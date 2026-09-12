@@ -1,0 +1,214 @@
+{
+  "406": {
+    "total_lines": 69,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "always @(posedge clk or negedge rst_n) begin",
+      "if (!rst_n) begin",
+      "pc 10' de;"
+    ]
+  },
+  "407": {
+    "total_lines": 67,
+    "prompts": [
+      "User prompt: Za Odoo 2 code helee bvr tsaash ni saijruulii. Bvr gvnrvv ni orj saijruulaltaa hiiy Response: L.IawypblH rVH PW opx, cynepKOMnb10Tep 60noH 6HAep XVHMH qaaaJITaLi AGI npoueccopyyAblH (NPU, TPU, Groq TSP) xaMr\"1LäH 3r33rT31i AapaarhiH 3 1400 LUMH3 MeXaHh3Mb1r . cr 60J10H . cl A33P cyynraH v14.O TYBLUI.•IHA xyprae: 1 . Predicated Dual-Issue Micro-Execution (CnoT AOTOPX HexuenT 6vte\"13nT): OnoorM'7H cnoryym aeBXBH 6VX3n 6aruaap 6nennar. 10"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "m trn -",
+      "if m trn:"
+    ]
+  },
+  "408": {
+    "total_lines": 79,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "3. XYBbcax usrT3i non4K 6YTapxai (Q16.16 Fixed-Point Saturating MAC I _MAC): M3AP3nvwiH aeeneH HapVIVIH",
+      "6yrapxaüraap anAaraanryvi TOOUOOJ1h<, xanmx yeA Hb aBT0MaTaap 30rcaor (Saturating Arithmetic) x3nx30."
+    ]
+  },
+  "409": {
+    "total_lines": 68,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "// Predicate 6yen33rvü Tyn vünmu•für anracHa (NOP)",
+      "end else begin"
+    ]
+  },
+  "410": {
+    "total_lines": 69,
+    "prompts": [
+      "User prompt: Za Odoo 2 code helee bvr tsaash ni saijruulii. Bvr gvnrvv ni Orj saijruulaltaa hiiy Response: v14.O xypT3n VLIW CYBMÜH npeA',1KaT, QI 6.16 Toouoonon, peAYK14 MOAblr 6VP3H U.JVIÜAC3H. Onoo MMKPO-apxmeKTYPblH xarvtrMhH x3c3r 6Y10y xypAHhh xouporaon (Loop Overhead), caHax \"H AanananT (Memory Latency Hiding), 60noH xeeery U3rMiH 3KcnoHeHT (Activation/S0ftmax Engine) r3C3H L43a3P uaxnyPblH 3 TOM acyyAnblr v15.O TYBUJVIHA xypr3e:"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "rw = self.",
+      "ri = self. get_reg(inp)",
+      "new code language"
+    ]
+  },
+  "411": {
+    "total_lines": 71,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "xaHraMh<VIVIH xonx33r33P 1 TaaaHA QI 6.16 6yrapxairaap TOOUoonOX.",
+      "I. . cl v15.O Mau.uMH 3aaBPbIH epreTren (IO T3MA3rT)",
+      "new code language"
+    ]
+  },
+  "412": {
+    "total_lines": 70,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "// 6' d41: OP_PFT (Hardware Prefetch)",
+      "6' d41: begin"
+    ]
+  },
+  "413": {
+    "total_lines": 73,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "def get_reg(self, name: str) str:",
+      "— name. strip()",
+      "name -"
+    ]
+  },
+  "414": {
+    "total_lines": 53,
+    "prompts": [
+      "User prompt: Za Odoo 2 code helee bvr tsaash ni saijruulii. Bvr gvnrvv ni orj saijruulaltaa hiiy Response: vl 5.0 A33P xvpAHvu•i xouporaon (Zero-Overhead Loop) 60noH Softmax ohponuoonorq u.MiA3rAC3H. OAOO xarvTMüH ryH TYBI.UVIH 6ytoy CMCTomtK AaMxyynanT (Systolic Systole Streaming), 6ypTr3rq\"tiH Aapaannb1H T3CP3nT (SIMD Shuffle/Permute), 60n0H caHax aTOMHK CAS (Compare-And-Swap) rac3H WIKPO-aPXMTeKTYPblH 3 cyypb 6apx1_1J33n'4Lir UJL,1hA3X VI 6.0 TYBUJI,IHA H3BTpwnH3."
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "var softmax act = exp(partial_acc)",
+      "new code language",
+      "1. napaarv•1iH 32-691TMhH 6110KV4hr LI cKpeTHnaA pyy apblH ropMMoop ypbAH\"naH TaTax"
+    ]
+  },
+  "415": {
+    "total_lines": 97,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "input wire [127 : e] vliw_bundle,",
+      "// XepuJ 4 uyyA yracHyyA (NoC -rohpox)",
+      "cas_req,"
+    ]
+  },
+  "416": {
+    "total_lines": 71,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "always @(posedge clk or negedge rst_n) begin",
+      "if (!rst_n) begin"
+    ]
+  },
+  "417": {
+    "total_lines": 64,
+    "prompts": [
+      "User prompt: Za Odoo 2 code helee bvr tsaash ni saijruulii. Bvr gvnrvv ni Orj saijruulaltaa hiiy Response: LlawypblH ryHV11ä TYBUJVIHA cynepK0MnsOTep, xarar1,1üH cyyru,1üH veL,1hH AGI ToouoonnblH xypaacryypyyaaa (WSE-3, TPU v5p, Groq) Tynrapaar cyypb rauaaHYYA 60nox 614T TYBLUHb4i 33P3ru33 MacKnan (Bit-Matrix Population I Hamming Weight), caHax oiH LUYYA 3ypeacT (DMA Scatter-Gather) ycp3nTryü YHUJhJIT, 60noH annapaTb1H TYBWHhi FP8/BF16 AhHaMYIK 6nox-cKannp xyupranr-blr U.MhA3)K vl 7.0-A"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "rs = self.",
+      "= int(mask, e)",
+      "m val"
+    ]
+  },
+  "418": {
+    "total_lines": 70,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "1. . cl VI 7.0 MawMH 3aaBPblH epreTren (10 T3MA3rT)",
+      "• _CNT (Hardware Population Count I Hamming Distance):",
+      "o @opMaT: _cNe1#0ee . > (Opcode 6 ' d46)"
+    ]
+  },
+  "419": {
+    "total_lines": 68,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "dst",
+      "srcl",
+      "val"
+    ]
+  },
+  "420": {
+    "total_lines": 70,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "if name. and name[l:] in \"0123456789ABCDEF\" :",
+      "return name[l:]"
+    ]
+  },
+  "421": {
+    "total_lines": 62,
+    "prompts": [
+      "User prompt: Za Odoo 2 code helee bvr tsaash ni saijruulii. Bvr gvnrvv ni orj saijruulaltaa hiiy Response: MMKp0-apxMTeKTyp 60n0H x3JIHMü aapaarMbiH TYBLUVIHA VI 8.0 milestone-oop cynepKOMnbK)Tep1-1iH X3M)K33HY11i napannenb TOOUOOJIOJIA Tynrapaar XYHA 3 cyypb X3parxyv1be: 1 . Hardware Coroutine I Hardware Fibers ( _ YLD I Single-Cycle Context Switch): 1/0 ocB3n XOJ1blH NoC 6aru xynoax yea U€M',IVIH pipeline-Mir"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "found 1 be",
+      "found = 1 bl",
+      "new code language"
+    ]
+  },
+  "422": {
+    "total_lines": 74,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "end",
+      "endfunction",
+      "// execute slot task:"
+    ]
+  },
+  "423": {
+    "total_lines": 78,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "available_regs = [f\"{i:X}\" for i in range(14)]",
+      "self.",
+      "var_map: Dict[str, str]"
+    ]
+  },
+  "424": {
+    "total_lines": 57,
+    "prompts": [
+      "User prompt: Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr gvnrvv ni orj saijruulaltaa hiiy Response: 3H3 ye UJaTaHA cynePKOMnb10Tepv11äH X3M>K33HVUi Marpnu xypAacryyp (Google TPU v5/NVlDlA Blackwell) 60n0H caHax Tycraapnanvravi Yir1Ar1b•1üH CldCTeM\"1LäH xaMn4üH cyynqnüH 3 ryH TeXH\"KL4ÜH cyyp\"r cyynrax, xoäp x3n33 v 19.0 TYBLIJL•IHA xypr3e: 1 . TexHMK XaHraM*hiH 2 x 2 CMCTOJIMK r aaaaa Ypxaap (Outer-Product Tensor Core Unit I _MOC): Oaoon,1VIH AOTOOA cKansp VPXB3P33C"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "yield",
+      "$ØxDEAD_øeee",
+      ". END"
+    ]
+  },
+  "425": {
+    "total_lines": 87,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "output",
+      "output",
+      "output"
+    ]
+  }
+}

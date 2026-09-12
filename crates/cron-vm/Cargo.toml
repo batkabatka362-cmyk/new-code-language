@@ -1,0 +1,7 @@
+[package]
+name = "cron-vm"
+version = "0.1.0"
+edition = "2021"
+description = "Cycle-Accurate 256-Core 4D-Torus Neuromorphic Hardware Simulator for CRON"
+
+[dependencies]

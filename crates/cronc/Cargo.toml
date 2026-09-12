@@ -1,0 +1,7 @@
+[package]
+name = "cronc"
+version = "0.1.0"
+edition = "2021"
+description = "CRON Programming Language Compiler for 4D-Torus Neuromorphic Hardware"
+
+[dependencies]

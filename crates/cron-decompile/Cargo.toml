@@ -1,0 +1,8 @@
+[package]
+name = "cron-decompile"
+version = "0.1.0"
+edition = "2021"
+description = "Machine-to-Blueprint Reverse Decompiler for CRON (.cl to .cr)"
+
+[dependencies]
+cronc = { path = "../cronc" }

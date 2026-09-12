@@ -1,0 +1,2085 @@
+[
+  {
+    "index": 0,
+    "file": "0-д хуваах үйлдэл дээр Hardware Trap амжилттай ажи.._.docx",
+    "length": 9510,
+    "matches": [
+      "vliw",
+      "verilator",
+      "opcode",
+      "hardware trap"
+    ]
+  },
+  {
+    "index": 1,
+    "file": "1 дэх чиглэл болох Region-Based Memory & Lifetime .._.docx",
+    "length": 12109,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr",
+      "region-based"
+    ]
+  },
+  {
+    "index": 2,
+    "file": "1 дэх чиглэл болох Дифференциал Програмчлал ба Авт.._.docx",
+    "length": 10645,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 3,
+    "file": "1-ees ehleed mash sain hiij ehelii_.docx",
+    "length": 9207,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      ".cr"
+    ]
+  },
+  {
+    "index": 4,
+    "file": "2 дахь чиглэл болох Sub-Byte SIMD Packing (1-bit, .._.docx",
+    "length": 8048,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "bitnet",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 5,
+    "file": "2 дахь чиглэл болох VTABLE-гүй Static Trait систем.._.docx",
+    "length": 9055,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cr"
+    ]
+  },
+  {
+    "index": 6,
+    "file": "2 дахь чиглэл болох Динамик вектор урт ба Уян Pred.._.docx",
+    "length": 8984,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 7,
+    "file": "3 дахь чиглэл болох 4D Граф хуваарилалт ба Завсрын.._.docx",
+    "length": 10079,
+    "matches": [
+      "4d torus",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 8,
+    "file": "3 дахь чиглэл болох 4D Орон зайн Асинхрон сэргээлт.._.docx",
+    "length": 8868,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 9,
+    "file": "3 дахь чиглэл болох Аппарат санал хүсэлтэд суурилс.._.docx",
+    "length": 7845,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 10,
+    "file": "4 дэх чиглэл болох Амьд Телеметр ба Өөрийгөө Засах.._.docx",
+    "length": 9228,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr",
+      "region-based"
+    ]
+  },
+  {
+    "index": 11,
+    "file": "4 дэх чиглэл болох Аппарат түвшний аюулгүй байдал .._.docx",
+    "length": 9712,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 12,
+    "file": "4 дэх чиглэл болох Төхөөрөмжийн Бие Даасан Драйвер.._.docx",
+    "length": 11870,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 13,
+    "file": "AdvancedCRCompiler дээр алдаатай мөр өгч, Source-M.._.docx",
+    "length": 2445,
+    "matches": [
+      ".cr"
+    ]
+  },
+  {
+    "index": 14,
+    "file": "Alagaa. Za odoo 2 code helee bvr tsaash ni saijruu.._.docx",
+    "length": 2346,
+    "matches": [
+      "vliw",
+      "bitnet",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 15,
+    "file": "Barag gedeg ni _ Ogt baihgvi bol bas l bishel yum .._.docx",
+    "length": 2942,
+    "matches": [
+      "vliw",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 16,
+    "file": "Bi oilgohdoo. RTL, ter tusmaa VLIM deer yg taaruul.._.docx",
+    "length": 2145,
+    "matches": [
+      "vliw",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 17,
+    "file": "Build a full automated testbench pipeline verifyin.._.docx",
+    "length": 12957,
+    "matches": [
+      "vliw",
+      "six brain",
+      "cr_compiler",
+      "stdp",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 18,
+    "file": "C++ Host Driver дээр 4D Торус болон 6 тархины ачаа.._.docx",
+    "length": 9682,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "verilator"
+    ]
+  },
+  {
+    "index": 19,
+    "file": "Chi umnuhiin umnuh chat deer zuwhun .cr tailbarlaa.._.docx",
+    "length": 6260,
+    "matches": [
+      "vliw",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 20,
+    "file": "Code helee saijruulii_.docx",
+    "length": 2194,
+    "matches": [
+      "vliw",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 21,
+    "file": "Code helnvvdee tugs sain zagwarchilaad bas saijruu.._.docx",
+    "length": 3152,
+    "matches": [
+      "vliw",
+      "stdp",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 22,
+    "file": "Daraachiih ni.docx",
+    "length": 5615,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 23,
+    "file": "Ehleed 2 code helnii tuhai bvh oiltiig aguulsan ta.._.docx",
+    "length": 8824,
+    "matches": [
+      "vliw",
+      "4d torus",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 24,
+    "file": "Ehleed 3 hiiy_.docx",
+    "length": 6175,
+    "matches": [
+      "vliw",
+      "six brain"
+    ]
+  },
+  {
+    "index": 25,
+    "file": "Ehnees ni duustal hoyulanga ni hiiy_.docx",
+    "length": 7346,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 26,
+    "file": "Ehnees ni ehel.docx",
+    "length": 6766,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 27,
+    "file": "Ehnees ni ehleed hiij ehel_.docx",
+    "length": 7976,
+    "matches": [
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 28,
+    "file": "Ehnees ni ehleed hiij ehelii_.docx",
+    "length": 8404,
+    "matches": [
+      "vliw",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 29,
+    "file": "Ehnees ni ehleed mash hiij ehelii_.docx",
+    "length": 10323,
+    "matches": [
+      "cr_compiler",
+      ".cr"
+    ]
+  },
+  {
+    "index": 30,
+    "file": "Ehnees ni ehleed mash sain hiij ehelii_(1).docx",
+    "length": 9495,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 31,
+    "file": "Ehnees ni ehleed mash sain hiij ehelii_(2).docx",
+    "length": 9482,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 32,
+    "file": "Ehnees ni ehleed mash sain hiij ehelii_.docx",
+    "length": 9251,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 33,
+    "file": "Ehnees ni.docx",
+    "length": 6056,
+    "matches": [
+      "vliw",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 34,
+    "file": "Ehniihees ni ehleed mash sain saijruulj ehelii_.docx",
+    "length": 10160,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 35,
+    "file": "Ene 2 code heliig ashiglaj yu hiiwel ilvv vr dvnte.._.docx",
+    "length": 3107,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "bitnet",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 36,
+    "file": "Ene 2dahi machine code language vnheer l yg songog.._.docx",
+    "length": 2002,
+    "matches": [
+      ".cl"
+    ]
+  },
+  {
+    "index": 37,
+    "file": "Ene bishee. Harina ingej heleh vyd nadad ugsun har.._.docx",
+    "length": 2359,
+    "matches": [
+      "vliw",
+      "bitnet",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 38,
+    "file": "Ene code heliig uur busad ymar gazart ashiglah ni .._.docx",
+    "length": 6564,
+    "matches": [
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 39,
+    "file": "Ene gehdee shuud .cl deer bichegdii gewel yg vibe .._.docx",
+    "length": 2351,
+    "matches": [
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 41,
+    "file": "Hamgiin aimar ni bidnii hel yrduu hvneer bol anh t.._.docx",
+    "length": 2864,
+    "matches": [
+      "stdp"
+    ]
+  },
+  {
+    "index": 42,
+    "file": "LFSR Random Generator болон Non-blocking Poll үйлд.._.docx",
+    "length": 7116,
+    "matches": [
+      "vliw",
+      "verilator",
+      "opcode"
+    ]
+  },
+  {
+    "index": 43,
+    "file": "Let_s build a Verilator testbench verifying 1-cycl.._.docx",
+    "length": 11979,
+    "matches": [
+      "vliw",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 44,
+    "file": "Let_s build a Verilator testbench verifying LTP_LT.._.docx",
+    "length": 9027,
+    "matches": [
+      "vliw",
+      "stdp",
+      "verilator",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 45,
+    "file": "Let_s build a Verilator testbench verifying bit co.._.docx",
+    "length": 11391,
+    "matches": [
+      "vliw",
+      "verilator",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 46,
+    "file": "Let_s build a Verilator testbench verifying sub-na.._.docx",
+    "length": 9630,
+    "matches": [
+      "vliw",
+      "verilator",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 47,
+    "file": "Let_s build a closed-loop reasoning program in .cr.._.docx",
+    "length": 7519,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "bitnet",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 48,
+    "file": "Let_s build a complete Verilator benchmark simulat.._(1).docx",
+    "length": 9970,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "bitnet",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 49,
+    "file": "Let_s build a complete Verilator benchmark simulat.._.docx",
+    "length": 11984,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 50,
+    "file": "Let_s build a dedicated BitNet 1.58b runtime engin.._.docx",
+    "length": 10220,
+    "matches": [
+      "vliw",
+      "bitnet",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 51,
+    "file": "Let_s build a dedicated testbench in Verilator to .._.docx",
+    "length": 8523,
+    "matches": [
+      "4d torus",
+      "verilator",
+      ".cl"
+    ]
+  },
+  {
+    "index": 52,
+    "file": "Let_s detail the GDSII silicon floorplan and layer.._.docx",
+    "length": 7920,
+    "matches": [
+      "vliw",
+      "bitnet",
+      "stdp",
+      ".cr"
+    ]
+  },
+  {
+    "index": 53,
+    "file": "Let_s document the official ABI, function calling .._.docx",
+    "length": 5885,
+    "matches": [
+      "vliw",
+      "bitnet",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 54,
+    "file": "Let_s implement adaptive congestion-aware routing .._.docx",
+    "length": 9683,
+    "matches": [
+      "verilator"
+    ]
+  },
+  {
+    "index": 55,
+    "file": "Let_s implement the 2nd architectural step_ Photon.._.docx",
+    "length": 8278,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 56,
+    "file": "Let_s implement the 2nd step_ Photonic Phase Matri.._.docx",
+    "length": 7184,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 57,
+    "file": "Let_s implement the 3rd step_ Spike-Timing-Depende.._.docx",
+    "length": 9517,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 58,
+    "file": "Let_s implement the 4th step_ Self-Replicating Thr.._.docx",
+    "length": 7104,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 59,
+    "file": "Let_s map and benchmark a full BitNet 1.58b transf.._.docx",
+    "length": 12802,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "bitnet",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 60,
+    "file": "Let_s perform a complete Power, Performance, and A.._.docx",
+    "length": 4338,
+    "matches": [
+      "vliw",
+      "bitnet",
+      "stdp",
+      ".cr"
+    ]
+  },
+  {
+    "index": 61,
+    "file": "Let_s profile the crossbar link utilization and tu.._.docx",
+    "length": 10984,
+    "matches": [
+      "cr_compiler",
+      "bitnet",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 62,
+    "file": "Let_s run a full-scale 256-core stress test in Ver.._.docx",
+    "length": 10395,
+    "matches": [
+      "vliw",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 63,
+    "file": "Let_s run a full-scale benchmark on the 256-core 4.._.docx",
+    "length": 8527,
+    "matches": [
+      "vliw",
+      "stdp",
+      "verilator",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 64,
+    "file": "Let_s write a complete ISA reference manual docume.._.docx",
+    "length": 7104,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "bitnet",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 65,
+    "file": "Nadad neg taamag baina. 🤔 code engine buyu code a.._.docx",
+    "length": 2822,
+    "matches": [
+      "stdp",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 66,
+    "file": "Odoo uur haashaa saijruulalt hiih we _.docx",
+    "length": 2625,
+    "matches": [
+      "vliw",
+      "bitnet",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 67,
+    "file": "Python iderees dutahgvi oilgohod amar bas olon nar.._.docx",
+    "length": 2718,
+    "matches": [
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 68,
+    "file": "Python дээр .cr файлыг уншаад бүрэн 10 тэмдэгттэй .._.docx",
+    "length": 7682,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 69,
+    "file": "Shuud 3.docx",
+    "length": 7705,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 70,
+    "file": "Tegheer ymar dvgnelt hvrsen be mongoloor heleed ug.._.docx",
+    "length": 2872,
+    "matches": [
+      "vliw",
+      "bitnet",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 71,
+    "file": "Tegii(1).docx",
+    "length": 7208,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 72,
+    "file": "Tegii(2).docx",
+    "length": 4862,
+    "matches": [
+      "vliw",
+      "4d torus",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 73,
+    "file": "Tegii(3).docx",
+    "length": 6633,
+    "matches": [
+      "vliw",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 74,
+    "file": "Tegii.docx",
+    "length": 5461,
+    "matches": [
+      "vliw",
+      ".cl"
+    ]
+  },
+  {
+    "index": 75,
+    "file": "Tegwel iim bolgoj chadsan ni yrduu anhnii zuw garg.._.docx",
+    "length": 2395,
+    "matches": [
+      "vliw",
+      "stdp",
+      ".cr"
+    ]
+  },
+  {
+    "index": 76,
+    "file": "Tegwel zurag bichleg hiideg AI bas togloom hugjvvl.._.docx",
+    "length": 4141,
+    "matches": [
+      "stdp"
+    ]
+  },
+  {
+    "index": 77,
+    "file": "Trgwel sayniihiig .cr deer bichej vzii_.docx",
+    "length": 3298,
+    "matches": [
+      "vliw",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 78,
+    "file": "Vgvi. Shuud daraachiin 3 orii_.docx",
+    "length": 7859,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 79,
+    "file": "Yes(1).docx",
+    "length": 8471,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 80,
+    "file": "Yes(2).docx",
+    "length": 7123,
+    "matches": [
+      ".cr"
+    ]
+  },
+  {
+    "index": 81,
+    "file": "Yes(3).docx",
+    "length": 8412,
+    "matches": [
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 82,
+    "file": "Yes(4).docx",
+    "length": 7034,
+    "matches": [
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 83,
+    "file": "Yes(5).docx",
+    "length": 11412,
+    "matches": [
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 84,
+    "file": "Yes(6).docx",
+    "length": 7981,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "bitnet",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 85,
+    "file": "Yes(7).docx",
+    "length": 7952,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 86,
+    "file": "Yes(8).docx",
+    "length": 7461,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 87,
+    "file": "Yes.docx",
+    "length": 9766,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 88,
+    "file": "Yg l nadad heregtei hel baina daa. Ehleed uuriin h.._.docx",
+    "length": 4333,
+    "matches": [
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 89,
+    "file": "Yg zuw chigleld hugjij baina shvv. Bi ugaasaa _bi.._.docx",
+    "length": 11444,
+    "matches": [
+      "vliw",
+      "bitnet",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 90,
+    "file": "Ystoi jinhen god like programming code language bo.._.docx",
+    "length": 2920,
+    "matches": [
+      ".cr",
+      "region-based"
+    ]
+  },
+  {
+    "index": 92,
+    "file": "Za 2 code helee saijruulah uu_.docx",
+    "length": 3823,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 93,
+    "file": "Za ehnees ni bvgdiig duustal hiij ehel_.docx",
+    "length": 13598,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "bitnet",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 94,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(1).docx",
+    "length": 7551,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 95,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(10).docx",
+    "length": 8207,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 96,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(11).docx",
+    "length": 8690,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "bitnet",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 97,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(12).docx",
+    "length": 7735,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 98,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(13).docx",
+    "length": 9165,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 99,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(14).docx",
+    "length": 8807,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 100,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(15).docx",
+    "length": 8874,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 101,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(16).docx",
+    "length": 8254,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 102,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(17).docx",
+    "length": 9291,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 103,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(18).docx",
+    "length": 8406,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 104,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(19).docx",
+    "length": 8784,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 105,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(2).docx",
+    "length": 10035,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 106,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(20).docx",
+    "length": 8809,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 107,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(21).docx",
+    "length": 8244,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 108,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(22).docx",
+    "length": 8962,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 109,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(23).docx",
+    "length": 8136,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 110,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(24).docx",
+    "length": 9107,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 111,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(25).docx",
+    "length": 10336,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 112,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(26).docx",
+    "length": 8140,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 113,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(27).docx",
+    "length": 7430,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 114,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(28).docx",
+    "length": 9580,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr",
+      "hardware trap"
+    ]
+  },
+  {
+    "index": 115,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(29).docx",
+    "length": 7773,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 116,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(3).docx",
+    "length": 9773,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 117,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(30).docx",
+    "length": 8369,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 118,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(31).docx",
+    "length": 8703,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 119,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(32).docx",
+    "length": 9564,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 120,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(33).docx",
+    "length": 8161,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 121,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(34).docx",
+    "length": 7657,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 122,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(4).docx",
+    "length": 9744,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 123,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(5).docx",
+    "length": 9719,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 124,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(6).docx",
+    "length": 10407,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 125,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(7).docx",
+    "length": 8909,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 126,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(8).docx",
+    "length": 9443,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 127,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._(9).docx",
+    "length": 9349,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 128,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii. Bvr.._.docx",
+    "length": 2472,
+    "matches": [
+      "vliw",
+      "bitnet",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 129,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii_(1).docx",
+    "length": 6873,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 130,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii_(2).docx",
+    "length": 6206,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 131,
+    "file": "Za odoo 2 code helee bvr tsaash ni saijruulii_.docx",
+    "length": 6112,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 132,
+    "file": "Za odoo 4 dahi chiglel hiij duusagii. Tegeed daraa.._.docx",
+    "length": 11182,
+    "matches": [
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 133,
+    "file": "Za odoo bidnii zohioson code hel ymar tuwshind hvr.._.docx",
+    "length": 4092,
+    "matches": [
+      "vliw",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 135,
+    "file": "Za odoo code helee bvr tsaash ni saijruulii. Code .._(2).docx",
+    "length": 8905,
+    "matches": [
+      "vliw",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 136,
+    "file": "Za odoo code helee bvr tsaash ni saijruulii. Code .._(3).docx",
+    "length": 3365,
+    "matches": [
+      "hardware trap"
+    ]
+  },
+  {
+    "index": 137,
+    "file": "Za odoo code helee bvr tsaash ni saijruulii. Code .._(4).docx",
+    "length": 4083,
+    "matches": [
+      "vliw",
+      "opcode",
+      ".cr"
+    ]
+  },
+  {
+    "index": 138,
+    "file": "Za odoo code helee bvr tsaash ni saijruulii. Code .._(5).docx",
+    "length": 3813,
+    "matches": [
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 139,
+    "file": "Za odoo code helee bvr tsaash ni saijruulii. Code .._.docx",
+    "length": 4067,
+    "matches": [
+      "vliw",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 140,
+    "file": "Za odoo code helee bvr tsaash ni saijruulii_.docx",
+    "length": 9040,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      ".cr"
+    ]
+  },
+  {
+    "index": 141,
+    "file": "Za odoo daraachiin heliig ni_.docx",
+    "length": 6653,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 142,
+    "file": "Za odoo dutuu vldeesen zvilsee nuhuj bichii_.docx",
+    "length": 10412,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 143,
+    "file": "Za odoo dvgnelt bolgoj bvr anh code zohioj ehelsen.._.docx",
+    "length": 5210,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "six brain",
+      "bitnet",
+      "stdp",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 144,
+    "file": "Za odoo tailbarlaagvi dutuu vldeesen zvils baigaa .._.docx",
+    "length": 1882,
+    "matches": [
+      "vliw",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 145,
+    "file": "Za odoo umnuh deer chatnii aldaanas bolj ustgagdsa.._.docx",
+    "length": 5173,
+    "matches": [
+      "bitnet",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 146,
+    "file": "Za odoo uursdiin zohioson code language-iig uuruur.._(1).docx",
+    "length": 3409,
+    "matches": [
+      "vliw",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 147,
+    "file": "Za odoo uursdiin zohioson code language-iig uuruur.._.docx",
+    "length": 2787,
+    "matches": [
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 148,
+    "file": "Za odoo uursdiinhuu 2 heleer code bichej vzii her .._.docx",
+    "length": 3439,
+    "matches": [
+      "vliw",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 149,
+    "file": "Za odoo vvseh sula taluud bas dutuu heregtei zvils.._.docx",
+    "length": 4830,
+    "matches": [
+      "vliw",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 150,
+    "file": "Za odoo ymar dvgnelt hvrch bolohoor baina we sayni.._.docx",
+    "length": 2713,
+    "matches": [
+      "vliw",
+      "4d torus",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 151,
+    "file": "Za tegii(1).docx",
+    "length": 4606,
+    "matches": [
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 152,
+    "file": "Za tegii(10).docx",
+    "length": 6096,
+    "matches": [
+      "verilator",
+      ".cr"
+    ]
+  },
+  {
+    "index": 153,
+    "file": "Za tegii(11).docx",
+    "length": 4968,
+    "matches": [
+      "4d torus",
+      "verilator",
+      ".cr"
+    ]
+  },
+  {
+    "index": 154,
+    "file": "Za tegii(12).docx",
+    "length": 5578,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "verilator"
+    ]
+  },
+  {
+    "index": 155,
+    "file": "Za tegii(13).docx",
+    "length": 5315,
+    "matches": [
+      "vliw",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 156,
+    "file": "Za tegii(14).docx",
+    "length": 5918,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 157,
+    "file": "Za tegii(15).docx",
+    "length": 7649,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      ".cr"
+    ]
+  },
+  {
+    "index": 158,
+    "file": "Za tegii(16).docx",
+    "length": 10560,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 159,
+    "file": "Za tegii(17).docx",
+    "length": 7624,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 160,
+    "file": "Za tegii(18).docx",
+    "length": 4385,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "cr_compiler",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 161,
+    "file": "Za tegii(19).docx",
+    "length": 8335,
+    "matches": [
+      "vliw",
+      "cr_compiler"
+    ]
+  },
+  {
+    "index": 162,
+    "file": "Za tegii(2).docx",
+    "length": 8598,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      ".cl"
+    ]
+  },
+  {
+    "index": 163,
+    "file": "Za tegii(20).docx",
+    "length": 11512,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 164,
+    "file": "Za tegii(3).docx",
+    "length": 9677,
+    "matches": [
+      "vliw",
+      "verilator",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 165,
+    "file": "Za tegii(4).docx",
+    "length": 10995,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 166,
+    "file": "Za tegii(5).docx",
+    "length": 9913,
+    "matches": [
+      "vliw",
+      "verilator",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 167,
+    "file": "Za tegii(6).docx",
+    "length": 13175,
+    "matches": [
+      "vliw",
+      "stdp",
+      "verilator",
+      "opcode",
+      ".cl"
+    ]
+  },
+  {
+    "index": 168,
+    "file": "Za tegii(7).docx",
+    "length": 12990,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 169,
+    "file": "Za tegii(8).docx",
+    "length": 6350,
+    "matches": [
+      "vliw",
+      "opcode"
+    ]
+  },
+  {
+    "index": 170,
+    "file": "Za tegii(9).docx",
+    "length": 8886,
+    "matches": [
+      "vliw",
+      "4d torus",
+      "cr_compiler",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 171,
+    "file": "Za tegii.docx",
+    "length": 10190,
+    "matches": [
+      "cr_compiler",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 172,
+    "file": "Za tegii_(1).docx",
+    "length": 7105,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 173,
+    "file": "Za tegii_.docx",
+    "length": 7084,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "stdp",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 174,
+    "file": "Za tegui.docx",
+    "length": 11856,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      "opcode"
+    ]
+  },
+  {
+    "index": 175,
+    "file": "Za tegwel .cl deer ymarch hamaagvi neg hetsvv code.._.docx",
+    "length": 3696,
+    "matches": [
+      "vliw",
+      "stdp"
+    ]
+  },
+  {
+    "index": 176,
+    "file": "Za ushuu tsaash ni saijruulii_.docx",
+    "length": 7123,
+    "matches": [
+      "vliw",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 177,
+    "file": "Za vrgeljlvvlii_.docx",
+    "length": 4498,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "verilator",
+      ".cr"
+    ]
+  },
+  {
+    "index": 178,
+    "file": "cr_compiler-т RAW hazard-ийг автоматаар илрүүлж за.._.docx",
+    "length": 7018,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 179,
+    "file": "Архитектур дахь дөрөв дэх хэл болох Python-ий ажил.._.docx",
+    "length": 7006,
+    "matches": [
+      "vliw",
+      "verilator",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 180,
+    "file": "Дараагийн алхам болгон цөмд CYCLE_CNT, STALL_CNT б.._.docx",
+    "length": 6059,
+    "matches": [
+      "vliw",
+      "cr_compiler",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 181,
+    "file": "Системийн онцгой тохиолдол, 0-д хуваах болон халил.._.docx",
+    "length": 6224,
+    "matches": [
+      "vliw",
+      "opcode",
+      ".cl",
+      ".cr",
+      "hardware trap"
+    ]
+  },
+  {
+    "index": 182,
+    "file": "Том жингүүдийг арын фон дээр 0-stall-тайгаар Scrat.._.docx",
+    "length": 6509,
+    "matches": [
+      "vliw",
+      "opcode",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 183,
+    "file": "Эхнийхээс нь эхлээд хийж эхэлье_.docx",
+    "length": 6546,
+    "matches": [
+      "vliw",
+      ".cl",
+      ".cr"
+    ]
+  },
+  {
+    "index": 184,
+    "file": "​Бодит Хэрэглээний Програмчлал (.cr SDK & Standard.._.docx",
+    "length": 8866,
+    "matches": [
+      "vliw",
+      "six brain",
+      "stdp",
+      ".cl",
+      ".cr"
+    ]
+  }
+]

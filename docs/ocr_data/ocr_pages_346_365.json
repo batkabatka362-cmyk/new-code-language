@@ -1,0 +1,218 @@
+{
+  "346": {
+    "total_lines": 113,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "output wire",
+      "bank conflict stall",
+      "// 4 ujmpx3r 6'•1e AaacaH 256-yrT3vi SRAM 6110K (HI.\"T 1024 yr)"
+    ]
+  },
+  "347": {
+    "total_lines": 88,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "case (bse12)",
+      "2 'de: banke[row2]",
+      "2 'dl: bank1[row2]"
+    ]
+  },
+  "348": {
+    "total_lines": 83,
+    "prompts": [
+      "User prompt: napaaauüH anxaM 60naoH ueMö CYCLE CNT, STALL CNT 6vxuü Hardware Performance Counters M0öynuüa H3Mbe. Response: TexHMK xaHraMWVIH 60AYIT uarMhH ryüL43TßJ1, caHax rauan•r 60J10H HOXUer1T 6mer13JITY1ür OHOLUJIOX Hardware Performance Counters Moayrwuir cyynraq. 3H3 MOAYJ1b Hb 128-6'.-1T'.•1iH VLIW 40M AOTOP Aapaax 4 Tycral•i 32-6MT'.•1iH Toonyypblr (CSR - Control and Status Registers) TacpaJITryV1 6ypTr3H3:"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "3H3XYV 4-Bank 6','T1.wuir cyynracHaap VLIW 1.10M caHax Oiroo xyn33)K rauax acyynan 6','P3H uw1VIA3rA3h<, TOOUoonOX cyaar 6a caHax \"H xypa 1:1",
+      "T3H4B3PT3vi 60nn00."
+    ]
+  },
+  "349": {
+    "total_lines": 83,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "2 'bio:",
+      "2 'bli:",
+      "default:"
+    ]
+  },
+  "350": {
+    "total_lines": 84,
+    "prompts": [
+      "User prompt: cr_compi/er-m RAW hazard-uüe aemo,vamaap unpvvnx aaaepyyöb1H 6aüpb1e cone3öse AOT Hazard Scheduling pass H9Mbe. Response: cr_compi1er-T 30pnyncaH AOT Hazard Scheduler (Instruction Reordering Pass)-Mir VLIW apxmeKTypT OMHOX vünannVIH yp 6',1HffA3X xvpran 1 TaKTblH xouporaon (I-cycle latency) vycA3r. 3H3XVY Scheduler Hb ererAnL•1iH xaMaapnblH HVIrn3JIT rpa@ (Directed Acyclic Graph - DAG) 6aüryymK, RAW hazard nn3Pa3n XOOPOHA Hb 6V1e AaacaH 3aaBPyyAblr"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "double stall",
+      "std: : cout",
+      "std: : cout"
+    ]
+  },
+  "351": {
+    "total_lines": 67,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "if mode",
+      "reg2",
+      "try :"
+    ]
+  },
+  "352": {
+    "total_lines": 61,
+    "prompts": [
+      "User prompt: C++ Host Driver ö33P 4D Topyc 60noH 6 mapxuHb1 aqaannb12 mepMuHan ö33P 60öum qaam öypcsnöæ ASCII Dashboard yvce3e. Response: Verilator TaKTblH UOwnT 6YPA (Fclk) 6 TaPXhHbl Cba3blH VIA3BX>KV1n, 4D TopyCblH [X , Y, Z, W] KOOPAMHaTblH TeneB, caHax ohH MepreJIAeeH (Stall) 60n0H VLIW AaM>Kyynax XOOn0iH aqaannblr TepMMHan A33P L.uyyA ANSI escape Aapaannaap 3yPAar uarhiH ASCII Dashboard-Mir C++ Host Driver-T 3anrax erbe."
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "ir list = [IRInstruction(s10t, idx) for idx,",
+      "# 3. AOT Hazard Scheduler axnnnyynax",
+      "scheduler AOTHazardSchedu1er()"
+    ]
+  },
+  "353": {
+    "total_lines": 154,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "#pragma once",
+      "b6 agi"
+    ]
+  },
+  "354": {
+    "total_lines": 86,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "Torus rnnep-xaBTraäH OPOH aaüH Tenea (X, Y, Z, W)",
+      "// 4D Quantum"
+    ]
+  },
+  "355": {
+    "total_lines": 70,
+    "prompts": [
+      "User prompt: Za Odoo code helee bvr tsaash ni saijruulii. Code bichegdeh vyd vvseh asuudaluud eswe/ hyzgaartai zvils bas dutuu zvils baigaa yu? Response: XYBbcarHM51H H3PUJMn (Aliasing), 16-6hTh'iH LUI aaanary, Zero-Overhead Hardware Loop (ZOL), A3A @YHKU (_CAL/_RET), 4-Bank Interleaved SRAM, TeXHMK Performance Counters, 60n0H AOT Hazard Scheduler-nür aM)KLUITTa51 cyynracaH. r3B'1 61,1AHVIV1 apxmeKTyp TOMOPH, 60AMT 6ereea KOMnneKC AGI anrop1,1TMYYAb1r 691\"v1x vea x3n 60noH CMCTeM\"iH TYBLU\"HA Aapaax 4 cyypb"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "// 3. 6ypTr3rHA'4üH TeneBMhr YHUMX",
+      "for (int i e; i < 16; ++1) {",
+      "current_regs [i]"
+    ]
+  },
+  "356": {
+    "total_lines": 61,
+    "prompts": [
+      "User prompt: Ehnees ni duustal hoyulanga ni hiiy. Response: Complex Arithmetic Unit (KOMnneKC TOOHb1 annapaT H3rx) 60n0H Strided Vector Addressing (Anxan•rrai 40 BeKTOP xanrnanT) xoépblr ISA TVBUJH33C 3XJ133A Verilog RTL, Python KOMnnnRT0p xypT3n 6yp3H X3p3DKvynbe. 1. ApxmeKTYPblH 3arBapqnan (v6.O ISA)"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "0 3H3 Hb caHax oüH 6aHKyynan OPOH 3ai1H naryy u.JYYA 6araHblH oreraru,lir (Column Slicing) O-caaTamairaap Tarax erHe.",
+      "2. K3LUhiH aaBxapra 6a raaaaa CaHax (DRAM/HBM) xon60nTblH AYTaraan"
+    ]
+  },
+  "357": {
+    "total_lines": 107,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "// c_dst",
+      "regs[e]",
+      "regsC1] main_ram[addr_lanel];"
+    ]
+  },
+  "358": {
+    "total_lines": 77,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "default: begin",
+      "// EpAMhH 4-Wide VLII•J 6arL4b1r 60noacpyynax (OMHOX",
+      "end"
+    ]
+  },
+  "359": {
+    "total_lines": 62,
+    "prompts": [
+      "User prompt: TOM KUHeyyöUüe apb1H d)0H ö33P O-stall-maüeaap Scratchpad pyy mamax Background DMA Double-Buffering cucmeMuüe RTL 60n0H X3f73HÖ X3psexyvnbe. Response: ragaaa caHax oürooc (DDR/HBM) M3np3JIV151H TOM (Weights) TaTax 6ahx XOOPOHA VLIW BMHex 6aruaa O -caaranraüraap Tacpanrrvil Toouoonh< 6ahx Background Double-Buffering DMA Engine-I\"r 6MT33e."
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "1.",
+      "new code language",
+      "Aapaax nporpaMM Hb caHax OiHOOC 6araHblH naryy 32 anxanraap erermu•llär H3r TaaaHA aqaanx, 2 KBaHT nonrh0Hblr KOMnneKC ypxyyn3nT33P"
+    ]
+  },
+  "360": {
+    "total_lines": 111,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "2. RTL: Background Burst DMA Xeaenryyp (rtl/torus_dma_engine. v)",
+      "Tarraac yn xaMaapaH apblH 4)0H A33P 6ne AaaH 4-waTnanT burst XOAonrwp:"
+    ]
+  },
+  "361": {
+    "total_lines": 65,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "endmodule",
+      "3. VLIW UeMA Ping-Pong CaHax LUV1nxyynsrq H3M3X",
+      "new code language"
+    ]
+  },
+  "362": {
+    "total_lines": 85,
+    "prompts": [
+      "User prompt: CucmeMuÜH OHuaoÜ moxuonöon, 0-ö xyeaax 60noH xanunmt,la 6apt,x aeöaa Hardware Trap & Fault Handling xsnxæa cyynaaR. Response: CVICTeM A33P caHaMcaprYbi O-n xyBaax YLär1A3n (div-by-zero), caHax 0üH 36B1_ueeperAeerY1.i pyy (i 1 legal- address/ sandbox violation), 3CB3n apncbMeTVIK xanv1nT (arithmetic overflow) yycøx yen 149ML4ür Tar rauaxaac c3prMün)K, aBTOMaTaap Hardware Trap I Fault Handler pyy u.mnxvynsx Tycravl xsnx33r xapsrxyvnse."
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "new code language",
+      "2. Tacpamrvü AGI Toouoonon: CaR caR napaMerpT3',i M3AP3ru•1LiH cvmK33Hk1'i Marpmuyynur 1024-vrT3bi e»uep xypAHbl SRAM A33P",
+      "RMap H X3MX33HVIVi xfi3raapnanTryir33P -racpanrryü ypcraH (Streaming Execution) TOOU00n0X 60n0Mh< 6yPAn33."
+    ]
+  },
+  "363": {
+    "total_lines": 93,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "mcause",
+      "new code language",
+      "32' høoel; //"
+    ]
+  },
+  "364": {
+    "total_lines": 72,
+    "prompts": [
+      "User prompt: 0-0 xyeaax vünösn ö33P Hardware Trap aMxunmmaü axunnax 5yüe waneax C++ mecm6eHquüe 6UWbe. Response: O-A xyBaax ayoyJITai yinA3n yyC3x3A Hardware Trap aMh<'4JITTa1.i 6apb>K, exØ004 BeKTOP pyy VCP3H, annaar 3acaapnaaA MRET-33P X3BMhH ypr3nxnyyr1>K 6yür HaH0ceKy'HAv1iH HapvtüBgnanTavi Luanrax C++ Verilator Testbench-Mür TOA0pxoünbé. 3H3XYV TeCT6eHH Hb:"
+    ],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      ".MODULE safeAdaptivecortex",
+      "Cay-lax ohH ØxeeØ4 xam- A33p 6aüpnax Trap Vector Handler",
+      ". TRAP VECTOR"
+    ]
+  },
+  "365": {
+    "total_lines": 82,
+    "prompts": [],
+    "first_lines": [
+      "9/11/26, 9:06 AM",
+      "std: : cout",
+      "std: : cout",
+      "std: : cout"
+    ]
+  }
+}

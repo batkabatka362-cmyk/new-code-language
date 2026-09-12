@@ -1,0 +1,14 @@
+[package]
+name = "cron-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Unified CLI for the CRON Programming Language"
+
+[[bin]]
+name = "cron"
+path = "src/main.rs"
+
+[dependencies]
+cronc = { path = "../cronc" }
+cron-vm = { path = "../cron-vm" }
+cron-decompile = { path = "../cron-decompile" }

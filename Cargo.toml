@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "crates/cronc",
+    "crates/cron-vm",
+    "crates/cron-decompile",
+    "crates/cron-cli",
+]
+resolver = "2"
