@@ -51,6 +51,8 @@ pub struct VarInfo {
     pub is_grad: bool,
     pub is_mut: bool,
     pub is_consumed: bool,
+    pub is_tainted: bool,
+    pub is_capability: bool,
     pub def_span: Span,
     pub var_type: Option<String>,
     pub in_region: bool,
@@ -217,6 +219,8 @@ impl SemanticChecker {
                         is_grad: param.is_grad,
                         is_mut: false,
                         is_consumed: false,
+                        is_tainted: false,
+                        is_capability: false,
                         def_span: param.span,
                         var_type: Some(param.param_type.clone()),
                         in_region: false,
@@ -242,6 +246,8 @@ impl SemanticChecker {
                     is_grad: param.is_grad,
                     is_mut: false,
                     is_consumed: false,
+                    is_tainted: false,
+                    is_capability: false,
                     def_span: param.span,
                     var_type: Some(param.param_type.clone()),
                     in_region: false,
@@ -249,6 +255,18 @@ impl SemanticChecker {
             }
             func_checker.check_statements(&func.body)?;
             func_checker.verify_all_linear_consumed()?;
+        }
+
+        // Check cognitive brain blocks
+        for brain in &program.brains {
+            let mut brain_checker = SemanticChecker::new();
+            brain_checker.known_functions = self.known_functions.clone();
+            brain_checker.known_structs = self.known_structs.clone();
+            brain_checker.known_types = self.known_types.clone();
+            brain_checker.known_traits = self.known_traits.clone();
+            brain_checker.known_impls = self.known_impls.clone();
+            brain_checker.check_statements(&brain.body)?;
+            brain_checker.verify_all_linear_consumed()?;
         }
 
         // Check main statements
@@ -278,12 +296,21 @@ impl SemanticChecker {
                 span,
             } => {
                 self.check_expr(value)?;
+                let is_tainted_by_name_or_type = name.contains("tainted") || type_annot.as_deref().unwrap_or("").contains("tainted");
+                let is_sanitized_call = matches!(value, Expr::Call { callee, .. } if callee == "sanitize");
+                let is_tainted = is_tainted_by_name_or_type && !is_sanitized_call;
+                let is_capability = name.contains("cap")
+                    || type_annot.as_deref().unwrap_or("").contains("cap_t")
+                    || matches!(value, Expr::Call { callee, .. } if callee == "acquire_capability");
+
                 self.insert_var(VarInfo {
                     name: name.clone(),
                     is_lin: *is_lin,
                     is_grad: *is_grad,
                     is_mut: *is_mut,
                     is_consumed: false,
+                    is_tainted,
+                    is_capability,
                     def_span: *span,
                     var_type: type_annot.clone(),
                     in_region: self.in_region,
@@ -295,6 +322,8 @@ impl SemanticChecker {
                         is_grad: *e_grad,
                         is_mut: *is_mut,
                         is_consumed: false,
+                        is_tainted: false,
+                        is_capability: false,
                         def_span: *span,
                         var_type: e_type.clone(),
                         in_region: self.in_region,
@@ -370,6 +399,21 @@ impl SemanticChecker {
                     self.pop_scope();
                 }
             }
+            Statement::Brain { body, .. } => {
+                self.push_scope();
+                self.check_statements(body)?;
+                self.pop_scope();
+            }
+            Statement::Fork { target, .. } => {
+                self.check_expr(target)?;
+            }
+            Statement::Simulate { action, with_arg, .. } => {
+                self.check_expr(action)?;
+                if let Some(arg) = with_arg {
+                    self.check_expr(arg)?;
+                }
+            }
+            Statement::Abort(_) => {}
             Statement::If {
                 condition,
                 then_body,
@@ -421,6 +465,8 @@ impl SemanticChecker {
                     is_grad: false,
                     is_mut: true,
                     is_consumed: false,
+                    is_tainted: false,
+                    is_capability: false,
                     def_span: *span,
                     var_type: None,
                     in_region: self.in_region,
@@ -462,6 +508,8 @@ impl SemanticChecker {
                     is_grad: false,
                     is_mut: false,
                     is_consumed: false,
+                    is_tainted: false,
+                    is_capability: false,
                     def_span: *span,
                     var_type: None,
                     in_region: false,
@@ -540,7 +588,56 @@ impl SemanticChecker {
                     }
                 }
             }
-            Expr::Call { args, .. } => {
+            Expr::Call { callee, args } => {
+                if callee == "secure_patch_icache" {
+                    // Taint checking (Pages 749-752)
+                    for arg in args {
+                        let arg_var_name = match &arg.value {
+                            Expr::Ident(n, _) => Some(n.as_str()),
+                            Expr::Consume(n, _) => Some(n.as_str()),
+                            _ => None,
+                        };
+                        if let Some(vname) = arg_var_name {
+                            if let Some(var) = self.lookup_var(vname) {
+                                if var.is_tainted {
+                                    let span = match &arg.value {
+                                        Expr::Ident(_, sp) => *sp,
+                                        Expr::Consume(_, sp) => *sp,
+                                        _ => Span::default(),
+                                    };
+                                    return Err(TypeError::new(
+                                        "E0009",
+                                        format!("Security violation: Tainted variable '{}' cannot be used in secure_patch_icache without sanitize()", vname),
+                                        span,
+                                    )
+                                    .with_note("Pages 749-752: Hardware Capability and Taint Tracking Zero-Trust Verification")
+                                    .with_help(format!("Call `let clean_{} = sanitize({}, min, max)` before patching I-Cache.", vname, vname)));
+                                }
+                            }
+                        }
+                    }
+
+                    // Capability token checking (Pages 749-752)
+                    let has_capability = args.iter().any(|arg| {
+                        match &arg.value {
+                            Expr::Ident(n, _) | Expr::Consume(n, _) => {
+                                self.lookup_var(n).map(|v| v.is_capability).unwrap_or(false)
+                            }
+                            _ => false,
+                        }
+                    });
+                    if !has_capability {
+                        let span = args.first().map(|a| a.value.span()).unwrap_or_default();
+                        return Err(TypeError::new(
+                            "E0010",
+                            "Security violation: secure_patch_icache requires an acquired capability token",
+                            span,
+                        )
+                        .with_note("Pages 749-752: Capability-based access control enforces least privilege")
+                        .with_help("Acquire a capability token using `acquire_capability(...)` before patching."));
+                    }
+                }
+
                 for arg in args {
                     self.check_expr(&arg.value)?;
                 }

@@ -248,6 +248,12 @@ impl Codegen {
             self.compile_statements(&func.body);
         }
 
+        // Compile cognitive brain declarations if any
+        for brain in &program.brains {
+            self.push_slot(make_slot('_', "SH", 0, '$', 1, 4, '>'));
+            self.compile_statements(&brain.body);
+        }
+
         // Then compile main entry statements
         self.compile_statements(&program.main_statements);
 
@@ -310,6 +316,32 @@ impl Codegen {
                     self.push_slot(make_slot('_', "RC", 7, '$', 2, 5, '>'));
                     self.compile_statements(fb);
                 }
+            }
+            Statement::Brain { body, .. } => {
+                // Cognitive Brain block: Sentry watchdog & bounds
+                self.push_slot(make_slot('_', "SH", 0, '$', 1, 4, '>'));
+                self.compile_statements(body);
+            }
+            Statement::Fork { target, .. } => {
+                let target_reg = 13;
+                self.compile_expr(target, target_reg);
+                // Emit Superposition branch / fiber spawn slot
+                self.push_slot(make_slot('_', "SW", target_reg, '$', target_reg, 5, '>'));
+            }
+            Statement::Simulate { action, with_arg, .. } => {
+                let act_reg = 12;
+                self.compile_expr(action, act_reg);
+                if let Some(arg) = with_arg {
+                    let arg_reg = 11;
+                    self.compile_expr(arg, arg_reg);
+                    self.push_slot(make_slot('_', "PS", act_reg, '$', arg_reg, 1, '>'));
+                } else {
+                    self.push_slot(make_slot('_', "PS", act_reg, '$', act_reg, 0, '>'));
+                }
+            }
+            Statement::Abort(_) => {
+                // Halt / cognitive trap
+                self.push_slot(make_slot('_', "HL", 0, '#', 0, 0, '!'));
             }
             Statement::If {
                 condition,
@@ -556,7 +588,7 @@ impl Codegen {
                     "predicated_op" => {
                         self.push_slot(make_slot('_', "PO", dest, '$', first_arg_reg, 2, '>'));
                     }
-                    "subbyte_dot" => {
+                    "subbyte_dot" | "ternary_dot16" => {
                         self.push_slot(make_slot('_', "MD", dest, '$', first_arg_reg, 6, '>'));
                     }
                     "backward" | "reversible_backward_step" => {
@@ -581,9 +613,65 @@ impl Codegen {
                         // Brain 4 STDP Synapse Update
                         self.push_slot(make_slot('_', "ST", dest, '$', first_arg_reg, 4, '>'));
                     }
-                    "ground_to_symbol" | "ground_and_unify" | "unify_terms" => {
+                    "ground_to_symbol" | "ground_and_unify" | "unify_terms" | "symbolify" => {
                         // Brain 1 Symbolic grounding
                         self.push_slot(make_slot('_', "SY", dest, '$', first_arg_reg, 8, '>'));
+                    }
+                    "match_hyper_edge" => {
+                        // Brain 1 Hyper-Edge Matcher (Opcode 7'd134)
+                        self.push_slot(make_slot('_', "HE", dest, '$', first_arg_reg, 3, '>'));
+                    }
+                    "lif_step" => {
+                        // Brain 4 Neuromorphic LIF Neuron Step (Opcode 6'd75)
+                        self.push_slot(make_slot('_', "LI", dest, '$', first_arg_reg, 5, '>'));
+                    }
+                    "lorenz_step" => {
+                        // Brain 5 Chaos Diffusion / Lorenz Attractor (Opcode 7'd128)
+                        self.push_slot(make_slot('_', "OD", dest, '$', first_arg_reg, 7, '>'));
+                    }
+                    "cross_attention_gate" => {
+                        // Brain 5 Cross-Attention Gating (Opcode 7'd132)
+                        self.push_slot(make_slot('_', "CA", dest, '$', first_arg_reg, 2, '>'));
+                    }
+                    "arbiter_update" => {
+                        // Brain 6 Dynamic Arbiter Weight Update (Opcode 7'd126)
+                        self.push_slot(make_slot('_', "AW", dest, '$', first_arg_reg, 1, '>'));
+                    }
+                    "cordic_sincos" => {
+                        // Hardware CORDIC Sin/Cos (Opcode 6'd63)
+                        self.push_slot(make_slot('_', "CD", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "atomic_cas" => {
+                        // Hardware Atomic Compare-and-Swap (Opcode 7'd105)
+                        self.push_slot(make_slot('_', "CS", dest, '$', first_arg_reg, 1, '>'));
+                    }
+                    "prefix_sum" => {
+                        // Parallel Prefix-Sum Kogge-Stone Adder Tree (Opcode 7'd106)
+                        self.push_slot(make_slot('_', "PS", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "transpose_4x4" => {
+                        // Tensor Tile Strided Swizzle / Transpose (Opcode 7'd115)
+                        self.push_slot(make_slot('_', "TT", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "wormhole_route" => {
+                        // Deterministic 4D Hyper-Torus Wormhole Tunnel (Opcode 7'd135)
+                        self.push_slot(make_slot('_', "WH", dest, '$', first_arg_reg, 3, '>'));
+                    }
+                    "deflect_packet" => {
+                        // Adaptive Deflection Routing (Opcode 6'd76)
+                        self.push_slot(make_slot('_', "DF", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "acquire_capability" => {
+                        // Hardware Capability Token Acquisition (Opcode 0x14: _AC)
+                        self.push_slot(make_slot('_', "AC", dest, '$', 0, 1, '>'));
+                    }
+                    "sanitize" => {
+                        // Hardware Bounds Sanitization (Opcode 0x15: _SN)
+                        self.push_slot(make_slot('_', "SN", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "secure_patch_icache" => {
+                        // Hardware Secure I-Cache Patch (Opcode 0x16: _SC)
+                        self.push_slot(make_slot('_', "SC", dest, '$', first_arg_reg, 2, '>'));
                     }
                     "deduce_causal_chain" | "assert_triple" | "init_kg_partition" => {
                         // Brain 1 Causal Knowledge Graph query
@@ -604,12 +692,40 @@ impl Codegen {
                     "recover_from_neighbor" => {
                         self.push_slot(make_slot('_', "RC", dest, '$', first_arg_reg, 5, '>'));
                     }
-                    "await_dma_channel" => {
+                    "await_dma_channel" | "dma_sync" => {
                         self.push_slot(make_slot('_', "DW", 0, '$', 1, 5, '>'));
                     }
                     "verify_slot_parity" | "poll_core_telemetry" => {
                         // Brain 6 Parity telemetry
                         self.push_slot(make_slot('_', "PT", 0, '$', 0, 1, '>'));
+                    }
+                    "lfsr_rand" | "random" => {
+                        // 32-bit Galois LFSR Hardware PRNG (Milestone #042)
+                        self.push_slot(make_slot('_', "RN", dest, '$', 0, 0, '>'));
+                    }
+                    "noc_poll" | "poll_noc" => {
+                        // Non-blocking NoC FIFO Poll (Milestone #042)
+                        self.push_slot(make_slot('_', "PL", dest, '$', 0, 0, '>'));
+                    }
+                    "read_csr" | "csr_read" => {
+                        // Hardware CSR Performance Counter Read (Milestone #180)
+                        let csr_id = match args.first().map(|a| &a.value) {
+                            Some(Expr::LiteralInt(i)) => (*i as usize).min(3),
+                            _ => first_arg_reg.min(3),
+                        };
+                        self.push_slot(make_slot('_', "RC", dest, 'C', csr_id, 0, '>'));
+                    }
+                    "checkpoint" | "save_checkpoint" | "shadow_save" => {
+                        // 1-Cycle Hardware Shadow Checkpoint Save (Milestone #053)
+                        self.push_slot(make_slot('_', "RC", 0, '!', 0, 0, '>'));
+                    }
+                    "restore_checkpoint" | "shadow_restore" => {
+                        // 1-Cycle Hardware Shadow Checkpoint Restore (Milestone #053)
+                        self.push_slot(make_slot('_', "RC", 0, '!', 0, 1, '>'));
+                    }
+                    "mret" | "return_from_trap" => {
+                        // Return from Hardware Trap Handler (Milestone #181)
+                        self.push_slot(make_slot('_', "RT", 0, '$', 0, 0, '>'));
                     }
                     "$trap" => {
                         self.push_slot(make_slot('_', "PO", dest, '$', 0, 0, '>'));

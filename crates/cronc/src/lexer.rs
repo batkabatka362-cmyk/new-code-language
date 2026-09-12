@@ -509,7 +509,7 @@ impl Lexer {
                     } else {
                         let tok = match word.as_str() {
                             "async" => Token::Async,
-                            "def" => Token::Def,
+                            "def" | "fn" => Token::Def,
                             "let" => Token::Let,
                             "lin" => Token::Lin,
                             "grad" => Token::Grad,
@@ -544,6 +544,12 @@ impl Lexer {
                             "module" => Token::Module,
                             "trait" => Token::Trait,
                             "impl" => Token::Impl,
+                            "brain" => Token::Brain,
+                            "fork" => Token::Fork,
+                            "simulate" => Token::Simulate,
+                            "abort" => Token::Abort,
+                            "then" => Token::Then,
+                            "with" => Token::With,
                             _ => Token::Ident(word),
                         };
                         tokens.push(Spanned::new(tok, span));

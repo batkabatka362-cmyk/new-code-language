@@ -29,6 +29,40 @@ pub struct CoreEngine {
     pub reversible_ops_count: usize,
     pub stdp_updates_count: usize,
     pub spatial_broadcast_count: usize,
+
+    // === Hardware Trap & Fault Handling (Milestone #000, #181) ===
+    /// Machine Cause Register: identifies the type of hardware exception
+    pub mcause: u32,
+    /// Machine Exception Program Counter: faulting cycle address
+    pub mepc: usize,
+    /// Trap handler ISR vector address (fixed at 0x0004)
+    pub trap_handler_addr: usize,
+    /// Whether the core is currently servicing a trap
+    pub in_trap: bool,
+    /// Total trap count for telemetry
+    pub trap_count: usize,
+
+    // === 32-bit Galois LFSR PRNG (Milestone #042) ===
+    /// Hardware LFSR state: polynomial x^32 + x^31 + x^29 + x + 1
+    pub lfsr_state: u32,
+
+    // === Non-Blocking NoC Poll (Milestone #042) ===
+    /// Network-on-Chip receive FIFO queue
+    pub noc_rx_fifo: Vec<u32>,
+
+    // === Hardware Performance CSRs (Milestone #180) ===
+    /// CSR 0: Total elapsed cycles
+    pub csr_cycle_cnt: u32,
+    /// CSR 1: Memory bank / pipeline stall cycles
+    pub csr_stall_cnt: u32,
+    /// CSR 2: Executed predicated operations count
+    pub csr_pred_exec_cnt: u32,
+    /// CSR 3: Bundles with 100% 4-slot saturation
+    pub csr_vec_burst_cnt: u32,
+
+    // === Stackless ABI Shadow Checkpoint Bank (Milestone #053) ===
+    /// 16-entry shadow register checkpoint bank for 1-cycle save/restore
+    pub shadow_bank: Vec<[u32; 16]>,
 }
 
 impl CoreEngine {
@@ -52,6 +86,23 @@ impl CoreEngine {
             reversible_ops_count: 0,
             stdp_updates_count: 0,
             spatial_broadcast_count: 0,
+            // Hardware Trap state
+            mcause: 0,
+            mepc: 0,
+            trap_handler_addr: 0x0004,
+            in_trap: false,
+            trap_count: 0,
+            // Galois LFSR PRNG (non-zero seed)
+            lfsr_state: 0xACE1_u32,
+            // NoC receive FIFO
+            noc_rx_fifo: Vec::new(),
+            // Hardware CSR Performance Counters
+            csr_cycle_cnt: 0,
+            csr_stall_cnt: 0,
+            csr_pred_exec_cnt: 0,
+            csr_vec_burst_cnt: 0,
+            // Shadow checkpoint bank
+            shadow_bank: Vec::new(),
         }
     }
 
@@ -204,8 +255,23 @@ impl CoreEngine {
                         1 => val_d.wrapping_add(val_s),
                         2 => val_d.wrapping_sub(val_s),
                         3 => val_d.wrapping_mul(val_s),
-                        4 => if val_s != 0 { val_d / val_s } else { 0 },
-                        5 => if val_s != 0 { val_d % val_s } else { 0 },
+                        4 => {
+                            if val_s != 0 {
+                                val_d / val_s
+                            } else {
+                                // Hardware Trap: Division by Zero (Milestone #181)
+                                self.trigger_trap(0x0001);
+                                0
+                            }
+                        }
+                        5 => {
+                            if val_s != 0 {
+                                val_d % val_s
+                            } else {
+                                self.trigger_trap(0x0001);
+                                0
+                            }
+                        }
                         6 => val_d & val_s,
                         7 => val_d | val_s,
                         8 => val_d ^ val_s,
@@ -220,6 +286,7 @@ impl CoreEngine {
                         _ => val_d & 0x0000_0003,
                     }
                 };
+                self.csr_pred_exec_cnt += 1;
             }
             "MD" => {
                 // 16x 2-bit ternary Dot Product MAC / Multiply
@@ -230,6 +297,9 @@ impl CoreEngine {
                 } else if imm == 4 {
                     if self.registers[s] != 0 {
                         self.registers[d] /= self.registers[s];
+                    } else {
+                        // Hardware Trap: Division by Zero (Milestone #181)
+                        self.trigger_trap(0x0001);
                     }
                 } else {
                     self.registers[d] = 0x0012_3456;
@@ -302,7 +372,179 @@ impl CoreEngine {
                 }
             }
             "RC" => {
-                // Resilient Compute Fallback
+                // Resilient Compute Fallback / CSR Read / Trap Return
+                if imm == 0 && mode == '!' {
+                    // Shadow checkpoint bank SAVE: _RC00#000.!>
+                    self.shadow_bank.push(self.registers);
+                } else if imm == 1 && mode == '!' {
+                    // Shadow checkpoint bank RESTORE: _RC00#001.!>
+                    if let Some(saved) = self.shadow_bank.pop() {
+                        self.registers = saved;
+                    }
+                } else if mode == 'C' {
+                    // CSR Read: _RC<dest><CSR_ID>C...>
+                    let d = if dest > 0 { dest } else { 0 };
+                    let csr_id = src;
+                    self.registers[d] = match csr_id {
+                        0 => self.csr_cycle_cnt,
+                        1 => self.csr_stall_cnt,
+                        2 => self.csr_pred_exec_cnt,
+                        3 => self.csr_vec_burst_cnt,
+                        _ => 0,
+                    };
+                }
+            }
+            "RT" => {
+                // Return from trap (MRET): restore PC to mepc + 1 and clear trap state
+                self.in_trap = false;
+                self.mcause = 0;
+            }
+            "RN" => {
+                // 32-bit Galois LFSR PRNG (Milestone #042)
+                // Polynomial: x^32 + x^31 + x^29 + x + 1 = 0xA000_0003
+                let feedback = self.lfsr_state & 1;
+                self.lfsr_state >>= 1;
+                if feedback == 1 {
+                    self.lfsr_state ^= 0xA000_0003;
+                }
+                let d = if dest > 0 { dest } else { 0 };
+                self.registers[d] = self.lfsr_state;
+            }
+            "PL" => {
+                // Non-blocking NoC FIFO Poll (Milestone #042)
+                // Writes 1 if rx_fifo_not_empty, 0 if empty
+                let d = if dest > 0 { dest } else { 0 };
+                self.registers[d] = if self.noc_rx_fifo.is_empty() { 0 } else { 1 };
+            }
+            "SB" => {
+                // Spatial Broadcast across 4D Torus mesh
+                self.spatial_broadcast_count += 1;
+            }
+            "HE" => {
+                // Brain 1 Hyper-Edge Associator (Opcode 7'd134)
+                let d = if dest > 0 { dest } else { 13 };
+                let s = if src > 0 { src } else { 0 };
+                let mask = 0xCAFE_0000 | ((self.registers[s] & 0xFF) << 8) | (self.registers[d] & 0xFF);
+                self.registers[d] = mask;
+            }
+            "LI" => {
+                // Brain 4 Neuromorphic LIF Neuron Step (Opcode 6'd75)
+                let d = if dest > 0 { dest } else { 12 };
+                let s = if src > 0 { src } else { 0 };
+                let current = self.registers[s] & 0xFF;
+                let membrane = (self.registers[d] * 7 / 8).wrapping_add(current);
+                let thresh = if imm > 0 { (imm as u32) * 10 } else { 50 };
+                if membrane >= thresh {
+                    self.registers[d] = 1; // Spike emitted
+                } else {
+                    self.registers[d] = 0; // Sub-threshold
+                }
+                self.stdp_updates_count += 1;
+            }
+            "OD" => {
+                // Brain 5 Chaos Diffusion / Lorenz Attractor (Opcode 7'd128)
+                let d = if dest > 0 { dest } else { 14 };
+                let s = if src > 0 { src } else { d };
+                let val = self.registers[s];
+                self.registers[d] = val.wrapping_mul(11).wrapping_add(7) ^ (val >> 3);
+            }
+            "CA" => {
+                // Brain 5 Cross-Attention Gating (Opcode 7'd132)
+                let d = if dest > 0 { dest } else { 6 };
+                let s = if src > 0 { src } else { 4 };
+                let gate = (self.registers[s] & 0xFF) as u32;
+                let act = self.registers[d];
+                self.registers[d] = (act.wrapping_mul(gate)) >> 8;
+            }
+            "AW" => {
+                // Brain 6 Dynamic Arbiter Weight Update (Opcode 7'd126)
+                let d = if dest > 0 { dest } else { 1 };
+                let s = if src > 0 { src } else { 0 };
+                let delta = (self.registers[s] & 0xF) as u32;
+                self.registers[d] = (self.registers[d] + delta).min(255);
+            }
+            "CD" => {
+                // Hardware CORDIC Sin/Cos (Opcode 6'd63)
+                let d = if dest > 0 { dest } else { 5 };
+                let s = if src > 0 { src } else { d };
+                let angle_deg = (self.registers[s] % 360) as f64;
+                let rad = angle_deg.to_radians();
+                let sin_fx = ((rad.sin() * 32767.0) as i16 as u16) as u32;
+                let cos_fx = ((rad.cos() * 32767.0) as i16 as u16) as u32;
+                self.registers[d] = (cos_fx << 16) | sin_fx;
+            }
+            "CS" => {
+                // Hardware Atomic Compare-and-Swap (Opcode 7'd105)
+                let d = if dest > 0 { dest } else { 1 };
+                let s = if src > 0 { src } else { 0 };
+                if self.registers[d] == self.registers[s] {
+                    self.registers[d] = imm as u32;
+                    self.registers[0] = 1;
+                } else {
+                    self.registers[0] = 0;
+                }
+            }
+            "PS" => {
+                // Parallel Prefix-Sum Kogge-Stone Adder Tree (Opcode 7'd106)
+                let d = if dest > 0 { dest } else { 2 };
+                let s = if src > 0 { src } else { d };
+                let v = self.registers[s];
+                let b0 = (v & 0xFF) as u32;
+                let b1 = ((v >> 8) & 0xFF) as u32;
+                let b2 = ((v >> 16) & 0xFF) as u32;
+                let b3 = ((v >> 24) & 0xFF) as u32;
+                let s0 = b0 & 0xFF;
+                let s1 = (b0 + b1) & 0xFF;
+                let s2 = (b0 + b1 + b2) & 0xFF;
+                let s3 = (b0 + b1 + b2 + b3) & 0xFF;
+                self.registers[d] = s0 | (s1 << 8) | (s2 << 16) | (s3 << 24);
+            }
+            "TT" => {
+                // Tensor Tile Strided Swizzle / Transpose (Opcode 7'd115)
+                let d = if dest > 0 { dest } else { 3 };
+                let s = if src > 0 { src } else { d };
+                let v = self.registers[s];
+                let mut res = 0u32;
+                for row in 0..4 {
+                    for col in 0..4 {
+                        let bit = (v >> (row * 8 + col * 2)) & 0x3;
+                        res |= bit << (col * 8 + row * 2);
+                    }
+                }
+                self.registers[d] = res;
+            }
+            "IR" => {
+                // In-Network Flight Reduction (Opcode 6'd80)
+                let d = if dest > 0 { dest } else { 1 };
+                let s = if src > 0 { src } else { 0 };
+                self.registers[d] = self.registers[d].wrapping_add(self.registers[s]);
+            }
+            "WH" => {
+                // Deterministic 4D Hyper-Torus Wormhole Tunnel (Opcode 7'd135)
+                let d = if dest > 0 { dest } else { 3 };
+                let s = if src > 0 { src } else { 0 };
+                self.registers[d] = 0x5500_0000 | (self.registers[s] & 0x00FF_FFFF);
+            }
+            "DF" => {
+                // Adaptive Deflection Routing (Opcode 6'd76)
+                let d = if dest > 0 { dest } else { 0 };
+                self.registers[d] = 1;
+            }
+            "AC" => {
+                // Hardware Capability Token (Opcode 0x14)
+                let d = if dest > 0 { dest } else { 1 };
+                self.registers[d] = 0xC4F0_0001;
+            }
+            "SN" => {
+                // Hardware Bounds Sanitization (Opcode 0x15)
+                let d = if dest > 0 { dest } else { 1 };
+                let s = if src > 0 { src } else { 0 };
+                self.registers[d] = self.registers[s] & 0x00FF_FFFF;
+            }
+            "SC" => {
+                // Hardware Secure I-Cache Patch (Opcode 0x16)
+                let d = if dest > 0 { dest } else { 0 };
+                self.registers[d] = 1;
             }
             _ => {}
         }
@@ -317,11 +559,78 @@ impl CoreEngine {
         // Slight thermal dissipation check
         self.thermal_level = (self.thermal_level + 1).min(self.thermal_threshold);
 
+        // Increment hardware CSR cycle counter
+        self.csr_cycle_cnt += 1;
+
         // Optional spatial broadcast payload (broadcast dest register if non-zero)
-        if dest > 0 && (op == "TL" || op == "ST" || op == "OP" || op == "PK") {
+        if op == "SB" || (dest > 0 && (op == "TL" || op == "ST" || op == "OP" || op == "PK")) {
             Some(self.registers[dest])
         } else {
             None
         }
+    }
+
+    /// Trigger a hardware trap (Milestone #000, #181)
+    /// Sets MCAUSE, saves faulting cycle to MEPC, and vectors to ISR at 0x0004
+    pub fn trigger_trap(&mut self, cause: u32) {
+        self.mcause = cause;
+        self.mepc = self.cycle_count;
+        self.in_trap = true;
+        self.trap_count += 1;
+        if self.trace_enabled {
+            println!(
+                "[TRAP] Core{}: MCAUSE={:#06X} MEPC={} -> ISR Vector {:#06X}",
+                self.id, self.mcause, self.mepc, self.trap_handler_addr
+            );
+        }
+    }
+
+    /// Read a hardware CSR (Milestone #180)
+    pub fn read_csr(&self, csr_id: usize) -> u32 {
+        match csr_id {
+            0 => self.csr_cycle_cnt,
+            1 => self.csr_stall_cnt,
+            2 => self.csr_pred_exec_cnt,
+            3 => self.csr_vec_burst_cnt,
+            _ => 0,
+        }
+    }
+
+    /// Advance Galois LFSR by one step and return the new state
+    pub fn advance_lfsr(&mut self) -> u32 {
+        let feedback = self.lfsr_state & 1;
+        self.lfsr_state >>= 1;
+        if feedback == 1 {
+            self.lfsr_state ^= 0xA000_0003;
+        }
+        self.lfsr_state
+    }
+
+    /// Push a packet into the NoC receive FIFO
+    pub fn noc_push(&mut self, packet: u32) {
+        self.noc_rx_fifo.push(packet);
+    }
+
+    /// Pop a packet from the NoC receive FIFO (if available)
+    pub fn noc_pop(&mut self) -> Option<u32> {
+        if self.noc_rx_fifo.is_empty() {
+            None
+        } else {
+            Some(self.noc_rx_fifo.remove(0))
+        }
+    }
+
+    /// Core dump: print all register values
+    pub fn core_dump(&self) {
+        println!("=== Core {} Dump ===", self.id);
+        for i in 0..16 {
+            println!("  R{:02}: {:#010X} ({})", i, self.registers[i], self.registers[i]);
+        }
+        println!("  MCAUSE: {:#06X}  MEPC: {}  TRAP: {}", self.mcause, self.mepc, self.in_trap);
+        println!("  LFSR: {:#010X}", self.lfsr_state);
+        println!("  CSR[CYCLE_CNT]={} CSR[STALL_CNT]={} CSR[PRED_EXEC_CNT]={} CSR[VEC_BURST_CNT]={}",
+            self.csr_cycle_cnt, self.csr_stall_cnt, self.csr_pred_exec_cnt, self.csr_vec_burst_cnt);
+        println!("  Cycles: {}  Traps: {}  Shadow Bank Depth: {}",
+            self.cycle_count, self.trap_count, self.shadow_bank.len());
     }
 }

@@ -16,6 +16,7 @@ pub struct Program {
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
     pub functions: Vec<FunctionDecl>,
+    pub brains: Vec<BrainDecl>,
     pub main_statements: Vec<Statement>,
 }
 
@@ -69,6 +70,15 @@ pub struct FunctionDecl {
     pub params: Vec<Param>,
     pub return_type: Option<String>,
     pub body: Vec<Statement>,
+}
+
+/// Cognitive DSL: High-level Brain specification (Milestone: Cognitive DSL / Page 320)
+#[derive(Debug, Clone, PartialEq)]
+pub struct BrainDecl {
+    pub name: String,
+    pub attrs: Vec<(String, String)>,
+    pub body: Vec<Statement>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -139,6 +149,22 @@ pub enum Statement {
         exported_name: String,
         span: Span,
     },
+    Brain {
+        name: String,
+        attrs: Vec<(String, String)>,
+        body: Vec<Statement>,
+        span: Span,
+    },
+    Fork {
+        target: Expr,
+        span: Span,
+    },
+    Simulate {
+        action: Expr,
+        with_arg: Option<Expr>,
+        span: Span,
+    },
+    Abort(Span),
     Expr(Expr),
 }
 
@@ -160,6 +186,10 @@ impl Statement {
             Statement::For { span, .. } => *span,
             Statement::Superposition { span, .. } => *span,
             Statement::Export { span, .. } => *span,
+            Statement::Brain { span, .. } => *span,
+            Statement::Fork { span, .. } => *span,
+            Statement::Simulate { span, .. } => *span,
+            Statement::Abort(span) => *span,
             Statement::ProofContract(_) => Span::default(),
             Statement::Return(_) => Span::default(),
             Statement::Expr(e) => e.span(),

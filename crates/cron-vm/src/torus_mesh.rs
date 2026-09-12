@@ -86,4 +86,31 @@ impl TorusMesh {
             Vec::new()
         }
     }
+
+    /// 16-Way Branchless 4D Hyper-Tree Traversal (Pages 268-275)
+    /// Decodes a 4-bit directional mask per child index without branches.
+    /// Calculates Torus wrap-around & stride projection: (X + Y*2 + Z*4 + W*8) & 0x7F.
+    pub fn branchless_traverse_16way(base: Coord4D, active_mask: u16) -> [(Coord4D, usize); 16] {
+        let mut results = [(Coord4D::new(0, 0, 0, 0), 0); 16];
+        for i in 0..16 {
+            let dx = (i >> 0) & 1;
+            let dy = (i >> 1) & 1;
+            let dz = (i >> 2) & 1;
+            let dw = (i >> 3) & 1;
+
+            let nx = (base.x + dx) % 4;
+            let ny = (base.y + dy) % 4;
+            let nz = (base.z + dz) % 4;
+            let nw = (base.w + dw) % 4;
+
+            let coord = Coord4D { x: nx, y: ny, z: nz, w: nw };
+            // Hyper-tree stride projection hash
+            let hash = (nx + ny * 2 + nz * 4 + nw * 8) & 0x7F;
+
+            let is_active = (active_mask >> i) & 1;
+            results[i] = (coord, hash * (is_active as usize));
+        }
+        results
+    }
 }
+

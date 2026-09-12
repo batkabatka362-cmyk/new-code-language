@@ -3,8 +3,9 @@ pub mod simulator;
 pub mod torus_mesh;
 
 pub use core_engine::CoreEngine;
-pub use simulator::{HardwareStats, Simulator, VliwInstruction};
+pub use simulator::{BundleProfile, ExecutionProfile, FiberTask, HardwareStats, Simulator, VliwInstruction};
 pub use torus_mesh::{Coord4D, TorusMesh};
+
 
 pub fn run_cl(cl_code: &str) -> HardwareStats {
     let mut sim = Simulator::new();
@@ -43,5 +44,26 @@ mod tests {
         assert_eq!(stats.total_cycles, 2);
         assert!(stats.optical_gemm_ops > 0);
         assert!(stats.reversible_gate_ops > 0);
+    }
+
+    #[test]
+    fn test_branchless_16way_hyper_tree_traversal() {
+        use crate::torus_mesh::{Coord4D, TorusMesh};
+        let base = Coord4D::new(3, 3, 3, 3);
+        // Test all 16 directions active
+        let active_mask = 0xFFFF;
+        let branches = TorusMesh::branchless_traverse_16way(base, active_mask);
+
+        assert_eq!(branches.len(), 16);
+        // Branch 0 (dx=0, dy=0, dz=0, dw=0) -> stays at (3,3,3,3)
+        assert_eq!(branches[0].0, Coord4D::new(3, 3, 3, 3));
+        // Branch 15 (dx=1, dy=1, dz=1, dw=1) -> wraps around to (0,0,0,0)
+        assert_eq!(branches[15].0, Coord4D::new(0, 0, 0, 0));
+
+        // Test inactive mask filters hash
+        let sparse_mask = 0x0001; // only branch 0 active
+        let sparse_branches = TorusMesh::branchless_traverse_16way(base, sparse_mask);
+        assert!(sparse_branches[0].1 > 0);
+        assert_eq!(sparse_branches[1].1, 0);
     }
 }

@@ -5,7 +5,11 @@ pub mod codegen;
 pub mod diagnostic;
 pub mod lexer;
 pub mod parser;
+pub mod scheduler;
 pub mod token;
+pub mod verilog_backend;
+
+pub use scheduler::{AOTHazardScheduler, IRInstruction};
 
 use checker::SemanticChecker;
 use codegen::Codegen;
@@ -59,6 +63,11 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
     let machine_code = codegen.generate(&program);
 
     Ok(machine_code)
+}
+
+pub fn compile_to_verilog(source: &str, module_name: &str) -> Result<String, String> {
+    let cl_code = compile_source(source)?;
+    verilog_backend::generate_verilog_hdl(&cl_code, module_name)
 }
 
 #[cfg(test)]
@@ -410,5 +419,20 @@ mod tests {
         "#;
         let result = compile_source(code);
         assert!(result.is_ok(), "Failed to compile async expressions: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_crc8_token_integrity() {
+        use crate::cl_lang::{compute_crc8_atm, pack_slot_with_crc8, verify_token_crc8};
+        let crc = compute_crc8_atm(b"_OP04$1");
+        assert_ne!(crc, 0);
+
+        let packed_slot = pack_slot_with_crc8('_', "OP", "04", '$', '1', '2', '>');
+        assert_eq!(packed_slot.len(), 10);
+        assert!(verify_token_crc8(&packed_slot));
+
+        // Corrupt a byte in the payload and verify detection
+        let corrupted = "_OP05$1".to_string() + &packed_slot[7..];
+        assert!(!verify_token_crc8(&corrupted));
     }
 }

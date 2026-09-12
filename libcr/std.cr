@@ -9,6 +9,8 @@ import { TorusCoord, core_id_to_coord, coord_to_core_id, manhattan_distance_4d }
 import { LinearGuard, wrap_linear, unwrap_linear, linear_swap } from "core/linear.cr"
 import { broadcast_4d_sphere, open_simplex_pipe, sync_neighborhood } from "core/spatial.cr"
 import { wave_t, ext_addr_t, spk_stamp, rev_t, pack_wave } from "core/types.cr"
+import { DynamicVec, vec_new, vec_push_back, vec_pop } from "core/vec.cr"
+import { HyperTreeNode, create_hyper_node, hyper_tree_traverse_step } from "core/hyper_tree.cr"
 
 // Brain 1: Symbolic & Causal Unification
 import { KnowledgeGraphPartition, Triple, init_kg_partition, assert_triple } from "symbolic/knowledge_graph.cr"
@@ -27,6 +29,7 @@ import { ReversibleLayer, init_reversible_layer, reversible_backward_step } from
 import { StdpSynapse, init_stdp_synapse, stdp_apply_spike } from "neuro/stdp.cr"
 import { AerSpikePacket, pack_aer_spike, dispatch_aer_spike } from "neuro/synapse_routing.cr"
 import { DynamicSNN, compute_attention_head } from "neuro/transformer.cr"
+import { ALifeAgent, create_alife_agent, alife_lifecycle_step } from "neuro/alife.cr"
 
 // Brain 5: Quantum Superposition Meta-Planning
 import { SuperpositionPlanTree, init_superposition_tree, branch_in_superposition, collapse_optimal_decision } from "quantum/mcts_quantum.cr"

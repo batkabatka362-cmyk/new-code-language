@@ -46,6 +46,14 @@ pub enum Token {
     Trait,
     Impl,
 
+    // Cognitive DSL Keywords
+    Brain,
+    Fork,
+    Simulate,
+    Abort,
+    Then,
+    With,
+
     // Identifiers & Literals
     Ident(String),
     IntLit(i64),

@@ -110,6 +110,7 @@ impl Parser {
         let mut traits = Vec::new();
         let mut impls = Vec::new();
         let mut functions = Vec::new();
+        let mut brains = Vec::new();
         let mut main_statements = Vec::new();
 
         while !self.check(&Token::Eof) && !self.check(&Token::EndDir) {
@@ -216,6 +217,9 @@ impl Parser {
                 || self.check(&Token::Async) || self.check(&Token::Def) || self.check(&Token::Inline) {
                 let func = self.parse_function_decl()?;
                 functions.push(func);
+            } else if self.check(&Token::Brain) {
+                let brain_decl = self.parse_brain_decl()?;
+                brains.push(brain_decl);
             } else if let Token::Ident(_name) = self.peek() {
                 if self.peek_offset(1) == &Token::Colon
                     && !matches!(self.peek_offset(2), Token::Ident(_) | Token::OpenParen)
@@ -267,6 +271,7 @@ impl Parser {
             traits,
             impls,
             functions,
+            brains,
             main_statements,
         })
     }
@@ -475,6 +480,19 @@ impl Parser {
         })
     }
 
+    /// Parse `brain <Name> [attrs] { ... }`
+    fn parse_brain_decl(&mut self) -> Result<BrainDecl, String> {
+        let span = self.current_span();
+        self.expect(&Token::Brain)?;
+        let name = match self.advance() {
+            Token::Ident(n) => n,
+            other => return Err(format!("Expected brain name, got {:?}", other)),
+        };
+        let attrs = self.parse_bracket_attributes()?;
+        let body = self.parse_block()?;
+        Ok(BrainDecl { name, attrs, body, span })
+    }
+
     fn parse_block(&mut self) -> Result<Vec<Statement>, String> {
         self.expect(&Token::OpenBrace)?;
         let mut stmts = Vec::new();
@@ -495,8 +513,15 @@ impl Parser {
                 let _stmt_span = self.current_span();
                 self.advance(); // let
                 let is_mut = self.match_token(&Token::Mut);
+                let has_paren = self.match_token(&Token::OpenParen);
                 let mut vars = Vec::new();
                 loop {
+                    let is_tainted = if matches!(self.peek(), Token::Ident(ref n) if n == "tainted") && matches!(self.peek_offset(1), Token::Ident(_)) {
+                        self.advance();
+                        true
+                    } else {
+                        false
+                    };
                     let is_lin = self.match_token(&Token::Lin);
                     let is_grad = self.match_token(&Token::Grad);
                     let _is_lin2 = self.match_token(&Token::Lin);
@@ -509,7 +534,14 @@ impl Parser {
                     };
 
                     let type_annot = if self.match_token(&Token::Colon) {
-                        Some(self.parse_type_str()?)
+                        let t = self.parse_type_str()?;
+                        if is_tainted && !t.contains("tainted") {
+                            Some(format!("tainted {}", t))
+                        } else {
+                            Some(t)
+                        }
+                    } else if is_tainted {
+                        Some("tainted".to_string())
                     } else {
                         None
                     };
@@ -519,6 +551,9 @@ impl Parser {
                     if !self.match_token(&Token::Comma) {
                         break;
                     }
+                }
+                if has_paren {
+                    self.expect(&Token::CloseParen)?;
                 }
 
                 self.expect(&Token::Assign)?;
@@ -567,19 +602,65 @@ impl Parser {
                     span,
                 })
             }
+            Token::Brain => {
+                let span = self.current_span();
+                self.advance(); // brain
+                let name = match self.advance() {
+                    Token::Ident(n) => n,
+                    other => return Err(format!("Expected brain name, got {:?}", other)),
+                };
+                let attrs = self.parse_bracket_attributes()?;
+                let body = self.parse_block()?;
+                Ok(Statement::Brain { name, attrs, body, span })
+            }
+            Token::Fork => {
+                let span = self.current_span();
+                self.advance(); // fork
+                let target = self.parse_expr()?;
+                self.match_token(&Token::Semicolon);
+                Ok(Statement::Fork { target, span })
+            }
+            Token::Simulate => {
+                let span = self.current_span();
+                self.advance(); // simulate
+                let action = self.parse_expr()?;
+                let with_arg = if self.match_token(&Token::With) {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
+                self.match_token(&Token::Semicolon);
+                Ok(Statement::Simulate { action, with_arg, span })
+            }
+            Token::Abort => {
+                let span = self.current_span();
+                self.advance(); // abort
+                self.match_token(&Token::Semicolon);
+                Ok(Statement::Abort(span))
+            }
             Token::If => {
                 let span = self.current_span();
                 self.advance(); // if
                 let condition = self.parse_expr()?;
-                let then_body = self.parse_block()?;
+                let then_body = if self.match_token(&Token::Then) {
+                    if self.check(&Token::OpenBrace) {
+                        self.parse_block()?
+                    } else {
+                        vec![self.parse_statement()?]
+                    }
+                } else {
+                    self.parse_block()?
+                };
 
                 let else_body = if self.match_token(&Token::Else) {
                     if self.check(&Token::If) {
                         // else if -> nested
                         let nested_if = self.parse_statement()?;
                         Some(vec![nested_if])
-                    } else {
+                    } else if self.check(&Token::OpenBrace) {
                         Some(self.parse_block()?)
+                    } else {
+                        Some(vec![self.parse_statement()?])
                     }
                 } else {
                     None
@@ -833,9 +914,9 @@ impl Parser {
             other => return Err(format!("Expected type identifier, got {:?}", other)),
         };
 
-        if type_str == "linear" {
+        if type_str == "linear" || type_str == "tainted" {
             if let Token::Ident(inner) = self.peek() {
-                type_str = format!("linear {}", inner);
+                type_str = format!("{} {}", type_str, inner);
                 self.advance();
             }
         }
