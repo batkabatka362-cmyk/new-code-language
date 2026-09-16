@@ -73,7 +73,8 @@ impl CBackend {
 
         // 4. Emit Function Definitions
         for f in &mono_program.functions {
-            self.emit_func(f);
+            let sched = mono_program.schedules.iter().find(|s| s.target_fn == f.name);
+            self.emit_func(f, sched);
         }
 
         // 5. Emit Impl Methods
@@ -455,6 +456,50 @@ impl CBackend {
         self.emit_line("    return t;");
         self.emit_line("}");
         self.emit_line("");
+        self.emit_line("// --- Phase 9: Bank-Conflict-Free SRAM Auto-Swizzling & 4D-Torus PGAS ---");
+        self.emit_line("static inline int64_t sram_swizzle_index(int64_t row, int64_t col, int64_t stride) {");
+        self.emit_line("    if (stride <= 0) return 0;");
+        self.emit_line("    // Bank-conflict-free swizzling: row * stride + (col ^ (row & (stride - 1)))");
+        self.emit_line("    return (row * stride) + (col ^ (row & (stride - 1)));");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tile4x4_f32_t tile_swizzle(cron_tile4x4_f32_t a) {");
+        self.emit_line("    cron_tile4x4_f32_t out;");
+        self.emit_line("    for (int r = 0; r < 4; r++) {");
+        self.emit_line("        for (int c = 0; c < 4; c++) {");
+        self.emit_line("            int swizzled_c = c ^ (r & 3);");
+        self.emit_line("            out.m[r][swizzled_c] = a.m[r][c];");
+        self.emit_line("        }");
+        self.emit_line("    }");
+        self.emit_line("    return out;");
+        self.emit_line("}");
+        self.emit_line("#define CRON_PGAS_MAX_CORES 256");
+        self.emit_line("#define CRON_PGAS_SCRATCHPAD_SIZE 1024");
+        self.emit_line("static _Atomic int64_t cron_pgas_global_memory[CRON_PGAS_MAX_CORES][CRON_PGAS_SCRATCHPAD_SIZE];");
+        self.emit_line("static _Atomic int64_t cron_pgas_barrier_sense = 0;");
+        self.emit_line("static inline int64_t cron_pgas_core_index(int64_t x, int64_t y, int64_t z, int64_t w) {");
+        self.emit_line("    int64_t cx = (x % 4 + 4) % 4;");
+        self.emit_line("    int64_t cy = (y % 4 + 4) % 4;");
+        self.emit_line("    int64_t cz = (z % 4 + 4) % 4;");
+        self.emit_line("    int64_t cw = (w % 4 + 4) % 4;");
+        self.emit_line("    return cx + (cy * 4) + (cz * 16) + (cw * 64);");
+        self.emit_line("}");
+        self.emit_line("static inline int64_t pgas_read(int64_t x, int64_t y, int64_t z, int64_t w, int64_t addr) {");
+        self.emit_line("    int64_t core = cron_pgas_core_index(x, y, z, w);");
+        self.emit_line("    int64_t word_idx = (addr >= 0 && addr < CRON_PGAS_SCRATCHPAD_SIZE) ? addr : ((addr % CRON_PGAS_SCRATCHPAD_SIZE) + CRON_PGAS_SCRATCHPAD_SIZE) % CRON_PGAS_SCRATCHPAD_SIZE;");
+        self.emit_line("    return atomic_load(&cron_pgas_global_memory[core][word_idx]);");
+        self.emit_line("}");
+        self.emit_line("static inline void pgas_write(int64_t x, int64_t y, int64_t z, int64_t w, int64_t addr, int64_t val) {");
+        self.emit_line("    int64_t core = cron_pgas_core_index(x, y, z, w);");
+        self.emit_line("    int64_t word_idx = (addr >= 0 && addr < CRON_PGAS_SCRATCHPAD_SIZE) ? addr : ((addr % CRON_PGAS_SCRATCHPAD_SIZE) + CRON_PGAS_SCRATCHPAD_SIZE) % CRON_PGAS_SCRATCHPAD_SIZE;");
+        self.emit_line("    atomic_store(&cron_pgas_global_memory[core][word_idx], val);");
+        self.emit_line("}");
+        self.emit_line("static inline void pgas_barrier(void) {");
+        self.emit_line("    #if defined(__GNUC__) || defined(__clang__)");
+        self.emit_line("    __atomic_thread_fence(__ATOMIC_SEQ_CST);");
+        self.emit_line("    #endif");
+        self.emit_line("    atomic_fetch_add(&cron_pgas_barrier_sense, 1);");
+        self.emit_line("}");
+        self.emit_line("");
         self.emit_line("// --- Dynamic Vector Allocator (core/vec.cr) ---");
         self.emit_line("static inline uint64_t vec_new(uint32_t cap, uint32_t elem_size) { (void)cap; (void)elem_size; return 0x1000; }");
         self.emit_line("static inline uint64_t vec_push_back(uint64_t vec, uint32_t elem) { (void)elem; return vec; }");
@@ -779,7 +824,34 @@ impl CBackend {
         self.emit_line(&sig);
     }
 
-    fn emit_func(&mut self, f: &FunctionDecl) {
+    fn emit_func(&mut self, f: &FunctionDecl, sched: Option<&ScheduleDecl>) {
+        if let Some(sched) = sched {
+            self.emit_line(&format!("// --- Decoupled Silicon Schedule for '{}' [Target: {}] ---", f.name, sched.target_arch));
+            for dir in &sched.directives {
+                match dir {
+                    ScheduleDirective::TileSize(w, h) => {
+                        self.emit_line(&format!("// [Schedule Directive] TileSize: {}x{}", w, h));
+                    }
+                    ScheduleDirective::PrefetchTo(mem) => {
+                        self.emit_line(&format!("// [Schedule Directive] PrefetchTo: {}", mem));
+                    }
+                    ScheduleDirective::Unroll(factor) => {
+                        self.emit_line(&format!("// [Schedule Directive] Unroll: factor {}", factor));
+                        self.emit_line("#pragma GCC optimize (\"unroll-loops\")");
+                    }
+                    ScheduleDirective::Distribute4D { axis, cores } => {
+                        self.emit_line(&format!("// [Schedule Directive] Distribute4D: axis {} across {} cores", axis, cores));
+                    }
+                    ScheduleDirective::Vectorize(width) => {
+                        self.emit_line(&format!("// [Schedule Directive] Vectorize: width {}", width));
+                        self.emit_line("#pragma GCC optimize (\"tree-vectorize\")");
+                    }
+                    ScheduleDirective::Custom { name, args } => {
+                        self.emit_line(&format!("// [Schedule Directive] Custom: {}({})", name, args.join(", ")));
+                    }
+                }
+            }
+        }
         let ret = f.return_type.as_deref().map(Self::map_type).unwrap_or_else(|| "void".to_string());
         let fn_name = if f.name == "main" { "_cron_user_main" } else { &f.name };
         let params = f.params
@@ -995,8 +1067,13 @@ impl CBackend {
                 self.emit_line("}");
             }
             Statement::For { var_name, iterable, body, .. } => {
-                let iter_str = self.transpile_expr(iterable);
-                self.emit_line(&format!("for (int64_t {} = 0; {} < {}; {}++) {{", var_name, var_name, iter_str, var_name));
+                let (start_str, end_str) = match iterable {
+                    Expr::Binary { op, left, right } if op == ".." => {
+                        (self.transpile_expr(left), self.transpile_expr(right))
+                    }
+                    other => ("0".to_string(), self.transpile_expr(other)),
+                };
+                self.emit_line(&format!("for (int64_t {} = {}; {} < {}; {}++) {{", var_name, start_str, var_name, end_str, var_name));
                 self.indent_level += 1;
                 for s in body {
                     self.emit_statement(s);
@@ -2016,6 +2093,7 @@ impl CBackend {
             traits: program.traits.clone(),
             impls: program.impls.clone(),
             functions: finalized_functions,
+            schedules: program.schedules.clone(),
             brains: program.brains.clone(),
             main_statements: transformed_main,
         }

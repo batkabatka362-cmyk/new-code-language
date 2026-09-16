@@ -114,6 +114,9 @@ impl SemanticChecker {
             "tile4x4_f32", "tile4x4_i32", "tile_matmul", "tile_transpose", "tile_add", "tile_fma",
             "tile_get", "tile_set",
             "dma_sync", "await_dma_channel",
+            // Phase 9: Bank-Free Swizzling & 4D-Torus PGAS intrinsics
+            "sram_swizzle_index", "tile_swizzle",
+            "pgas_read", "pgas_write", "pgas_barrier",
         ] {
             known_functions.insert(f.to_string());
         }
@@ -321,6 +324,73 @@ impl SemanticChecker {
             brain_checker.known_impls = self.known_impls.clone();
             brain_checker.check_statements(&brain.body)?;
             brain_checker.verify_all_linear_consumed()?;
+        }
+
+        // Check decoupled schedule declarations
+        for sched in &program.schedules {
+            let fn_exists = self.known_functions.contains(&sched.target_fn)
+                || program.functions.iter().any(|f| f.name == sched.target_fn)
+                || program.impls.iter().any(|imp| imp.methods.iter().any(|m| m.name == sched.target_fn));
+            if !fn_exists {
+                return Err(TypeError::new(
+                    "E0011",
+                    format!("Schedule target function '{}' not found in program", sched.target_fn),
+                    sched.span,
+                )
+                .with_note("Decoupled silicon schedules must target an existing function or kernel")
+                .with_help(format!("Define `def {}(...)` before or after this schedule", sched.target_fn)));
+            }
+
+            for dir in &sched.directives {
+                match dir {
+                    ScheduleDirective::TileSize(w, h) => {
+                        if *w == 0 || *h == 0 {
+                            return Err(TypeError::new(
+                                "E0012",
+                                format!("Invalid tile_size({}, {}): dimensions must be non-zero", w, h),
+                                sched.span,
+                            ));
+                        }
+                    }
+                    ScheduleDirective::Unroll(factor) => {
+                        if *factor == 0 {
+                            return Err(TypeError::new(
+                                "E0012",
+                                format!("Invalid unroll factor {}: must be greater than 0", factor),
+                                sched.span,
+                            ));
+                        }
+                    }
+                    ScheduleDirective::Distribute4D { axis, cores } => {
+                        if *cores == 0 {
+                            return Err(TypeError::new(
+                                "E0012",
+                                format!("Invalid core count {} in distribute_4d: must be greater than 0", cores),
+                                sched.span,
+                            ));
+                        }
+                        let clean_axis = axis.trim_matches('"');
+                        if !["X", "Y", "Z", "W", "X+", "X-", "Y+", "Y-", "Z+", "Z-", "W+", "W-"].contains(&clean_axis) {
+                            return Err(TypeError::new(
+                                "E0012",
+                                format!("Invalid 4D-Torus axis '{}' in distribute_4d directive", axis),
+                                sched.span,
+                            )
+                            .with_help("Supported axes are: X, Y, Z, W, X+, X-, Y+, Y-, Z+, Z-, W+, W-"));
+                        }
+                    }
+                    ScheduleDirective::Vectorize(width)
+                        if *width == 0 || (*width & (*width - 1)) != 0 =>
+                    {
+                        return Err(TypeError::new(
+                            "E0012",
+                            format!("Invalid vector width {}: must be a power of two", width),
+                            sched.span,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
         }
 
         // Check main statements

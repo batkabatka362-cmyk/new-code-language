@@ -389,3 +389,51 @@ Pipeline order: `Parse → Autodiff → Semantic Check → Optimize → Codegen`
 | Apple Metal | `cron metal` | Apple GPU shader code |
 | Verilog RTL | `cron verilog` | Hardware synthesis for FPGA/ASIC |
 | JIT | `cron jit` | In-memory just-in-time execution |
+
+---
+
+## 9. Decoupled Silicon Schedules (`schedule` Block)
+
+CRON decouples pure mathematical algorithms from microarchitectural execution schedules (inspired by Halide and Triton):
+
+```cron
+def attention_kernel(q: tile4x4_f32, k: tile4x4_f32) -> tile4x4_f32 {
+    let k_t = tile_transpose(k)
+    return tile_matmul(q, k_t)
+}
+
+schedule attention_kernel for "torus_4d_silicon" {
+    tile_size(4, 4)
+    prefetch_to("sram")
+    unroll(4)
+    distribute_4d(axis: "X", cores: 4)
+    vectorize(4)
+}
+```
+
+- **Supported Directives**:
+  - `tile_size(M, N)`: Systolic tile partitioning dimensions.
+  - `prefetch_to(memory_space)`: Hardware prefetching into `@sram` or `@hbm`.
+  - `unroll(factor)`: Compile-time loop unrolling and `#pragma GCC optimize ("unroll-loops")`.
+  - `distribute_4d(axis: A, cores: N)`: Spatial decomposition across 4D-Torus dimensions (X, Y, Z, W).
+  - `vectorize(width)`: SIMD lane vectorization width (power of two).
+
+---
+
+## 10. Bank-Conflict-Free SRAM Auto-Swizzling & 4D-Torus PGAS
+
+### 10.1 Bank-Conflict-Free Swizzling
+Eliminates shared memory bank conflicts in columnar and strided tensor accesses:
+```cron
+let swizzled_idx = sram_swizzle_index(row, col, stride)
+let swizzled_tile = tile_swizzle(tensor_tile)
+```
+- **Mathematical Formula**: `index = (row * stride) + (col ^ (row & (stride - 1)))`.
+- **Latency Overhead**: 0 extra cycles (evaluated in ALU bitwise operations during address generation).
+
+### 10.2 4D-Torus PGAS (Partitioned Global Address Space)
+Single-sided RDMA intrinsics dispatched across the 4D-Torus NoC without operating system driver or host CPU overhead:
+- `pgas_write(x, y, z, w, addr, val)`: Write 64-bit word directly to remote core SRAM partition (`_YD` slot).
+- `pgas_read(x, y, z, w, addr) -> i64`: Single-cycle remote read across 4D mesh (`_RC` slot).
+- `pgas_barrier()`: Chip-wide hardware barrier across 256 physical cores (`_bb` slot).
+

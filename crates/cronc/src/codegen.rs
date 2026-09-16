@@ -649,8 +649,20 @@ impl Codegen {
                     "tile_matmul" | "tile_fma" => {
                         self.push_slot(make_slot('_', "OP", dest, '$', first_arg_reg, 0xE, '>'));
                     }
-                    "tile_transpose" => {
+                    "tile_transpose" | "tile_swizzle" => {
                         self.push_slot(make_slot('_', "TT", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "sram_swizzle_index" => {
+                        self.push_slot(make_slot('_', "TL", dest, '$', first_arg_reg, 2, '>'));
+                    }
+                    "pgas_read" => {
+                        self.push_slot(make_slot('_', "RC", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "pgas_write" => {
+                        self.push_slot(make_slot('_', "YD", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "pgas_barrier" => {
+                        self.push_slot(make_slot('_', "bb", 0, '#', 0, 0, '>'));
                     }
                     "backward" | "reversible_backward_step" => {
                         // Brain 3 Reversible Backward Pass

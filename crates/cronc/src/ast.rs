@@ -17,8 +17,27 @@ pub struct Program {
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
     pub functions: Vec<FunctionDecl>,
+    pub schedules: Vec<ScheduleDecl>,
     pub brains: Vec<BrainDecl>,
     pub main_statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScheduleDecl {
+    pub target_fn: String,
+    pub target_arch: String,
+    pub directives: Vec<ScheduleDirective>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScheduleDirective {
+    TileSize(usize, usize),
+    PrefetchTo(String),
+    Unroll(usize),
+    Distribute4D { axis: String, cores: usize },
+    Vectorize(usize),
+    Custom { name: String, args: Vec<String> },
 }
 
 #[derive(Debug, Clone, PartialEq)]

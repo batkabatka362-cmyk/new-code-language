@@ -111,6 +111,7 @@ impl Parser {
         let mut traits = Vec::new();
         let mut impls = Vec::new();
         let mut functions = Vec::new();
+        let mut schedules = Vec::new();
         let mut brains = Vec::new();
         let mut main_statements = Vec::new();
 
@@ -262,6 +263,9 @@ impl Parser {
                 || self.check(&Token::Async) || self.check(&Token::Def) || self.check(&Token::Inline) {
                 let func = self.parse_function_decl()?;
                 functions.push(func);
+            } else if self.check(&Token::Schedule) {
+                let schedule_decl = self.parse_schedule_decl()?;
+                schedules.push(schedule_decl);
             } else if self.check(&Token::Brain) {
                 let brain_decl = self.parse_brain_decl()?;
                 brains.push(brain_decl);
@@ -319,6 +323,7 @@ impl Parser {
             traits,
             impls,
             functions,
+            schedules,
             brains,
             main_statements,
         })
@@ -588,6 +593,156 @@ impl Parser {
         let attrs = self.parse_bracket_attributes()?;
         let body = self.parse_block()?;
         Ok(BrainDecl { name, attrs, body, span })
+    }
+
+    /// Parse `schedule <target_fn> [for <target_arch>] { <directives>* }`
+    fn parse_schedule_decl(&mut self) -> Result<ScheduleDecl, String> {
+        let span = self.current_span();
+        self.expect(&Token::Schedule)?;
+        let target_fn = match self.advance() {
+            Token::Ident(n) => n,
+            other => return Err(format!("Expected target function name after schedule, got {:?}", other)),
+        };
+
+        let target_arch = if self.match_token(&Token::For) {
+            match self.advance() {
+                Token::Ident(a) => a,
+                Token::StringLit(s) => s,
+                other => return Err(format!("Expected target architecture after 'for', got {:?}", other)),
+            }
+        } else {
+            "generic".to_string()
+        };
+
+        self.expect(&Token::OpenBrace)?;
+        let mut directives = Vec::new();
+
+        while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+            if self.match_token(&Token::Semicolon) {
+                continue;
+            }
+
+            let dir_name = match self.advance() {
+                Token::Ident(n) => n,
+                other => return Err(format!("Expected schedule directive name, got {:?}", other)),
+            };
+
+            self.expect(&Token::OpenParen)?;
+
+            let directive = match dir_name.as_str() {
+                "tile_size" => {
+                    let m = self.parse_usize_lit("tile_size width")?;
+                    self.expect(&Token::Comma)?;
+                    let n = self.parse_usize_lit("tile_size height")?;
+                    ScheduleDirective::TileSize(m, n)
+                }
+                "prefetch_to" => {
+                    let target = self.parse_directive_string_or_raw()?;
+                    ScheduleDirective::PrefetchTo(target)
+                }
+                "unroll" => {
+                    let factor = self.parse_usize_lit("unroll factor")?;
+                    ScheduleDirective::Unroll(factor)
+                }
+                "distribute_4d" => {
+                    let axis = if matches!(self.peek(), Token::Ident(ref id) if id == "axis")
+                        && self.peek_offset(1) == &Token::Colon
+                    {
+                        self.advance(); // axis
+                        self.advance(); // :
+                        self.parse_directive_string_or_raw()?
+                    } else {
+                        self.parse_directive_string_or_raw()?
+                    };
+                    self.expect(&Token::Comma)?;
+                    let cores = if matches!(self.peek(), Token::Ident(ref id) if id == "cores")
+                        && self.peek_offset(1) == &Token::Colon
+                    {
+                        self.advance(); // cores
+                        self.advance(); // :
+                        self.parse_usize_lit("cores count")?
+                    } else {
+                        self.parse_usize_lit("cores count")?
+                    };
+                    ScheduleDirective::Distribute4D { axis, cores }
+                }
+                "vectorize" => {
+                    let width = self.parse_usize_lit("vectorize width")?;
+                    ScheduleDirective::Vectorize(width)
+                }
+                _ => {
+                    let mut args = Vec::new();
+                    while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                        args.push(self.parse_directive_string_or_raw()?);
+                        if !self.match_token(&Token::Comma) {
+                            break;
+                        }
+                    }
+                    ScheduleDirective::Custom {
+                        name: dir_name,
+                        args,
+                    }
+                }
+            };
+
+            self.expect(&Token::CloseParen)?;
+            self.match_token(&Token::Semicolon);
+            directives.push(directive);
+        }
+
+        self.expect(&Token::CloseBrace)?;
+
+        Ok(ScheduleDecl {
+            target_fn,
+            target_arch,
+            directives,
+            span,
+        })
+    }
+
+    fn parse_directive_string_or_raw(&mut self) -> Result<String, String> {
+        match self.peek() {
+            Token::StringLit(_) => {
+                if let Token::StringLit(s) = self.advance() {
+                    Ok(s)
+                } else {
+                    unreachable!()
+                }
+            }
+            Token::Ident(_) => {
+                if let Token::Ident(s) = self.advance() {
+                    Ok(s)
+                } else {
+                    unreachable!()
+                }
+            }
+            Token::Axis(ax) => {
+                let s = ax.clone();
+                self.advance();
+                Ok(s)
+            }
+            other => Err(format!(
+                "Expected string or identifier in schedule directive, got {:?}",
+                other
+            )),
+        }
+    }
+
+    fn parse_usize_lit(&mut self, ctx: &str) -> Result<usize, String> {
+        match self.advance() {
+            Token::IntLit(val) => {
+                if val >= 0 {
+                    Ok(val as usize)
+                } else {
+                    Err(format!("Expected positive integer for {}, got {}", ctx, val))
+                }
+            }
+            Token::HexLit(val) => Ok(val as usize),
+            other => Err(format!(
+                "Expected integer literal for {}, got {:?}",
+                ctx, other
+            )),
+        }
     }
 
     fn parse_block(&mut self) -> Result<Vec<Statement>, String> {
