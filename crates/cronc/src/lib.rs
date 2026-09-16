@@ -26,6 +26,7 @@ pub mod autodiff;
 pub mod cl_binary;
 pub mod gpu_backend;
 pub mod autotune;
+pub mod cl_c23;
 
 pub use scheduler::{AOTHazardScheduler, IRInstruction};
 pub use jit_backend::run_source_jit;
@@ -33,6 +34,7 @@ pub use cl_binary::{assemble_cl_to_clb, disassemble_clb_to_cl};
 pub use optimizer::Optimizer;
 pub use fdo::{parse_fdo_profile, analyze_profile, compact_nop_bundles, fdo_recompile};
 pub use autotune::{SiliconAutotuner, AutotuneDecision};
+pub use cl_c23::compile_cl_to_c23;
 
 use checker::SemanticChecker;
 use codegen::Codegen;
@@ -369,7 +371,11 @@ pub fn compile_to_metal_with_name(source: &str, file_label: Option<&str>) -> Res
 }
 
 pub fn compile_native_binary(source: &str, output_path: &std::path::Path, extra_flags: &[&str]) -> Result<(), String> {
-    let c23_code = compile_to_c23(source)?;
+    let c23_code = if source.trim_start().starts_with("B0") || source.contains("B0000:") {
+        compile_cl_to_c23(source, "CronSiliconNative")?
+    } else {
+        compile_to_c23(source)?
+    };
     let temp_c_path = output_path.with_extension("c");
     std::fs::write(&temp_c_path, c23_code).map_err(|e| format!("Failed to write temporary C source: {}", e))?;
 
