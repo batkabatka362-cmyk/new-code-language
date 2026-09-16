@@ -21,6 +21,7 @@ class TestCronPythonSDK(unittest.TestCase):
             let val_x: i32 = 77
             let val_y: i32 = 33
             let val_sum: i32 = val_x + val_y
+            export val_sum as final_sum
         .END
         """
         c23_code = cron.compile_c23(source)

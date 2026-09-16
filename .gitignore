@@ -2,3 +2,7 @@
 *.pdb
 *.exe
 *.prof
+*.egg-info/
+*.egg-info
+__pycache__/
+*.pyc
