@@ -87,14 +87,31 @@ pub struct SemanticChecker {
 
 impl SemanticChecker {
     pub fn new() -> Self {
+        let mut known_functions = HashSet::new();
+        for f in &[
+            "simd_splat", "simd_load", "simd_store", "simd_fma", "simd_dot",
+            "simd_reduce_sum", "simd_add", "simd_sub", "simd_mul", "simd_div",
+            "vec4f", "vec8f", "vec16f", "vec4i", "vec8i",
+            "channel_new", "channel_send", "channel_recv", "channel_try_recv", "channel_close",
+            "spawn_at", "torus_core_id", "torus_coord_x", "torus_coord_y", "torus_coord_z", "torus_coord_w",
+            "torus_distance", "torus_send", "torus_recv", "torus_broadcast",
+        ] {
+            known_functions.insert(f.to_string());
+        }
+
+        let mut known_types = HashMap::new();
+        for t in &["vec4f", "vec8f", "vec16f", "vec4i", "vec8i", "channel", "Channel"] {
+            known_types.insert(t.to_string(), "builtin".to_string());
+        }
+
         Self {
             scopes: vec![Scope::new()],
             in_region: false,
             exported_vars: HashSet::new(),
             region_allocated_vars: HashMap::new(),
-            known_functions: HashSet::new(),
+            known_functions,
             known_structs: HashMap::new(),
-            known_types: HashMap::new(),
+            known_types,
             known_traits: HashMap::new(),
             known_impls: HashMap::new(),
         }
@@ -157,6 +174,11 @@ impl SemanticChecker {
             self.known_types.insert(t.name.clone(), t.target_type.clone());
         }
 
+        // Register algebraic enum types
+        for e in &program.enums {
+            self.known_types.insert(e.name.clone(), "enum".to_string());
+        }
+
         // Register trait contracts (Milestone #005: zero-vtable static traits)
         for trait_decl in &program.traits {
             let methods: Vec<(String, Vec<String>, Option<String>)> = trait_decl
@@ -209,6 +231,12 @@ impl SemanticChecker {
                 func_checker.known_functions = self.known_functions.clone();
                 func_checker.known_structs = self.known_structs.clone();
                 func_checker.known_types = self.known_types.clone();
+                for gp in &impl_decl.generic_params {
+                    func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
+                }
+                for gp in &method.generic_params {
+                    func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
+                }
                 func_checker.known_traits = self.known_traits.clone();
                 func_checker.known_impls = self.known_impls.clone();
                 for param in &method.params {
@@ -237,6 +265,9 @@ impl SemanticChecker {
             func_checker.known_functions = self.known_functions.clone();
             func_checker.known_structs = self.known_structs.clone();
             func_checker.known_types = self.known_types.clone();
+            for gp in &func.generic_params {
+                func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
+            }
             func_checker.known_traits = self.known_traits.clone();
             func_checker.known_impls = self.known_impls.clone();
             for param in &func.params {
@@ -484,6 +515,32 @@ impl SemanticChecker {
                     self.pop_scope();
                 }
             }
+            Statement::Match { expr, arms, span: _ } => {
+                self.check_expr(expr)?;
+                for arm in arms {
+                    self.push_scope();
+                    if let MatchPattern::Variant { bindings, .. } = &arm.pattern {
+                        for b in bindings {
+                            if b != "_" {
+                                self.insert_var(VarInfo {
+                                    name: b.clone(),
+                                    is_lin: false,
+                                    is_grad: false,
+                                    is_mut: false,
+                                    is_consumed: false,
+                                    is_tainted: false,
+                                    is_capability: false,
+                                    def_span: arm.span,
+                                    var_type: None,
+                                    in_region: self.in_region,
+                                });
+                            }
+                        }
+                    }
+                    self.check_statements(&arm.body)?;
+                    self.pop_scope();
+                }
+            }
             Statement::Export {
                 source_name,
                 exported_name,
@@ -651,6 +708,17 @@ impl SemanticChecker {
             Expr::Await(inner) | Expr::Spawn(inner) => {
                 self.check_expr(inner)?;
             }
+            Expr::SpawnAt { core_id, target, .. } => {
+                self.check_expr(core_id)?;
+                self.check_expr(target)?;
+            }
+            Expr::ChannelSend { channel, value, .. } => {
+                self.check_expr(channel)?;
+                self.check_expr(value)?;
+            }
+            Expr::ChannelRecv { channel, .. } => {
+                self.check_expr(channel)?;
+            }
             Expr::Array(elements) | Expr::Tuple(elements) => {
                 for el in elements {
                     self.check_expr(el)?;
@@ -686,6 +754,15 @@ impl SemanticChecker {
                 self.check_expr(condition)?;
                 self.check_expr(then_branch)?;
                 self.check_expr(else_branch)?;
+            }
+            Expr::Grad { callee, .. } => {
+                self.check_expr(callee)?;
+            }
+            Expr::GradCall { callee, args, .. } => {
+                self.check_expr(callee)?;
+                for arg in args {
+                    self.check_expr(&arg.value)?;
+                }
             }
             Expr::LiteralInt(_) | Expr::LiteralHex(_) | Expr::LiteralFloat(_)
             | Expr::LiteralAxis(_) | Expr::LiteralString(_) | Expr::LiteralBool(_) => {}

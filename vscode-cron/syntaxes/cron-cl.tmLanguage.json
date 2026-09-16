@@ -1,0 +1,54 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CRON Low-Level",
+  "scopeName": "source.cron-cl",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#bundle_header" },
+    { "include": "#immediate_slot" },
+    { "include": "#operation_slot" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cron-cl",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "bundle_header": {
+      "patterns": [
+        {
+          "name": "entity.name.section.bundle.cron-cl",
+          "match": "\\bB[0-9]{4}:"
+        }
+      ]
+    },
+    "immediate_slot": {
+      "patterns": [
+        {
+          "name": "constant.numeric.immediate.cron-cl",
+          "match": "'[0-9A-Fa-f]{8}[>!]"
+        }
+      ]
+    },
+    "operation_slot": {
+      "patterns": [
+        {
+          "match": "(_)([A-Z0-9]{2})([0-9A-Fa-f]{2})([$#@])([0-9A-Fa-f])([0-9A-Fa-f])([0-9A-Fa-f])([>!])",
+          "captures": {
+            "1": { "name": "punctuation.definition.slot.cron-cl" },
+            "2": { "name": "keyword.operator.opcode.cron-cl" },
+            "3": { "name": "variable.other.register.dest.cron-cl" },
+            "4": { "name": "punctuation.separator.mode.cron-cl" },
+            "5": { "name": "variable.other.register.src.cron-cl" },
+            "6": { "name": "constant.numeric.parity.cron-cl" },
+            "7": { "name": "constant.numeric.imm.cron-cl" },
+            "8": { "name": "keyword.control.terminator.cron-cl" }
+          }
+        }
+      ]
+    }
+  }
+}

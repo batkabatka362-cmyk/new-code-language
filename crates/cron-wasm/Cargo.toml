@@ -1,0 +1,13 @@
+[package]
+name = "cron-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WebAssembly bindings for CRON Compiler & 4D-Torus VM Simulator"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cronc = { path = "../cronc" }
+cron-vm = { path = "../cron-vm" }
+cron-decompile = { path = "../cron-decompile" }

@@ -13,11 +13,25 @@ pub struct Program {
     pub imports: Vec<ImportDecl>,
     pub type_aliases: Vec<TypeAliasDecl>,
     pub structs: Vec<StructDecl>,
+    pub enums: Vec<EnumDecl>,
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<ImplDecl>,
     pub functions: Vec<FunctionDecl>,
     pub brains: Vec<BrainDecl>,
     pub main_statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumDecl {
+    pub name: String,
+    pub generic_params: Vec<String>,
+    pub variants: Vec<EnumVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: String,
+    pub payload: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +49,7 @@ pub struct TypeAliasDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDecl {
     pub name: String,
+    pub generic_params: Vec<String>,
     pub fields: Vec<(String, String)>,
 }
 
@@ -42,6 +57,7 @@ pub struct StructDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraitDecl {
     pub name: String,
+    pub generic_params: Vec<String>,
     pub methods: Vec<TraitMethodSig>,
 }
 
@@ -58,6 +74,7 @@ pub struct TraitMethodSig {
 pub struct ImplDecl {
     pub trait_name: String,
     pub target_struct: String,
+    pub generic_params: Vec<String>,
     pub methods: Vec<FunctionDecl>,
 }
 
@@ -67,6 +84,7 @@ pub struct FunctionDecl {
     pub is_export: bool,
     pub is_inline: bool,
     pub name: String,
+    pub generic_params: Vec<String>,
     pub params: Vec<Param>,
     pub return_type: Option<String>,
     pub body: Vec<Statement>,
@@ -166,6 +184,29 @@ pub enum Statement {
     },
     Abort(Span),
     Expr(Expr),
+    Match {
+        expr: Expr,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: MatchPattern,
+    pub body: Vec<Statement>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatchPattern {
+    Variant {
+        enum_name: Option<String>,
+        variant_name: String,
+        bindings: Vec<String>,
+    },
+    Literal(Expr),
+    Wildcard,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -193,6 +234,7 @@ impl Statement {
             Statement::ProofContract(_) => Span::default(),
             Statement::Return(_) => Span::default(),
             Statement::Expr(e) => e.span(),
+            Statement::Match { span, .. } => *span,
         }
     }
 }
@@ -255,6 +297,33 @@ pub enum Expr {
     Consume(String, Span),
     Await(Box<Expr>),
     Spawn(Box<Expr>),
+    SpawnAt {
+        core_id: Box<Expr>,
+        target: Box<Expr>,
+        span: Span,
+    },
+    ChannelSend {
+        channel: Box<Expr>,
+        value: Box<Expr>,
+        span: Span,
+    },
+    ChannelRecv {
+        channel: Box<Expr>,
+        span: Span,
+    },
+    /// Language-level automatic differentiation: grad(f) or grad(f, wrt: "x")
+    Grad {
+        callee: Box<Expr>,
+        wrt: Option<String>,
+        span: Span,
+    },
+    /// Direct evaluation of a differentiated function: grad(f)(x, y, ...)
+    GradCall {
+        callee: Box<Expr>,
+        wrt: Option<String>,
+        args: Vec<CallArg>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -262,6 +331,11 @@ impl Expr {
         match self {
             Expr::Ident(_, span) => *span,
             Expr::Consume(_, span) => *span,
+            Expr::SpawnAt { span, .. } => *span,
+            Expr::ChannelSend { span, .. } => *span,
+            Expr::ChannelRecv { span, .. } => *span,
+            Expr::Grad { span, .. } => *span,
+            Expr::GradCall { span, .. } => *span,
             _ => Span::default(),
         }
     }

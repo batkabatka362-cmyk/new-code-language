@@ -7,6 +7,7 @@
 use crate::ast::*;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Clone)]
 pub struct VliwSlot {
     pub raw: String,
 }
@@ -33,6 +34,7 @@ impl VliwSlot {
     }
 }
 
+#[derive(Clone)]
 pub struct VliwBundle {
     pub cycle: usize,
     pub slots: [VliwSlot; 4],
@@ -390,6 +392,12 @@ impl Codegen {
                 self.push_slot(make_slot('_', "PO", 6, '$', 6, 0, '>'));
             }
             Statement::Export { .. } => {}
+            Statement::Match { expr, arms, .. } => {
+                self.compile_expr(expr, 1);
+                for arm in arms {
+                    self.compile_statements(&arm.body);
+                }
+            }
             Statement::Return(opt_expr) => {
                 if let Some(expr) = opt_expr {
                     self.compile_expr(expr, 0);
@@ -504,6 +512,22 @@ impl Codegen {
                 self.push_slot(make_slot('_', "SP", 0, '#', 0, 8, '>'));
                 self.compile_expr(inner, dest);
             }
+            Expr::SpawnAt { core_id, target, .. } => {
+                let core_reg = (dest % 14) + 1;
+                self.compile_expr(core_id, core_reg);
+                self.push_slot(make_slot('_', "SP", core_reg, '$', core_reg, 8, '>'));
+                self.compile_expr(target, dest);
+            }
+            Expr::ChannelSend { channel, value, .. } => {
+                self.compile_expr(channel, dest);
+                let val_reg = (dest % 14) + 1;
+                self.compile_expr(value, val_reg);
+                self.push_slot(make_slot('_', "TX", dest, '$', val_reg, 0, '>'));
+            }
+            Expr::ChannelRecv { channel, .. } => {
+                self.compile_expr(channel, dest);
+                self.push_slot(make_slot('_', "RX", dest, '$', dest, 0, '>'));
+            }
             Expr::Await(inner) => {
                 self.compile_expr(inner, dest);
                 self.push_slot(make_slot('_', "FJ", dest, '#', 0, 0, '>'));
@@ -559,6 +583,31 @@ impl Codegen {
                 }
 
                 match callee.as_str() {
+                    "channel_send" => {
+                        let ch_reg = if !args.is_empty() {
+                            self.compile_expr(&args[0].value, dest);
+                            dest
+                        } else { 0 };
+                        let val_reg = if args.len() >= 2 {
+                            let vr = (dest % 14) + 1;
+                            self.compile_expr(&args[1].value, vr);
+                            vr
+                        } else { 0 };
+                        self.push_slot(make_slot('_', "TX", ch_reg, '$', val_reg, 0, '>'));
+                    }
+                    "channel_recv" => {
+                        let ch_reg = if !args.is_empty() {
+                            self.compile_expr(&args[0].value, dest);
+                            dest
+                        } else { 0 };
+                        self.push_slot(make_slot('_', "RX", dest, '$', ch_reg, 0, '>'));
+                    }
+                    "channel_new" => {
+                        self.push_slot(make_slot('\'', "=0", dest, '#', 0, 1, '>'));
+                    }
+                    "torus_distance" | "torus_dist" => {
+                        self.push_slot(make_slot('_', "TL", dest, '$', first_arg_reg, 1, '>'));
+                    }
                     "pack_wave" => {
                         self.push_slot(make_slot('\'', "=1", dest, '#', 0, 4, '>'));
                     }
@@ -738,6 +787,9 @@ impl Codegen {
             Expr::MethodCall { object, method, args } => {
                 // Zero-vtable monomorphized dispatch (Milestone #005)
                 self.compile_method_call(object, method, args, dest);
+            }
+            Expr::Grad { .. } | Expr::GradCall { .. } => {
+                self.push_slot(make_slot('\'', "=0", dest, '#', 0, 0, '>'));
             }
         }
     }

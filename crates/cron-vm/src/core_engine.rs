@@ -63,6 +63,24 @@ pub struct CoreEngine {
     // === Stackless ABI Shadow Checkpoint Bank (Milestone #053) ===
     /// 16-entry shadow register checkpoint bank for 1-cycle save/restore
     pub shadow_bank: Vec<[u32; 16]>,
+
+    // === Banked Registers & 4D Hyperspace Clusters ===
+    /// 16 Bank Register Files (16 banks x 16 registers each)
+    /// Bank 0: Local Core Registers (mirrored with registers)
+    /// Banks 1..15: 4D-Torus Hyperspace Clusters ($W$-axis scatter/gather)
+    pub bank_registers: [[u32; 16]; 16],
+    /// Chip-wide global barrier synchronization state
+    pub in_barrier: bool,
+    pub barrier_count: usize,
+
+    // === Extended Homopolymer & Twin-Token Macro Telemetry ===
+    pub cache_invalidations: usize, // CC: Chip-wide I/D Cache Invalidation
+    pub dma_transfers: usize,       // DD: Direct NoC DMA transfer burst
+    pub dvfs_energy_state: u32,     // EE: DVFS Power State (0=Nominal, 1=Eco, 2=Turbo)
+    pub energy_saved_uw: u64,       // EE: Energy Saved in micro-Watts
+    pub photonic_pumps: usize,      // 11: Photonic Laser Pump Strobe
+    pub arena_resets: usize,        // 88: Region Arena 0-cycle Reset
+    pub sentry_trips: usize,        // 99: Global Hardware Sentry Watchdog Trip
 }
 
 impl CoreEngine {
@@ -103,29 +121,43 @@ impl CoreEngine {
             csr_vec_burst_cnt: 0,
             // Shadow checkpoint bank
             shadow_bank: Vec::new(),
+            // Banked Registers & 4D Hyperspace Clusters
+            bank_registers: [[0; 16]; 16],
+            in_barrier: false,
+            barrier_count: 0,
+            // Extended Homopolymer Telemetry
+            cache_invalidations: 0,
+            dma_transfers: 0,
+            dvfs_energy_state: 0,
+            energy_saved_uw: 0,
+            photonic_pumps: 0,
+            arena_resets: 0,
+            sentry_trips: 0,
         }
     }
 
-    fn parse_slot_metadata(&self, slot: &str) -> (String, usize, usize, usize, char) {
+    fn parse_slot_metadata(&self, slot: &str) -> (String, usize, usize, usize, usize, char) {
         if slot.len() < 3 {
-            return (String::new(), 0, 0, 0, '$');
+            return (String::new(), 0, 0, 0, 0, '$');
         }
 
         let op = slot[1..3].to_string();
 
-        // Parse destination register (prefer 2-char hex at index 3..5)
-        let dest = if slot.len() >= 5 {
-            if let Ok(d) = usize::from_str_radix(&slot[3..5], 16) {
-                d.min(15)
-            } else if let Ok(d) = usize::from_str_radix(&slot[2..4], 16) {
-                d.min(15)
-            } else if let Ok(d) = usize::from_str_radix(&slot[3..4], 16) {
-                d.min(15)
-            } else {
-                0
-            }
+        // Parse destination bank (high nibble) and register (low nibble)
+        // If immediate load with 1-char opcode (e.g. '=00#0A04>, '=06#0064>, index 4 is '#'):
+        //   bank is index 2, reg is index 3
+        // If standard 2-char opcode (e.g. '==04#000A>, _PO06G400>, _PO0A$000>, _POA0$000>):
+        //   bank is index 3, reg is index 4
+        let (dest_bank, dest_reg) = if slot.len() >= 5 && slot.chars().nth(4) == Some('#') {
+            let h = slot[2..3].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
+            let l = slot[3..4].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
+            (h, l)
+        } else if slot.len() >= 5 {
+            let h = slot[3..4].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
+            let l = slot[4..5].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
+            (h, l)
         } else {
-            0
+            (0, 0)
         };
 
         // Parse mode (index 5)
@@ -153,7 +185,7 @@ impl CoreEngine {
             0
         };
 
-        (op, dest, src, imm, mode)
+        (op, dest_bank, dest_reg, src, imm, mode)
     }
 
     pub fn execute_slot(&mut self, slot: &str) -> Option<u32> {
@@ -161,7 +193,7 @@ impl CoreEngine {
             return None;
         }
 
-        let (op, dest, src, imm, mode) = self.parse_slot_metadata(slot);
+        let (op, dest_bank, dest_reg, src, imm, mode) = self.parse_slot_metadata(slot);
 
         // Check for Halt
         if op == "HL" || slot.starts_with("_HL") || slot.starts_with("_HLT") {
@@ -169,20 +201,36 @@ impl CoreEngine {
             return None;
         }
 
+        // Check for Global 256-Core Chip-Wide Hardware Barrier (bb) (Pages 88-95)
+        if op == "bb" || (slot.len() >= 3 && &slot[1..3] == "bb") || (slot.len() >= 5 && &slot[3..5] == "bb") {
+            if !self.in_barrier {
+                self.in_barrier = true;
+                self.barrier_count += 1;
+            }
+        }
+
+        let dest = dest_reg.min(15);
+        let saved_local_reg = self.registers[dest];
+        if dest_bank > 0 {
+            // Load current banked value into execution slot
+            self.registers[dest] = self.bank_registers[dest_bank.min(15)][dest];
+        }
+
         match op.as_str() {
-            "==" | "=0" | "=1" => {
-                // Immediate load: e.g. '=00#0A04>, '=06#0064>, or '=006#0P1>
+            op if op.starts_with('=') || slot.starts_with("'=") => {
+                // Immediate load: e.g. '=00#0A04>, '=06#0064>, or '==04#000A>
                 let reg_idx = dest;
                 if reg_idx < 16 {
-                    if slot.len() >= 9 && slot.chars().nth(4) == Some('#') {
-                        let hex_part: String = slot[5..9].chars().filter(|c| c.is_ascii_hexdigit()).collect();
+                    if let Some(hash_pos) = slot.find('#') {
+                        let hex_part: String = slot[hash_pos + 1..]
+                            .chars()
+                            .take_while(|c| c.is_ascii_hexdigit())
+                            .collect();
                         if let Ok(val) = u32::from_str_radix(&hex_part, 16) {
                             self.registers[reg_idx] = val;
                         } else {
                             self.registers[reg_idx] = imm as u32;
                         }
-                    } else if slot.len() >= 6 && slot.chars().nth(5) == Some('#') {
-                        self.registers[reg_idx] = imm as u32;
                     } else {
                         let imm_str: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
                         if let Ok(val) = u32::from_str_radix(&imm_str, 16) {
@@ -242,16 +290,49 @@ impl CoreEngine {
                 self.registers[d] = val;
             }
             "PO" | "P0" | "P1" => {
-                // Predicated SIMD ALU
+                // Predicated SIMD ALU (Pages 88-95: Polymorphic Mode Delimiters)
                 let d = if dest > 0 { dest } else { 6 };
                 let s = if src > 0 { src } else { 4 };
                 let val_d = self.registers[d];
                 let val_s = self.registers[s];
 
-                self.registers[d] = if mode == 'G' {
-                    if val_d >= val_s { 1 } else { 0 }
-                } else {
-                    match imm {
+                self.registers[d] = match mode {
+                    '+' => val_d.wrapping_add(val_s),
+                    '-' => val_d.wrapping_sub(val_s),
+                    '*' => val_d.wrapping_mul(val_s),
+                    '/' => {
+                        if val_s != 0 {
+                            val_d / val_s
+                        } else {
+                            // Hardware Trap: Division by Zero (Milestone #181)
+                            self.trigger_trap(0x0001);
+                            0
+                        }
+                    }
+                    '%' => {
+                        if val_s != 0 {
+                            val_d % val_s
+                        } else {
+                            self.trigger_trap(0x0001);
+                            0
+                        }
+                    }
+                    '&' => val_d & val_s,
+                    '|' => val_d | val_s,
+                    '^' => val_d ^ val_s,
+                    '~' => !val_s,
+                    '=' => if val_d == val_s { 1 } else { 0 },
+                    '<' => if val_d < val_s { 1 } else { 0 },
+                    '>' => if val_d > val_s { 1 } else { 0 },
+                    '?' => if val_s != 0 { val_d } else { 0 },
+                    '!' => {
+                        if val_s != 0 {
+                            self.trigger_trap(0x0002);
+                        }
+                        val_d
+                    }
+                    'G' => if val_d >= val_s { 1 } else { 0 },
+                    _ => match imm {
                         1 => val_d.wrapping_add(val_s),
                         2 => val_d.wrapping_sub(val_s),
                         3 => val_d.wrapping_mul(val_s),
@@ -284,17 +365,17 @@ impl CoreEngine {
                         0xF => if val_d > val_s { 1 } else { 0 },
                         0 => if val_s > 0 && d != s { val_s } else { val_d & 0x0000_0003 },
                         _ => val_d & 0x0000_0003,
-                    }
+                    },
                 };
                 self.csr_pred_exec_cnt += 1;
             }
             "MD" => {
-                // 16x 2-bit ternary Dot Product MAC / Multiply
+                // 16x 2-bit ternary Dot Product MAC / Multiply (Pages 88-95)
                 let d = if dest > 0 { dest } else { 8 };
                 let s = if src > 0 { src } else { 0 };
-                if imm == 3 {
+                if mode == '*' || imm == 3 {
                     self.registers[d] = self.registers[d].wrapping_mul(self.registers[s]);
-                } else if imm == 4 {
+                } else if mode == '/' || imm == 4 {
                     if self.registers[s] != 0 {
                         self.registers[d] /= self.registers[s];
                     } else {
@@ -546,6 +627,88 @@ impl CoreEngine {
                 let d = if dest > 0 { dest } else { 0 };
                 self.registers[d] = 1;
             }
+            "LF" => {
+                // Brain 4 Neuromorphic LIF Spike Generator (Opcode 6'd74)
+                self.stdp_updates_count += 1;
+                let d = if dest > 0 { dest } else { 12 };
+                let s = if src > 0 { src } else { 0 };
+                self.registers[d] = if self.registers[s] > 100 { 1 } else { 0 };
+            }
+            "TX" => {
+                // NoC Channel Send Wormhole Packet Injection (Opcode 6'd78)
+                let s = if src > 0 { src } else { dest };
+                let _val = self.registers[s];
+                self.spatial_broadcast_count += 1;
+            }
+            "RX" => {
+                // Core Mailbox Channel Recv FIFO Pop (Opcode 6'd79)
+                let d = if dest > 0 { dest } else { 0 };
+                self.registers[d] = self.noc_rx_fifo.pop().unwrap_or(0);
+            }
+            "CC" => {
+                // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation (Homopolymer CC)
+                self.cache_invalidations += 1;
+                self.csr_stall_cnt = 0;
+                self.shadow_bank.clear();
+            }
+            "DD" => {
+                // Zero-Overhead Direct 4D-Torus NoC DMA Transfer (Homopolymer DD)
+                self.dma_transfers += 1;
+                let s = if src > 0 { src } else { dest };
+                let val = self.registers[s];
+                if dest_bank > 0 {
+                    self.bank_registers[dest_bank.min(15)][dest] = val;
+                }
+                self.spatial_broadcast_count += 1;
+            }
+            "EE" => {
+                // Energy-Aware Dynamic Voltage and Frequency Scaling (Homopolymer EE)
+                self.dvfs_energy_state = 1; // Eco mode
+                self.thermal_level = 25;    // Dissipate heat to baseline
+                self.energy_saved_uw += 450;
+            }
+            "BB" => {
+                // Brain-Bridge Cross-Neuromorphic Synchronization (Homopolymer BB)
+                for i in 0..4 {
+                    self.wave_reg.amplitudes[i] = (self.stdp_weights[i] as u32).min(255) as u8;
+                }
+            }
+            "FF" => {
+                // Fredkin Reversible Full Fold (Homopolymer FF)
+                let mut acc = 0u32;
+                while let Some(top) = self.reversible_stack.pop() {
+                    acc = acc.wrapping_add(top);
+                }
+                let d = if dest > 0 { dest } else { 0 };
+                self.registers[d] = acc;
+                self.reversible_ops_count += 1;
+            }
+            "11" => {
+                // Photonic Laser Pump Strobe (Homopolymer 11)
+                self.photonic_pumps += 1;
+                self.wave_reg.amplitudes = [255, 255, 255, 255];
+            }
+            "88" => {
+                // Region Arena Instantaneous 0-Cycle Reset (Homopolymer 88)
+                self.reversible_stack.clear();
+                self.arena_resets += 1;
+            }
+            "99" => {
+                // Global Hardware Sentry Watchdog Trip (Homopolymer 99)
+                self.thermal_threshold = 180;
+                self.sentry_trips += 1;
+            }
+            "aa" => {
+                // All-to-all NoC Hypercube Scatter (Homopolymer aa)
+                self.spatial_broadcast_count += 4;
+            }
+            "ee" => {
+                // Event-driven Neuromorphic Spike Broadcast (Homopolymer ee)
+                self.stdp_updates_count += 1;
+                for w in self.stdp_weights.iter_mut() {
+                    *w = (*w + 1).min(127);
+                }
+            }
             _ => {}
         }
 
@@ -556,6 +719,35 @@ impl CoreEngine {
             );
         }
 
+        // Bank isolation & writeback:
+        // If dest_bank > 0: write result to bank_registers[dest_bank][dest], and restore local registers[dest]
+        // If dest_bank == 0: write result to registers[dest] and mirror to bank_registers[0][dest]
+        if dest_bank > 0 {
+            let result_val = self.registers[dest];
+            self.registers[dest] = saved_local_reg;
+            self.bank_registers[dest_bank.min(15)][dest] = result_val;
+            self.spatial_broadcast_count += 1;
+        } else {
+            self.bank_registers[0][dest] = self.registers[dest];
+        }
+
+        // Homopolymer AA: Dual-bank SIMD self-broadcast / lockstep auto-accumulation (RA <- RA * RA or self-broadcast)
+        // Dest bank 10, Dest reg 10 (or token containing "AA" in position 3..5)
+        if (dest_bank == 10 && dest_reg == 10) || (slot.len() >= 5 && &slot[3..5] == "AA") {
+            self.csr_vec_burst_cnt += 1;
+            let val = if self.registers[10] != 0 {
+                self.registers[10]
+            } else if saved_local_reg != 0 {
+                saved_local_reg
+            } else {
+                self.bank_registers[10][10]
+            };
+            let acc = val.wrapping_mul(val);
+            self.registers[10] = acc;
+            self.bank_registers[0][10] = acc;
+            self.bank_registers[10][10] = acc;
+        }
+
         // Slight thermal dissipation check
         self.thermal_level = (self.thermal_level + 1).min(self.thermal_threshold);
 
@@ -564,9 +756,28 @@ impl CoreEngine {
 
         // Optional spatial broadcast payload (broadcast dest register if non-zero)
         if op == "SB" || (dest > 0 && (op == "TL" || op == "ST" || op == "OP" || op == "PK")) {
-            Some(self.registers[dest])
+            if dest_bank > 0 {
+                Some(self.bank_registers[dest_bank.min(15)][dest])
+            } else {
+                Some(self.registers[dest])
+            }
         } else {
             None
+        }
+    }
+
+    /// Read from a banked register file
+    pub fn get_bank_register(&self, bank: usize, reg: usize) -> u32 {
+        self.bank_registers[bank.min(15)][reg.min(15)]
+    }
+
+    /// Write to a banked register file (mirrors Bank 0 to local registers)
+    pub fn set_bank_register(&mut self, bank: usize, reg: usize, val: u32) {
+        let b = bank.min(15);
+        let r = reg.min(15);
+        self.bank_registers[b][r] = val;
+        if b == 0 {
+            self.registers[r] = val;
         }
     }
 

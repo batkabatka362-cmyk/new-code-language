@@ -1,0 +1,142 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CRON",
+  "scopeName": "source.cron",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#directives" },
+    { "include": "#keywords" },
+    { "include": "#modifiers" },
+    { "include": "#brains" },
+    { "include": "#types" },
+    { "include": "#builtins" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cron",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cron",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "keyword.control.directive.cron",
+          "match": "\\.(MODULE|ENTRY|END)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.declaration.cron",
+          "match": "\\b(struct|trait|impl|fn|def|let|import|from|export|as)\\b"
+        },
+        {
+          "name": "keyword.control.cron",
+          "match": "\\b(if|else|while|for|in|return|abort|match)\\b"
+        },
+        {
+          "name": "keyword.control.concurrency.cron",
+          "match": "\\b(spawn|await|consume|async|fork|simulate)\\b"
+        },
+        {
+          "name": "keyword.control.cognitive.cron",
+          "match": "\\b(region|resilient|resilient_compute|fallback|superposition|proof_contract|invariant|ensures)\\b"
+        }
+      ]
+    },
+    "modifiers": {
+      "patterns": [
+        {
+          "name": "storage.modifier.linear.cron",
+          "match": "\\b(lin|mut|grad)\\b"
+        }
+      ]
+    },
+    "brains": {
+      "patterns": [
+        {
+          "name": "entity.name.tag.brain.cron",
+          "match": "\\bbrain\\s+([a-zA-Z0-9_]+)\\b",
+          "captures": {
+            "1": { "name": "entity.name.type.brain.cron" }
+          }
+        },
+        {
+          "name": "support.class.brain.cron",
+          "match": "\\b(symbolic|photonic|reversible|neuro|quantum|resilient)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.cron",
+          "match": "\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|string|void|wave_t|ext_addr_t|spk_stamp|rev_t|TorusCoord)\\b"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.cron",
+          "match": "\\b(pack_wave|arena_alloc|create_arena|arena_reset|manhattan_distance_4d|fredkin_gate|toffoli_gate|stdp_apply_spike|collapse_optimal_decision|evaluate_thermal_safety|optical_gemm_forward)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.cron",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.cron",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.cron",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.cron",
+          "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.cron",
+          "match": "\\b[0-9]+\\b"
+        },
+        {
+          "name": "constant.language.boolean.cron",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.cron",
+          "match": "(\\+|-|\\*|/|%|==|!=|<=|>=|<|>|&&|\\|\\||!|&|\\||\\^|<<|>>)"
+        }
+      ]
+    }
+  }
+}

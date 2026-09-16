@@ -1,0 +1,67 @@
+// ============================================================================
+// CRON NVIDIA CUDA PTX Accelerator Backend v1.0
+// Target Architecture: NVIDIA sm_80 / sm_90 (Ampere / Hopper / Blackwell)
+// Address Size: 64-bit Unified Virtual Memory (UVM)
+// ============================================================================
+
+.version 7.5
+.target sm_80
+.address_size 64
+
+// Kernel: gemm_fma_kernel
+.visible .entry gemm_fma_kernel (
+        .param .u64 param_a,
+        .param .u64 param_b,
+        .param .u64 param_c,
+        .param .u32 param_n
+    )
+{
+.reg .pred %p<16>;
+.reg .b32  %r<64>;
+.reg .b64  %rd<64>;
+.reg .f32  %f<64>;
+
+    ld.param.u64 %rd1, [param_a];
+    ld.param.u64 %rd2, [param_b];
+    ld.param.u64 %rd3, [param_c];
+    ld.param.u32 %r1, [param_n];
+    
+    // Compute global thread ID: gid = ctaid.x * ntid.x + tid.x
+    mov.u32 %r2, %tid.x;
+    mov.u32 %r3, %ctaid.x;
+    mov.u32 %r4, %ntid.x;
+    mad.lo.u32 %r5, %r3, %r4, %r2;
+    mov.u32 %r6, 0;
+L_while_start_1:
+    setp.lt.s32 %p1, %r6, %r1;
+    selp.u32 %r7, 1, 0, %p1;
+    setp.eq.s32 %p2, %r7, 0;
+    @%p2 bra L_while_end_2;
+    mov.f32 %f1, 0f3FA00000;
+    mov.f32 %f2, 0f40200000;
+    mov.f32 %f3, 0f3F400000;
+    fma.rn.f32 %f4, %f1, %f2, %f3;
+    mov.u32 %r8, 1;
+    add.s32 %r9, %r6, %r8;
+    mov.b32 %r6, %r9;
+    bra L_while_start_1;
+L_while_end_2:
+        ret;
+    }
+
+// Default Standalone Main Compute Kernel
+.visible .entry cron_main_kernel (
+        .param .u64 param_d_out,
+        .param .u32 param_n
+    )
+{
+.reg .pred %p<16>;
+.reg .b32  %r<64>;
+.reg .b64  %rd<64>;
+.reg .f32  %f<64>;
+
+    mov.u32 %r10, 1024;
+    mov.u32 %r11, 1;
+        ret;
+    }
+

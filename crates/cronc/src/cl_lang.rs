@@ -83,12 +83,115 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "AW", // Arbiter Weight Update (Brain 6)
     "WH", // NoC Wormhole Bypass Tunnel
     "LF", // Neuromorphic LIF Spike Generator (Brain 4)
+    "LI", // Neuromorphic LIF Neuron Step (Brain 4)
+    "TX", // NoC Channel Send Wormhole Packet Injection
+    "RX", // Core Mailbox Channel Recv FIFO Pop
+    "IR", // In-Network Flight Reduction
+    "DF", // Adaptive Deflection Routing
+    "AC", // Hardware Capability Token
+    "SN", // Hardware Bounds Sanitization
+    "SC", // Hardware Secure I-Cache Patch
+    "RN", // 32-bit Galois LFSR PRNG
+    "PL", // Non-Blocking NoC FIFO Poll
+    "RT", // Return from Hardware Trap (MRET)
     "HL", // Halt Execution
     "NO", // NOP (No Operation)
     "=0", // Immediate Load Low
     "=1", // Immediate Load High
     "==", // Generic Immediate Load
+    "bb", // 256-Core Chip-Wide Global Synchronization Barrier
+    // Extended Homopolymer Macro Opcodes
+    "CC", // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation
+    "DD", // Zero-Overhead Direct 4D-Torus NoC DMA Transfer
+    "EE", // Energy-Aware Dynamic Voltage and Frequency Scaling (DVFS)
+    "BB", // Brain-Bridge Cross-Neuromorphic Synchronization
+    "FF", // Fredkin Reversible Full Fold
+    "00", // Null Quiesce / Sleep
+    "11", // Photonic Laser Pump Strobe
+    "88", // Region Arena Instantaneous 0-Cycle Reset
+    "99", // Global Hardware Sentry Watchdog Trip
+    "aa", // All-to-all NoC Hypercube Scatter
+    "cc", // Core-to-Core Cache Coherence Handshake
+    "dd", // Deterministic Deflection Clear
+    "ee", // Event-Driven Neuromorphic Spike Broadcast
+    "ff", // Fast-Fourier / Wavelength Multiplex Trigger
 ];
+
+pub const ALPHABET_94_STR: &str = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+
+pub fn get_alphabet_94() -> Vec<char> {
+    (33u8..=126u8).map(|b| b as char).collect()
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AlphabetAuditReport {
+    pub unique_characters_used: usize,
+    pub total_characters_scanned: usize,
+    pub coverage_percentage: f64,
+    pub missing_characters: Vec<char>,
+    pub character_frequencies: std::collections::HashMap<char, usize>,
+    pub entropy_bits_per_char: f64,
+    pub total_bundles: usize,
+    pub total_slots: usize,
+}
+
+pub fn audit_alphabet_coverage(cl_code: &str) -> AlphabetAuditReport {
+    use std::collections::HashMap;
+    let mut freqs: HashMap<char, usize> = HashMap::new();
+    let mut total_scanned = 0;
+    let mut total_bundles = 0;
+    let mut total_slots = 0;
+
+    for line in cl_code.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+            continue;
+        }
+        if let Some((_b_part, slots_part)) = trimmed.split_once(':') {
+            total_bundles += 1;
+            for c in trimmed.chars() {
+                if !c.is_whitespace() {
+                    *freqs.entry(c).or_insert(0) += 1;
+                    total_scanned += 1;
+                }
+            }
+            total_slots += slots_part.split_whitespace().count();
+        }
+    }
+
+    let alphabet = get_alphabet_94();
+    let mut missing = Vec::new();
+    for &c in &alphabet {
+        if !freqs.contains_key(&c) {
+            missing.push(c);
+        }
+    }
+
+    let unique_used = alphabet.len() - missing.len();
+    let coverage = (unique_used as f64 / 94.0) * 100.0;
+
+    // Shannon entropy: H = -sum(p * log2(p))
+    let mut entropy = 0.0;
+    if total_scanned > 0 {
+        for &count in freqs.values() {
+            let p = count as f64 / total_scanned as f64;
+            if p > 0.0 {
+                entropy -= p * p.log2();
+            }
+        }
+    }
+
+    AlphabetAuditReport {
+        unique_characters_used: unique_used,
+        total_characters_scanned: total_scanned,
+        coverage_percentage: coverage,
+        missing_characters: missing,
+        character_frequencies: freqs,
+        entropy_bits_per_char: entropy,
+        total_bundles,
+        total_slots,
+    }
+}
 
 pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
     if raw.len() != 10 {
@@ -101,15 +204,15 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
 
     let chars: Vec<char> = raw.chars().collect();
     let prefix = chars[0];
-    if prefix != '_' && prefix != '\'' {
+    if prefix != '_' && prefix != '\'' && prefix != '~' && prefix != '@' {
         return Err(format!("Invalid slot prefix '{}' in '{}'", prefix, raw));
     }
 
     let opcode: String = chars[1..3].iter().collect();
     let terminator = chars[9];
-    if terminator != '>' && terminator != '!' {
+    if terminator != '>' && terminator != '!' && terminator != '?' && terminator != ';' {
         return Err(format!(
-            "Invalid slot terminator '{}' in '{}' (expected '>' or '!')",
+            "Invalid slot terminator '{}' in '{}' (expected '>', '!', '?', or ';')",
             terminator, raw
         ));
     }
@@ -142,6 +245,7 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
         terminator,
     })
 }
+
 
 pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
     let mut report = ClReport::default();

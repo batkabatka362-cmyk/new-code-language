@@ -107,6 +107,7 @@ impl Parser {
         let mut imports = Vec::new();
         let mut type_aliases = Vec::new();
         let mut structs = Vec::new();
+        let mut enums = Vec::new();
         let mut traits = Vec::new();
         let mut impls = Vec::new();
         let mut functions = Vec::new();
@@ -178,9 +179,13 @@ impl Parser {
                     Token::Ident(n) => n,
                     other => return Err(format!("Expected struct name, got {:?}", other)),
                 };
+                let mut generic_params = Vec::new();
                 if self.match_token(&Token::Less) {
                     while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
-                        self.advance();
+                        match self.advance() {
+                            Token::Ident(p) => generic_params.push(p),
+                            other => return Err(format!("Expected generic parameter in struct {}, got {:?}", name, other)),
+                        }
                         self.match_token(&Token::Comma);
                     }
                     self.expect(&Token::Greater)?;
@@ -206,7 +211,47 @@ impl Parser {
                     self.match_token(&Token::Semicolon);
                 }
                 self.expect(&Token::CloseBrace)?;
-                structs.push(StructDecl { name, fields });
+                structs.push(StructDecl { name, generic_params, fields });
+            } else if self.match_token(&Token::Enum) {
+                let name = match self.advance() {
+                    Token::Ident(n) => n,
+                    other => return Err(format!("Expected enum name, got {:?}", other)),
+                };
+                let mut generic_params = Vec::new();
+                if self.match_token(&Token::Less) {
+                    while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
+                        match self.advance() {
+                            Token::Ident(p) => generic_params.push(p),
+                            other => return Err(format!("Expected generic parameter in enum {}, got {:?}", name, other)),
+                        }
+                        self.match_token(&Token::Comma);
+                    }
+                    self.expect(&Token::Greater)?;
+                }
+                self.expect(&Token::OpenBrace)?;
+                let mut variants = Vec::new();
+                while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+                    let variant_name = match self.advance() {
+                        Token::Ident(n) => n,
+                        other => return Err(format!("Expected enum variant name in enum {}, got {:?}", name, other)),
+                    };
+                    let payload = if self.match_token(&Token::OpenParen) {
+                        let mut types = Vec::new();
+                        while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                            types.push(self.parse_type_str()?);
+                            self.match_token(&Token::Comma);
+                        }
+                        self.expect(&Token::CloseParen)?;
+                        Some(types)
+                    } else {
+                        None
+                    };
+                    variants.push(EnumVariant { name: variant_name, payload });
+                    self.match_token(&Token::Comma);
+                    self.match_token(&Token::Semicolon);
+                }
+                self.expect(&Token::CloseBrace)?;
+                enums.push(EnumDecl { name, generic_params, variants });
             } else if self.check(&Token::Trait) {
                 let trait_decl = self.parse_trait_decl()?;
                 traits.push(trait_decl);
@@ -221,15 +266,17 @@ impl Parser {
                 let brain_decl = self.parse_brain_decl()?;
                 brains.push(brain_decl);
             } else if let Token::Ident(_name) = self.peek() {
-                if self.peek_offset(1) == &Token::Colon
-                    && !matches!(self.peek_offset(2), Token::Ident(_) | Token::OpenParen)
+                if (self.peek_offset(1) == &Token::Colon
+                    && self.peek_offset(2) != &Token::Colon
+                    && !matches!(self.peek_offset(2), Token::Ident(_) | Token::OpenParen))
                     || (self.peek_offset(1) == &Token::Colon
+                        && self.peek_offset(2) != &Token::Colon
                         && matches!(self.peek_offset(2), Token::Ident(_))
                         && self.peek_offset(3) != &Token::Assign
                         && self.peek_offset(3) != &Token::Comma)
                 {
                     // Label like _main:
-                    let is_label = if self.peek_offset(1) == &Token::Colon {
+                    let is_label = if self.peek_offset(1) == &Token::Colon && self.peek_offset(2) != &Token::Colon {
                         match self.peek_offset(2) {
                             Token::Ident(_) => {
                                 !matches!(self.peek_offset(3), Token::Assign | Token::Comma)
@@ -268,6 +315,7 @@ impl Parser {
             imports,
             type_aliases,
             structs,
+            enums,
             traits,
             impls,
             functions,
@@ -283,6 +331,17 @@ impl Parser {
             Token::Ident(n) => n,
             other => return Err(format!("Expected trait name, got {:?}", other)),
         };
+        let mut generic_params = Vec::new();
+        if self.match_token(&Token::Less) {
+            while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
+                match self.advance() {
+                    Token::Ident(p) => generic_params.push(p),
+                    other => return Err(format!("Expected generic parameter in trait {}, got {:?}", name, other)),
+                }
+                self.match_token(&Token::Comma);
+            }
+            self.expect(&Token::Greater)?;
+        }
         self.expect(&Token::OpenBrace)?;
         let mut methods = Vec::new();
         while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
@@ -343,21 +402,53 @@ impl Parser {
             });
         }
         self.expect(&Token::CloseBrace)?;
-        Ok(TraitDecl { name, methods })
+        Ok(TraitDecl { name, generic_params, methods })
     }
 
     /// Parse `impl <Trait> for <Struct> { def <method>(<params>) { body } ... }`
     fn parse_impl_decl(&mut self) -> Result<ImplDecl, String> {
         self.expect(&Token::Impl)?;
-        let trait_name = match self.advance() {
+        let mut generic_params = Vec::new();
+        if self.match_token(&Token::Less) {
+            while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
+                match self.advance() {
+                    Token::Ident(p) => generic_params.push(p),
+                    other => return Err(format!("Expected generic parameter in impl, got {:?}", other)),
+                }
+                self.match_token(&Token::Comma);
+            }
+            self.expect(&Token::Greater)?;
+        }
+        let first_name = match self.advance() {
             Token::Ident(n) => n,
-            other => return Err(format!("Expected trait name after 'impl', got {:?}", other)),
+            other => return Err(format!("Expected trait or struct name after 'impl', got {:?}", other)),
         };
-        // Expect 'for' keyword (mapped as Token::For)
-        self.expect(&Token::For)?;
-        let target_struct = match self.advance() {
-            Token::Ident(n) => n,
-            other => return Err(format!("Expected struct name after 'for', got {:?}", other)),
+        // Optional type arguments after first identifier, e.g. `impl<T> Channel<T>`
+        if self.match_token(&Token::Less) {
+            while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
+                self.advance();
+                self.match_token(&Token::Comma);
+            }
+            self.expect(&Token::Greater)?;
+        }
+
+        // Check if 'for' keyword follows (indicating trait implementation)
+        let (trait_name, target_struct) = if self.match_token(&Token::For) {
+            let target_struct = match self.advance() {
+                Token::Ident(n) => n,
+                other => return Err(format!("Expected struct name after 'for', got {:?}", other)),
+            };
+            if self.match_token(&Token::Less) {
+                while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
+                    self.advance();
+                    self.match_token(&Token::Comma);
+                }
+                self.expect(&Token::Greater)?;
+            }
+            (first_name, target_struct)
+        } else {
+            // Inherent impl: impl Struct { ... }
+            (String::new(), first_name)
         };
         self.expect(&Token::OpenBrace)?;
         let mut methods = Vec::new();
@@ -369,6 +460,7 @@ impl Parser {
         Ok(ImplDecl {
             trait_name,
             target_struct,
+            generic_params,
             methods,
         })
     }
@@ -400,9 +492,13 @@ impl Parser {
             other => return Err(format!("Expected function name, found {:?}", other)),
         };
 
+        let mut generic_params = Vec::new();
         if self.match_token(&Token::Less) {
             while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
-                self.advance();
+                match self.advance() {
+                    Token::Ident(p) => generic_params.push(p),
+                    other => return Err(format!("Expected generic parameter in function {}, got {:?}", name, other)),
+                }
                 self.match_token(&Token::Comma);
             }
             self.expect(&Token::Greater)?;
@@ -474,6 +570,7 @@ impl Parser {
             is_export,
             is_inline,
             name,
+            generic_params,
             params,
             return_type,
             body,
@@ -575,7 +672,7 @@ impl Parser {
                 let span = self.current_span();
                 self.advance(); // region
                 let name = match self.advance() {
-                    Token::Ident(n) => n,
+                    Token::Ident(n) | Token::StringLit(n) => n,
                     other => return Err(format!("Expected region name, got {:?}", other)),
                 };
 
@@ -679,6 +776,28 @@ impl Parser {
                 let condition = self.parse_expr()?;
                 let body = self.parse_block()?;
                 Ok(Statement::While { condition, body, span })
+            }
+            Token::Match => {
+                let span = self.current_span();
+                self.advance(); // match
+                let expr = self.parse_expr()?;
+                self.expect(&Token::OpenBrace)?;
+                let mut arms = Vec::new();
+                while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+                    let arm_span = self.current_span();
+                    println!("Inside match loop, current token: {:?}", self.peek());
+                    let pattern = self.parse_match_pattern()?;
+                    self.expect(&Token::FatArrow)?;
+                    let body = if self.check(&Token::OpenBrace) {
+                        self.parse_block()?
+                    } else {
+                        vec![self.parse_statement()?]
+                    };
+                    arms.push(MatchArm { pattern, body, span: arm_span });
+                    self.match_token(&Token::Comma);
+                }
+                self.expect(&Token::CloseBrace)?;
+                Ok(Statement::Match { expr, arms, span })
             }
             Token::For => {
                 let span = self.current_span();
@@ -875,6 +994,49 @@ impl Parser {
             self.expect(&Token::CloseBracket)?;
         }
         Ok(attrs)
+    }
+
+    fn parse_match_pattern(&mut self) -> Result<MatchPattern, String> {
+        match self.peek() {
+            Token::Underscore => {
+                self.advance();
+                Ok(MatchPattern::Wildcard)
+            }
+            Token::Ident(_) => {
+                let name = match self.advance() {
+                    Token::Ident(n) => n,
+                    _ => unreachable!(),
+                };
+                let (enum_name, variant_name) = if self.match_token(&Token::Colon) {
+                    self.expect(&Token::Colon)?;
+                    let v = match self.advance() {
+                        Token::Ident(v) => v,
+                        other => return Err(format!("Expected variant name after '::', got {:?}", other)),
+                    };
+                    (Some(name), v)
+                } else {
+                    (None, name)
+                };
+
+                let mut bindings = Vec::new();
+                if self.match_token(&Token::OpenParen) {
+                    while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                        match self.advance() {
+                            Token::Ident(b) => bindings.push(b),
+                            Token::Underscore => bindings.push("_".to_string()),
+                            other => return Err(format!("Expected binding identifier in match arm, got {:?}", other)),
+                        }
+                        self.match_token(&Token::Comma);
+                    }
+                    self.expect(&Token::CloseParen)?;
+                }
+                Ok(MatchPattern::Variant { enum_name, variant_name, bindings })
+            }
+            _ => {
+                let lit = self.parse_expr()?;
+                Ok(MatchPattern::Literal(lit))
+            }
+        }
     }
 
     fn parse_type_str(&mut self) -> Result<String, String> {
@@ -1203,6 +1365,37 @@ impl Parser {
                     object: Box::new(expr),
                     index: Box::new(index),
                 };
+            } else if self.match_token(&Token::OpenParen) {
+                // Function call chaining on expression, e.g. grad(f)(x)
+                let _call_span = self.current_span();
+                let mut args = Vec::new();
+                while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                    let arg = self.parse_call_arg()?;
+                    args.push(arg);
+                    if !self.match_token(&Token::Comma) {
+                        break;
+                    }
+                }
+                self.expect(&Token::CloseParen)?;
+                match expr {
+                    Expr::Grad { callee, wrt, span: g_span } => {
+                        expr = Expr::GradCall {
+                            callee,
+                            wrt,
+                            args,
+                            span: g_span,
+                        };
+                    }
+                    other => {
+                        expr = Expr::Call {
+                            callee: match &other {
+                                Expr::Ident(name, _) => name.clone(),
+                                _ => format!("{:?}", other),
+                            },
+                            args,
+                        };
+                    }
+                }
             } else {
                 break;
             }
@@ -1321,15 +1514,54 @@ impl Parser {
                 self.expect(&Token::CloseParen)?;
                 Ok(Expr::Consume(ident, span))
             }
+            Token::Grad => {
+                let span = self.current_span();
+                self.advance(); // grad
+                self.expect(&Token::OpenParen)?;
+                let callee = self.parse_expr()?;
+                let mut wrt = None;
+                if self.match_token(&Token::Comma) {
+                    if let Token::Ident(param_key) = self.peek() {
+                        if param_key == "wrt" && self.peek_offset(1) == &Token::Colon {
+                            self.advance(); // wrt
+                            self.advance(); // :
+                        }
+                    }
+                    match self.advance() {
+                        Token::StringLit(s) | Token::Ident(s) => wrt = Some(s),
+                        other => return Err(format!("Expected parameter name for grad wrt, got {:?}", other)),
+                    }
+                }
+                self.expect(&Token::CloseParen)?;
+                Ok(Expr::Grad {
+                    callee: Box::new(callee),
+                    wrt,
+                    span,
+                })
+            }
             Token::Await => {
                 self.advance(); // await
                 let inner = self.parse_expr()?;
                 Ok(Expr::Await(Box::new(inner)))
             }
             Token::Spawn => {
+                let span = self.current_span();
                 self.advance(); // spawn
-                let inner = self.parse_expr()?;
-                Ok(Expr::Spawn(Box::new(inner)))
+                if self.check(&Token::Ident("at".to_string())) {
+                    self.advance(); // at
+                    self.expect(&Token::OpenParen)?;
+                    let core_id = self.parse_expr()?;
+                    self.expect(&Token::CloseParen)?;
+                    let inner = self.parse_expr()?;
+                    Ok(Expr::SpawnAt {
+                        core_id: Box::new(core_id),
+                        target: Box::new(inner),
+                        span,
+                    })
+                } else {
+                    let inner = self.parse_expr()?;
+                    Ok(Expr::Spawn(Box::new(inner)))
+                }
             }
             Token::If => {
                 self.advance(); // if
@@ -1385,7 +1617,8 @@ impl Parser {
                 let id = name.clone();
                 self.advance();
 
-                // Check for generic type arguments: e.g. LinearGuard<T> { ... }
+                // Check for generic type arguments: e.g. LinearGuard<T> { ... } or call<T>(...)
+                let mut full_id = id.clone();
                 if self.check(&Token::Less) {
                     let mut lookahead = 1;
                     let mut depth = 1;
@@ -1405,11 +1638,19 @@ impl Parser {
                     }
                     if depth == 0 && (self.peek_offset(lookahead + 1) == &Token::OpenBrace || self.peek_offset(lookahead + 1) == &Token::OpenParen) {
                         self.advance(); // <
+                        full_id.push('<');
+                        let mut first = true;
                         while !self.check(&Token::Greater) && !self.check(&Token::Eof) {
-                            self.advance();
+                            if !first {
+                                full_id.push_str(", ");
+                            }
+                            first = false;
+                            let t = self.parse_type_str()?;
+                            full_id.push_str(&t);
                             self.match_token(&Token::Comma);
                         }
                         self.expect(&Token::Greater)?;
+                        full_id.push('>');
                     }
                 }
 
@@ -1425,13 +1666,15 @@ impl Parser {
                     }
                     self.expect(&Token::CloseParen)?;
                     Ok(Expr::Call {
-                        callee: id,
+                        callee: full_id,
                         args,
                     })
                 } else if self.check(&Token::OpenBrace) && (
-                    (matches!(self.peek_offset(1), Token::Ident(_) | Token::Fallback | Token::Region | Token::Type | Token::Export) && matches!(self.peek_offset(2), Token::Colon))
-                    || matches!(self.peek_offset(1), Token::CloseBrace)
-                ) {
+                        (matches!(self.peek_offset(1), Token::Ident(_) | Token::Fallback | Token::Region | Token::Type | Token::Export)
+                            && matches!(self.peek_offset(2), Token::Colon)
+                            && self.peek_offset(3) != &Token::Colon)
+                        || matches!(self.peek_offset(1), Token::CloseBrace)
+                    ) {
                     // Struct initialization: StructName { field: val, ... }
                     self.advance(); // consume OpenBrace
                     let mut fields = Vec::new();
@@ -1455,7 +1698,7 @@ impl Parser {
                     }
                     self.expect(&Token::CloseBrace)?;
                     Ok(Expr::StructInit {
-                        struct_name: id,
+                        struct_name: full_id,
                         fields,
                     })
                 } else {
@@ -1473,7 +1716,12 @@ impl Parser {
                 }.to_string();
                 Ok(Expr::Ident(name, id_span))
             }
-            other => Err(format!("Unexpected token in expression: {:?}", other)),
+            other => {
+                println!("Unexpected token in expression at pos {}: {:?}", self.pos, other);
+                println!("Previous token: {:?}", if self.pos > 0 { &self.tokens[self.pos - 1].value } else { &Token::Eof });
+                println!("Next token: {:?}", if self.pos + 1 < self.tokens.len() { &self.tokens[self.pos + 1].value } else { &Token::Eof });
+                Err(format!("Unexpected token in expression at pos {}: {:?}", self.pos, other))
+            }
         }
     }
 

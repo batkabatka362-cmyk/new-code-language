@@ -4,5 +4,8 @@ members = [
     "crates/cron-vm",
     "crates/cron-decompile",
     "crates/cron-cli",
+    "crates/cron-wasm",
+    "crates/cron-lsp",
+    "crates/cron-rt",
 ]
 resolver = "2"

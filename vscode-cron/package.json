@@ -1,0 +1,64 @@
+{
+  "name": "cron-lang",
+  "displayName": "CRON Cognitive Language Support",
+  "description": "Language support, syntax highlighting, and LSP 3.17 engine for CRON (.cr) & CRON Low-Level (.cl) 256-Core 4D-Torus Processor",
+  "version": "1.0.0",
+  "publisher": "cron-ai",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onLanguage:cron",
+    "onLanguage:cron-cl"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "cron",
+        "aliases": ["CRON", "cron"],
+        "extensions": [".cr"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "cron-cl",
+        "aliases": ["CRON Low-Level Machine Code", "cron-cl"],
+        "extensions": [".cl"],
+        "configuration": "./language-configuration-cl.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cron",
+        "scopeName": "source.cron",
+        "path": "./syntaxes/cron.tmLanguage.json"
+      },
+      {
+        "language": "cron-cl",
+        "scopeName": "source.cron-cl",
+        "path": "./syntaxes/cron-cl.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "CRON Language Support",
+      "properties": {
+        "cron.lsp.serverPath": {
+          "type": "string",
+          "default": "cron",
+          "description": "Path to the 'cron' executable (runs 'cron lsp')"
+        },
+        "cron.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Trace communication between VS Code and the CRON Language Server"
+        }
+      }
+    }
+  }
+}

@@ -38,3 +38,17 @@ import { QubitRegister, entangle_decision_paths } from "quantum/superposition_pl
 // Brain 6: Self-Healing Sentry & Hardware Resilience
 import { SentryConfig, init_sentry_daemon, evaluate_thermal_safety } from "resilient/sentry.cr"
 import { CoreTelemetry, poll_core_telemetry, verify_slot_parity } from "resilient/telemetry.cr"
+
+// Neural Network & Tensor Engine (libcr/nn)
+import { Tensor4D, create_tensor4d, tensor_to_torus_coord, tensor4d_total_elements } from "nn/tensor4d.cr"
+import { FlashAttentionConfig, AttentionOutput, init_flash_attention_config, photonic_flash_attention_forward } from "nn/attention.cr"
+import { STDPLayer, SynapseTrace, create_stdp_layer, stdp_step } from "nn/stdp.cr"
+
+// Concurrency & 4D-Torus CSP Mesh (libcr/concurrency)
+import { Channel, channel_create, channel_shutdown } from "concurrency/channel.cr"
+import { TorusRouter, TorusMessage, torus_hop_distance, torus_next_hop } from "concurrency/torus.cr"
+
+// Cognitive Deep Learning & Neuromorphic Autograd
+import { Tensor, tensor_create, tensor_reshape, tensor_fma_simd, tensor_dot_simd } from "tensor/tensor.cr"
+import { TransformerBlock, MultiHeadAttention, FeedForward, RMSNorm, transformer_block_forward } from "nn/transformer.cr"
+import { LIFNeuron, SNNLayer, SNNTapeEntry, create_lif_neuron, snn_layer_forward, snn_layer_backward } from "neuro/snn_autograd.cr"

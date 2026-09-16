@@ -12,3 +12,4 @@ path = "src/main.rs"
 cronc = { path = "../cronc" }
 cron-vm = { path = "../cron-vm" }
 cron-decompile = { path = "../cron-decompile" }
+cron-lsp = { path = "../cron-lsp" }

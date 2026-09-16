@@ -19,6 +19,11 @@ pub struct HardwareStats {
     pub dram_bandwidth_saved_mb: f64,
     pub total_traps: usize,
     pub pred_exec_ops: u32,
+    pub cache_invalidations: usize,
+    pub dma_transfers: usize,
+    pub total_energy_saved_uw: u64,
+    pub photonic_pumps: usize,
+    pub arena_resets: usize,
 }
 
 // === FDO (Feedback-Directed Optimization) Execution Profile (Pages 746–749) ===
@@ -172,6 +177,14 @@ impl Simulator {
         }
     }
 
+    pub fn get_bank_register(&self, core_id: usize, bank: usize, reg: usize) -> u32 {
+        if core_id < self.cores.len() {
+            self.cores[core_id].get_bank_register(bank, reg)
+        } else {
+            0
+        }
+    }
+
     pub fn read_csr(&self, core_id: usize, csr_id: usize) -> u32 {
         if core_id < self.cores.len() {
             self.cores[core_id].read_csr(csr_id)
@@ -183,6 +196,54 @@ impl Simulator {
     pub fn trap_count(&self, core_id: usize) -> usize {
         if core_id < self.cores.len() {
             self.cores[core_id].trap_count
+        } else {
+            0
+        }
+    }
+
+    pub fn get_core_cache_invalidations(&self, core_id: usize) -> usize {
+        if core_id < self.cores.len() {
+            self.cores[core_id].cache_invalidations
+        } else {
+            0
+        }
+    }
+
+    pub fn get_core_dma_transfers(&self, core_id: usize) -> usize {
+        if core_id < self.cores.len() {
+            self.cores[core_id].dma_transfers
+        } else {
+            0
+        }
+    }
+
+    pub fn get_core_dvfs_state(&self, core_id: usize) -> u32 {
+        if core_id < self.cores.len() {
+            self.cores[core_id].dvfs_energy_state
+        } else {
+            0
+        }
+    }
+
+    pub fn get_core_energy_saved(&self, core_id: usize) -> u64 {
+        if core_id < self.cores.len() {
+            self.cores[core_id].energy_saved_uw
+        } else {
+            0
+        }
+    }
+
+    pub fn get_core_photonic_pumps(&self, core_id: usize) -> usize {
+        if core_id < self.cores.len() {
+            self.cores[core_id].photonic_pumps
+        } else {
+            0
+        }
+    }
+
+    pub fn get_core_arena_resets(&self, core_id: usize) -> usize {
+        if core_id < self.cores.len() {
+            self.cores[core_id].arena_resets
         } else {
             0
         }
@@ -335,6 +396,61 @@ impl Simulator {
             }
         }
 
+        // Global 256-Core Chip-Wide Hardware Barrier (bb) lockstep synchronization
+        let has_barrier = inst.slots.iter().any(|s| {
+            s.len() >= 3 && (&s[1..3] == "bb" || (s.len() >= 5 && &s[3..5] == "bb"))
+        });
+        if has_barrier {
+            for core in &mut self.cores {
+                core.in_barrier = false;
+            }
+        }
+
+        // Global 256-Core Chip-Wide Cache Invalidation (CC)
+        let has_cache_inv = inst.slots.iter().any(|s| {
+            s.len() >= 3 && (&s[1..3] == "CC" || (s.len() >= 5 && &s[3..5] == "CC"))
+        });
+        if has_cache_inv {
+            for core in &mut self.cores {
+                core.cache_invalidations += 1;
+                core.csr_stall_cnt = 0;
+            }
+        }
+
+        // Direct NoC DMA Burst (DD)
+        let has_dma = inst.slots.iter().any(|s| {
+            s.len() >= 3 && (&s[1..3] == "DD" || (s.len() >= 5 && &s[3..5] == "DD"))
+        });
+        if has_dma {
+            self.stats.mesh_packets_routed += 32;
+            for core in &mut self.cores {
+                core.dma_transfers += 1;
+            }
+        }
+
+        // Energy-Aware Dynamic Voltage and Frequency Scaling (EE)
+        let has_dvfs = inst.slots.iter().any(|s| {
+            s.len() >= 3 && (&s[1..3] == "EE" || (s.len() >= 5 && &s[3..5] == "EE"))
+        });
+        if has_dvfs {
+            for core in &mut self.cores {
+                core.thermal_level = 25; // instant baseline cooling
+                core.dvfs_energy_state = 1;
+                core.energy_saved_uw += 450;
+            }
+        }
+
+        // Region Arena 0-Cycle Reset across all 256 cores (88)
+        let has_arena_reset = inst.slots.iter().any(|s| {
+            s.len() >= 3 && (&s[1..3] == "88" || (s.len() >= 5 && &s[3..5] == "88"))
+        });
+        if has_arena_reset {
+            for core in &mut self.cores {
+                core.reversible_stack.clear();
+                core.arena_resets += 1;
+            }
+        }
+
         // Process NoC packet deliveries
         for i in 0..256 {
             let recvd = self.mesh.deliver_packets(i);
@@ -360,6 +476,11 @@ impl Simulator {
         let mut peak_temp = 25;
         let mut total_traps = 0;
         let mut total_pred = 0;
+        let mut total_cache_inv = 0;
+        let mut total_dma = 0;
+        let mut total_energy = 0;
+        let mut total_pumps = 0;
+        let mut total_arena_resets = 0;
 
         for core in &self.cores {
             total_mzi += core.optical_gemm_count;
@@ -367,6 +488,11 @@ impl Simulator {
             total_stdp += core.stdp_updates_count;
             total_traps += core.trap_count;
             total_pred += core.csr_pred_exec_cnt;
+            total_cache_inv += core.cache_invalidations;
+            total_dma += core.dma_transfers;
+            total_energy += core.energy_saved_uw;
+            total_pumps += core.photonic_pumps;
+            total_arena_resets += core.arena_resets;
             if core.thermal_level > peak_temp {
                 peak_temp = core.thermal_level;
             }
@@ -378,6 +504,11 @@ impl Simulator {
         self.stats.peak_temperature_c = peak_temp;
         self.stats.total_traps = total_traps;
         self.stats.pred_exec_ops = total_pred;
+        self.stats.cache_invalidations = total_cache_inv;
+        self.stats.dma_transfers = total_dma;
+        self.stats.total_energy_saved_uw = total_energy;
+        self.stats.photonic_pumps = total_pumps;
+        self.stats.arena_resets = total_arena_resets;
         // Reversible memory saves ~128 bytes per reverse auto-diff step per core
         self.stats.dram_bandwidth_saved_mb = (total_rev as f64 * 128.0) / (1024.0 * 1024.0);
 

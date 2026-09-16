@@ -25,6 +25,14 @@
 - **Photonic Wave Registers**: $W_0$ to $W_3$ (Stores coherent optical amplitude & phase tuples).
 - **Reversible Shadow Registers**: $S_0$ to $S_7$ (Hardware-managed LIFO stack for zero-memory backwards differentiation $F^{-1}$).
 - **Status & Predicate Registers**: $P_0$ (Predicate mask register), $T_{stat}$ (Thermal & error status).
+- **Control & Status Registers (CSRs)**: `CYCLE_CNT`, `STALL_CNT`, `PRED_EXEC_CNT`, `VEC_BURST_CNT`.
+- **Banked Register File**: 16 banks × 16 registers (Bank 0 mirrors local registers).
+
+### 1.2 Hardware State per Core
+- **LFSR PRNG**: 32-bit Galois LFSR (polynomial $x^{32} + x^{31} + x^{29} + x + 1 = \texttt{0xA000\_0003}$).
+- **NoC Receive FIFO**: Variable-depth packet queue for inter-core communication.
+- **Shadow Checkpoint Bank**: LIFO stack of full register snapshots for resilient compute.
+- **Trap State**: `MCAUSE`, `MEPC`, `in_trap`, `trap_handler_addr` (RISC-V style).
 
 ---
 
@@ -66,32 +74,155 @@ Each slot token is strictly **10 ASCII characters** long:
 
 ---
 
-## 3. Opcode Reference Table
+## 3. Complete Opcode Reference
 
-| Opcode | Name | Unit | Semantics |
-|---|---|---|---|
-| `_OP` | **Optical GEMM** | Photonic MZI | $R_{dst} \leftarrow \text{MZI\_GEMM}(R_{src}, \text{Arg})$ |
-| `_FA` | **Forward Autodiff Tap** | Photonic MZI | Tap intermediate phase state into reversible register |
-| `_BK` | **Backward Autodiff** | Reversible ALU | $R_{dst} \leftarrow F^{-1}(R_{src})$ compute gradient without DRAM load |
-| `_RF` | **Reversible Fredkin** | Reversible ALU | Controlled reversible swap without entropy dissipation |
-| `_MD` | **Sub-Byte MAC** | SIMD ALU | 16x 2-bit ternary dot product accumulation |
-| `_PK` | **Pack Sub-byte** | SIMD ALU | Pack 32-bit scalar stream into 2-bit ternary registers |
-| `_ST` | **STDP Synapse Update**| STDP Engine | Update synaptic weights based on spike timing delta |
-| `_GU` | **Gradient Step** | ALU | $W \leftarrow W - \eta \cdot \nabla W$ in 1 cycle |
-| `_UN` | **Unify Causal Axiom**| Symbolic Engine| Unify latent vector with symbolic rule axiom |
-| `_SY` | **Symbolify State** | Symbolic Engine| Compress continuous vector into graph symbol ID |
-| `_QP` | **Quantum Plan Eval** | Superposition | Evaluate superposition paths and collapse to optimal choice |
-| `_SH` | **Self-Healing Sentry**| Watchdog Fiber | Activate sentry watchdog with thermal threshold |
-| `_RS` | **Region Reset** | Memory Arena | Reclaim all temporary region registers in 0 cycles |
-| `_SP` | **Spawn Fiber** | Hardware Fibers| Spawn Fiber 1 asynchronous background routine |
-| `_FJ` | **Fiber Join** | Hardware Fibers| Await Fiber 1 completion and merge result |
-| `_SB` | **Spatial Broadcast** | 4D Torus NoC | Broadcast packet across 4D torus axis |
-| `_DW` | **DMA Wait** | 4D Torus NoC | Await DMA / asynchronous transfer completion |
-| `_HLT`| **Halt Execution** | Control | Stop core execution and signal host driver |
+### 3.1 Photonic & Optical Compute Unit
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_OP` / `_WD` | **Optical GEMM** | $R_{dst} \leftarrow \text{MZI\_GEMM}(R_{src}, \text{Arg})$ — Photonic Mach-Zehnder interferometer matrix multiply |
+| `_FA` | **Forward Autodiff Tap** | Push $R_{src}$ onto reversible stack; $R_{dst} \leftarrow R_{src}$ — Tap intermediate state for $\nabla F$ |
+| `_CD` | **Hardware CORDIC** | $R_{dst} \leftarrow (\cos\theta \ll 16) \mid \sin\theta$ — Fixed-point sin/cos in 1 cycle (Q15 format) |
+
+### 3.2 Reversible Thermodynamic ALU (Brain 3)
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_BK` | **Backward Invert** | $R_{dst} \leftarrow F^{-1}(\text{pop}(S))$ — Pop reversible stack, XOR-invert for gradient computation |
+| `_RF` | **Reversible Fredkin Gate** | $\text{swap}(R_{dst}, R_{src})$ — Controlled reversible swap, zero entropy dissipation |
+| `_TO` | **Toffoli 3-Wire Gate** | $\text{if } R_{10}[0] \wedge R_{11}[0]: R_{dst}[0] \oplus\!\!= 1$ — Universal reversible gate |
+
+### 3.3 Predicated SIMD ALU
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_PO` / `_P0` / `_P1` | **Predicated ALU** | $R_{dst} \leftarrow R_{dst} \diamond R_{src}$ — Mode char selects op: `+`,`-`,`*`,`/`,`%`,`&`,`\|`,`^`,`~`,`=`,`<`,`>`,`?`,`!`,`G` |
+| `_MD` | **Sub-Byte MAC** | 16× 2-bit ternary dot product or $R_{dst} \leftarrow R_{dst} \times R_{src}$ / $R_{dst} \div R_{src}$ |
+| `_PK` | **Pack Sub-byte** | Pack 32-bit scalar stream into 2-bit ternary representation: $R_{dst} \leftarrow \texttt{0x5555\_AAAA}$ |
+| `_BL` | **Blend Staged Halo** | $R_{dst} \leftarrow R_{src} \mid \texttt{0x8000}$ — Merge halo region data |
+| `_PS` | **Parallel Prefix Sum** | Kogge-Stone adder tree: byte-lane cumulative sum across 4 packed bytes |
+| `_TT` | **Tensor Tile Transpose** | 4×4 2-bit matrix transpose with strided swizzle pattern |
+| `_IR` | **In-Network Reduction** | $R_{dst} \leftarrow R_{dst} + R_{src}$ — Accumulate in-flight reduction result |
+
+### 3.4 Neuromorphic Engine (Brain 4)
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_ST` | **STDP Synapse Update** | Increment all synapse weights: $w_i \leftarrow \min(w_i + 2, 127)$ |
+| `_LI` | **LIF Neuron Step** | Leaky integrate-and-fire: membrane decay 7/8 + current; spike if $\geq$ threshold |
+| `_LF` | **LIF Spike Generator** | Simple spike: $R_{dst} \leftarrow (R_{src} > 100) ? 1 : 0$ |
+
+### 3.5 Cognitive & Symbolic Engine (Brain 1)
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_SY` | **Symbolic Grounding** | $R_{dst} \leftarrow \texttt{0xCAFE\_BABE}$ — Compress continuous vector to symbol ID |
+| `_KG` | **Knowledge Graph Query** | $R_{dst} \leftarrow 1$ — Assert or query knowledge graph edge |
+| `_HE` | **Hyper-Edge Associator** | $R_{dst} \leftarrow \texttt{0xCAFE\_0000} \mid (R_{src}[7:0] \ll 8) \mid R_{dst}[7:0]$ |
+| `_CA` | **Cross-Attention Gate** | $R_{dst} \leftarrow (R_{dst} \times R_{src}[7:0]) \gg 8$ — Attention-gated activation |
+
+### 3.6 Chaos & Dynamical Systems (Brain 5)
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_OD` | **Chaos Diffusion** | $R_{dst} \leftarrow R_{src} \times 11 + 7 \oplus (R_{src} \gg 3)$ — Lorenz attractor step |
+| `_SW` | **Superposition Wave** | Predicated execution: skip rest of cycle if $R_{src} = 0$ |
+
+### 3.7 Resource Management (Brain 6)
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_RS` | **Region Arena Reset** | $R_1 \leftarrow 0$ — Reclaim all temporary region registers in 0 cycles |
+| `_AW` | **Arbiter Weight Update** | $R_{dst} \leftarrow \min(R_{dst} + R_{src}[3:0], 255)$ — Dynamic priority scheduling |
+
+### 3.8 Gradient & Learning
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_GU` | **Gradient Step Update** | $W \leftarrow W - \eta \cdot \nabla W$: $R_{dst} \leftarrow R_{dst} - R_{src}/2$ |
+
+### 3.9 Network-on-Chip (4D Torus)
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_SB` | **Spatial Broadcast** | Broadcast $R_{dst}$ across 4D torus mesh axis |
+| `_TX` | **NoC Channel Send** | Inject wormhole packet: $R_{src} \to$ NoC transmit FIFO |
+| `_RX` | **NoC Channel Recv** | Pop from receive FIFO: $R_{dst} \leftarrow \text{FIFO.pop()}$ (blocking) |
+| `_PL` | **NoC FIFO Poll** | Non-blocking poll: $R_{dst} \leftarrow (\text{FIFO} \neq \emptyset) ? 1 : 0$ |
+| `_WH` | **Wormhole Tunnel** | Deterministic 4D hyper-torus routing: $R_{dst} \leftarrow \texttt{0x5500\_0000} \mid R_{src}[23:0]$ |
+| `_DF` | **Deflection Route** | Adaptive deflection routing fallback: $R_{dst} \leftarrow 1$ |
+| `_DW` | **DMA Write-back** | Scatter to High-Bandwidth Memory (HBM3) |
+| `_TL` | **4D Torus Tile** | $R_{dst} \leftarrow \text{CoreID}$ — Load core's 4D coordinate |
+
+### 3.10 Hardware Fibers & Control
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_SP` | **Spawn Fiber** | Activate Fiber 1 (async hardware coroutine) |
+| `_FJ` | **Fiber Join** | Await Fiber 1 completion and merge result |
+| `_YD` | **Coroutine Yield** | Yield execution to spatial gather / fiber switch |
+| `_SH` | **Self-Healing Sentry** | Activate thermal watchdog with threshold from immediate |
+| `_PT` | **Parity Telemetry** | Pipeline prefetch hint (NOP with telemetry annotation) |
+| `_HLT` | **Halt Execution** | Stop core execution and signal host driver |
+
+### 3.11 Control & Status Registers
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_RC` | **Resilient Compute / CSR** | Mode `!` imm=0: Shadow bank SAVE; Mode `!` imm=1: Shadow bank RESTORE; Mode `C`: CSR Read |
+| `_RT` | **Return from Trap** | Clear trap state: `in_trap ← false`, `mcause ← 0` (equivalent to MRET) |
+| `_RN` | **LFSR Random** | Advance Galois LFSR by one step: $R_{dst} \leftarrow \text{LFSR.next()}$ |
+
+### 3.12 Hardware Security
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_AC` | **Capability Token** | $R_{dst} \leftarrow \texttt{0xC4F0\_0001}$ — Issue hardware capability token |
+| `_SN` | **Bounds Sanitization** | $R_{dst} \leftarrow R_{src} \wedge \texttt{0x00FF\_FFFF}$ — 24-bit address masking |
+| `_SC` | **Secure I-Cache Patch** | $R_{dst} \leftarrow 1$ — Validate instruction cache integrity |
+
+### 3.13 Atomic Operations
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `_CS` | **Compare-and-Swap** | If $R_{dst} = R_{src}$: $R_{dst} \leftarrow \text{imm}$, $R_0 \leftarrow 1$; else $R_0 \leftarrow 0$ |
 
 ---
 
-## 4. 4D Torus Routing & Coordinate Calculation
+## 4. Homopolymer Macro Opcodes
+
+Homopolymer opcodes are **twin-character** tokens (e.g., `CC`, `DD`, `FF`) that trigger chip-wide macro operations. They are designed for maximum decode simplicity — the hardware recognizes repeated characters as a single-cycle macro command.
+
+### 4.1 Uppercase Homopolymers
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `AA` | **Dual-Bank SIMD Broadcast** | Auto-accumulate $R_{10} \leftarrow R_{10}^2$ across Bank 0 and Bank 10 |
+| `BB` | **Brain-Bridge Sync** | Cross-neuromorphic synchronization: copy STDP weights → wave register amplitudes |
+| `CC` | **Cache Invalidation** | Chip-wide 256-core I/D cache & pipeline flush; clear stall counters and shadow bank |
+| `DD` | **Direct DMA Transfer** | Zero-overhead 4D-torus NoC DMA burst: $\text{Bank}[d][r] \leftarrow R_{src}$ |
+| `EE` | **DVFS Energy Scaling** | Enter eco-mode: voltage/frequency scaling, thermal dissipation to 25°C baseline |
+| `FF` | **Fredkin Full Fold** | Pop entire reversible stack, accumulate sum: $R_{dst} \leftarrow \sum S_i$ |
+
+### 4.2 Numeric Homopolymers
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `00` | **Zero-Fill Reset** | (Reserved for future zero-fill operations) |
+| `11` | **Photonic Laser Pump** | Strobe all 4 wave register amplitudes to maximum (255) |
+| `88` | **Arena Instant Reset** | Clear reversible stack in 0 cycles (hardware arena reclamation) |
+| `99` | **Sentry Watchdog Trip** | Set thermal threshold to 180°C; increment sentry trip counter |
+
+### 4.3 Lowercase Homopolymers
+
+| Opcode | Name | Semantics |
+|---|---|---|
+| `aa` | **All-to-All Scatter** | Hypercube scatter: spatial broadcast count += 4 (all axes simultaneously) |
+| `ee` | **Spike Broadcast** | Event-driven neuromorphic: increment all STDP weights by 1 (soft Hebbian) |
+
+---
+
+## 5. 4D Torus Routing & Coordinate Calculation
 
 For core coordinates $(x, y, z, w)$ with $x,y,z,w \in \{0, 1, 2, 3\}$:
 - **Core ID**:
@@ -101,3 +232,26 @@ For core coordinates $(x, y, z, w)$ with $x,y,z,w \in \{0, 1, 2, 3\}$:
   $$\text{Neighbor}(X-) = ((x - 1 + 4) \bmod 4, y, z, w)$$
   (And analogously for axes $Y, Z, W$).
 - Toroidal wrap-around guarantees a maximum topological diameter of 8 hops across all 256 cores.
+
+---
+
+## 6. Hardware Trap Mechanism
+
+The CRON ISA supports RISC-V-style hardware traps with the following behavior:
+
+1. **Trap Sources**: Division by zero (`MCAUSE = 0x0001`), assertion failure (`MCAUSE = 0x0002`)
+2. **On Trap**: Save faulting cycle to `MEPC`, set `MCAUSE`, enter trap state
+3. **Recovery**: Execute `_RT` (Return from Trap) to clear trap state and resume execution
+4. **Shadow Checkpointing**: `_RC` with mode `!` saves/restores full register snapshots for fault tolerance
+
+---
+
+## 7. Feedback-Directed Optimization (FDO)
+
+The CRON toolchain supports a profile-guided optimization loop:
+
+1. **Compile**: `cronc` generates `.cl` VLIW bundles
+2. **Simulate**: `cron-vm` executes and collects per-bundle execution profiles (`.prof`)
+3. **Analyze**: Hot-bundle detection (≥5× baseline), cold-path identification, NOP density analysis
+4. **Recompile**: `cronc --fdo` re-packs NOP-heavy bundles, annotates hot paths with `_PT` prefetch hints
+5. **Verify**: Re-simulate to confirm cycle reduction and functional equivalence

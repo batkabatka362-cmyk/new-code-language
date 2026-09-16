@@ -1,15 +1,27 @@
 pub mod ast;
+pub mod c_backend;
 pub mod checker;
 pub mod cl_lang;
 pub mod codegen;
 pub mod diagnostic;
+pub mod fdo;
 pub mod lexer;
+pub mod optimizer;
 pub mod parser;
 pub mod scheduler;
 pub mod token;
 pub mod verilog_backend;
+pub mod llvm_backend;
+pub mod jit_backend;
+pub mod autodiff;
+pub mod cl_binary;
+pub mod gpu_backend;
 
 pub use scheduler::{AOTHazardScheduler, IRInstruction};
+pub use jit_backend::run_source_jit;
+pub use cl_binary::{assemble_cl_to_clb, disassemble_clb_to_cl};
+pub use optimizer::Optimizer;
+pub use fdo::{parse_fdo_profile, analyze_profile, compact_nop_bundles, fdo_recompile};
 
 use checker::SemanticChecker;
 use codegen::Codegen;
@@ -34,7 +46,7 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
     };
 
     let mut parser = Parser::new(tokens);
-    let program = match parser.parse_program() {
+    let mut program = match parser.parse_program() {
         Ok(p) => p,
         Err(e) => {
             let diag = Diagnostic::new("E0001", &e, 1, 1)
@@ -43,6 +55,8 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
             return Err(diag.render(file_label));
         }
     };
+
+    let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
     if let Err(type_err) = checker.check_program(&program) {
@@ -59,16 +73,335 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
         return Err(diag.render(file_label));
     }
 
+    // SSS+ Optimization Pipeline (runs after validation)
+    let mut opt = optimizer::Optimizer::new();
+    opt.optimize_program(&mut program);
+
     let mut codegen = Codegen::new();
     let machine_code = codegen.generate(&program);
 
     Ok(machine_code)
 }
 
+/// Compile source code, then apply FDO-guided recompilation using the given profile.
+/// Returns the FDO-optimized VLIW machine code string.
+pub fn compile_source_with_fdo(source: &str, fdo_profile: &str) -> Result<String, String> {
+    let cl_code = compile_source(source)?;
+    let (optimized, _analysis) = fdo_recompile(&cl_code, fdo_profile)?;
+    Ok(optimized)
+}
+
+pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
+    let mut lexer = Lexer::new(source);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            return vec![Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Check EBNF grammar syntax rules in docs/cron_spec.md")];
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let mut program = match parser.parse_program() {
+        Ok(p) => p,
+        Err(e) => {
+            return vec![Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Verify module declaration, matching braces and parentheses")];
+        }
+    };
+
+    let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
+
+    let mut checker = SemanticChecker::new();
+    if let Err(type_err) = checker.check_program(&program) {
+        let span = type_err.span.unwrap_or(crate::token::Span::point(1, 1, 0));
+        let mut diag = Diagnostic::new(type_err.code, &type_err.message, span.line, span.col)
+            .with_span(span.len)
+            .with_source(source);
+        if let Some(note) = type_err.note {
+            diag = diag.with_note(note);
+        }
+        if let Some(help) = type_err.help {
+            diag = diag.with_help(help);
+        }
+        return vec![diag];
+    }
+
+    Vec::new()
+}
+
 pub fn compile_to_verilog(source: &str, module_name: &str) -> Result<String, String> {
     let cl_code = compile_source(source)?;
     verilog_backend::generate_verilog_hdl(&cl_code, module_name)
 }
+
+pub fn compile_to_c23(source: &str) -> Result<String, String> {
+    compile_to_c23_with_name(source, None)
+}
+
+pub fn compile_to_c23_with_name(source: &str, file_label: Option<&str>) -> Result<String, String> {
+    let mut lexer = Lexer::new(source);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Check EBNF grammar syntax rules in docs/cron_spec.md");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let mut program = match parser.parse_program() {
+        Ok(p) => p,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Verify module declaration, matching braces and parentheses");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
+
+    let mut checker = SemanticChecker::new();
+    if let Err(type_err) = checker.check_program(&program) {
+        let span = type_err.span.unwrap_or(crate::token::Span::point(1, 1, 0));
+        let mut diag = Diagnostic::new(type_err.code, &type_err.message, span.line, span.col)
+            .with_span(span.len)
+            .with_source(source);
+        if let Some(note) = type_err.note {
+            diag = diag.with_note(note);
+        }
+        if let Some(help) = type_err.help {
+            diag = diag.with_help(help);
+        }
+        return Err(diag.render(file_label));
+    }
+
+    // SSS+ Optimization Pipeline (runs after validation)
+    let mut opt = optimizer::Optimizer::new();
+    opt.optimize_program(&mut program);
+
+    let mut c_backend = c_backend::CBackend::new();
+    let c_code = c_backend.generate(&program);
+
+    Ok(c_code)
+}
+
+pub fn compile_to_llvm(source: &str) -> Result<String, String> {
+    compile_to_llvm_with_name(source, None)
+}
+
+pub fn compile_to_llvm_with_name(source: &str, file_label: Option<&str>) -> Result<String, String> {
+    let mut lexer = Lexer::new(source);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Check EBNF grammar syntax rules in docs/cron_spec.md");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let mut program = match parser.parse_program() {
+        Ok(p) => p,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Verify module declaration, matching braces and parentheses");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
+
+    let mut checker = SemanticChecker::new();
+    if let Err(type_err) = checker.check_program(&program) {
+        let span = type_err.span.unwrap_or(crate::token::Span::point(1, 1, 0));
+        let mut diag = Diagnostic::new(type_err.code, &type_err.message, span.line, span.col)
+            .with_span(span.len)
+            .with_source(source);
+        if let Some(note) = type_err.note {
+            diag = diag.with_note(note);
+        }
+        if let Some(help) = type_err.help {
+            diag = diag.with_help(help);
+        }
+        return Err(diag.render(file_label));
+    }
+
+    // SSS+ Optimization Pipeline (runs after validation)
+    let mut opt = optimizer::Optimizer::new();
+    opt.optimize_program(&mut program);
+
+    let mut llvm_backend = llvm_backend::LlvmBackend::new();
+    let llvm_ir = llvm_backend.generate(&program);
+
+    Ok(llvm_ir)
+}
+
+pub fn execute_jit(source: &str) -> Result<i64, String> {
+    jit_backend::run_source_jit(source)
+}
+
+pub fn compile_to_ptx(source: &str) -> Result<String, String> {
+    compile_to_ptx_with_name(source, None)
+}
+
+pub fn compile_to_ptx_with_name(source: &str, file_label: Option<&str>) -> Result<String, String> {
+    let mut lexer = Lexer::new(source);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Check EBNF grammar syntax rules in docs/cron_spec.md");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let mut program = match parser.parse_program() {
+        Ok(p) => p,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Verify module declaration, matching braces and parentheses");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
+
+    let mut checker = SemanticChecker::new();
+    if let Err(type_err) = checker.check_program(&program) {
+        let span = type_err.span.unwrap_or(crate::token::Span::point(1, 1, 0));
+        let mut diag = Diagnostic::new(type_err.code, &type_err.message, span.line, span.col)
+            .with_span(span.len)
+            .with_source(source);
+        if let Some(note) = type_err.note {
+            diag = diag.with_note(note);
+        }
+        if let Some(help) = type_err.help {
+            diag = diag.with_help(help);
+        }
+        return Err(diag.render(file_label));
+    }
+
+    // SSS+ Optimization Pipeline (runs after validation)
+    let mut opt = optimizer::Optimizer::new();
+    opt.optimize_program(&mut program);
+
+    let mut gpu = gpu_backend::GpuBackend::new();
+    let ptx_code = gpu.generate_ptx(&program);
+
+    Ok(ptx_code)
+}
+
+pub fn compile_to_metal(source: &str) -> Result<String, String> {
+    compile_to_metal_with_name(source, None)
+}
+
+pub fn compile_to_metal_with_name(source: &str, file_label: Option<&str>) -> Result<String, String> {
+    let mut lexer = Lexer::new(source);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Check EBNF grammar syntax rules in docs/cron_spec.md");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let mut program = match parser.parse_program() {
+        Ok(p) => p,
+        Err(e) => {
+            let diag = Diagnostic::new("E0001", &e, 1, 1)
+                .with_source(source)
+                .with_help("Verify module declaration, matching braces and parentheses");
+            return Err(diag.render(file_label));
+        }
+    };
+
+    let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
+
+    let mut checker = SemanticChecker::new();
+    if let Err(type_err) = checker.check_program(&program) {
+        let span = type_err.span.unwrap_or(crate::token::Span::point(1, 1, 0));
+        let mut diag = Diagnostic::new(type_err.code, &type_err.message, span.line, span.col)
+            .with_span(span.len)
+            .with_source(source);
+        if let Some(note) = type_err.note {
+            diag = diag.with_note(note);
+        }
+        if let Some(help) = type_err.help {
+            diag = diag.with_help(help);
+        }
+        return Err(diag.render(file_label));
+    }
+
+    // SSS+ Optimization Pipeline (runs after validation)
+    let mut opt = optimizer::Optimizer::new();
+    opt.optimize_program(&mut program);
+
+    let mut gpu = gpu_backend::GpuBackend::new();
+    let metal_code = gpu.generate_metal(&program);
+
+    Ok(metal_code)
+}
+
+pub fn compile_native_binary(source: &str, output_path: &std::path::Path, extra_flags: &[&str]) -> Result<(), String> {
+    let c23_code = compile_to_c23(source)?;
+    let temp_c_path = output_path.with_extension("c");
+    std::fs::write(&temp_c_path, c23_code).map_err(|e| format!("Failed to write temporary C source: {}", e))?;
+
+    let compilers = ["clang", "gcc"];
+    let mut success = false;
+    let mut last_err = String::new();
+
+    for comp in &compilers {
+        let mut cmd = std::process::Command::new(comp);
+        cmd.arg("-std=c2x")
+           .arg("-O3")
+           .arg(&temp_c_path)
+           .arg("-o")
+           .arg(output_path);
+
+        for flag in extra_flags {
+            cmd.arg(flag);
+        }
+
+        match cmd.output() {
+            Ok(output) => {
+                if output.status.success() {
+                    success = true;
+                    break;
+                } else {
+                    last_err = String::from_utf8_lossy(&output.stderr).to_string();
+                }
+            }
+            Err(e) => {
+                last_err = format!("Failed to execute '{}': {}", comp, e);
+            }
+        }
+    }
+
+    let _ = std::fs::remove_file(temp_c_path);
+
+    if success {
+        Ok(())
+    } else {
+        Err(format!("Native linking failed: {}", last_err))
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

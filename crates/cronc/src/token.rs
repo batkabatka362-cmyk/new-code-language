@@ -39,6 +39,8 @@ pub enum Token {
     Ensures,
 
     Struct,
+    Enum,
+    Match,
     Type,
     Mut,
     Inline,
@@ -74,7 +76,9 @@ pub enum Token {
     Comma,        // ,
     Colon,        // :
     Arrow,        // ->
+    FatArrow,     // =>
     Assign,       // =
+    Underscore,   // _
     Plus,         // +
     Minus,        // -
     Star,         // *

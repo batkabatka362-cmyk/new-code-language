@@ -1,7 +1,9 @@
+pub mod cluster;
 pub mod core_engine;
 pub mod simulator;
 pub mod torus_mesh;
 
+pub use cluster::{ClusterCoord, ClusterNode, ClusterSimulator, ClusterStats, InterChipLink, InterChipPacket};
 pub use core_engine::CoreEngine;
 pub use simulator::{BundleProfile, ExecutionProfile, FiberTask, HardwareStats, Simulator, VliwInstruction};
 pub use torus_mesh::{Coord4D, TorusMesh};

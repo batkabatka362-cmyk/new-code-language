@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CRON Interactive Playground — Write, compile, and visualize code on a 256-Core 4D-Torus Neuromorphic Processor">
+  <title>CRON Playground — 4D-Torus Neuromorphic Simulator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- === Top Toolbar === -->
+    <div class="toolbar">
+      <span class="logo">CRON</span>
+      <span class="separator"></span>
+
+      <button id="btn-run" class="btn btn-run">▶ Run</button>
+      <button id="btn-step" class="btn">⏭ Step</button>
+      <button id="btn-step-slot" class="btn" title="Step single 10-char VLIW slot">⏭ Slot</button>
+      <button id="btn-reset" class="btn">⏹ Reset</button>
+      <button id="btn-speed-toggle" class="btn" title="Toggle Simulation Speed">⚡ 120ms</button>
+
+      <span class="separator"></span>
+
+      <select id="example-select" class="example-select">
+        <option value="hello_cron">Hello CRON</option>
+        <option value="edge_ai">Edge AI Inference</option>
+        <option value="cognitive_agent">Cognitive Agent</option>
+        <option value="brain_dsl">Cognitive DSL (brain {})</option>
+        <option value="loop_demo">Loop & Control Flow</option>
+      </select>
+
+      <span class="separator"></span>
+
+      <button id="btn-sound-toggle" class="btn btn-sound" title="Toggle Procedural Audio FX">🔊 SFX: ON</button>
+      <button id="btn-export-cr" class="btn" title="Download .cr source code">💾 Save .cr</button>
+
+      <div class="status">
+        <div class="pulse"></div>
+        <span id="status-text">Ready — 256-Core 4D-Torus Simulator</span>
+      </div>
+    </div>
+
+    <!-- === Main Content Grid === -->
+    <div class="main-content">
+
+      <!-- Panel 1: Code Editor (spans 2 rows) -->
+      <div class="panel editor-panel">
+        <div class="panel-header">
+          <div class="label"><span class="dot" style="background:#00ff88"></span> Source Code (.cr)</div>
+          <span style="color:#64748b;font-size:10px;">CRON Lang v1.0</span>
+        </div>
+        <div class="editor-wrapper">
+          <pre class="line-numbers" id="line-numbers">1</pre>
+          <div class="editor-container">
+            <pre class="syntax-highlight" id="syntax-highlight" aria-hidden="true"><code id="highlight-code"></code></pre>
+            <textarea class="code-editor" id="code-editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+          </div>
+        </div>
+        <div class="stats-bar">
+          <div class="stat">Cycles: <span class="stat-val" id="stat-cycles">0</span></div>
+          <div class="stat">Bundles: <span class="stat-val" id="stat-bundles">0</span></div>
+          <div class="stat">Ops: <span class="stat-val" id="stat-ops">0</span></div>
+        </div>
+      </div>
+
+      <!-- Panel 2: 4D-Torus Visualizer -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="label"><span class="dot" style="background:#00f5ff"></span> 4D-Torus Mesh (256 Cores)</div>
+          <span style="color:#64748b;font-size:10px;">4×4×4×4 Hyper-Torus</span>
+        </div>
+        <div class="panel-body torus-container" id="torus-container">
+          <!-- Canvas Overlay Controls -->
+          <div class="torus-controls-bar">
+            <button id="btn-auto-rotate" class="btn-ctrl active" title="Toggle Auto-Rotation">🔄 Auto-Rotate</button>
+            <button id="btn-reset-view" class="btn-ctrl" title="Reset View Angle">🎯 Reset View</button>
+          </div>
+
+          <!-- Bottom hint -->
+          <div class="torus-hint">
+            <span>🖱 Drag to orbit</span> • <span>Scroll to zoom</span> • <span>Click core to inspect</span>
+          </div>
+
+          <!-- Floating Core Inspector HUD -->
+          <div class="core-inspector" id="core-inspector">
+            <div class="inspector-header">
+              <div class="core-title">
+                <span class="core-badge" id="hud-core-id">Core #0</span>
+                <div class="coord-chips">
+                  <span class="coord-chip" id="hud-coord-x">X:0</span>
+                  <span class="coord-chip" id="hud-coord-y">Y:0</span>
+                  <span class="coord-chip" id="hud-coord-z">Z:0</span>
+                  <span class="coord-chip" id="hud-coord-w">W:0</span>
+                </div>
+              </div>
+              <button class="btn-close-hud" id="btn-close-hud" title="Close Inspector">✕</button>
+            </div>
+            <div class="inspector-body">
+              <div class="inspector-row">
+                <span class="inspector-label">Brain Subsystem:</span>
+                <span class="inspector-val" id="hud-subsystem" style="color:var(--cyan);">Layer 0 • Photonic GEMM</span>
+              </div>
+              <div class="inspector-row">
+                <span class="inspector-label">Core Thermal:</span>
+                <span class="inspector-val" id="hud-thermal">37.2 °C</span>
+              </div>
+              <div class="thermal-meter">
+                <div class="thermal-meter-fill" id="hud-thermal-meter"></div>
+              </div>
+              <div class="inspector-row" style="margin-top:2px;">
+                <span class="inspector-label">Local Status:</span>
+                <span class="inspector-val" id="hud-status" style="color:var(--green);">Online / Synced</span>
+              </div>
+              <div style="font-size:10px;color:var(--gray);margin-top:2px;">Immediate 4D Neighbors (8 Axes):</div>
+              <div class="neighbors-grid" id="hud-neighbors-grid">
+                <!-- Injected dynamically -->
+              </div>
+              <div class="inspector-actions">
+                <button id="btn-ping-neighbors" class="btn-action">⚡ Ping 8 Neighbors</button>
+                <button id="btn-inject-spike" class="btn-action btn-spike">💥 Inject Spike</button>
+              </div>
+            </div>
+          </div>
+
+          <canvas id="torus-canvas" class="torus-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Panel 3: Brain Dashboard + Registers + Machine Code -->
+      <div class="panel" style="overflow:hidden;">
+        <div class="panel-header">
+          <div class="label"><span class="dot" style="background:#ff00ff"></span> 6-Brain Cognitive Engine</div>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;overflow:auto;">
+
+          <!-- Brain Gauges -->
+          <div class="brain-dashboard">
+            <div class="brain-gauge">
+              <div class="brain-label" style="color:#a855f7">Brain 1 — Symbolic <span class="brain-pct">0%</span></div>
+              <div class="brain-bar-bg"><div class="brain-bar" style="width:0%"></div></div>
+              <div class="brain-detail">Idle</div>
+            </div>
+            <div class="brain-gauge">
+              <div class="brain-label" style="color:#ff00ff">Brain 2 — Photonic <span class="brain-pct">0%</span></div>
+              <div class="brain-bar-bg"><div class="brain-bar" style="width:0%"></div></div>
+              <div class="brain-detail">Idle</div>
+            </div>
+            <div class="brain-gauge">
+              <div class="brain-label" style="color:#3b82f6">Brain 3 — Quantum <span class="brain-pct">0%</span></div>
+              <div class="brain-bar-bg"><div class="brain-bar" style="width:0%"></div></div>
+              <div class="brain-detail">Idle</div>
+            </div>
+            <div class="brain-gauge">
+              <div class="brain-label" style="color:#00ff88">Brain 4 — STDP <span class="brain-pct">0%</span></div>
+              <div class="brain-bar-bg"><div class="brain-bar" style="width:0%"></div></div>
+              <div class="brain-detail">Idle</div>
+            </div>
+            <div class="brain-gauge">
+              <div class="brain-label" style="color:#ffb800">Brain 5 — Chaos <span class="brain-pct">0%</span></div>
+              <div class="brain-bar-bg"><div class="brain-bar" style="width:0%"></div></div>
+              <div class="brain-detail">Idle</div>
+            </div>
+            <div class="brain-gauge">
+              <div class="brain-label" style="color:#ff4466">Brain 6 — Sentry <span class="brain-pct">0%</span></div>
+              <div class="brain-bar-bg"><div class="brain-bar" style="width:0%"></div></div>
+              <div class="brain-detail">Idle</div>
+            </div>
+          </div>
+
+          <!-- Register Inspector -->
+          <div style="padding:0 10px;">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin:6px 0 4px;">
+              <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ffb800;margin-right:4px;"></span>
+              Register File (16 × 32-bit)
+            </div>
+          </div>
+          <div class="register-grid" id="register-grid"></div>
+
+          <!-- Tabbed Inspector: Machine Code (.cl) | Synthesized Verilog (.v) | Decompiler (.cr) | Silicon Telemetry | AGI Benchmarks -->
+          <div class="panel-tabs-container">
+            <div class="panel-tabs-header">
+              <button class="tab-btn active" id="tab-btn-cl" data-target="tab-pane-cl">💎 Machine Code (.cl)</button>
+              <button class="tab-btn" id="tab-btn-waveform" data-target="tab-pane-waveform">🌊 Waveform HUD</button>
+              <button class="tab-btn" id="tab-btn-verilog" data-target="tab-pane-verilog">⚡ Verilog RTL (.v)</button>
+              <button class="tab-btn" id="tab-btn-decompile" data-target="tab-pane-decompile">🔄 Decompiler (.cr)</button>
+              <button class="tab-btn" id="tab-btn-telemetry" data-target="tab-pane-telemetry">📊 Silicon Telemetry</button>
+              <button class="tab-btn" id="tab-btn-benchmarks" data-target="tab-pane-benchmarks">🏆 AGI Benchmarks</button>
+              <div class="tab-actions">
+                <button id="btn-copy-tab" class="btn-tab-action" title="Copy Content">📋 Copy</button>
+                <button id="btn-download-tab" class="btn-tab-action" title="Download File">📥 Download</button>
+              </div>
+            </div>
+
+            <!-- Tab Pane 1: Machine Code -->
+            <div class="tab-pane active" id="tab-pane-cl">
+              <div class="cl-viewer" id="cl-viewer">
+                <div style="padding:10px;color:#64748b;font-style:italic;">Press ▶ Run or ⏭ Step to compile and view machine code.</div>
+              </div>
+            </div>
+
+            <!-- Tab Pane: Real-Time Waveform HUD & Logic Analyzer -->
+            <div class="tab-pane" id="tab-pane-waveform">
+              <div class="waveform-dashboard">
+                <div class="waveform-toolbar">
+                  <div class="waveform-legend">
+                    <span class="legend-badge ch-clk"><span class="badge-dot" style="background:#00f5ff"></span> CH1: CLK / PC</span>
+                    <span class="legend-badge ch-opt"><span class="badge-dot" style="background:#ff00ff"></span> CH2: Photonic φ(t)</span>
+                    <span class="legend-badge ch-snn"><span class="badge-dot" style="background:#00ff88"></span> CH3: SNN Spikes</span>
+                    <span class="legend-badge ch-noc"><span class="badge-dot" style="background:#ffb800"></span> CH4: 4D NoC</span>
+                    <span class="legend-badge ch-dvfs"><span class="badge-dot" style="background:#ff4466"></span> CH5: DVFS / Temp</span>
+                  </div>
+                  <div class="waveform-controls">
+                    <button id="btn-waveform-clear" class="btn-ctrl">🔄 Clear</button>
+                    <button id="btn-waveform-freeze" class="btn-ctrl">❄ Freeze</button>
+                    <span class="timebase-label">0.5ns/div • 1.2V Core</span>
+                  </div>
+                </div>
+                <div class="waveform-canvas-box">
+                  <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+                </div>
+                <div class="waveform-status-row">
+                  <div class="wf-stat">Cycle: <span id="wf-active-cycle" class="wf-stat-val">0</span></div>
+                  <div class="wf-stat">PC: <span id="wf-active-pc" class="wf-stat-val">B0000</span></div>
+                  <div class="wf-stat">Optical Coherence: <span id="wf-opt-coherence" class="wf-stat-val" style="color:var(--magenta)">99.98%</span></div>
+                  <div class="wf-stat">Spike Burst: <span id="wf-spike-rate" class="wf-stat-val" style="color:var(--green)">0 / cycle</span></div>
+                  <div class="wf-stat">NoC Bandwidth: <span id="wf-noc-bw" class="wf-stat-val" style="color:var(--cyan)">3.2 Tbps</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab Pane 2: Verilog RTL -->
+            <div class="tab-pane" id="tab-pane-verilog">
+              <div class="verilog-viewer" id="verilog-viewer">
+                <div style="padding:10px;color:#64748b;font-style:italic;">Synthesize code to inspect IEEE 1364-2001 Verilog RTL.</div>
+              </div>
+            </div>
+
+            <!-- Tab Pane 3: Reverse Decompiler -->
+            <div class="tab-pane" id="tab-pane-decompile">
+              <div class="decompile-viewer" id="decompile-viewer">
+                <div style="padding:10px;color:#64748b;font-style:italic;">Run or Step code to inspect reverse-decompiled .cr blueprint from machine VLIW bundles.</div>
+              </div>
+            </div>
+
+            <!-- Tab Pane 4: Silicon Telemetry & Energy Efficiency -->
+            <div class="tab-pane" id="tab-pane-telemetry">
+              <div class="telemetry-dashboard">
+                <!-- Metrics Bar -->
+                <div class="telemetry-metrics-row">
+                  <div class="telemetry-stat-chip">
+                    <span class="stat-chip-label">Photonic Efficiency</span>
+                    <span class="stat-chip-val" style="color:var(--green)">128.4 TOPS/W</span>
+                    <span class="stat-chip-sub">31x vs NVIDIA H100</span>
+                  </div>
+                  <div class="telemetry-stat-chip">
+                    <span class="stat-chip-label">Mesh Latency (Avg)</span>
+                    <span class="stat-chip-val" style="color:var(--cyan)">1.4 Hops (0.7ns)</span>
+                    <span class="stat-chip-sub">4D Torus Toroidal Wave</span>
+                  </div>
+                  <div class="telemetry-stat-chip">
+                    <span class="stat-chip-label">Optical Coherence</span>
+                    <span class="stat-chip-val" style="color:var(--magenta)">99.98% MZI</span>
+                    <span class="stat-chip-sub">Quantum Phase Locked</span>
+                  </div>
+                </div>
+
+                <!-- Canvas Chart: Thermal Dissipation Curve -->
+                <div class="telemetry-chart-box">
+                  <div class="chart-header">
+                    <span>🔥 Thermal Dissipation Waveform (256-Core Grid)</span>
+                    <span id="telemetry-peak-temp" style="color:var(--amber);font-family:var(--font-code)">Peak: 42.1°C</span>
+                  </div>
+                  <canvas id="telemetry-canvas" class="telemetry-canvas"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab Pane 5: AGI Benchmark Suite & Comparative Analysis -->
+            <div class="tab-pane" id="tab-pane-benchmarks">
+              <div class="benchmarks-dashboard">
+                <div class="benchmarks-header">
+                  <div class="benchmark-title">
+                    <span>🚀 Neuromorphic Photonic AGI Benchmark Suite</span>
+                    <span class="badge-benchmark">Hardware In-Loop</span>
+                  </div>
+                  <button id="btn-run-benchmark" class="btn-benchmark-run">▶ Run Live Suite</button>
+                </div>
+
+                <div class="benchmark-cards-grid">
+                  <!-- Benchmark 1: Sparse Hyper-Tree Search -->
+                  <div class="benchmark-card">
+                    <div class="bmark-top">
+                      <span class="bmark-name">16-Way Torus Tree Traversal</span>
+                      <span class="bmark-badge">Brain 1</span>
+                    </div>
+                    <div class="bmark-bars">
+                      <div class="bmark-bar-row">
+                        <span class="bar-label">CRON (4D-Torus)</span>
+                        <div class="bar-track"><div class="bar-fill bar-cron" id="bmark-bar-1-cron" style="width:96%"></div></div>
+                        <span class="bar-value">1.4 ns</span>
+                      </div>
+                      <div class="bmark-bar-row">
+                        <span class="bar-label">NVIDIA H100</span>
+                        <div class="bar-track"><div class="bar-fill bar-gpu" id="bmark-bar-1-gpu" style="width:14%"></div></div>
+                        <span class="bar-value">42.0 ns</span>
+                      </div>
+                    </div>
+                    <div class="bmark-speedup">⚡ 30.0x Lower Latency vs H100 SXM5</div>
+                  </div>
+
+                  <!-- Benchmark 2: Photonic GEMM Energy Efficiency -->
+                  <div class="benchmark-card">
+                    <div class="bmark-top">
+                      <span class="bmark-name">Photonic GEMM Efficiency</span>
+                      <span class="bmark-badge">Brain 2</span>
+                    </div>
+                    <div class="bmark-bars">
+                      <div class="bmark-bar-row">
+                        <span class="bar-label">CRON MZI Mesh</span>
+                        <div class="bar-track"><div class="bar-fill bar-cron" id="bmark-bar-2-cron" style="width:98%"></div></div>
+                        <span class="bar-value">128.4 TOPS/W</span>
+                      </div>
+                      <div class="bmark-bar-row">
+                        <span class="bar-label">Google TPU v5e</span>
+                        <div class="bar-track"><div class="bar-fill bar-tpu" id="bmark-bar-2-tpu" style="width:16%"></div></div>
+                        <span class="bar-value">5.2 TOPS/W</span>
+                      </div>
+                    </div>
+                    <div class="bmark-speedup">🌿 24.7x Higher Energy Efficiency vs TPU v5e</div>
+                  </div>
+
+                  <!-- Benchmark 3: Neuromorphic STDP Plasticity -->
+                  <div class="benchmark-card">
+                    <div class="bmark-top">
+                      <span class="bmark-name">STDP Synapse Updates</span>
+                      <span class="bmark-badge">Brain 4</span>
+                    </div>
+                    <div class="bmark-bars">
+                      <div class="bmark-bar-row">
+                        <span class="bar-label">CRON Neuromorphic</span>
+                        <div class="bar-track"><div class="bar-fill bar-cron" id="bmark-bar-3-cron" style="width:94%"></div></div>
+                        <span class="bar-value">12.8 GSOP/s</span>
+                      </div>
+                      <div class="bmark-bar-row">
+                        <span class="bar-label">Intel Loihi 2</span>
+                        <div class="bar-track"><div class="bar-fill bar-loihi" id="bmark-bar-3-loihi" style="width:22%"></div></div>
+                        <span class="bar-value">1.1 GSOP/s</span>
+                      </div>
+                    </div>
+                    <div class="bmark-speedup">🧠 11.6x Higher Synaptic Throughput vs Loihi 2</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="cron_wasm_base64.js"></script>
+  <script src="torus.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

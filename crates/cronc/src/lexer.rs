@@ -271,6 +271,9 @@ impl Lexer {
                     let tok = if self.peek() == Some('=') {
                         self.advance();
                         Token::EqualEqual
+                    } else if self.peek() == Some('>') {
+                        self.advance();
+                        Token::FatArrow
                     } else {
                         Token::Assign
                     };
@@ -514,7 +517,7 @@ impl Lexer {
                             "lin" => Token::Lin,
                             "grad" => Token::Grad,
                             "region" => Token::Region,
-                            "resilient_compute" => Token::ResilientCompute,
+                            "resilient_compute" | "resilient" => Token::ResilientCompute,
                             "fallback" => Token::Fallback,
                             "return" => Token::Return,
                             "export" => Token::Export,
@@ -538,6 +541,9 @@ impl Lexer {
                             "or" => Token::Or,
                             "not" => Token::Not,
                             "struct" => Token::Struct,
+                            "enum" => Token::Enum,
+                            "match" => Token::Match,
+                            "_" => Token::Underscore,
                             "type" => Token::Type,
                             "mut" => Token::Mut,
                             "inline" => Token::Inline,

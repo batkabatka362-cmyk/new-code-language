@@ -5,3 +5,6 @@ edition = "2021"
 description = "CRON Programming Language Compiler for 4D-Torus Neuromorphic Hardware"
 
 [dependencies]
+
+[dev-dependencies]
+cron-vm = { path = "../cron-vm" }
