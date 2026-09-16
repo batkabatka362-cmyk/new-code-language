@@ -143,7 +143,7 @@ impl Optimizer {
                 *iterable = self.fold_expr(iterable.clone());
                 self.fold_constants_stmts(body);
             }
-            Statement::Region { body, .. } => {
+            Statement::Region { body, .. } | Statement::Fuse { body, .. } => {
                 self.fold_constants_stmts(body);
             }
             Statement::Resilient {
@@ -528,7 +528,7 @@ impl Optimizer {
                 Statement::For { body, .. } => {
                     self.eliminate_dead_code_stmts(body);
                 }
-                Statement::Region { body, .. } => {
+                Statement::Region { body, .. } | Statement::Fuse { body, .. } => {
                     self.eliminate_dead_code_stmts(body);
                 }
                 Statement::Resilient {
@@ -596,7 +596,7 @@ impl Optimizer {
                     self.collect_references_stmt(s);
                 }
             }
-            Statement::Region { body, .. } | Statement::Brain { body, .. } => {
+            Statement::Region { body, .. } | Statement::Brain { body, .. } | Statement::Fuse { body, .. } => {
                 for s in body {
                     self.collect_references_stmt(s);
                 }
@@ -781,7 +781,8 @@ impl Optimizer {
                     self.strength_reduce_stmts(body);
                 }
                 Statement::Region { body, .. }
-                | Statement::Brain { body, .. } => {
+                | Statement::Brain { body, .. }
+                | Statement::Fuse { body, .. } => {
                     self.strength_reduce_stmts(body);
                 }
                 Statement::Resilient {
@@ -1076,7 +1077,7 @@ impl Optimizer {
                         self.licm_stmts(eb);
                     }
                 }
-                Statement::Region { body, .. } | Statement::Brain { body, .. } => {
+                Statement::Region { body, .. } | Statement::Brain { body, .. } | Statement::Fuse { body, .. } => {
                     self.licm_stmts(body);
                 }
                 Statement::Resilient {
@@ -1122,7 +1123,7 @@ impl Optimizer {
                         modified.extend(self.collect_modified_vars(eb));
                     }
                 }
-                Statement::Region { body, .. } | Statement::Brain { body, .. } => {
+                Statement::Region { body, .. } | Statement::Brain { body, .. } | Statement::Fuse { body, .. } => {
                     modified.extend(self.collect_modified_vars(body));
                 }
                 _ => {}

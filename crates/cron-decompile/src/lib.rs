@@ -187,6 +187,7 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     let has_fallback = all_slots.iter().any(|s| s.op == "RC" && s.mode != 'C' && s.mode != '!');
     let has_barrier = all_slots.iter().any(|s| s.op == "bb");
     let has_optical = all_slots.iter().any(|s| s.op == "OP" || s.op == "WD");
+    let has_fuse = all_slots.iter().any(|s| s.op == "FU" || s.op == "FE");
 
     let mut out = String::new();
     out.push_str("// ============================================================================\n");
@@ -228,6 +229,15 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     if has_region {
         out.push_str(&format!("{}region TileProcessingArena [target=SELF] {{\n", indent));
         indent = "            ";
+    }
+
+    if has_fuse {
+        out.push_str(&format!("{}fuse [tile=(4, 4), stream=SRAM] {{\n", indent));
+        indent = match indent {
+            "            " => "                ",
+            "        " => "            ",
+            _ => "        ",
+        };
     }
 
     // Register SSA name tracking table
@@ -837,6 +847,15 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
         out.push_str(&format!("{}consume({})\n", indent, lin_var));
     }
 
+    if has_fuse {
+        indent = match indent {
+            "                " => "            ",
+            "            " => "        ",
+            _ => "    ",
+        };
+        out.push_str(&format!("{}}}\n\n", indent));
+    }
+
     if has_region {
         indent = "        ";
         out.push_str(&format!("{}}}\n\n", indent));
@@ -948,4 +967,17 @@ B0002: _ST0C$0084> _bb00$0000> _HL00$0000> _NO00$0000>
         // Check linear type sound cleanup
         assert!(decompiled.contains("consume") || decompiled.contains("export"));
     }
+
+    #[test]
+    fn test_decompile_kernel_fusion() {
+        let cl_code = r#"
+B0000: '=01#000A> '=02#0014> _FU00$000> _NO00$000>
+B0001: _PO03+102> _FE00$000> _bb00$000> _HL00$000>
+"#;
+        let decompiled = decompile_cl(cl_code).expect("Should decompile fused kernel cl");
+        assert!(decompiled.contains("fuse [tile=(4, 4), stream=SRAM] {"));
+        assert!(decompiled.contains("const_r1 + const_r2"));
+        assert!(decompiled.contains("}"));
+    }
 }
+

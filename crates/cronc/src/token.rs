@@ -48,6 +48,7 @@ pub enum Token {
     Trait,
     Impl,
     Schedule,
+    Fuse,
 
     // Cognitive DSL Keywords
     Brain,

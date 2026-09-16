@@ -325,6 +325,12 @@ impl Codegen {
                     self.compile_statements(fb);
                 }
             }
+            Statement::Fuse { body, .. } => {
+                // Milestone #012: Zero-Allocation Streaming Fusion VLIW Emission
+                self.push_slot(make_slot('_', "FU", 0, '$', 0, 0, '>'));
+                self.compile_statements(body);
+                self.push_slot(make_slot('_', "FE", 0, '$', 0, 0, '>'));
+            }
             Statement::Brain { body, .. } => {
                 // Cognitive Brain block: Sentry watchdog & bounds
                 self.push_slot(make_slot('_', "SH", 0, '$', 1, 4, '>'));

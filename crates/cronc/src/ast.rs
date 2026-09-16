@@ -162,6 +162,12 @@ pub enum Statement {
         fallback: Option<Vec<Statement>>,
         span: Span,
     },
+    /// Automated Kernel Fusion & Zero-Allocation Streaming Block (Milestone #012)
+    Fuse {
+        attrs: Vec<(String, String)>,
+        body: Vec<Statement>,
+        span: Span,
+    },
     If {
         condition: Expr,
         then_body: Vec<Statement>,
@@ -247,6 +253,7 @@ impl Statement {
             Statement::Assign { span, .. } => *span,
             Statement::Region { span, .. } => *span,
             Statement::Resilient { span, .. } => *span,
+            Statement::Fuse { span, .. } => *span,
             Statement::If { span, .. } => *span,
             Statement::While { span, .. } => *span,
             Statement::For { span, .. } => *span,

@@ -80,6 +80,7 @@ impl Scope {
 pub struct SemanticChecker {
     scopes: Vec<Scope>,
     in_region: bool,
+    in_fuse: bool,
     exported_vars: HashSet<String>,
     region_allocated_vars: HashMap<String, VarInfo>,
     known_functions: HashSet<String>,
@@ -122,6 +123,8 @@ impl SemanticChecker {
             // Phase 10: Dependent Tensor & Silicon Autotuner builtins
             "tensor_matmul", "tensor_transpose", "tensor_add", "tensor_reshape", "tensor_slice",
             "tensor_init", "tensor_ones", "tensor_zeros",
+            // Phase 12: Kernel Fusion & Streaming builtins
+            "tensor_scale", "tensor_softmax_maxsub", "tensor_gelu", "tensor_bias",
         ] {
             known_functions.insert(f.to_string());
         }
@@ -139,6 +142,7 @@ impl SemanticChecker {
         Self {
             scopes: vec![Scope::new()],
             in_region: false,
+            in_fuse: false,
             exported_vars: HashSet::new(),
             region_allocated_vars: HashMap::new(),
             known_functions,
@@ -149,6 +153,18 @@ impl SemanticChecker {
             fn_param_types: HashMap::new(),
             fn_return_types: HashMap::new(),
         }
+    }
+
+    pub fn lookup_outer_var(&self, name: &str) -> Option<&VarInfo> {
+        if self.scopes.len() <= 1 {
+            return None;
+        }
+        for scope in self.scopes[..self.scopes.len() - 1].iter().rev() {
+            if let Some(var) = scope.vars.get(name) {
+                return Some(var);
+            }
+        }
+        None
     }
 
     pub fn push_scope(&mut self) {
@@ -516,7 +532,7 @@ impl SemanticChecker {
                         dims_a.swap(len - 2, len - 1);
                         return Some(format!("tensor<{}, {}>", dims_a.join(", "), elem_a));
                     }
-                } else if callee == "tensor_add" && !args.is_empty() {
+                } else if (callee == "tensor_add" || callee == "tensor_scale" || callee == "tensor_softmax_maxsub" || callee == "tensor_gelu" || callee == "tensor_bias") && !args.is_empty() {
                     return self.infer_expr_type(&args[0].value);
                 } else if let Some(ret) = self.fn_return_types.get(callee) {
                     if let Some(expected_params) = self.fn_param_types.get(callee) {
@@ -697,6 +713,21 @@ impl SemanticChecker {
                         .with_help(format!("Consider declaring as mutable: `let mut {}`", target)));
                     }
 
+                    if self.in_fuse {
+                        if let Some(_outer_var) = self.lookup_outer_var(target) {
+                            return Err(TypeError::new(
+                                "E0017",
+                                format!(
+                                    "Fusion scope escape violation: Cannot assign streaming intermediate value to outer variable '{}'",
+                                    target
+                                ),
+                                *span,
+                            )
+                            .with_note("Milestone #012: Zero-allocation fusion prohibits intermediate streaming buffers from escaping to outer scopes")
+                            .with_help("Return the final result directly from the fuse block or use an export directive"));
+                        }
+                    }
+
                     // Check spatial memory domain consistency on assignment
                     if let Some(target_type) = &var.var_type {
                         let target_domain = if target_type.starts_with("@sram") {
@@ -784,6 +815,54 @@ impl SemanticChecker {
                     self.check_statements(fb)?;
                     self.pop_scope();
                 }
+            }
+            Statement::Fuse { attrs, body, span } => {
+                for (k, v) in attrs {
+                    if k == "tile" {
+                        let clean = v.trim_matches(|c| c == '(' || c == ')' || c == '[' || c == ']');
+                        let parts: Vec<&str> = clean.split(',').map(|s| s.trim()).collect();
+                        if parts.len() == 2 {
+                            if let (Ok(m), Ok(n)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                                if m * n > 256 {
+                                    return Err(TypeError::new(
+                                        "E0017",
+                                        format!("Tile size {}x{} ({} elements) exceeds local SRAM streaming limit of 256 elements", m, n, m * n),
+                                        *span,
+                                    ).with_note("Milestone #012: Kernel fusion requires tile sizes within on-chip register and SRAM boundaries")
+                                     .with_help("Reduce tile size to (16, 16) or smaller"));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let prev_in_fuse = self.in_fuse;
+                self.in_fuse = true;
+                self.push_scope();
+
+                for s in body {
+                    self.check_statement(s)?;
+                }
+
+                if let Some(scope) = self.scopes.last() {
+                    for (var_name, var) in &scope.vars {
+                        if var.is_lin && !var.is_consumed && !self.exported_vars.contains(var_name) {
+                            return Err(TypeError::new(
+                                "E0002",
+                                format!(
+                                    "Linear type leak: Linear variable '{}' was allocated in fuse block but never consumed or exported",
+                                    var_name
+                                ),
+                                var.def_span,
+                            )
+                            .with_note("Fused streaming variables must be consumed or exported before the fuse block exits")
+                            .with_help("Consume the linear variable or export it before the fuse block closes"));
+                        }
+                    }
+                }
+
+                self.pop_scope();
+                self.in_fuse = prev_in_fuse;
             }
             Statement::Brain { body, .. } => {
                 self.push_scope();

@@ -1204,6 +1204,17 @@ impl CBackend {
                 }
                 self.emit_line(&format!("// --- End Region '{}' ---", name));
             }
+            Statement::Fuse { attrs, body, .. } => {
+                let attr_str = attrs.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ");
+                self.emit_line(&format!("// === CRON SINGLE-PASS FUSED STREAMING KERNEL [{}] ===", attr_str));
+                self.emit_line("{");
+                self.indent_level += 1;
+                for s in body {
+                    self.emit_statement(s);
+                }
+                self.indent_level -= 1;
+                self.emit_line("} // === End Fused Streaming Kernel ===");
+            }
             Statement::Resilient { body, fallback, .. } => {
                 self.emit_line("{ // --- Resilient Fault-Tolerant Block ---");
                 self.indent_level += 1;
@@ -1743,6 +1754,13 @@ impl CBackend {
                     span: *span,
                 }
             }
+            Statement::Fuse { attrs, body, span } => {
+                Statement::Fuse {
+                    attrs: attrs.clone(),
+                    body: body.iter().map(|s| Self::substitute_statement(s, params, args)).collect(),
+                    span: *span,
+                }
+            }
             Statement::Resilient { attrs, body, fallback, span } => {
                 Statement::Resilient {
                     attrs: attrs.clone(),
@@ -1922,6 +1940,13 @@ impl CBackend {
                     span: *span,
                 }
             }
+            Statement::Fuse { attrs, body, span } => {
+                Statement::Fuse {
+                    attrs: attrs.clone(),
+                    body: body.iter().map(Self::mangled_statement).collect(),
+                    span: *span,
+                }
+            }
             Statement::Resilient { attrs, body, fallback, span } => {
                 Statement::Resilient {
                     attrs: attrs.clone(),
@@ -2044,7 +2069,7 @@ impl CBackend {
                 Self::collect_expr_types(iterable, out);
                 for s in body { Self::collect_stmt_types(s, out); }
             }
-            Statement::Region { body, .. } => {
+            Statement::Region { body, .. } | Statement::Fuse { body, .. } => {
                 for s in body { Self::collect_stmt_types(s, out); }
             }
             Statement::Resilient { body, fallback, .. } => {

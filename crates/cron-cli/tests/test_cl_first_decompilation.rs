@@ -120,3 +120,28 @@ B0002: _bb00$000> _HL00$000> _NO00$000> _NO00$000>
     assert_eq!(stats.total_cycles, 3);
     assert!(stats.mesh_packets_routed >= 1);
 }
+
+#[test]
+fn test_cl_first_kernel_fusion_decompilation_and_telemetry() {
+    let cl_kernel = r#"
+B0000: _FU00$000> '=01#0005> '=02#0007> _NO00$000>
+B0001: _PO03*102> _FE00$000> _bb00$000> _HL00$000>
+"#;
+
+    // 1. VM Execution tracks fused ops and saved DRAM traffic
+    let stats = run_cl(cl_kernel);
+    assert_eq!(stats.total_cycles, 2);
+    assert!(stats.fused_kernel_ops > 0, "Fused kernel ops must be recorded in VM");
+    assert!(stats.memory_wall_saved_bytes > 0, "DRAM traffic saved must be tracked");
+
+    // 2. Reverse semantic decompilation lifts back into `fuse [tile=(4, 4), stream=SRAM] { ... }`
+    let cr_decompiled = decompile_cl(cl_kernel).expect("Decompile must succeed");
+    assert!(cr_decompiled.contains("fuse [tile=(4, 4), stream=SRAM] {"));
+    assert!(cr_decompiled.contains("const_r1 * const_r2"));
+
+    // 3. Direct .cl -> C23 transpilation tracks fusion telemetry
+    let c23_code = compile_cl_to_c23(cl_kernel, "FusedStreamingKernel").expect("C23 compilation must succeed");
+    assert!(c23_code.contains("core->fused_ops_count"));
+    assert!(c23_code.contains("core->hbm_bytes_saved"));
+}
+

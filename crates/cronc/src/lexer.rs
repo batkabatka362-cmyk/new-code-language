@@ -557,6 +557,7 @@ impl Lexer {
                             "trait" => Token::Trait,
                             "impl" => Token::Impl,
                             "schedule" => Token::Schedule,
+                            "fuse" => Token::Fuse,
                             "brain" => Token::Brain,
                             "fork" => Token::Fork,
                             "simulate" => Token::Simulate,

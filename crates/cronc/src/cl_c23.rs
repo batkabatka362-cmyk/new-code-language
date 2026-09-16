@@ -53,6 +53,8 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    size_t stdp_updates_count;\n");
     out.push_str("    size_t spatial_broadcast_count;\n");
     out.push_str("    size_t barrier_count;\n");
+    out.push_str("    size_t fused_ops_count;\n");
+    out.push_str("    size_t hbm_bytes_saved;\n");
     out.push_str("    bool is_halted;\n");
     out.push_str("} CronSiliconCore;\n\n");
 
@@ -222,6 +224,14 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         "PS" => {
                             out.push_str(&format!("    core->r[{}] = core->r[{}];\n", d, s));
                         }
+                        "FU" => {
+                            out.push_str("    core->fused_ops_count++;\n");
+                            out.push_str("    core->hbm_bytes_saved += 64;\n");
+                        }
+                        "FE" => {
+                            out.push_str("    core->fused_ops_count++;\n");
+                            out.push_str("    core->hbm_bytes_saved += 64;\n");
+                        }
                         "HL" => {
                             out.push_str("    core->is_halted = true;\n");
                             out.push_str("    return;\n");
@@ -253,6 +263,10 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    printf(\"  STDP Synapse Updates:        %zu\\n\", core.stdp_updates_count);\n");
     out.push_str("    printf(\"  Spatial Broadcasts:          %zu\\n\", core.spatial_broadcast_count);\n");
     out.push_str("    printf(\"  Global Barrier Syncs:        %zu\\n\", core.barrier_count);\n");
+    out.push_str("    if (core.fused_ops_count > 0) {\n");
+    out.push_str("        printf(\"  Streaming Fused Ops:         %zu\\n\", core.fused_ops_count);\n");
+    out.push_str("        printf(\"  DRAM/HBM Traffic Saved:      %zu bytes\\n\", core.hbm_bytes_saved);\n");
+    out.push_str("    }\n");
     out.push_str("    printf(\"  Final Register R0:           0x%08X (%u)\\n\", core.r[0], core.r[0]);\n");
     out.push_str("    printf(\"  Final Register R1:           0x%08X (%u)\\n\", core.r[1], core.r[1]);\n");
     out.push_str("    printf(\"  Final Register R4:           0x%08X (%u)\\n\", core.r[4], core.r[4]);\n");

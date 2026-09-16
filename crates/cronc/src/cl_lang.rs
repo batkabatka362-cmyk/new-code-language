@@ -100,6 +100,8 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "=1", // Immediate Load High
     "==", // Generic Immediate Load
     "bb", // 256-Core Chip-Wide Global Synchronization Barrier
+    "FU", // Fusion Stream Anchor Start (Milestone #012)
+    "FE", // Fusion Stream Anchor End / Commit (Milestone #012)
     // Extended Homopolymer Macro Opcodes
     "CC", // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation
     "DD", // Zero-Overhead Direct 4D-Torus NoC DMA Transfer

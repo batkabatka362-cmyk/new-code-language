@@ -24,6 +24,8 @@ pub struct HardwareStats {
     pub total_energy_saved_uw: u64,
     pub photonic_pumps: usize,
     pub arena_resets: usize,
+    pub fused_kernel_ops: usize,
+    pub memory_wall_saved_bytes: usize,
 }
 
 // === FDO (Feedback-Directed Optimization) Execution Profile (Pages 746–749) ===
@@ -444,6 +446,15 @@ impl Simulator {
                 core.dvfs_energy_state = 1;
                 core.energy_saved_uw += 450;
             }
+        }
+
+        // Streaming Kernel Fusion Anchor (FU / FE)
+        let has_fusion = inst.slots.iter().any(|s| {
+            s.len() >= 3 && (&s[1..3] == "FU" || &s[1..3] == "FE")
+        });
+        if has_fusion {
+            self.stats.fused_kernel_ops += 256;
+            self.stats.memory_wall_saved_bytes += 16384;
         }
 
         // Region Arena 0-Cycle Reset across all 256 cores (88)

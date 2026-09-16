@@ -925,6 +925,13 @@ impl Parser {
                     span,
                 })
             }
+            Token::Fuse => {
+                let span = self.current_span();
+                self.advance(); // fuse
+                let attrs = self.parse_bracket_attributes()?;
+                let body = self.parse_block()?;
+                Ok(Statement::Fuse { attrs, body, span })
+            }
             Token::Brain => {
                 let span = self.current_span();
                 self.advance(); // brain
@@ -1210,6 +1217,19 @@ impl Parser {
                     Token::IntLit(v) => v.to_string(),
                     Token::HexLit(v) => format!("0x{:X}", v),
                     Token::StringLit(v) => v,
+                    Token::OpenParen => {
+                        let mut tuple_parts = Vec::new();
+                        while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                            match self.advance() {
+                                Token::IntLit(n) => tuple_parts.push(n.to_string()),
+                                Token::Ident(n) => tuple_parts.push(n),
+                                Token::Comma => {},
+                                other => return Err(format!("Unexpected token in attribute tuple: {:?}", other)),
+                            }
+                        }
+                        self.expect(&Token::CloseParen)?;
+                        format!("({})", tuple_parts.join(", "))
+                    }
                     other => return Err(format!("Expected attribute value, got {:?}", other)),
                 };
                 attrs.push((key, val));

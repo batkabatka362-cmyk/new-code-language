@@ -916,7 +916,7 @@ impl JitCompiler {
                 self.asm.emit_epilogue();
                 self.has_returned = true;
             }
-            Statement::Region { body, .. } | Statement::Resilient { body, .. } => {
+            Statement::Region { body, .. } | Statement::Resilient { body, .. } | Statement::Fuse { body, .. } => {
                 for s in body {
                     self.compile_statement(s);
                 }

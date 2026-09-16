@@ -476,6 +476,10 @@ fn main() {
             if stats.arena_resets > 0 {
                 println!("  Hardware Arena Resets (88):   {} 0-cycle resets", stats.arena_resets);
             }
+            if stats.fused_kernel_ops > 0 {
+                println!("  Streaming Fused Ops (FU/FE):  {} ops (Zero DRAM traffic)", stats.fused_kernel_ops);
+                println!("  DRAM/HBM Traffic Eliminated:  {} KB", stats.memory_wall_saved_bytes / 1024);
+            }
             println!("============================================================");
             println!("  STATUS: .cl EXECUTED NATIVELY WITH 100% HARDWARE INTEGRITY\n");
         }

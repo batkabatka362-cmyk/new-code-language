@@ -445,7 +445,7 @@ impl LlvmBackend {
                 }
                 self.has_terminated = true;
             }
-            Statement::Region { body, .. } | Statement::Resilient { body, .. } => {
+            Statement::Region { body, .. } | Statement::Resilient { body, .. } | Statement::Fuse { body, .. } => {
                 for s in body {
                     self.emit_statement(s);
                 }
