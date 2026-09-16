@@ -63,6 +63,12 @@ pub struct Scope {
     pub vars: HashMap<String, VarInfo>,
 }
 
+impl Default for Scope {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Scope {
     pub fn new() -> Self {
         Self {
@@ -85,6 +91,12 @@ pub struct SemanticChecker {
     known_impls: HashMap<(String, String), HashSet<String>>,
 }
 
+impl Default for SemanticChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SemanticChecker {
     pub fn new() -> Self {
         let mut known_functions = HashSet::new();
@@ -95,12 +107,23 @@ impl SemanticChecker {
             "channel_new", "channel_send", "channel_recv", "channel_try_recv", "channel_close",
             "spawn_at", "torus_core_id", "torus_coord_x", "torus_coord_y", "torus_coord_z", "torus_coord_w",
             "torus_distance", "torus_send", "torus_recv", "torus_broadcast",
+            // Sub-byte & BitNet AI intrinsics
+            "simd_ternary_dot", "pack_ternary", "unpack_ternary",
+            "pack_i4", "unpack_i4", "simd_f4_gemm",
+            // Systolic Tile Hardware intrinsics
+            "tile4x4_f32", "tile4x4_i32", "tile_matmul", "tile_transpose", "tile_add", "tile_fma",
+            "tile_get", "tile_set",
+            "dma_sync", "await_dma_channel",
         ] {
             known_functions.insert(f.to_string());
         }
 
         let mut known_types = HashMap::new();
-        for t in &["vec4f", "vec8f", "vec16f", "vec4i", "vec8i", "channel", "Channel"] {
+        for t in &[
+            "vec4f", "vec8f", "vec16f", "vec4i", "vec8i", "channel", "Channel",
+            "i2", "i4", "f4", "f8", "f16", "bf16",
+            "tile4x4_f32", "tile4x4_i32", "tile16x16_i2",
+        ] {
             known_types.insert(t.to_string(), "builtin".to_string());
         }
 
@@ -334,6 +357,52 @@ impl SemanticChecker {
                     || type_annot.as_deref().unwrap_or("").contains("cap_t")
                     || matches!(value, Expr::Call { callee, .. } if callee == "acquire_capability");
 
+                // Check spatial memory domain consistency on declaration
+                if let Some(target_type) = &type_annot {
+                    let target_domain = if target_type.starts_with("@sram") {
+                        Some("@sram")
+                    } else if target_type.starts_with("@hbm") {
+                        Some("@hbm")
+                    } else if target_type.starts_with("@noc") {
+                        Some("@noc")
+                    } else {
+                        None
+                    };
+
+                    if let Some(t_dom) = target_domain {
+                        if let Expr::Ident(src_name, _) = value {
+                            if let Some(src_var) = self.lookup_var(src_name) {
+                                if let Some(src_type) = &src_var.var_type {
+                                    let src_domain = if src_type.starts_with("@sram") {
+                                        Some("@sram")
+                                    } else if src_type.starts_with("@hbm") {
+                                        Some("@hbm")
+                                    } else if src_type.starts_with("@noc") {
+                                        Some("@noc")
+                                    } else {
+                                        None
+                                    };
+
+                                    if let Some(s_dom) = src_domain {
+                                        if t_dom != s_dom {
+                                            return Err(TypeError::new(
+                                                "E0015",
+                                                format!(
+                                                    "Spatial memory domain crossing violation: Direct assignment from {} to {} is forbidden across hardware domains without explicit DMA transfer (dma_sync)",
+                                                    s_dom, t_dom
+                                                ),
+                                                *span,
+                                            )
+                                            .with_note("Hardware memory boundaries (@sram, @hbm, @noc) prevent cache stalls and raw pointer aliasing")
+                                            .with_help("Use `dma_sync` or staged prefetch buffer before reading from or writing across memory tiers"));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 self.insert_var(VarInfo {
                     name: name.clone(),
                     is_lin: *is_lin,
@@ -386,6 +455,52 @@ impl SemanticChecker {
                         )
                         .with_note("Variables are immutable by default")
                         .with_help(format!("Consider declaring as mutable: `let mut {}`", target)));
+                    }
+
+                    // Check spatial memory domain consistency on assignment
+                    if let Some(target_type) = &var.var_type {
+                        let target_domain = if target_type.starts_with("@sram") {
+                            Some("@sram")
+                        } else if target_type.starts_with("@hbm") {
+                            Some("@hbm")
+                        } else if target_type.starts_with("@noc") {
+                            Some("@noc")
+                        } else {
+                            None
+                        };
+
+                        if let Some(t_dom) = target_domain {
+                            if let Expr::Ident(src_name, _) = value {
+                                if let Some(src_var) = self.lookup_var(src_name) {
+                                    if let Some(src_type) = &src_var.var_type {
+                                        let src_domain = if src_type.starts_with("@sram") {
+                                            Some("@sram")
+                                        } else if src_type.starts_with("@hbm") {
+                                            Some("@hbm")
+                                        } else if src_type.starts_with("@noc") {
+                                            Some("@noc")
+                                        } else {
+                                            None
+                                        };
+
+                                        if let Some(s_dom) = src_domain {
+                                            if t_dom != s_dom {
+                                                return Err(TypeError::new(
+                                                    "E0015",
+                                                    format!(
+                                                        "Spatial memory domain crossing violation: Direct assignment from {} to {} is forbidden across hardware domains without explicit DMA transfer (dma_sync)",
+                                                        s_dom, t_dom
+                                                    ),
+                                                    *span,
+                                                )
+                                                .with_note("Hardware memory boundaries (@sram, @hbm, @noc) prevent cache stalls and raw pointer aliasing")
+                                                .with_help("Use `dma_sync` or staged prefetch buffer before reading from or writing across memory tiers"));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 self.check_expr(value)?;

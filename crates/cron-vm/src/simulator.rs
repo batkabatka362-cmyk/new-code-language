@@ -133,6 +133,12 @@ pub struct Simulator {
     pub fibers_completed: usize,
 }
 
+impl Default for Simulator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Simulator {
     pub fn new() -> Self {
         let mut cores = Vec::with_capacity(256);

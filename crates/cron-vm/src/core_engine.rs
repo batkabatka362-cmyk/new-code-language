@@ -202,12 +202,11 @@ impl CoreEngine {
         }
 
         // Check for Global 256-Core Chip-Wide Hardware Barrier (bb) (Pages 88-95)
-        if op == "bb" || (slot.len() >= 3 && &slot[1..3] == "bb") || (slot.len() >= 5 && &slot[3..5] == "bb") {
-            if !self.in_barrier {
+        if (op == "bb" || (slot.len() >= 3 && &slot[1..3] == "bb") || (slot.len() >= 5 && &slot[3..5] == "bb"))
+            && !self.in_barrier {
                 self.in_barrier = true;
                 self.barrier_count += 1;
             }
-        }
 
         let dest = dest_reg.min(15);
         let saved_local_reg = self.registers[dest];
@@ -267,7 +266,7 @@ impl CoreEngine {
                 // STDP synapse update or prefetch stage (Brain 4)
                 self.stdp_updates_count += 1;
                 for w in self.stdp_weights.iter_mut() {
-                    *w = (*w + 2).min(127);
+                    *w += 2;
                 }
                 let d = if dest > 0 { dest } else { 12 };
                 self.registers[d] = 0x0000_0084;
@@ -382,6 +381,27 @@ impl CoreEngine {
                         // Hardware Trap: Division by Zero (Milestone #181)
                         self.trigger_trap(0x0001);
                     }
+                } else if imm == 5 || imm == 6 || mode == '.' {
+                    // Bit-exact 16-element ternary Dot Product (BitNet 1.58b)
+                    let reg_a = self.registers[d];
+                    let reg_b = self.registers[s];
+                    let mut sum: i32 = 0;
+                    for i in 0..16 {
+                        let code_a = (reg_a >> (i * 2)) & 0x3;
+                        let code_b = (reg_b >> (i * 2)) & 0x3;
+                        let sa: i32 = match code_a {
+                            1 => 1,
+                            2 => -1,
+                            _ => 0,
+                        };
+                        let sb: i32 = match code_b {
+                            1 => 1,
+                            2 => -1,
+                            _ => 0,
+                        };
+                        sum = sum.wrapping_add(sa * sb);
+                    }
+                    self.registers[d] = sum as u32;
                 } else {
                     self.registers[d] = 0x0012_3456;
                 }
@@ -404,9 +424,7 @@ impl CoreEngine {
                 self.reversible_ops_count += 1;
                 let s1 = if dest > 0 { dest } else { 10 };
                 let s2 = if src > 0 { src } else { (s1 + 1).min(15) };
-                let tmp = self.registers[s1];
-                self.registers[s1] = self.registers[s2];
-                self.registers[s2] = tmp;
+                self.registers.swap(s1, s2);
             }
             "TO" => {
                 // Toffoli 3-wire Reversible Gate (Brain 3)
@@ -533,7 +551,7 @@ impl CoreEngine {
                 // Brain 5 Cross-Attention Gating (Opcode 7'd132)
                 let d = if dest > 0 { dest } else { 6 };
                 let s = if src > 0 { src } else { 4 };
-                let gate = (self.registers[s] & 0xFF) as u32;
+                let gate = self.registers[s] & 0xFF;
                 let act = self.registers[d];
                 self.registers[d] = (act.wrapping_mul(gate)) >> 8;
             }
@@ -541,7 +559,7 @@ impl CoreEngine {
                 // Brain 6 Dynamic Arbiter Weight Update (Opcode 7'd126)
                 let d = if dest > 0 { dest } else { 1 };
                 let s = if src > 0 { src } else { 0 };
-                let delta = (self.registers[s] & 0xF) as u32;
+                let delta = self.registers[s] & 0xF;
                 self.registers[d] = (self.registers[d] + delta).min(255);
             }
             "CD" => {
@@ -570,10 +588,10 @@ impl CoreEngine {
                 let d = if dest > 0 { dest } else { 2 };
                 let s = if src > 0 { src } else { d };
                 let v = self.registers[s];
-                let b0 = (v & 0xFF) as u32;
-                let b1 = ((v >> 8) & 0xFF) as u32;
-                let b2 = ((v >> 16) & 0xFF) as u32;
-                let b3 = ((v >> 24) & 0xFF) as u32;
+                let b0 = v & 0xFF;
+                let b1 = (v >> 8) & 0xFF;
+                let b2 = (v >> 16) & 0xFF;
+                let b3 = (v >> 24) & 0xFF;
                 let s0 = b0 & 0xFF;
                 let s1 = (b0 + b1) & 0xFF;
                 let s2 = (b0 + b1 + b2) & 0xFF;
@@ -706,7 +724,7 @@ impl CoreEngine {
                 // Event-driven Neuromorphic Spike Broadcast (Homopolymer ee)
                 self.stdp_updates_count += 1;
                 for w in self.stdp_weights.iter_mut() {
-                    *w = (*w + 1).min(127);
+                    *w += 1;
                 }
             }
             _ => {}

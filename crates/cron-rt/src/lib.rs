@@ -3,6 +3,8 @@
 // Zero-overhead foreign function interface for C++, C#, Python, and SAGI Tree Graph.
 // ============================================================================
 
+#![allow(clippy::missing_safety_doc)]
+
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::slice;
@@ -314,7 +316,7 @@ pub unsafe extern "C" fn cron_vm_run_cl(
             reversible_gate_ops: st.reversible_gate_ops as u64,
             stdp_synapse_updates: st.stdp_synapse_updates as u64,
             mesh_packets_routed: st.mesh_packets_routed as u64,
-            peak_temperature_c: st.peak_temperature_c as u32,
+            peak_temperature_c: st.peak_temperature_c,
             dram_bandwidth_saved_mb: st.dram_bandwidth_saved_mb,
             success: true,
         };
@@ -364,7 +366,7 @@ pub unsafe extern "C" fn cron_vm_run_cr(
             reversible_gate_ops: st.reversible_gate_ops as u64,
             stdp_synapse_updates: st.stdp_synapse_updates as u64,
             mesh_packets_routed: st.mesh_packets_routed as u64,
-            peak_temperature_c: st.peak_temperature_c as u32,
+            peak_temperature_c: st.peak_temperature_c,
             dram_bandwidth_saved_mb: st.dram_bandwidth_saved_mb,
             success: true,
         };

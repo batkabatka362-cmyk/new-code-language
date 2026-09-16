@@ -209,10 +209,10 @@ impl AOTHazardScheduler {
                     let raw_hazard = inst.srcs.iter().any(|r| current_cycle_writes.contains(r));
 
                     // WAW in current cycle: cannot write register already written in same cycle
-                    let waw_hazard = inst.dest.map_or(false, |d| current_cycle_writes.contains(&d));
+                    let waw_hazard = inst.dest.is_some_and(|d| current_cycle_writes.contains(&d));
 
                     // WAR in current cycle: cannot write register already read in same cycle
-                    let war_hazard = inst.dest.map_or(false, |d| current_cycle_reads.contains(&d));
+                    let war_hazard = inst.dest.is_some_and(|d| current_cycle_reads.contains(&d));
 
                     // Structural: max 1 optical op per cycle
                     let optical_hazard = inst.is_optical && optical_in_cycle;

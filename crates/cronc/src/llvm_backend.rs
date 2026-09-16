@@ -25,6 +25,12 @@ pub struct LlvmBackend {
     has_terminated: bool,
 }
 
+impl Default for LlvmBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LlvmBackend {
     pub fn new() -> Self {
         Self {
@@ -62,11 +68,26 @@ impl LlvmBackend {
     }
 
     pub fn map_llvm_type(cron_type: &str) -> String {
-        let trimmed = cron_type
-            .trim()
+        let mut trimmed = cron_type.trim();
+        if trimmed.starts_with('@') {
+            if let Some(space_idx) = trimmed.find(' ') {
+                trimmed = trimmed[space_idx..].trim();
+            }
+        }
+        trimmed = trimmed
             .trim_start_matches("linear ")
             .trim_start_matches("lin ")
             .trim();
+
+        if trimmed == "tile4x4_f32" || trimmed == "tile<4, 4, f32>" || trimmed == "tile<4,4,f32>" {
+            return "[4 x [4 x float]]".to_string();
+        }
+        if trimmed == "tile4x4_i32" || trimmed == "tile<4, 4, i32>" || trimmed == "tile<4,4,i32>" {
+            return "[4 x [4 x i32]]".to_string();
+        }
+        if trimmed == "tile16x16_i2" || trimmed == "tile<16, 16, i2>" || trimmed == "tile<16,16,i2>" {
+            return "[16 x i32]".to_string();
+        }
 
         if trimmed.starts_with("channel<") || trimmed.starts_with("Channel<") || trimmed == "channel" || trimmed == "Channel" {
             return "ptr".to_string();
@@ -81,6 +102,9 @@ impl LlvmBackend {
         }
 
         match trimmed {
+            "i2" => "i2".to_string(),
+            "i4" => "i4".to_string(),
+            "f4" | "f8" | "f16" | "bf16" => "float".to_string(),
             "i8" | "u8" => "i8".to_string(),
             "i16" | "u16" => "i16".to_string(),
             "i32" | "u32" | "int" => "i32".to_string(),

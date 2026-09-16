@@ -318,6 +318,12 @@ pub struct X64Assembler {
     pub code: Vec<u8>,
 }
 
+impl Default for X64Assembler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl X64Assembler {
     pub fn new() -> Self {
         Self { code: Vec::with_capacity(4096) }
@@ -625,6 +631,12 @@ pub struct JitCompiler {
     next_offset: i32,
     last_stored_var: Option<String>,
     has_returned: bool,
+}
+
+impl Default for JitCompiler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JitCompiler {

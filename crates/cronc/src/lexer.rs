@@ -417,6 +417,12 @@ impl Lexer {
                     tokens.push(Spanned::new(Token::Dollar, span));
                     line_has_tokens = true;
                 }
+                '@' => {
+                    self.advance();
+                    let span = self.make_span(start_line, start_col, start_byte);
+                    tokens.push(Spanned::new(Token::At, span));
+                    line_has_tokens = true;
+                }
                 '0' if self.peek_next() == Some('x') || self.peek_next() == Some('X') => {
                     // Hex literal
                     self.advance(); // '0'

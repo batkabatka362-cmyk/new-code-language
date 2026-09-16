@@ -55,6 +55,12 @@ impl GpuType {
     }
 }
 
+impl Default for GpuBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GpuBackend {
     pub fn new() -> Self {
         Self {
@@ -377,20 +383,16 @@ impl GpuBackend {
                     (dst, GpuType::I32)
                 }
             }
-            Expr::Call { callee, args } => {
+            Expr::Call { callee, args }
                 // Check if calling built-in FMA intrinsic: fma(a, b, c) -> fma.rn.f32
-                if callee == "fma" && args.len() == 3 {
+                if callee == "fma" && args.len() == 3 => {
                     let (ra, _) = self.generate_ptx_expr(&args[0].value);
                     let (rb, _) = self.generate_ptx_expr(&args[1].value);
                     let (rc, _) = self.generate_ptx_expr(&args[2].value);
                     let dst = self.new_f32_reg();
                     self.emit_line(&format!("fma.rn.f32 {}, {}, {}, {};", dst, ra, rb, rc));
                     (dst, GpuType::F32)
-                } else {
-                    let r = self.new_i32_reg();
-                    (r, GpuType::I32)
                 }
-            }
             _ => {
                 let r = self.new_i32_reg();
                 (r, GpuType::I32)

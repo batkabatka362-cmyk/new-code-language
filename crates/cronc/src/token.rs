@@ -105,6 +105,7 @@ pub enum Token {
     MinusAssign,  // -=
     StarAssign,   // *=
     SlashAssign,  // /=
+    At,           // @
     Eof,
 }
 

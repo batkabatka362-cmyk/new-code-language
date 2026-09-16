@@ -101,6 +101,12 @@ pub struct Codegen {
     impl_methods: HashMap<(String, String), FunctionDecl>,
 }
 
+impl Default for Codegen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Codegen {
     pub fn new() -> Self {
         Self {
@@ -637,8 +643,14 @@ impl Codegen {
                     "predicated_op" => {
                         self.push_slot(make_slot('_', "PO", dest, '$', first_arg_reg, 2, '>'));
                     }
-                    "subbyte_dot" | "ternary_dot16" => {
-                        self.push_slot(make_slot('_', "MD", dest, '$', first_arg_reg, 6, '>'));
+                    "subbyte_dot" | "ternary_dot16" | "simd_ternary_dot" | "simd_f4_gemm" => {
+                        self.push_slot(make_slot('_', "MD", dest, '$', first_arg_reg, 5, '>'));
+                    }
+                    "tile_matmul" | "tile_fma" => {
+                        self.push_slot(make_slot('_', "OP", dest, '$', first_arg_reg, 0xE, '>'));
+                    }
+                    "tile_transpose" => {
+                        self.push_slot(make_slot('_', "TT", dest, '$', first_arg_reg, 0, '>'));
                     }
                     "backward" | "reversible_backward_step" => {
                         // Brain 3 Reversible Backward Pass

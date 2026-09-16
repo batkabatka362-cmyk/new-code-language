@@ -54,6 +54,12 @@ pub struct Optimizer {
     _cse_counter: usize,
 }
 
+impl Default for Optimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Optimizer {
     pub fn new() -> Self {
         Self {
@@ -940,13 +946,11 @@ impl Optimizer {
                     return String::new();
                 }
                 // Commutative ops: normalize order for better matching
-                if op == "+" || op == "*" || op == "&" || op == "|" || op == "^"
-                    || op == "==" || op == "!="
-                {
-                    if l > r {
+                if (op == "+" || op == "*" || op == "&" || op == "|" || op == "^"
+                    || op == "==" || op == "!=")
+                    && l > r {
                         return format!("({}{}{})", r, op, l);
                     }
-                }
                 format!("({}{}{})", l, op, r)
             }
             Expr::Unary { op, operand } => {

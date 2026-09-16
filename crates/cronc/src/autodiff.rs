@@ -352,8 +352,8 @@ impl AutodiffEngine {
                     }
                     // SIMD reduce sum: simd_reduce_sum(v) -> d(v)
                     "simd_reduce_sum" if !args.is_empty() => {
-                        let dv = Self::diff_expr(&args[0].value, wrt);
-                        dv
+                        
+                        Self::diff_expr(&args[0].value, wrt)
                     }
                     // SIMD dot product: simd_dot(a, b) -> da * b + a * db
                     "simd_dot" if args.len() >= 2 => {

@@ -35,7 +35,7 @@
 
 use crate::codegen::compute_parity;
 
-pub const CLB_MAGIC: [u8; 4] = [b'C', b'L', b'B', b'1'];
+pub const CLB_MAGIC: [u8; 4] = *b"CLB1";
 pub const CLB_VERSION: u16 = 1;
 
 pub const OP_TABLE: &[&str] = &[
@@ -308,7 +308,7 @@ pub fn disassemble_clb_to_cl(bytes: &[u8]) -> Result<String, String> {
         ));
     }
 
-    if &bytes[0..4] != &CLB_MAGIC {
+    if bytes[0..4] != CLB_MAGIC {
         return Err(format!(
             "Invalid CLB magic bytes: expected {:?}, got {:?}",
             CLB_MAGIC,

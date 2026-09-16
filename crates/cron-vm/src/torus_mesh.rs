@@ -56,6 +56,12 @@ pub struct TorusMesh {
     pub packet_queues: Vec<Vec<MeshPacket>>,
 }
 
+impl Default for TorusMesh {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TorusMesh {
     pub fn new() -> Self {
         let total = 256; // 4x4x4x4
@@ -93,7 +99,7 @@ impl TorusMesh {
     pub fn branchless_traverse_16way(base: Coord4D, active_mask: u16) -> [(Coord4D, usize); 16] {
         let mut results = [(Coord4D::new(0, 0, 0, 0), 0); 16];
         for i in 0..16 {
-            let dx = (i >> 0) & 1;
+            let dx = i & 1;
             let dy = (i >> 1) & 1;
             let dz = (i >> 2) & 1;
             let dw = (i >> 3) & 1;

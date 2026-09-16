@@ -16,6 +16,12 @@ pub struct CBackend {
     in_main: bool,
 }
 
+impl Default for CBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CBackend {
     pub fn new() -> Self {
         Self {
@@ -343,11 +349,111 @@ impl CBackend {
         self.emit_line("static inline uint64_t _cron_bsh1(uint64_t tile) { return tile; }");
         self.emit_line("#define _CRON_BSH_CHOOSER(_1, _2, NAME, ...) NAME");
         self.emit_line("#define blend_staged_halo(...) _CRON_BSH_CHOOSER(__VA_ARGS__, _cron_bsh2, _cron_bsh1)(__VA_ARGS__)");
-        self.emit_line("static inline uint64_t ternary_dot16(uint64_t a, uint32_t p) { (void)a; (void)p; return 42; }");
+        self.emit_line("// --- Sub-Byte & BitNet 1.58b AI Intrinsics ---");
+        self.emit_line("static inline int32_t simd_ternary_dot(uint32_t a, uint32_t b) {");
+        self.emit_line("    int32_t sum = 0;");
+        self.emit_line("    for (int i = 0; i < 16; i++) {");
+        self.emit_line("        uint32_t ea = (a >> (i * 2)) & 0x3;");
+        self.emit_line("        uint32_t eb = (b >> (i * 2)) & 0x3;");
+        self.emit_line("        int32_t sa = (ea == 1) ? 1 : ((ea == 2) ? -1 : 0);");
+        self.emit_line("        int32_t sb = (eb == 1) ? 1 : ((eb == 2) ? -1 : 0);");
+        self.emit_line("        sum += sa * sb;");
+        self.emit_line("    }");
+        self.emit_line("    return sum;");
+        self.emit_line("}");
+        self.emit_line("static inline uint64_t ternary_dot16(uint64_t a, uint32_t p) { return (uint64_t)simd_ternary_dot((uint32_t)a, p); }");
         self.emit_line("static inline uint64_t symbolify(uint64_t w, const char* str) { (void)w; (void)str; return 0x55; }");
         self.emit_line("static inline void dma_sync(uint32_t ch) { (void)ch; }");
         self.emit_line("static inline uint64_t apply_gradient_step(uint64_t act, uint64_t grad, uint32_t step) { (void)act; (void)grad; (void)step; return act; }");
         self.emit_line("static inline void await_dma_channel(uint32_t ch) { (void)ch; }");
+        self.emit_line("");
+        self.emit_line("static inline uint32_t _cron_pack_ternary_i32(const int32_t* p) {");
+        self.emit_line("    uint32_t packed = 0;");
+        self.emit_line("    for (int i = 0; i < 16; i++) {");
+        self.emit_line("        uint32_t code = 0;");
+        self.emit_line("        if (p[i] > 0) code = 1;");
+        self.emit_line("        else if (p[i] < 0) code = 2;");
+        self.emit_line("        packed |= (code << (i * 2));");
+        self.emit_line("    }");
+        self.emit_line("    return packed;");
+        self.emit_line("}");
+        self.emit_line("#define pack_ternary(p) _cron_pack_ternary_i32((const int32_t*)(p))");
+        self.emit_line("static inline int8_t unpack_ternary(uint32_t packed, int32_t idx) {");
+        self.emit_line("    uint32_t code = (packed >> ((idx & 0xF) * 2)) & 0x3;");
+        self.emit_line("    if (code == 1) return 1;");
+        self.emit_line("    if (code == 2) return -1;");
+        self.emit_line("    return 0;");
+        self.emit_line("}");
+        self.emit_line("static inline uint32_t _cron_pack_i4_i32(const int32_t* p) {");
+        self.emit_line("    uint32_t packed = 0;");
+        self.emit_line("    for (int i = 0; i < 8; i++) {");
+        self.emit_line("        packed |= (((uint32_t)(p[i] & 0xF)) << (i * 4));");
+        self.emit_line("    }");
+        self.emit_line("    return packed;");
+        self.emit_line("}");
+        self.emit_line("#define pack_i4(p) _cron_pack_i4_i32((const int32_t*)(p))");
+        self.emit_line("static inline int8_t unpack_i4(uint32_t packed, int32_t idx) {");
+        self.emit_line("    int8_t v = (int8_t)((packed >> ((idx & 0x7) * 4)) & 0xF);");
+        self.emit_line("    if (v & 0x8) v |= (int8_t)0xF0;");
+        self.emit_line("    return v;");
+        self.emit_line("}");
+        self.emit_line("static inline float simd_f4_gemm(uint32_t a, uint32_t b, float scale) {");
+        self.emit_line("    int32_t dot = 0;");
+        self.emit_line("    for (int i = 0; i < 8; i++) {");
+        self.emit_line("        int8_t va = unpack_i4(a, i);");
+        self.emit_line("        int8_t vb = unpack_i4(b, i);");
+        self.emit_line("        dot += (int32_t)va * (int32_t)vb;");
+        self.emit_line("    }");
+        self.emit_line("    return (float)dot * scale;");
+        self.emit_line("}");
+        self.emit_line("");
+        self.emit_line("// --- First-Class Systolic Tensor Tiles (tile4x4_f32, tile4x4_i32, tile16x16_i2) ---");
+        self.emit_line("typedef struct { float m[4][4]; } cron_tile4x4_f32_t;");
+        self.emit_line("typedef struct { int32_t m[4][4]; } cron_tile4x4_i32_t;");
+        self.emit_line("typedef struct { uint32_t rows[16]; } cron_tile16x16_i2_t;");
+        self.emit_line("static inline cron_tile4x4_f32_t tile4x4_f32(float val) {");
+        self.emit_line("    cron_tile4x4_f32_t t;");
+        self.emit_line("    for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) t.m[r][c] = val;");
+        self.emit_line("    return t;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tile4x4_i32_t tile4x4_i32(int32_t val) {");
+        self.emit_line("    cron_tile4x4_i32_t t;");
+        self.emit_line("    for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) t.m[r][c] = val;");
+        self.emit_line("    return t;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tile4x4_f32_t tile_matmul(cron_tile4x4_f32_t a, cron_tile4x4_f32_t b) {");
+        self.emit_line("    cron_tile4x4_f32_t out;");
+        self.emit_line("    for (int i = 0; i < 4; i++) {");
+        self.emit_line("        for (int j = 0; j < 4; j++) {");
+        self.emit_line("            float sum = 0.0f;");
+        self.emit_line("            for (int k = 0; k < 4; k++) sum += a.m[i][k] * b.m[k][j];");
+        self.emit_line("            out.m[i][j] = sum;");
+        self.emit_line("        }");
+        self.emit_line("    }");
+        self.emit_line("    return out;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tile4x4_f32_t tile_transpose(cron_tile4x4_f32_t a) {");
+        self.emit_line("    cron_tile4x4_f32_t out;");
+        self.emit_line("    for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) out.m[j][i] = a.m[i][j];");
+        self.emit_line("    return out;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tile4x4_f32_t tile_add(cron_tile4x4_f32_t a, cron_tile4x4_f32_t b) {");
+        self.emit_line("    cron_tile4x4_f32_t out;");
+        self.emit_line("    for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) out.m[i][j] = a.m[i][j] + b.m[i][j];");
+        self.emit_line("    return out;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tile4x4_f32_t tile_fma(cron_tile4x4_f32_t a, cron_tile4x4_f32_t b, cron_tile4x4_f32_t c) {");
+        self.emit_line("    cron_tile4x4_f32_t p = tile_matmul(a, b);");
+        self.emit_line("    return tile_add(p, c);");
+        self.emit_line("}");
+        self.emit_line("static inline float tile_get(cron_tile4x4_f32_t t, int32_t r, int32_t c) {");
+        self.emit_line("    if (r >= 0 && r < 4 && c >= 0 && c < 4) return t.m[r][c];");
+        self.emit_line("    return 0.0f;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tile4x4_f32_t tile_set(cron_tile4x4_f32_t t, int32_t r, int32_t c, float val) {");
+        self.emit_line("    if (r >= 0 && r < 4 && c >= 0 && c < 4) t.m[r][c] = val;");
+        self.emit_line("    return t;");
+        self.emit_line("}");
         self.emit_line("");
         self.emit_line("// --- Dynamic Vector Allocator (core/vec.cr) ---");
         self.emit_line("static inline uint64_t vec_new(uint32_t cap, uint32_t elem_size) { (void)cap; (void)elem_size; return 0x1000; }");
@@ -543,11 +649,27 @@ impl CBackend {
     }
 
     fn map_type(cron_type: &str) -> String {
-        let trimmed = cron_type
-            .trim()
+        let mut trimmed = cron_type.trim();
+        // Strip spatial memory domain annotations, e.g. "@sram(bank=0) i2" -> "i2"
+        if trimmed.starts_with('@') {
+            if let Some(space_idx) = trimmed.find(' ') {
+                trimmed = trimmed[space_idx..].trim();
+            }
+        }
+        trimmed = trimmed
             .trim_start_matches("linear ")
             .trim_start_matches("lin ")
             .trim();
+
+        if trimmed == "tile4x4_f32" || trimmed == "tile<4, 4, f32>" || trimmed == "tile<4,4,f32>" {
+            return "cron_tile4x4_f32_t".to_string();
+        }
+        if trimmed == "tile4x4_i32" || trimmed == "tile<4, 4, i32>" || trimmed == "tile<4,4,i32>" {
+            return "cron_tile4x4_i32_t".to_string();
+        }
+        if trimmed == "tile16x16_i2" || trimmed == "tile<16, 16, i2>" || trimmed == "tile<16,16,i2>" {
+            return "cron_tile16x16_i2_t".to_string();
+        }
 
         if trimmed.starts_with("channel<") || trimmed.starts_with("Channel<")
             || trimmed.starts_with("channel_") || trimmed.starts_with("Channel_")
@@ -566,6 +688,8 @@ impl CBackend {
         }
 
         match trimmed {
+            "i2" | "i4" => "int8_t".to_string(),
+            "f4" | "f8" | "f16" | "bf16" => "float".to_string(),
             "i8" => "int8_t".to_string(),
             "i16" => "int16_t".to_string(),
             "i32" | "int" => "int32_t".to_string(),
@@ -596,7 +720,7 @@ impl CBackend {
                     "cron_tuple_t".to_string()
                 } else if other.starts_with('[') && other.ends_with(']') {
                     // Array type like [i32; 4]
-                    "void*".to_string()
+                    "const void*".to_string()
                 } else if other.starts_with("struct ") {
                     other.to_string()
                 } else {

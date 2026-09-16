@@ -697,7 +697,7 @@ fn main() {
             let mut upper = 0;
             let mut lower = 0;
             let mut symbols = 0;
-            for (&ch, _) in &audit.character_frequencies {
+            for &ch in audit.character_frequencies.keys() {
                 if ch.is_ascii_digit() {
                     digits += 1;
                 } else if ch.is_ascii_uppercase() {
@@ -1468,7 +1468,7 @@ fn main() {
 
             println!("[CRON AOT] Invoking host GCC compiler (-O3 optimization)...");
             let comp_res = std::process::Command::new("gcc")
-                .args(&["-O3", &temp_c, "-o", &out_bin, "-lm"])
+                .args(["-O3", &temp_c, "-o", &out_bin, "-lm"])
                 .status();
 
             let _ = fs::remove_file(&temp_c);
@@ -1476,7 +1476,7 @@ fn main() {
             match comp_res {
                 Ok(st) if st.success() => {
                     println!("[SUCCESS] Successfully generated native machine binary: '{}'", out_bin);
-                    println!("Run directly: ./{}{}", if cfg!(windows) { "" } else { "" }, out_bin);
+                    println!("Run directly: ./{}", out_bin);
                 }
                 Ok(st) => {
                     eprintln!("Host C compiler failed with exit code: {:?}", st);
@@ -1557,7 +1557,7 @@ fn main() {
 
             println!("[CRON LLVM AOT] Invoking Clang compiler (-O3 -Wno-override-module optimization)...");
             let comp_res = std::process::Command::new("clang")
-                .args(&["-O3", "-Wno-override-module", &temp_ll, "-o", &out_bin])
+                .args(["-O3", "-Wno-override-module", &temp_ll, "-o", &out_bin])
                 .status();
 
             let _ = fs::remove_file(&temp_ll);
@@ -1565,7 +1565,7 @@ fn main() {
             match comp_res {
                 Ok(st) if st.success() => {
                     println!("[SUCCESS] Generated LLVM native binary: '{}'", out_bin);
-                    println!("Run directly: ./{}{}", if cfg!(windows) { "" } else { "" }, out_bin);
+                    println!("Run directly: ./{}", out_bin);
                 }
                 Ok(st) => {
                     eprintln!("Clang failed with exit code: {:?}", st);

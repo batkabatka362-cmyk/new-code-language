@@ -108,8 +108,7 @@ impl ReplSession {
         }
 
         // Colon commands
-        if trimmed.starts_with(':') {
-            let cmd = &trimmed[1..];
+        if let Some(cmd) = trimmed.strip_prefix(':') {
             match cmd {
                 "help" | "h" | "?" => self.print_help(),
                 "regs" | "r" => self.print_regs(),

@@ -1070,6 +1070,30 @@ impl Parser {
             }
         }
 
+        let mut spatial_prefix = String::new();
+        if self.match_token(&Token::At) {
+            let attr_name = match self.advance() {
+                Token::Ident(n) => n,
+                other => return Err(format!("Expected spatial memory domain (@sram, @hbm, @noc), got {:?}", other)),
+            };
+            spatial_prefix = format!("@{}", attr_name);
+            if self.match_token(&Token::OpenParen) {
+                spatial_prefix.push('(');
+                while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                    match self.advance() {
+                        Token::Ident(n) => spatial_prefix.push_str(&n),
+                        Token::IntLit(n) => spatial_prefix.push_str(&n.to_string()),
+                        Token::Assign => spatial_prefix.push('='),
+                        Token::Comma => spatial_prefix.push_str(", "),
+                        _ => {}
+                    }
+                }
+                self.expect(&Token::CloseParen)?;
+                spatial_prefix.push(')');
+            }
+            spatial_prefix.push(' ');
+        }
+
         let mut type_str = match self.advance() {
             Token::Ident(s) => s,
             Token::Lin => "lin".to_string(),
@@ -1081,6 +1105,10 @@ impl Parser {
                 type_str = format!("{} {}", type_str, inner);
                 self.advance();
             }
+        }
+
+        if !spatial_prefix.is_empty() {
+            type_str = format!("{}{}", spatial_prefix, type_str);
         }
 
         if self.match_token(&Token::Less) {

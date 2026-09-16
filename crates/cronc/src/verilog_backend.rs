@@ -38,8 +38,8 @@ pub fn encode_slot_to_u32(slot: &ClSlot) -> u32 {
 
     let rd = (slot.dest_reg.unwrap_or(0) as u32) & 0x0F;
     let rs1 = (slot.src_reg.unwrap_or(0) as u32) & 0x0F;
-    let imm = (slot.imm_token.to_digit(16).unwrap_or(0) as u32) & 0x0F;
-    let parity = (slot.parity_token.to_digit(16).unwrap_or(0) as u32) & 0x0F;
+    let imm = slot.imm_token.to_digit(16).unwrap_or(0) & 0x0F;
+    let parity = slot.parity_token.to_digit(16).unwrap_or(0) & 0x0F;
 
     // 32-bit Packed Format:
     // [31:26] Opcode (6 bits)
