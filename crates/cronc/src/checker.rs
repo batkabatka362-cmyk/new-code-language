@@ -89,6 +89,8 @@ pub struct SemanticChecker {
     known_traits: HashMap<String, Vec<(String, Vec<String>, Option<String>)>>,
     /// (trait_name, struct_name) -> method names (for monomorphization lookup)
     known_impls: HashMap<(String, String), HashSet<String>>,
+    pub fn_param_types: HashMap<String, Vec<(String, String)>>,
+    pub fn_return_types: HashMap<String, String>,
 }
 
 impl Default for SemanticChecker {
@@ -117,6 +119,9 @@ impl SemanticChecker {
             // Phase 9: Bank-Free Swizzling & 4D-Torus PGAS intrinsics
             "sram_swizzle_index", "tile_swizzle",
             "pgas_read", "pgas_write", "pgas_barrier",
+            // Phase 10: Dependent Tensor & Silicon Autotuner builtins
+            "tensor_matmul", "tensor_transpose", "tensor_add", "tensor_reshape", "tensor_slice",
+            "tensor_init", "tensor_ones", "tensor_zeros",
         ] {
             known_functions.insert(f.to_string());
         }
@@ -126,6 +131,7 @@ impl SemanticChecker {
             "vec4f", "vec8f", "vec16f", "vec4i", "vec8i", "channel", "Channel",
             "i2", "i4", "f4", "f8", "f16", "bf16",
             "tile4x4_f32", "tile4x4_i32", "tile16x16_i2",
+            "tensor",
         ] {
             known_types.insert(t.to_string(), "builtin".to_string());
         }
@@ -140,6 +146,8 @@ impl SemanticChecker {
             known_types,
             known_traits: HashMap::new(),
             known_impls: HashMap::new(),
+            fn_param_types: HashMap::new(),
+            fn_return_types: HashMap::new(),
         }
     }
 
@@ -181,9 +189,14 @@ impl SemanticChecker {
     }
 
     pub fn check_program(&mut self, program: &Program) -> Result<(), TypeError> {
-        // Register all function names
+        // Register all function names and parameter/return types
         for func in &program.functions {
             self.known_functions.insert(func.name.clone());
+            let params: Vec<(String, String)> = func.params.iter().map(|p| (p.name.clone(), p.param_type.clone())).collect();
+            self.fn_param_types.insert(func.name.clone(), params);
+            if let Some(ret) = &func.return_type {
+                self.fn_return_types.insert(func.name.clone(), ret.clone());
+            }
         }
 
         // Register structs
@@ -265,6 +278,8 @@ impl SemanticChecker {
                 }
                 func_checker.known_traits = self.known_traits.clone();
                 func_checker.known_impls = self.known_impls.clone();
+                func_checker.fn_param_types = self.fn_param_types.clone();
+                func_checker.fn_return_types = self.fn_return_types.clone();
                 for param in &method.params {
                     if param.name == "self" { continue; }
                     func_checker.insert_var(VarInfo {
@@ -296,6 +311,8 @@ impl SemanticChecker {
             }
             func_checker.known_traits = self.known_traits.clone();
             func_checker.known_impls = self.known_impls.clone();
+            func_checker.fn_param_types = self.fn_param_types.clone();
+            func_checker.fn_return_types = self.fn_return_types.clone();
             for param in &func.params {
                 func_checker.insert_var(VarInfo {
                     name: param.name.clone(),
@@ -322,6 +339,8 @@ impl SemanticChecker {
             brain_checker.known_types = self.known_types.clone();
             brain_checker.known_traits = self.known_traits.clone();
             brain_checker.known_impls = self.known_impls.clone();
+            brain_checker.fn_param_types = self.fn_param_types.clone();
+            brain_checker.fn_return_types = self.fn_return_types.clone();
             brain_checker.check_statements(&brain.body)?;
             brain_checker.verify_all_linear_consumed()?;
         }
@@ -388,6 +407,50 @@ impl SemanticChecker {
                             sched.span,
                         ));
                     }
+                    ScheduleDirective::Autotune { tile_sizes, unrolls, vectorize_widths, metric } => {
+                        if tile_sizes.is_empty() {
+                            return Err(TypeError::new(
+                                "E0012",
+                                "Autotune directive requires at least one candidate tile_size",
+                                sched.span,
+                            ));
+                        }
+                        for (w, h) in tile_sizes {
+                            if *w == 0 || *h == 0 {
+                                return Err(TypeError::new(
+                                    "E0012",
+                                    format!("Invalid autotune tile_size({}, {}): dimensions must be non-zero", w, h),
+                                    sched.span,
+                                ));
+                            }
+                        }
+                        for u in unrolls {
+                            if *u == 0 {
+                                return Err(TypeError::new(
+                                    "E0012",
+                                    format!("Invalid autotune unroll factor {}: must be greater than 0", u),
+                                    sched.span,
+                                ));
+                            }
+                        }
+                        for vw in vectorize_widths {
+                            if *vw == 0 || (*vw & (*vw - 1)) != 0 {
+                                return Err(TypeError::new(
+                                    "E0012",
+                                    format!("Invalid autotune vectorize width {}: must be a power of two", vw),
+                                    sched.span,
+                                ));
+                            }
+                        }
+                        let clean_metric = metric.trim_matches('"');
+                        if !["min_latency", "max_throughput", "energy_efficient"].contains(&clean_metric) {
+                            return Err(TypeError::new(
+                                "E0012",
+                                format!("Unknown autotune optimization metric '{}'", metric),
+                                sched.span,
+                            ).with_help("Supported metrics: \"min_latency\", \"max_throughput\", \"energy_efficient\""));
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -398,6 +461,94 @@ impl SemanticChecker {
         self.verify_all_linear_consumed()?;
 
         Ok(())
+    }
+
+    /// Parses a tensor shape string like `tensor<1, 32, 64, f32>` or `tensor<B, M, K, f32>`
+    pub fn parse_tensor_shape(type_str: &str) -> Option<(Vec<String>, String)> {
+        let trimmed = type_str.trim();
+        if !trimmed.starts_with("tensor<") || !trimmed.ends_with('>') {
+            return None;
+        }
+        let inner = trimmed[7..trimmed.len() - 1].trim();
+        let parts: Vec<String> = inner.split(',').map(|s| s.trim().to_string()).collect();
+        if parts.len() < 2 {
+            return None;
+        }
+        let elem_type = parts.last().unwrap().clone();
+        let dims = parts[..parts.len() - 1].to_vec();
+        Some((dims, elem_type))
+    }
+
+    /// Infers the static type of an expression, including dependent tensor dimensions
+    pub fn infer_expr_type(&self, expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Ident(name, _) | Expr::Consume(name, _) => {
+                self.lookup_var(name).and_then(|v| v.var_type.clone())
+            }
+            Expr::Call { callee, args } => {
+                if callee == "tensor_matmul" && args.len() >= 2 {
+                    let type_a = self.infer_expr_type(&args[0].value)?;
+                    let type_b = self.infer_expr_type(&args[1].value)?;
+                    let (dims_a, elem_a) = Self::parse_tensor_shape(&type_a)?;
+                    let (dims_b, _) = Self::parse_tensor_shape(&type_b)?;
+                    if dims_a.len() >= 2 && dims_b.len() >= 2 {
+                        let m = dims_a[dims_a.len() - 2].clone();
+                        let n = dims_b[dims_b.len() - 1].clone();
+                        let mut out_dims = Vec::new();
+                        if dims_a.len() > 2 {
+                            for d in &dims_a[..dims_a.len() - 2] {
+                                out_dims.push(d.clone());
+                            }
+                        } else if dims_b.len() > 2 {
+                            for d in &dims_b[..dims_b.len() - 2] {
+                                out_dims.push(d.clone());
+                            }
+                        }
+                        out_dims.push(m);
+                        out_dims.push(n);
+                        return Some(format!("tensor<{}, {}>", out_dims.join(", "), elem_a));
+                    }
+                } else if callee == "tensor_transpose" && !args.is_empty() {
+                    let type_a = self.infer_expr_type(&args[0].value)?;
+                    let (mut dims_a, elem_a) = Self::parse_tensor_shape(&type_a)?;
+                    if dims_a.len() >= 2 {
+                        let len = dims_a.len();
+                        dims_a.swap(len - 2, len - 1);
+                        return Some(format!("tensor<{}, {}>", dims_a.join(", "), elem_a));
+                    }
+                } else if callee == "tensor_add" && !args.is_empty() {
+                    return self.infer_expr_type(&args[0].value);
+                } else if let Some(ret) = self.fn_return_types.get(callee) {
+                    if let Some(expected_params) = self.fn_param_types.get(callee) {
+                        let mut symbol_map = HashMap::new();
+                        for (arg, (_pname, ptype)) in args.iter().zip(expected_params.iter()) {
+                            if let Some(actual_type) = self.infer_expr_type(&arg.value) {
+                                if let (Some((p_dims, _)), Some((a_dims, _))) = (Self::parse_tensor_shape(ptype), Self::parse_tensor_shape(&actual_type)) {
+                                    if p_dims.len() == a_dims.len() {
+                                        for (p_dim, a_dim) in p_dims.iter().zip(a_dims.iter()) {
+                                            if !p_dim.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(true) {
+                                                symbol_map.insert(p_dim.clone(), a_dim.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if !symbol_map.is_empty() {
+                            if let Some((ret_dims, ret_elem)) = Self::parse_tensor_shape(ret) {
+                                let substituted_dims: Vec<String> = ret_dims.iter().map(|d| {
+                                    symbol_map.get(d).cloned().unwrap_or_else(|| d.clone())
+                                }).collect();
+                                return Some(format!("tensor<{}, {}>", substituted_dims.join(", "), ret_elem));
+                            }
+                        }
+                    }
+                    return Some(ret.clone());
+                }
+                None
+            }
+            _ => None,
+        }
     }
 
     fn check_statements(&mut self, stmts: &[Statement]) -> Result<(), TypeError> {
@@ -473,6 +624,25 @@ impl SemanticChecker {
                     }
                 }
 
+                let inferred_type = if type_annot.is_none() {
+                    self.infer_expr_type(value)
+                } else {
+                    type_annot.clone()
+                };
+
+                // Statically verify tensor dimension compatibility if annotated
+                if let (Some(expected_str), Some(actual_str)) = (&type_annot, self.infer_expr_type(value)) {
+                    if let (Some((exp_dims, exp_elem)), Some((act_dims, act_elem))) = (Self::parse_tensor_shape(expected_str), Self::parse_tensor_shape(&actual_str)) {
+                        if exp_dims != act_dims || exp_elem != act_elem {
+                            return Err(TypeError::new(
+                                "E0016",
+                                format!("Tensor dimension mismatch: expected type '{}', but found expression of type '{}'", expected_str, actual_str),
+                                *span,
+                            ).with_note("Milestone #010: Symbolic Shape Inference enforces strict dependent tensor invariants"));
+                        }
+                    }
+                }
+
                 self.insert_var(VarInfo {
                     name: name.clone(),
                     is_lin: *is_lin,
@@ -482,7 +652,7 @@ impl SemanticChecker {
                     is_tainted,
                     is_capability,
                     def_span: *span,
-                    var_type: type_annot.clone(),
+                    var_type: inferred_type,
                     in_region: self.in_region,
                 });
                 for (e_lin, e_grad, e_name, e_type) in extra_vars {
@@ -877,6 +1047,90 @@ impl SemanticChecker {
                         )
                         .with_note("Pages 749-752: Capability-based access control enforces least privilege")
                         .with_help("Acquire a capability token using `acquire_capability(...)` before patching."));
+                    }
+                }
+
+                // Static verification of tensor_matmul contraction dimensions (K_a == K_b)
+                if callee == "tensor_matmul" {
+                    if args.len() < 2 {
+                        let span = args.first().map(|a| a.value.span()).unwrap_or_default();
+                        return Err(TypeError::new("E0016", "tensor_matmul requires at least 2 arguments", span));
+                    }
+                    let type_a = self.infer_expr_type(&args[0].value);
+                    let type_b = self.infer_expr_type(&args[1].value);
+                    if let (Some(t_a), Some(t_b)) = (type_a, type_b) {
+                        if let (Some((dims_a, _)), Some((dims_b, _))) = (Self::parse_tensor_shape(&t_a), Self::parse_tensor_shape(&t_b)) {
+                            if dims_a.len() < 2 || dims_b.len() < 2 {
+                                return Err(TypeError::new(
+                                    "E0016",
+                                    format!("tensor_matmul requires tensors of rank >= 2, but received rank {} ({}) and rank {} ({})", dims_a.len(), t_a, dims_b.len(), t_b),
+                                    args[0].value.span(),
+                                ));
+                            }
+                            let inner_a = &dims_a[dims_a.len() - 1];
+                            let outer_b = &dims_b[dims_b.len() - 2];
+                            if inner_a != outer_b {
+                                return Err(TypeError::new(
+                                    "E0016",
+                                    format!("Tensor dimension mismatch: cannot multiply tensor with inner dimension '{}' ({}) by tensor with outer dimension '{}' ({})", inner_a, t_a, outer_b, t_b),
+                                    args[1].value.span(),
+                                ).with_note("Milestone #010: Dependent Tensor Dimensions guarantee inner contraction dimension equality at compile-time")
+                                 .with_help(format!("Ensure inner dimension '{}' equals outer dimension '{}'", inner_a, outer_b)));
+                            }
+                            let batch_rank_a = dims_a.len() - 2;
+                            let batch_rank_b = dims_b.len() - 2;
+                            let check_batches = batch_rank_a.min(batch_rank_b);
+                            for i in 0..check_batches {
+                                if dims_a[i] != dims_b[i] {
+                                    return Err(TypeError::new(
+                                        "E0016",
+                                        format!("Tensor batch dimension mismatch at axis {}: '{}' ({}) vs '{}' ({})", i, dims_a[i], t_a, dims_b[i], t_b),
+                                        args[1].value.span(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check generic function call site dependent tensor shape unification
+                if let Some(expected_params) = self.fn_param_types.get(callee).cloned() {
+                    let mut symbol_map: HashMap<String, String> = HashMap::new();
+                    for (arg, (_param_name, param_type)) in args.iter().zip(expected_params.iter()) {
+                        if let Some(actual_type) = self.infer_expr_type(&arg.value) {
+                            if let (Some((p_dims, _p_elem)), Some((a_dims, _a_elem))) = (Self::parse_tensor_shape(param_type), Self::parse_tensor_shape(&actual_type)) {
+                                if p_dims.len() != a_dims.len() {
+                                    return Err(TypeError::new(
+                                        "E0016",
+                                        format!("Tensor rank mismatch in call to '{}': parameter expects rank {}, but received rank {}", callee, p_dims.len(), a_dims.len()),
+                                        arg.value.span(),
+                                    ));
+                                }
+                                for (p_dim, a_dim) in p_dims.iter().zip(a_dims.iter()) {
+                                    let is_generic_symbol = !p_dim.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(true);
+                                    if is_generic_symbol {
+                                        if let Some(bound_dim) = symbol_map.get(p_dim) {
+                                            if bound_dim != a_dim {
+                                                return Err(TypeError::new(
+                                                    "E0016",
+                                                    format!("Tensor generic dimension conflict in call to '{}': symbol '{}' was previously bound to '{}', but argument provides '{}'", callee, p_dim, bound_dim, a_dim),
+                                                    arg.value.span(),
+                                                ).with_note("Milestone #010: Symbolic Shape Inference enforces consistent dependent dimension unification")
+                                                 .with_help(format!("Align tensor dimensions so that symbol '{}' has a single consistent dimension", p_dim)));
+                                            }
+                                        } else {
+                                            symbol_map.insert(p_dim.clone(), a_dim.clone());
+                                        }
+                                    } else if p_dim != a_dim {
+                                        return Err(TypeError::new(
+                                            "E0016",
+                                            format!("Tensor dimension mismatch in call to '{}': expected dimension '{}', but argument has '{}'", callee, p_dim, a_dim),
+                                            arg.value.span(),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

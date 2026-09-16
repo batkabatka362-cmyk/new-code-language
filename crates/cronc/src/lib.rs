@@ -1,3 +1,12 @@
+#![allow(
+    clippy::result_large_err,
+    clippy::type_complexity,
+    clippy::ptr_arg,
+    clippy::match_like_matches_macro,
+    clippy::needless_range_loop,
+    clippy::doc_lazy_continuation
+)]
+
 pub mod ast;
 pub mod c_backend;
 pub mod checker;
@@ -16,12 +25,14 @@ pub mod jit_backend;
 pub mod autodiff;
 pub mod cl_binary;
 pub mod gpu_backend;
+pub mod autotune;
 
 pub use scheduler::{AOTHazardScheduler, IRInstruction};
 pub use jit_backend::run_source_jit;
 pub use cl_binary::{assemble_cl_to_clb, disassemble_clb_to_cl};
 pub use optimizer::Optimizer;
 pub use fdo::{parse_fdo_profile, analyze_profile, compact_nop_bundles, fdo_recompile};
+pub use autotune::{SiliconAutotuner, AutotuneDecision};
 
 use checker::SemanticChecker;
 use codegen::Codegen;

@@ -437,3 +437,54 @@ Single-sided RDMA intrinsics dispatched across the 4D-Torus NoC without operatin
 - `pgas_read(x, y, z, w, addr) -> i64`: Single-cycle remote read across 4D mesh (`_RC` slot).
 - `pgas_barrier()`: Chip-wide hardware barrier across 256 physical cores (`_bb` slot).
 
+---
+
+## 11. Dependent Tensor Dimensions & Symbolic Shape Inference
+
+CRON provides static, dependent dimension verification for tensors directly in the type system:
+```cron
+let a: tensor<1, 32, 64, f32> = tensor_init(1.0);
+let b: tensor<1, 64, 128, f32> = tensor_init(2.0);
+let c: tensor<1, 32, 128, f32> = tensor_matmul(a, b);
+```
+
+### 11.1 Compile-Time Contraction Verification
+Unlike C++/CUDA (which crashes at runtime with SIGSEGV or CUDA error 700) or PyTorch (which crashes with `RuntimeError: mat1 and mat2 shapes cannot be multiplied`), CRON statically proves dimension compatibility at compile time:
+- Invariant: $A \in [..., M, K]$ and $B \in [..., K', N]$ requires $K == K'$.
+- If $K \neq K'$, the compiler rejects the program with `E0016: Dimension Mismatch`.
+- **Runtime Cost**: 0 cycles (zero bounds checks, zero dynamic dimension branching).
+
+### 11.2 Generic Shape Unification
+Generic functions can parameterize tensor dimensions symbolically:
+```cron
+def batched_gemm(a: tensor<B, M, K, f32>, b: tensor<B, K, N, f32>) -> tensor<B, M, N, f32> {
+    return tensor_matmul(a, b);
+}
+```
+At call sites, generic dimension variables (`B`, `M`, `K`, `N`) unify with argument dimensions. If conflicting dimension bindings are detected, compilation fails immediately with `E0016`.
+
+---
+
+## 12. Integrated Silicon Autotuning Engine
+
+CRON includes an automated compiler autotuning engine inside `schedule` declarations:
+```cron
+schedule systolic_kernel for "torus_4d" {
+    autotune {
+        tile_size: [(4, 4), (8, 8), (16, 16)];
+        unroll: [1, 2, 4];
+        vectorize: [4, 8];
+        metric: "min_latency"; // or "max_throughput", "energy_efficient"
+    }
+    distribute_4d(axis: "X+", cores: 16);
+}
+```
+
+### 12.1 4D-Torus Microarchitectural Cost Function
+The compiler benchmark engine evaluates candidate configurations against hardware parameters:
+- **VLIW Register Pressure**: Penalizes configurations requiring $>16$ local registers (spill penalty: 3.2 cycles/spill).
+- **SRAM Bank Conflicts**: Non-power-of-two tile widths incur bank collision penalties.
+- **SIMD Lane Utilization**: Benchmarks 128-bit vs 256-bit SIMD bus efficiency.
+- **Pareto-Optimal Synthesis**: Emits automated `#pragma GCC optimize` directives and VLIW slot bundles tailored for peak silicon throughput.
+
+

@@ -646,11 +646,14 @@ impl Codegen {
                     "subbyte_dot" | "ternary_dot16" | "simd_ternary_dot" | "simd_f4_gemm" => {
                         self.push_slot(make_slot('_', "MD", dest, '$', first_arg_reg, 5, '>'));
                     }
-                    "tile_matmul" | "tile_fma" => {
+                    "tile_matmul" | "tile_fma" | "tensor_matmul" => {
                         self.push_slot(make_slot('_', "OP", dest, '$', first_arg_reg, 0xE, '>'));
                     }
-                    "tile_transpose" | "tile_swizzle" => {
+                    "tile_transpose" | "tile_swizzle" | "tensor_transpose" => {
                         self.push_slot(make_slot('_', "TT", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "tensor_add" => {
+                        self.push_slot(make_slot('_', "PO", dest, '$', first_arg_reg, 1, '>'));
                     }
                     "sram_swizzle_index" => {
                         self.push_slot(make_slot('_', "TL", dest, '$', first_arg_reg, 2, '>'));

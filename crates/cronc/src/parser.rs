@@ -627,6 +627,77 @@ impl Parser {
                 other => return Err(format!("Expected schedule directive name, got {:?}", other)),
             };
 
+            if dir_name == "autotune" {
+                let has_brace = self.match_token(&Token::OpenBrace);
+                if !has_brace {
+                    self.expect(&Token::OpenParen)?;
+                }
+                let mut tile_sizes = Vec::new();
+                let mut unrolls = Vec::new();
+                let mut vectorize_widths = Vec::new();
+                let mut metric = "min_latency".to_string();
+
+                let close_tok = if has_brace { Token::CloseBrace } else { Token::CloseParen };
+                while !self.check(&close_tok) && !self.check(&Token::Eof) {
+                    if self.match_token(&Token::Semicolon) || self.match_token(&Token::Comma) {
+                        continue;
+                    }
+                    let key = match self.advance() {
+                        Token::Ident(k) => k,
+                        other => return Err(format!("Expected autotune parameter key, got {:?}", other)),
+                    };
+                    self.expect(&Token::Colon)?;
+                    match key.as_str() {
+                        "tile_size" | "tile_sizes" => {
+                            self.expect(&Token::OpenBracket)?;
+                            while !self.check(&Token::CloseBracket) && !self.check(&Token::Eof) {
+                                self.expect(&Token::OpenParen)?;
+                                let w = self.parse_usize_lit("tile width")?;
+                                self.expect(&Token::Comma)?;
+                                let h = self.parse_usize_lit("tile height")?;
+                                self.expect(&Token::CloseParen)?;
+                                tile_sizes.push((w, h));
+                                self.match_token(&Token::Comma);
+                            }
+                            self.expect(&Token::CloseBracket)?;
+                        }
+                        "unroll" | "unrolls" => {
+                            self.expect(&Token::OpenBracket)?;
+                            while !self.check(&Token::CloseBracket) && !self.check(&Token::Eof) {
+                                unrolls.push(self.parse_usize_lit("unroll candidate")?);
+                                self.match_token(&Token::Comma);
+                            }
+                            self.expect(&Token::CloseBracket)?;
+                        }
+                        "vectorize" | "vectorize_widths" => {
+                            self.expect(&Token::OpenBracket)?;
+                            while !self.check(&Token::CloseBracket) && !self.check(&Token::Eof) {
+                                vectorize_widths.push(self.parse_usize_lit("vectorize width candidate")?);
+                                self.match_token(&Token::Comma);
+                            }
+                            self.expect(&Token::CloseBracket)?;
+                        }
+                        "metric" => {
+                            metric = self.parse_directive_string_or_raw()?;
+                        }
+                        _ => {
+                            return Err(format!("Unknown autotune parameter key '{}'", key));
+                        }
+                    }
+                    self.match_token(&Token::Comma);
+                    self.match_token(&Token::Semicolon);
+                }
+                self.expect(&close_tok)?;
+                self.match_token(&Token::Semicolon);
+                directives.push(ScheduleDirective::Autotune {
+                    tile_sizes,
+                    unrolls,
+                    vectorize_widths,
+                    metric,
+                });
+                continue;
+            }
+
             self.expect(&Token::OpenParen)?;
 
             let directive = match dir_name.as_str() {
@@ -1282,6 +1353,7 @@ impl Parser {
                     let tok = self.advance();
                     match tok {
                         Token::Ident(s) => type_str.push_str(&s),
+                        Token::IntLit(n) => type_str.push_str(&n.to_string()),
                         Token::Comma => type_str.push_str(", "),
                         _ => {}
                     }

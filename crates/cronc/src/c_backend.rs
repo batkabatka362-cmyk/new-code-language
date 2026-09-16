@@ -500,6 +500,110 @@ impl CBackend {
         self.emit_line("    atomic_fetch_add(&cron_pgas_barrier_sense, 1);");
         self.emit_line("}");
         self.emit_line("");
+        self.emit_line("// --- Phase 10: Dependent Tensor & Silicon Autotuner Builtins ---");
+        self.emit_line("typedef struct {");
+        self.emit_line("    int64_t rank;");
+        self.emit_line("    int64_t shape[8];");
+        self.emit_line("    int64_t strides[8];");
+        self.emit_line("    int64_t total_elements;");
+        self.emit_line("    float* data;");
+        self.emit_line("} cron_tensor_f32_t;");
+        self.emit_line("");
+        self.emit_line("static inline cron_tensor_f32_t cron_tensor_new(int64_t rank, const int64_t* shape, float initial_val) {");
+        self.emit_line("    cron_tensor_f32_t t;");
+        self.emit_line("    t.rank = rank;");
+        self.emit_line("    int64_t total = 1;");
+        self.emit_line("    for (int i = 0; i < rank && i < 8; i++) {");
+        self.emit_line("        t.shape[i] = shape[i];");
+        self.emit_line("        total *= shape[i];");
+        self.emit_line("    }");
+        self.emit_line("    t.total_elements = total;");
+        self.emit_line("    int64_t stride = 1;");
+        self.emit_line("    for (int i = (int)rank - 1; i >= 0; i--) {");
+        self.emit_line("        t.strides[i] = stride;");
+        self.emit_line("        stride *= t.shape[i];");
+        self.emit_line("    }");
+        self.emit_line("    t.data = (float*)malloc((total > 0 ? total : 1) * sizeof(float));");
+        self.emit_line("    for (int64_t i = 0; i < total; i++) {");
+        self.emit_line("        t.data[i] = initial_val;");
+        self.emit_line("    }");
+        self.emit_line("    return t;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tensor_f32_t tensor_init(float val) {");
+        self.emit_line("    int64_t s[2] = { 4, 4 };");
+        self.emit_line("    return cron_tensor_new(2, s, val);");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tensor_f32_t tensor_ones(void) { return tensor_init(1.0f); }");
+        self.emit_line("static inline cron_tensor_f32_t tensor_zeros(void) { return tensor_init(0.0f); }");
+        self.emit_line("static inline cron_tensor_f32_t tensor_matmul(cron_tensor_f32_t a, cron_tensor_f32_t b) {");
+        self.emit_line("    int64_t rank = a.rank > b.rank ? a.rank : b.rank;");
+        self.emit_line("    if (rank < 2) rank = 2;");
+        self.emit_line("    int64_t m = a.rank >= 2 ? a.shape[a.rank - 2] : 4;");
+        self.emit_line("    int64_t k = a.rank >= 1 ? a.shape[a.rank - 1] : 4;");
+        self.emit_line("    int64_t n = b.rank >= 1 ? b.shape[b.rank - 1] : 4;");
+        self.emit_line("    cron_tensor_f32_t out;");
+        self.emit_line("    out.rank = rank;");
+        self.emit_line("    for (int i = 0; i < (int)rank - 2; i++) out.shape[i] = a.shape[i];");
+        self.emit_line("    out.shape[rank - 2] = m;");
+        self.emit_line("    out.shape[rank - 1] = n;");
+        self.emit_line("    int64_t total = 1;");
+        self.emit_line("    for (int i = 0; i < rank; i++) total *= out.shape[i];");
+        self.emit_line("    out.total_elements = total;");
+        self.emit_line("    int64_t stride = 1;");
+        self.emit_line("    for (int i = (int)rank - 1; i >= 0; i--) {");
+        self.emit_line("        out.strides[i] = stride;");
+        self.emit_line("        stride *= out.shape[i];");
+        self.emit_line("    }");
+        self.emit_line("    out.data = (float*)calloc(total > 0 ? total : 1, sizeof(float));");
+        self.emit_line("    int64_t batch_count = (m * n > 0) ? (total / (m * n)) : 1;");
+        self.emit_line("    for (int64_t batch = 0; batch < batch_count; batch++) {");
+        self.emit_line("        int64_t a_offset = batch * (m * k);");
+        self.emit_line("        int64_t b_offset = batch * (k * n);");
+        self.emit_line("        int64_t out_offset = batch * (m * n);");
+        self.emit_line("        for (int64_t i = 0; i < m; i++) {");
+        self.emit_line("            for (int64_t p = 0; p < k; p++) {");
+        self.emit_line("                float a_val = a.data ? a.data[a_offset + i * k + p] : 1.0f;");
+        self.emit_line("                for (int64_t j = 0; j < n; j++) {");
+        self.emit_line("                    float b_val = b.data ? b.data[b_offset + p * n + j] : 1.0f;");
+        self.emit_line("                    out.data[out_offset + i * n + j] += a_val * b_val;");
+        self.emit_line("                }");
+        self.emit_line("            }");
+        self.emit_line("        }");
+        self.emit_line("    }");
+        self.emit_line("    return out;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tensor_f32_t tensor_transpose(cron_tensor_f32_t a) {");
+        self.emit_line("    cron_tensor_f32_t out = a;");
+        self.emit_line("    if (a.rank >= 2) {");
+        self.emit_line("        int64_t r1 = a.rank - 2;");
+        self.emit_line("        int64_t r2 = a.rank - 1;");
+        self.emit_line("        out.shape[r1] = a.shape[r2];");
+        self.emit_line("        out.shape[r2] = a.shape[r1];");
+        self.emit_line("        out.data = (float*)malloc((a.total_elements > 0 ? a.total_elements : 1) * sizeof(float));");
+        self.emit_line("        int64_t m = a.shape[r1];");
+        self.emit_line("        int64_t n = a.shape[r2];");
+        self.emit_line("        int64_t batch_count = (m * n > 0) ? (a.total_elements / (m * n)) : 1;");
+        self.emit_line("        for (int64_t b = 0; b < batch_count; b++) {");
+        self.emit_line("            for (int64_t i = 0; i < m; i++) {");
+        self.emit_line("                for (int64_t j = 0; j < n; j++) {");
+        self.emit_line("                    out.data[b * (m * n) + j * m + i] = a.data ? a.data[b * (m * n) + i * n + j] : 1.0f;");
+        self.emit_line("                }");
+        self.emit_line("            }");
+        self.emit_line("        }");
+        self.emit_line("    }");
+        self.emit_line("    return out;");
+        self.emit_line("}");
+        self.emit_line("static inline cron_tensor_f32_t tensor_add(cron_tensor_f32_t a, cron_tensor_f32_t b) {");
+        self.emit_line("    cron_tensor_f32_t out = a;");
+        self.emit_line("    out.data = (float*)malloc((a.total_elements > 0 ? a.total_elements : 1) * sizeof(float));");
+        self.emit_line("    for (int64_t i = 0; i < a.total_elements; i++) {");
+        self.emit_line("        float va = a.data ? a.data[i] : 1.0f;");
+        self.emit_line("        float vb = b.data ? b.data[i] : 1.0f;");
+        self.emit_line("        out.data[i] = va + vb;");
+        self.emit_line("    }");
+        self.emit_line("    return out;");
+        self.emit_line("}");
+        self.emit_line("");
         self.emit_line("// --- Dynamic Vector Allocator (core/vec.cr) ---");
         self.emit_line("static inline uint64_t vec_new(uint32_t cap, uint32_t elem_size) { (void)cap; (void)elem_size; return 0x1000; }");
         self.emit_line("static inline uint64_t vec_push_back(uint64_t vec, uint32_t elem) { (void)elem; return vec; }");
@@ -727,6 +831,10 @@ impl CBackend {
             return "cron_fiber_t*".to_string();
         }
 
+        if trimmed.starts_with("tensor<") || trimmed.starts_with("tensor") {
+            return "cron_tensor_f32_t".to_string();
+        }
+
         if trimmed.contains('<') {
             let mangled = Self::mangle_type_name(trimmed);
             return format!("struct {}", mangled);
@@ -844,6 +952,14 @@ impl CBackend {
                     }
                     ScheduleDirective::Vectorize(width) => {
                         self.emit_line(&format!("// [Schedule Directive] Vectorize: width {}", width));
+                        self.emit_line("#pragma GCC optimize (\"tree-vectorize\")");
+                    }
+                    ScheduleDirective::Autotune { tile_sizes, unrolls, vectorize_widths, metric } => {
+                        let decision = crate::autotune::SiliconAutotuner::select_optimal_schedule(tile_sizes, unrolls, vectorize_widths, metric);
+                        self.emit_line(&format!("// [Schedule Directive] Autotune: metric=\"{}\" (evaluated {} candidates)", metric, decision.evaluated_candidates));
+                        self.emit_line(&format!("// [Autotune Decision] Optimal TileSize: {}x{}, Unroll: {}, Vectorize: {} (cost: {:.2})",
+                            decision.best_tile_size.0, decision.best_tile_size.1, decision.best_unroll, decision.best_vectorize, decision.latency_cycles));
+                        self.emit_line("#pragma GCC optimize (\"unroll-loops\")");
                         self.emit_line("#pragma GCC optimize (\"tree-vectorize\")");
                     }
                     ScheduleDirective::Custom { name, args } => {
@@ -1247,8 +1363,8 @@ impl CBackend {
                     return format!("await({})", self.transpile_expr(&args[0].value));
                 }
 
-                let clean_callee = if callee.starts_with('$') {
-                    format!("_cron_{}", &callee[1..])
+                let clean_callee = if let Some(stripped) = callee.strip_prefix('$') {
+                    format!("_cron_{}", stripped)
                 } else {
                     Self::mangle_type_name(callee)
                 };

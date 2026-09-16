@@ -1,3 +1,8 @@
+#![allow(
+    clippy::manual_checked_ops,
+    clippy::needless_range_loop
+)]
+
 pub mod cluster;
 pub mod core_engine;
 pub mod simulator;

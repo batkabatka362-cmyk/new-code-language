@@ -37,6 +37,12 @@ pub enum ScheduleDirective {
     Unroll(usize),
     Distribute4D { axis: String, cores: usize },
     Vectorize(usize),
+    Autotune {
+        tile_sizes: Vec<(usize, usize)>,
+        unrolls: Vec<usize>,
+        vectorize_widths: Vec<usize>,
+        metric: String,
+    },
     Custom { name: String, args: Vec<String> },
 }
 
