@@ -847,6 +847,12 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
         out.push_str(&format!("{}consume({})\n", indent, lin_var));
     }
 
+    if has_region && last_assigned_var != "ext_hbm_base" && last_assigned_var != "w_seed" && !last_assigned_var.is_empty() {
+        let exp_name = format!("exported_{}", last_assigned_var);
+        out.push_str(&format!("{}export {} as {}\n", indent, last_assigned_var, exp_name));
+        last_assigned_var = exp_name;
+    }
+
     if has_fuse {
         indent = match indent {
             "                " => "            ",

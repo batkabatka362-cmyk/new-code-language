@@ -24,13 +24,14 @@ _main:
                 pgas_barrier() // 256-Core Chip-Wide Hardware Barrier
                 spatial_broadcast(0)
                 export w_seed as final_core_state
-                consume(opt_latent)
                 consume(ternary_acc)
+                consume(opt_latent)
+                export r7_1 as exported_r7_1
             }
 
         }
 
         await_dma_channel(channel=1)
-        spatial_broadcast(r7_1)
+        spatial_broadcast(exported_r7_1)
         pgas_barrier()
 .END

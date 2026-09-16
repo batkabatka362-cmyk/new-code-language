@@ -4,6 +4,7 @@ use std::path::Path;
 
 mod repl;
 mod project;
+mod tui_debugger;
 
 fn print_banner() {
     println!(r#"
@@ -30,6 +31,7 @@ fn print_help() {
     println!("    verilog <file.cr> [-o <out.v>] Synthesize IEEE 1364-2001 Verilog RTL core");
     println!("    run <file.cr>                  Compile and execute on 256-Core 4D-Torus Simulator");
     println!("    sim <file.cl|.clb>             Directly run .cl machine code or .clb binary in 4D-Torus VM");
+    println!("    debug <file.cl|.cr> [--core N] [--batch \"...\"] Interactive Photonic & Torus Debugger TUI");
     println!("    asm <file.cl> [-o <out.clb>]   Assemble .cl into 128-bit binary bytecode (.clb)");
     println!("    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl");
     println!("    cl-alphabet                    Display complete 94-character .cl specification table");
@@ -482,6 +484,66 @@ fn main() {
             }
             println!("============================================================");
             println!("  STATUS: .cl EXECUTED NATIVELY WITH 100% HARDWARE INTEGRITY\n");
+        }
+        "debug" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing input file. Usage: cron debug <file.cl|.cr> [--core N] [--batch \"...\"]");
+                std::process::exit(1);
+            }
+            let input_path = &args[2];
+            let mut inspected_core = 0;
+            let mut batch_script: Option<String> = None;
+
+            let mut i = 3;
+            while i < args.len() {
+                if args[i] == "--core" && i + 1 < args.len() {
+                    inspected_core = args[i + 1].parse::<usize>().unwrap_or(0);
+                    i += 2;
+                } else if args[i] == "--batch" && i + 1 < args.len() {
+                    batch_script = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let cl_code = if input_path.ends_with(".cr") {
+                let source = fs::read_to_string(input_path).unwrap_or_else(|e| {
+                    eprintln!("Error reading CRON source '{}': {}", input_path, e);
+                    std::process::exit(1);
+                });
+                println!("[CRON JIT-COMPILER] Compiling '{}' into 128-bit VLIW machine bundles for debugger...", input_path);
+                match cronc::compile_source(&source) {
+                    Ok(cl) => cl,
+                    Err(e) => {
+                        eprintln!("[COMPILATION ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else if input_path.ends_with(".clb") {
+                let bytes = fs::read(input_path).unwrap_or_else(|e| {
+                    eprintln!("Error reading binary '{}': {}", input_path, e);
+                    std::process::exit(1);
+                });
+                cronc::cl_binary::disassemble_clb_to_cl(&bytes).unwrap_or_else(|e| {
+                    eprintln!("[CLB DISASSEMBLY ERROR] {}", e);
+                    std::process::exit(1);
+                })
+            } else {
+                fs::read_to_string(input_path).unwrap_or_else(|e| {
+                    eprintln!("Error reading machine code '{}': {}", input_path, e);
+                    std::process::exit(1);
+                })
+            };
+
+            let mut tui = tui_debugger::TuiDebugger::new(input_path, &cl_code);
+            tui.debugger.set_inspected_core(inspected_core);
+
+            if let Some(script) = batch_script {
+                tui.run_batch(&script);
+            } else {
+                tui.run_interactive();
+            }
         }
         "asm" => {
             if args.len() < 3 {

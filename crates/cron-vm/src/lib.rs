@@ -5,11 +5,16 @@
 
 pub mod cluster;
 pub mod core_engine;
+pub mod debugger;
 pub mod simulator;
 pub mod torus_mesh;
 
 pub use cluster::{ClusterCoord, ClusterNode, ClusterSimulator, ClusterStats, InterChipLink, InterChipPacket};
 pub use core_engine::CoreEngine;
+pub use debugger::{
+    disassemble_bundle, disassemble_slot, Breakpoint, Debugger, DisassembledBundle, DisassembledSlot,
+    RegisterDiff, StepResult,
+};
 pub use simulator::{BundleProfile, ExecutionProfile, FiberTask, HardwareStats, Simulator, VliwInstruction};
 pub use torus_mesh::{Coord4D, TorusMesh};
 
