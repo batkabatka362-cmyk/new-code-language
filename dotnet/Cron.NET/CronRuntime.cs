@@ -228,6 +228,23 @@ namespace Cron.NET
         public static extern bool cron_swarm_tui_telemetry_json(
             nuint ticks,
             out IntPtr outJson);
+
+        // Section 15: Neuro-Symbolic MCTS & Formal Mathematical Proof Verification
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_mcts_synthesize(
+            [MarshalAs(UnmanagedType.LPStr)] string prompt,
+            nuint simulations,
+            nuint rolloutDepth,
+            out IntPtr outCode,
+            out IntPtr outReportJson);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_proof_verify(
+            [MarshalAs(UnmanagedType.LPStr)] string clCode,
+            [MarshalAs(UnmanagedType.LPStr)] string workloadName,
+            out IntPtr outCertificateJson);
     }
 
     /// <summary>
@@ -765,4 +782,59 @@ namespace Cron.NET
             return result;
         }
     }
+
+    /// <summary>
+    /// Autonomous Neuro-Symbolic MCTS (Monte Carlo Tree Search) Kernel Synthesizer.
+    /// Formulates 4-way VLIW slot scheduling as an MDP solved via UCT search.
+    /// </summary>
+    public static class CronMctsSynthesizer
+    {
+        /// <summary>
+        /// Synthesizes an optimal 4-way VLIW kernel for the given prompt using MCTS.
+        /// </summary>
+        public static (string code, string reportJson) Synthesize(string prompt, int simulations = 100, int rolloutDepth = 12)
+        {
+            bool ok = NativeMethods.cron_mcts_synthesize(
+                prompt, (nuint)simulations, (nuint)rolloutDepth,
+                out IntPtr codePtr, out IntPtr jsonPtr);
+
+            if (!ok || codePtr == IntPtr.Zero || jsonPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to synthesize kernel using MCTS.");
+
+            string code = Marshal.PtrToStringAnsi(codePtr) ?? string.Empty;
+            string reportJson = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+
+            NativeMethods.cron_string_free(codePtr);
+            NativeMethods.cron_string_free(jsonPtr);
+
+            return (code, reportJson);
+        }
+    }
+
+    /// <summary>
+    /// Formal Mathematical Proof Verification Engine.
+    /// Validates Dally-Seitz Deadlock-Freedom, Hoare Loop Invariants, WCET bounds,
+    /// Landauer thermodynamic dissipation, and hardware CRC-8 slot authenticity.
+    /// </summary>
+    public static class CronProofVerifier
+    {
+        /// <summary>
+        /// Verifies a machine kernel (.cl) and returns whether it is certified,
+        /// along with the complete cryptographic proof certificate JSON.
+        /// </summary>
+        public static (bool isCertified, string certificateJson) Verify(string clCode, string workloadName = "CRON-Kernel")
+        {
+            bool certified = NativeMethods.cron_proof_verify(
+                clCode, workloadName, out IntPtr certPtr);
+
+            if (certPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to generate formal proof certificate.");
+
+            string certJson = Marshal.PtrToStringAnsi(certPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(certPtr);
+
+            return (certified, certJson);
+        }
+    }
 }
+

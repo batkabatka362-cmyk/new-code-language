@@ -1019,3 +1019,89 @@ pub unsafe extern "C" fn cron_swarm_tui_telemetry_json(
     }
 }
 
+// ============================================================================
+// Section 17: Neuro-Symbolic MCTS & Formal Mathematical Proof Verification
+// ============================================================================
+
+/// Synthesizes an optimal 4-way VLIW machine code schedule via Monte Carlo Tree Search.
+/// Returns true on success, populating out_code and out_report_json with heap-allocated C strings.
+#[no_mangle]
+pub unsafe extern "C" fn cron_mcts_synthesize(
+    prompt: *const c_char,
+    simulations: usize,
+    rollout_depth: usize,
+    out_code: *mut *mut c_char,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if prompt.is_null() || out_code.is_null() || out_report_json.is_null() {
+        return false;
+    }
+
+    let prompt_str = match CStr::from_ptr(prompt).to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let config = cronc::cl_reasoning::MctsConfig {
+        simulations: if simulations == 0 { 100 } else { simulations },
+        rollout_depth: if rollout_depth == 0 { 12 } else { rollout_depth },
+        ..Default::default()
+    };
+
+    let mut scheduler = cronc::cl_reasoning::MctsScheduler::new(config);
+    let result = scheduler.synthesize(prompt_str, None);
+
+    let json_str = result.to_json();
+    let code_c = match CString::new(result.cl_code) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    let json_c = match CString::new(json_str) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    *out_code = code_c.into_raw();
+    *out_report_json = json_c.into_raw();
+    true
+}
+
+/// Formally verifies machine code and generates a cryptographic proof certificate.
+/// Returns true if the kernel is certified safe, populating out_certificate_json.
+#[no_mangle]
+pub unsafe extern "C" fn cron_proof_verify(
+    cl_code: *const c_char,
+    workload_name: *const c_char,
+    out_certificate_json: *mut *mut c_char,
+) -> bool {
+    if cl_code.is_null() || out_certificate_json.is_null() {
+        return false;
+    }
+
+    let code_str = match CStr::from_ptr(cl_code).to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let work_name = if workload_name.is_null() {
+        "CRON-Kernel"
+    } else {
+        match CStr::from_ptr(workload_name).to_str() {
+            Ok(s) => s,
+            Err(_) => "CRON-Kernel",
+        }
+    };
+
+    let verifier = cronc::cl_proof::ProofVerifier::new();
+    let cert = verifier.verify_kernel(code_str, work_name);
+
+    let json_c = match CString::new(cert.to_json()) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    *out_certificate_json = json_c.into_raw();
+    cert.is_certified
+}
+

@@ -220,6 +220,24 @@ CRON_API bool cron_swarm_tui_telemetry_json(
     char** out_json
 );
 
+/* ------------------------------------------------------------------------- */
+/* 15. Neuro-Symbolic MCTS & Formal Mathematical Proof Verification C-ABI     */
+/* ------------------------------------------------------------------------- */
+
+CRON_API bool cron_mcts_synthesize(
+    const char* prompt,
+    size_t simulations,
+    size_t rollout_depth,
+    char** out_code,
+    char** out_report_json
+);
+
+CRON_API bool cron_proof_verify(
+    const char* cl_code,
+    const char* workload_name,
+    char** out_certificate_json
+);
+
 #ifdef __cplusplus
 }
 #endif

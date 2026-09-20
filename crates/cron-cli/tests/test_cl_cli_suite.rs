@@ -1634,6 +1634,58 @@ fn test_cli_swarm_tui_json() {
     assert!(out_str.contains("\"chip_traffic_gbps\":"));
 }
 
+#[test]
+fn test_cli_mcts_synthesize_hud_and_json() {
+    // 1. Terminal HUD mode
+    let out_hud = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["mcts-synthesize", "--prompt", "FlashAttention-2 forward tile", "--sims", "40", "--depth", "8"])
+        .output()
+        .expect("Failed to execute cron mcts-synthesize");
+    assert!(out_hud.status.success(), "cron mcts-synthesize must exit 0");
+    let s_hud = String::from_utf8_lossy(&out_hud.stdout);
+    assert!(s_hud.contains("CRON NEURO-SYMBOLIC MCTS KERNEL SYNTHESIS ENGINE"));
+    assert!(s_hud.contains("MCTS INSTRUCTION SCHEDULING & SLOT PACKING METRICS"));
+    assert!(s_hud.contains("STATUS: MCTS INSTRUCTION SCHEDULING CERTIFIED OPTIMAL"));
+
+    // 2. JSON mode
+    let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["mcts-synthesize", "--prompt", "BitNet Ternary GEMM", "--sims", "30", "--json"])
+        .output()
+        .expect("Failed to execute cron mcts-synthesize --json");
+    assert!(out_json.status.success(), "cron mcts-synthesize --json must exit 0");
+    let s_json = String::from_utf8_lossy(&out_json.stdout);
+    assert!(s_json.contains("\"prompt\": \"BitNet Ternary GEMM\""));
+    assert!(s_json.contains("\"optimized_ipc\":"));
+    assert!(s_json.contains("\"total_cycles\":"));
+}
+
+#[test]
+fn test_cli_verify_proof_badge_and_json() {
+    // 1. ASCII proof badge mode
+    let out_badge = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["verify-proof", "--workload", "Attention-Head-0"])
+        .output()
+        .expect("Failed to execute cron verify-proof");
+    assert!(out_badge.status.success(), "cron verify-proof must exit 0");
+    let s_badge = String::from_utf8_lossy(&out_badge.stdout);
+    assert!(s_badge.contains("CRON FORMAL MATHEMATICAL PROOF CERTIFICATE"));
+    assert!(s_badge.contains("MATHEMATICALLY PROVEN & TAPE-OUT CERTIFIED"));
+    assert!(s_badge.contains("LEMMA-DOR-01"));
+    assert!(s_badge.contains("LEMMA-INV-02"));
+
+    // 2. JSON certificate mode
+    let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["verify-proof", "--workload", "Attention-Head-0", "--json"])
+        .output()
+        .expect("Failed to execute cron verify-proof --json");
+    assert!(out_json.status.success(), "cron verify-proof --json must exit 0");
+    let s_json = String::from_utf8_lossy(&out_json.stdout);
+    assert!(s_json.contains("\"certificate_id\":"));
+    assert!(s_json.contains("\"is_certified\": true"));
+    assert!(s_json.contains("\"total_lemmas\": 6"));
+}
+
+
 
 
 

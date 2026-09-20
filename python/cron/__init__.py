@@ -27,6 +27,8 @@ from .compiler import (
     synthesize_kernel,
     render_swarm_tui,
     get_swarm_tui_telemetry,
+    synthesize_mcts_kernel,
+    verify_proof_certificate,
 )
 from .torch_bridge import (
     CronBitLinear,
@@ -70,6 +72,8 @@ __all__ = [
     "synthesize_kernel",
     "render_swarm_tui",
     "get_swarm_tui_telemetry",
+    "synthesize_mcts_kernel",
+    "verify_proof_certificate",
     "CronBitLinear",
     "CronRMSNorm",
     "CronRingTapeAttention",

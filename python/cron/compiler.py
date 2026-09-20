@@ -465,3 +465,64 @@ def get_swarm_tui_telemetry(ticks: int = 10) -> Dict[str, Any]:
         raise RuntimeError(f"CRON swarm-tui telemetry error:\n{res.stderr or res.stdout}")
     return _extract_json(res.stdout)
 
+
+def synthesize_mcts_kernel(prompt: str,
+                           simulations: int = 100,
+                           rollout_depth: int = 12,
+                           json_output: bool = True) -> Dict[str, Any]:
+    """Synthesize an optimal 4-way VLIW machine kernel using Monte Carlo Tree Search (MCTS).
+
+    Formulates instruction scheduling as an MDP solved via UCT search,
+    maximizing IPC and eliminating pipeline hazard bubbles.
+
+    Args:
+        prompt: Natural language AI workload prompt or description.
+        simulations: Number of MCTS search tree iterations (default: 100).
+        rollout_depth: Lookahead depth for simulation rollouts (default: 12).
+        json_output: If True, returns structured JSON dict with metrics.
+
+    Returns:
+        Dict with keys: prompt, optimized_ipc, speedup_pct, total_cycles, total_ops,
+        slot_saturation_pct, tree_nodes, simulations_run, final_code_preview, etc.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "mcts-synthesize", "--prompt", prompt, "--sims", str(simulations), "--depth", str(rollout_depth)]
+    if json_output:
+        cmd.append("--json")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON mcts-synthesize error:\n{res.stderr or res.stdout}")
+    if json_output:
+        return _extract_json(res.stdout)
+    return {"raw_output": res.stdout, "status": "completed"}
+
+
+def verify_proof_certificate(cl_file_or_code: str,
+                             workload_name: str = "CRON-Kernel",
+                             json_output: bool = True) -> Dict[str, Any]:
+    """Formally verify a machine kernel (.cl) and generate a mathematical proof certificate.
+
+    Verifies Dally-Seitz Deadlock-Freedom, Hoare loop invariants, WCET cycle bounds,
+    Landauer thermodynamic dissipation, and hardware CRC-8 slot authenticity.
+
+    Args:
+        cl_file_or_code: Path to .cl file or inline machine code string.
+        workload_name: Identifier for the verified workload.
+        json_output: If True, returns certificate JSON dictionary.
+
+    Returns:
+        Dict with keys: certificate_id, target_workload, is_certified,
+        passed_lemmas, total_lemmas, max_cycles_bound, landauer_dissipation_pj, lemmas.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "verify-proof", cl_file_or_code, "--workload", workload_name]
+    if json_output:
+        cmd.append("--json")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON verify-proof error:\n{res.stderr or res.stdout}")
+    if json_output:
+        return _extract_json(res.stdout)
+    return {"raw_output": res.stdout, "status": "verified"}
+
+

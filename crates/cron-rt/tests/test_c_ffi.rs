@@ -442,5 +442,64 @@ fn test_ffi_swarm_tui_telemetry_json() {
     }
 }
 
+#[test]
+fn test_ffi_mcts_synthesize() {
+    let prompt = CString::new("FlashAttention-2 forward tile").unwrap();
+    let mut code_ptr: *mut c_char = std::ptr::null_mut();
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_mcts_synthesize(
+            prompt.as_ptr(),
+            50, // simulations
+            10, // rollout depth
+            &mut code_ptr,
+            &mut json_ptr,
+        )
+    };
+    assert!(ok);
+    assert!(!code_ptr.is_null());
+    assert!(!json_ptr.is_null());
+
+    let code_str = unsafe { CStr::from_ptr(code_ptr).to_str().unwrap() };
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+
+    assert!(code_str.contains("B0000:"));
+    assert!(json_str.contains("\"optimized_ipc\":"));
+    assert!(json_str.contains("\"prompt\": \"FlashAttention-2 forward tile\""));
+
+    unsafe {
+        cron_string_free(code_ptr);
+        cron_string_free(json_ptr);
+    }
+}
+
+#[test]
+fn test_ffi_proof_verify() {
+    let code = CString::new("B0000: ADD R1, R0, 1 | NOP | NOP | NOP\n").unwrap();
+    let name = CString::new("Increment Loop").unwrap();
+    let mut cert_ptr: *mut c_char = std::ptr::null_mut();
+
+    let is_certified = unsafe {
+        cron_proof_verify(
+            code.as_ptr(),
+            name.as_ptr(),
+            &mut cert_ptr,
+        )
+    };
+    assert!(is_certified);
+    assert!(!cert_ptr.is_null());
+
+    let cert_str = unsafe { CStr::from_ptr(cert_ptr).to_str().unwrap() };
+    assert!(cert_str.contains("\"is_certified\": true"));
+    assert!(cert_str.contains("\"certificate_id\":"));
+    assert!(cert_str.contains("\"lemmas\":"));
+
+    unsafe {
+        cron_string_free(cert_ptr);
+    }
+}
+
+
 
 
