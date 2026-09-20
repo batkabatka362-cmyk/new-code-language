@@ -44,6 +44,28 @@
         "path": "./syntaxes/cron-cl.tmLanguage.json"
       }
     ],
+    "commands": [
+      {
+        "command": "cron.buildC23",
+        "title": "CRON: Compile .cr to C23"
+      },
+      {
+        "command": "cron.runNative",
+        "title": "CRON: Execute Native Host Binary"
+      },
+      {
+        "command": "cron.healCl",
+        "title": "CRON .cl: Auto-Heal Microcode with Autonomous Vibe Loop"
+      },
+      {
+        "command": "cron.optCl",
+        "title": "CRON .cl: Super-Optimize VLIW Microcode (DAG Level 2)"
+      },
+      {
+        "command": "cron.runJitCl",
+        "title": "CRON .cl: Execute Machine Code on JIT Simulator"
+      }
+    ],
     "configuration": {
       "title": "CRON Language Support",
       "properties": {

@@ -73,6 +73,45 @@ function activate(context) {
             term.sendText(`cron native "${editor.document.fileName}"`);
         })
     );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.healCl', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !editor.document.fileName.endsWith('.cl')) {
+                vscode.window.showErrorMessage('Please open a .cl file to heal.');
+                return;
+            }
+            const term = vscode.window.createTerminal('CRON Auto-Heal .cl');
+            term.show();
+            term.sendText(`cron cl-heal "${editor.document.fileName}"`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.optCl', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !editor.document.fileName.endsWith('.cl')) {
+                vscode.window.showErrorMessage('Please open a .cl file to optimize.');
+                return;
+            }
+            const term = vscode.window.createTerminal('CRON Super-Optimize .cl');
+            term.show();
+            term.sendText(`cron cl-opt "${editor.document.fileName}" --level 2`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.runJitCl', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !editor.document.fileName.endsWith('.cl')) {
+                vscode.window.showErrorMessage('Please open a .cl file to execute.');
+                return;
+            }
+            const term = vscode.window.createTerminal('CRON JIT .cl');
+            term.show();
+            term.sendText(`cron cl-run "${editor.document.fileName}"`);
+        })
+    );
 }
 
 function deactivate() {

@@ -157,11 +157,101 @@ pub extern "C" fn cron_wasm_run_simulation(ptr: *const u8, len: usize) -> *const
     set_result(json, false)
 }
 
+/// Run the Esolang-Inspired AI Silicon Coprocessor simulation (Brainfuck Tape,
+/// Malbolge Balanced Ternary BitNet b1.58, Befunge 2D Systolic Wavefront, Prolog Unifier)
+/// and return structured JSON telemetry.
+#[no_mangle]
+pub extern "C" fn cron_wasm_esoteric_sim(mode_ptr: *const u8, mode_len: usize) -> *const u8 {
+    let mode = if !mode_ptr.is_null() && mode_len > 0 {
+        let slice = unsafe { std::slice::from_raw_parts(mode_ptr, mode_len) };
+        std::str::from_utf8(slice).unwrap_or("demo")
+    } else {
+        "demo"
+    };
+
+    let mut coproc = cronc::EsotericCoprocessor::new();
+    match mode {
+        "tape" => {
+            for i in 0..16 {
+                coproc.tape.tape_memory[i] = (i as u32) * 0x1111;
+            }
+            coproc.tape.tp0 = 4;
+            let _ = coproc.exec_tape_read();
+            coproc.exec_tape_write(0xBEEF);
+        }
+        "trit" => {
+            let trits = [
+                cronc::Trit::Pos, cronc::Trit::Zero, cronc::Trit::Neg, cronc::Trit::Pos,
+                cronc::Trit::Pos, cronc::Trit::Zero, cronc::Trit::Neg, cronc::Trit::Zero,
+                cronc::Trit::Pos, cronc::Trit::Neg, cronc::Trit::Zero, cronc::Trit::Pos,
+                cronc::Trit::Zero, cronc::Trit::Zero, cronc::Trit::Neg, cronc::Trit::Pos,
+            ];
+            let w = cronc::TritWord::from_trits(&trits);
+            let acts: [i8; 16] = [12, -4, 8, 15, -2, 0, 7, -9, 10, -5, 3, 11, -8, 6, -1, 4];
+            let _ = coproc.exec_trit_mac(w, &acts);
+        }
+        "systolic" => {
+            coproc.exec_systolic_push(cronc::SystolicDirection::EastX, 0x42);
+            coproc.exec_systolic_push(cronc::SystolicDirection::NorthY, 0x84);
+            coproc.exec_systolic_push(cronc::SystolicDirection::WestX, 0x21);
+        }
+        "unify" => {
+            let mut vec_a = [0xFFFFu16; 16];
+            let mut vec_b = [0xFFFFu16; 16];
+            vec_a[0] = 10; vec_a[1] = 25; vec_a[2] = 42; vec_a[3] = 99;
+            vec_b[0] = 7;  vec_b[1] = 25; vec_b[2] = 88; vec_b[3] = 99;
+            let _ = coproc.exec_unify(&vec_a, &vec_b);
+        }
+        _ => {
+            coproc.run_demo();
+        }
+    }
+
+    set_result(coproc.to_json(), false)
+}
+
+/// Synthesize synthesizable Verilog RTL for the Esoteric AI Coprocessor from WebAssembly.
+#[no_mangle]
+pub extern "C" fn cron_wasm_esoteric_synth() -> *const u8 {
+    let rtl = cronc::synthesize_verilog_esoteric_coprocessor();
+    set_result(rtl, false)
+}
+
+/// Calculate optical insertion loss and WDM laser power budget from WebAssembly.
+#[no_mangle]
+pub extern "C" fn cron_wasm_optic_calc(ptr: *const u8, len: usize, mesh_dim: usize, wdm_ch: usize) -> *const u8 {
+    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+    let cl_code = match std::str::from_utf8(slice) {
+        Ok(s) => s,
+        Err(e) => return set_result(format!("UTF-8 Decoding Error: {}", e), true),
+    };
+    let opt = cronc::ClOpticOptions {
+        mesh_dim: if mesh_dim > 0 { mesh_dim } else { 16 },
+        wdm_channels: if wdm_ch > 0 { wdm_ch } else { 8 },
+        ..Default::default()
+    };
+    match cronc::analyze_cl_optic(cl_code, &opt) {
+        Ok(rep) => set_result(cronc::optic_report_to_json(&rep), false),
+        Err(e) => set_result(format!("Optical Analysis Error: {}", e), true),
+    }
+}
+
+/// Inspect a binary .clpatch package from WebAssembly.
+#[no_mangle]
+pub extern "C" fn cron_wasm_patch_inspect(ptr: *const u8, len: usize) -> *const u8 {
+    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+    match cronc::ClPatchPackage::from_bytes(slice) {
+        Ok(pkg) => set_result(cronc::patch_package_to_json(&pkg), false),
+        Err(e) => set_result(format!("Patch Deserialization Error: {}", e), true),
+    }
+}
+
 /// Version string of the native Rust CRON WebAssembly engine.
 #[no_mangle]
 pub extern "C" fn cron_wasm_version() -> *const u8 {
     set_result("CRON Toolchain v0.1.0 (Rust wasm32 Native Engine)".to_string(), false)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -205,4 +295,61 @@ mod tests {
         let dec_cr = std::str::from_utf8(dec_slice).unwrap();
         assert!(dec_cr.contains(".MODULE"));
     }
+
+    #[test]
+    fn test_wasm_esoteric_sim_and_synth() {
+        // Test Esoteric Coprocessor WASM simulation (demo mode)
+        let sim_ptr = cron_wasm_esoteric_sim(std::ptr::null(), 0);
+        assert_eq!(cron_wasm_get_is_err(), 0);
+        let sim_len = cron_wasm_get_result_len();
+        let sim_slice = unsafe { std::slice::from_raw_parts(sim_ptr, sim_len) };
+        let sim_json = std::str::from_utf8(sim_slice).unwrap();
+        assert!(sim_json.contains("\"status\": \"SUCCESS\""));
+        assert!(sim_json.contains("\"total_trit_macs\":"));
+        assert!(sim_json.contains("\"systolic_hops\":"));
+
+        // Test Esoteric Coprocessor WASM Verilog synthesis
+        let rtl_ptr = cron_wasm_esoteric_synth();
+        assert_eq!(cron_wasm_get_is_err(), 0);
+        let rtl_len = cron_wasm_get_result_len();
+        let rtl_slice = unsafe { std::slice::from_raw_parts(rtl_ptr, rtl_len) };
+        let rtl_v = std::str::from_utf8(rtl_slice).unwrap();
+        assert!(rtl_v.contains("module esoteric_coprocessor"));
+        assert!(rtl_v.contains("trit_weights"));
+    }
+
+    #[test]
+    fn test_wasm_optic_calc_and_patch_inspect() {
+        let cl_code = "
+        B0000: _OP01$28F> _NO00#000> _NO00#000> _NO00#000>
+        B0001: _WD00#100> _NO00#000> _NO00#000> _HL00#000!
+        ";
+        let opt_ptr = cron_wasm_optic_calc(cl_code.as_ptr(), cl_code.len(), 16, 8);
+        assert_eq!(cron_wasm_get_is_err(), 0);
+        let opt_len = cron_wasm_get_result_len();
+        let opt_slice = unsafe { std::slice::from_raw_parts(opt_ptr, opt_len) };
+        let opt_json = std::str::from_utf8(opt_slice).unwrap();
+        assert!(opt_json.contains("\"status\": \"COMPLIANT\""));
+        assert!(opt_json.contains("\"insertion_loss_db\":"));
+
+        // Test patch inspect from bytes
+        let mut pkg = cronc::ClPatchPackage::new("TORUS_256_REV_A");
+        pkg.add_entry(cronc::MicrocodePatchEntry {
+            entry_id: 0,
+            target_cycle: 1,
+            target_core_id: None,
+            action: cronc::PatchAction::ReplaceBundle,
+            replacement_bundle_raw: "_OP01$28F> _NO00#000> _NO00#000> _NO00#000>".to_string(),
+            enabled: true,
+            comment: "WASM test".to_string(),
+        }).unwrap();
+        let bytes = pkg.to_bytes();
+        let patch_ptr = cron_wasm_patch_inspect(bytes.as_ptr(), bytes.len());
+        assert_eq!(cron_wasm_get_is_err(), 0);
+        let patch_len = cron_wasm_get_result_len();
+        let patch_slice = unsafe { std::slice::from_raw_parts(patch_ptr, patch_len) };
+        let patch_json = std::str::from_utf8(patch_slice).unwrap();
+        assert!(patch_json.contains("\"silicon_rev\": \"TORUS_256_REV_A\""));
+    }
 }
+

@@ -70,6 +70,15 @@ class CronKernel(Kernel):
             return self._handle_cl_execution(cl_content.strip())
         elif code_str.startswith("%info"):
             return self._handle_info_magic()
+        elif code_str.startswith("%esoteric"):
+            return self._handle_esoteric_magic(code_str[9:].strip())
+        elif code_str.startswith("%tile"):
+            return self._handle_tile_magic(code_str[5:].strip())
+        elif code_str.startswith("%optic"):
+            return self._handle_optic_magic(code_str[6:].strip())
+        elif code_str.startswith("%bench") or code_str.startswith("%compare"):
+            prefix_len = 6 if code_str.startswith("%bench") else 8
+            return self._handle_bench_magic(code_str[prefix_len:].strip())
 
         # 2. Standard .cr Execution
         try:
@@ -204,6 +213,64 @@ class CronKernel(Kernel):
         </div>
         """
         self._send_html(html)
+        return {"status": "ok", "execution_count": getattr(self, "execution_count", 1), "payload": [], "user_expressions": {}}
+
+    def _handle_esoteric_magic(self, arg_str: str):
+        """Executes the Esolang-Inspired AI Silicon Coprocessor modes."""
+        mode = arg_str.strip() or "demo"
+        cron_exe = find_cron_executable()
+        import subprocess
+        res = subprocess.run([cron_exe, "cl-esoteric", mode], capture_output=True, text=True, encoding="utf-8")
+        out = res.stdout if res.returncode == 0 else (res.stderr or res.stdout)
+        self._send_stdout(out)
+        return {"status": "ok" if res.returncode == 0 else "error", "execution_count": getattr(self, "execution_count", 1), "payload": [], "user_expressions": {}}
+
+    def _handle_tile_magic(self, arg_str: str):
+        """Synthesizes Polyhedral loop tiling with Befunge 2D systolic wavefront."""
+        cron_exe = find_cron_executable()
+        args = [cron_exe, "cl-tile"] + (arg_str.split() if arg_str.strip() else ["gemm", "--m", "64", "--n", "64", "--k", "64", "--systolic"])
+        import subprocess
+        res = subprocess.run(args, capture_output=True, text=True, encoding="utf-8")
+        out = res.stdout if res.returncode == 0 else (res.stderr or res.stdout)
+        self._send_stdout(out)
+        return {"status": "ok" if res.returncode == 0 else "error", "execution_count": getattr(self, "execution_count", 1), "payload": [], "user_expressions": {}}
+
+    def _handle_optic_magic(self, arg_str: str):
+        """Analyzes photonic insertion loss and WDM laser power budget."""
+        cron_exe = find_cron_executable()
+        import subprocess
+        # If user passed a file or code
+        args = [cron_exe, "cl-optic"]
+        parts = arg_str.split()
+        if parts:
+            args.extend(parts)
+        else:
+            # Default to checking sample optical attention
+            import os
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            default_cl = os.path.join(base_dir, "examples", "cl", "mini_transformer_attention.cl")
+            args.append(default_cl)
+        res = subprocess.run(args, capture_output=True, text=True, encoding="utf-8")
+        out = res.stdout if res.returncode == 0 else (res.stderr or res.stdout)
+        self._send_stdout(out)
+        return {"status": "ok" if res.returncode == 0 else "error", "execution_count": getattr(self, "execution_count", 1), "payload": [], "user_expressions": {}}
+
+    def _handle_bench_magic(self, arg_str: str):
+        """Runs competitive performance benchmark against PyTorch/CUDA and Mojo."""
+        from .compiler import run_comparison_benchmark
+        try:
+            target = arg_str.strip() or "all"
+            report_text = run_comparison_benchmark(workload=target, baseline="all", json_output=False)
+            html = f"""
+            <div style="font-family: Consolas, monospace; background: #11111b; color: #cdd6f4; padding: 14px; border-radius: 8px; border: 1px solid #89b4fa; overflow-x: auto;">
+                <div style="color: #89b4fa; font-weight: bold; margin-bottom: 8px; font-size: 14px;">⚡ CRON Real-World Competitive Benchmark Scoreboard</div>
+                <pre style="margin: 0; color: #a6e3a1; font-size: 12px; line-height: 1.3;">{report_text}</pre>
+            </div>
+            """
+            self._send_html(html)
+            self._send_stdout(report_text)
+        except Exception as e:
+            self._send_error(str(e))
         return {"status": "ok", "execution_count": getattr(self, "execution_count", 1), "payload": [], "user_expressions": {}}
 
     def _render_rich_hud(self, telemetry: Dict[str, Any], code: str) -> str:

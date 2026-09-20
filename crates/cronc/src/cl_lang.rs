@@ -37,6 +37,14 @@ pub struct ClBundle {
     pub slots: [ClSlot; 4],
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClWeightBinding {
+    pub bank: usize,
+    pub offset: usize,
+    pub values: Vec<u32>,
+    pub file_path: Option<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ClReport {
     pub total_bundles: usize,
@@ -45,6 +53,11 @@ pub struct ClReport {
     pub parity_verified: usize,
     pub crc_verified: usize,
     pub hazards: Vec<String>,
+    pub labels_found: usize,
+    pub cores_partitioned: usize,
+    pub weights_bound: usize,
+    pub total_weight_bytes: usize,
+    pub directives_found: usize,
 }
 
 pub const KNOWN_OPCODES: &[&str] = &[
@@ -99,9 +112,33 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "=0", // Immediate Load Low
     "=1", // Immediate Load High
     "==", // Generic Immediate Load
+    "JP", // Unconditional Branch/Jump
+    "BZ", // Branch if Zero
+    "BN", // Branch if Non-Zero
+    "BL", // Branch if Less/Negative
+    "BG", // Branch if Greater
     "bb", // 256-Core Chip-Wide Global Synchronization Barrier
     "FU", // Fusion Stream Anchor Start (Milestone #012)
     "FE", // Fusion Stream Anchor End / Commit (Milestone #012)
+    // Milestone #021: Esolang-Inspired AI Silicon Coprocessor Opcodes
+    "TI", // Brainfuck Tape Pointer Increment ($tp0++)
+    "TD", // Brainfuck Tape Pointer Decrement ($tp0--)
+    "TR", // Brainfuck Tape Read & Auto-Advance -> Dest Reg
+    "TW", // Brainfuck Tape Write & Auto-Advance <- Src Reg
+    "ZL", // Brainfuck Zero-Overhead Hardware Loop Counter Set
+    "TC", // Malbolge 16-Trit SIMD Crazy Operation / Activation LUT
+    "TM", // Malbolge Multiplier-Free BitNet b1.58 Trit-MAC
+    "DE", // Befunge Systolic Push East (+X)
+    "DW", // Befunge Systolic Push West (-X)
+    "DN", // Befunge Systolic Push North (+Y)
+    "DS", // Befunge Systolic Push South (-Y)
+    "UN", // Prolog 1-Cycle Hardware Symbolic Index Matcher / Unifier
+    // Milestone #029: Dedicated AI Silicon ISA Extensions
+    "RM", // RMSNorm Normalizer Step
+    "SM", // Streaming Online Flash-Softmax
+    "SI", // SiLU Activation (SwiGLU)
+    "GE", // GELU Activation
+    "SS", // Selective Scan SSM Step (Mamba)
     // Extended Homopolymer Macro Opcodes
     "CC", // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation
     "DD", // Zero-Overhead Direct 4D-Torus NoC DMA Transfer
@@ -149,15 +186,17 @@ pub fn audit_alphabet_coverage(cl_code: &str) -> AlphabetAuditReport {
         if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
             continue;
         }
-        if let Some((_b_part, slots_part)) = trimmed.split_once(':') {
-            total_bundles += 1;
-            for c in trimmed.chars() {
-                if !c.is_whitespace() {
-                    *freqs.entry(c).or_insert(0) += 1;
-                    total_scanned += 1;
-                }
+        for c in trimmed.chars() {
+            if !c.is_whitespace() {
+                *freqs.entry(c).or_insert(0) += 1;
+                total_scanned += 1;
             }
-            total_slots += slots_part.split_whitespace().count();
+        }
+        if let Some((b_part, slots_part)) = trimmed.split_once(':') {
+            if b_part.starts_with('B') || b_part.starts_with('b') {
+                total_bundles += 1;
+                total_slots += slots_part.split_whitespace().count();
+            }
         }
     }
 
@@ -206,15 +245,24 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
 
     let chars: Vec<char> = raw.chars().collect();
     let prefix = chars[0];
-    if prefix != '_' && prefix != '\'' && prefix != '~' && prefix != '@' {
+    let is_valid_prefix = prefix == '_' || prefix == '\'' || prefix == '~' || prefix == '@'
+        || prefix == '%' || prefix == '&' || prefix == '^' || prefix == '|'
+        || prefix == '$' || prefix == '#' || prefix == ':' || prefix == '\\'
+        || prefix == '*' || prefix == '+' || prefix == '-' || prefix == '/'
+        || prefix == '?' || prefix == '!' || prefix == '=' || prefix == '<' || prefix == '>'
+        || prefix == '.' || prefix == '(' || prefix == ')';
+    if !is_valid_prefix {
         return Err(format!("Invalid slot prefix '{}' in '{}'", prefix, raw));
     }
 
     let opcode: String = chars[1..3].iter().collect();
     let terminator = chars[9];
-    if terminator != '>' && terminator != '!' && terminator != '?' && terminator != ';' {
+    let is_valid_terminator = terminator == '>' || terminator == '!' || terminator == '?' || terminator == ';'
+        || terminator == ']' || terminator == '}' || terminator == ')' || terminator == '|'
+        || terminator == '~' || terminator == '$' || terminator == '#' || terminator == ',';
+    if !is_valid_terminator {
         return Err(format!(
-            "Invalid slot terminator '{}' in '{}' (expected '>', '!', '?', or ';')",
+            "Invalid slot terminator '{}' in '{}' (expected valid CL terminator)",
             terminator, raw
         ));
     }
@@ -222,7 +270,10 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
     // Parse dest register if applicable (only for instructions that write to a register)
     let dest_str: String = chars[3..5].iter().collect();
     let is_writer = opcode != "SB" && opcode != "SH" && opcode != "RS" 
-                 && opcode != "HL" && opcode != "DW" && opcode != "YD" && opcode != "NO";
+                 && opcode != "HL" && opcode != "DW" && opcode != "YD" && opcode != "NO"
+                 && opcode != "JP" && opcode != "BZ" && opcode != "BN" && opcode != "BL" && opcode != "BG"
+                 && opcode != "TI" && opcode != "TD" && opcode != "TW" && opcode != "ZL"
+                 && opcode != "DE" && opcode != "DW" && opcode != "DN" && opcode != "DS";
     let dest_reg = if is_writer {
         usize::from_str_radix(&dest_str, 16).ok()
     } else {
@@ -248,6 +299,95 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
     })
 }
 
+/// Parse `.weights` directive lines:
+/// Syntax forms supported:
+/// 1. `.weights bank=1, offset=0: [0x3F800000, 0x40000000, 0x3E800000]`
+/// 2. `.weights bank=2: [1.0, -0.5, 2.0, 0.0]`
+/// 3. `.weights "weights.bin", bank=3, offset=0, size=16`
+pub fn parse_weights_directive(line: &str) -> Result<ClWeightBinding, String> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with(".weights") {
+        return Err(format!("Expected .weights directive, got '{}'", trimmed));
+    }
+    let rest = trimmed[".weights".len()..].trim();
+
+    let mut bank = 0usize;
+    let mut offset = 0usize;
+    let mut file_path = None;
+    let mut values = Vec::new();
+
+    // Check for quoted file path
+    if let Some(start_quote) = rest.find('"') {
+        if let Some(end_quote) = rest[start_quote + 1..].find('"') {
+            let path = &rest[start_quote + 1..start_quote + 1 + end_quote];
+            file_path = Some(path.to_string());
+        }
+    }
+
+    // Check for bracketed values: [...]
+    if let Some(open_b) = rest.find('[') {
+        if let Some(close_b) = rest.rfind(']') {
+            let inner = &rest[open_b + 1..close_b];
+            for token in inner.split(',') {
+                let tok = token.trim();
+                if tok.is_empty() {
+                    continue;
+                }
+                if tok.starts_with("0x") || tok.starts_with("0X") {
+                    let hex_str = &tok[2..];
+                    let val = u32::from_str_radix(hex_str, 16)
+                        .map_err(|e| format!("Invalid hex weight '{}': {}", tok, e))?;
+                    values.push(val);
+                } else if tok.contains('.') || tok.contains('e') || tok.contains('E') {
+                    let f = tok.parse::<f32>()
+                        .map_err(|e| format!("Invalid float weight '{}': {}", tok, e))?;
+                    values.push(f.to_bits());
+                } else {
+                    let val = tok.parse::<u32>()
+                        .map_err(|e| format!("Invalid integer weight '{}': {}", tok, e))?;
+                    values.push(val);
+                }
+            }
+        }
+    }
+
+    // Extract bank= and offset= from key-value pairs
+    for token in rest.split(|c: char| c == ',' || c == ':' || c == ' ' || c == '\t') {
+        let tok = token.trim();
+        if let Some(val_str) = tok.strip_prefix("bank=") {
+            let clean = val_str.trim_matches(|c: char| !c.is_ascii_hexdigit());
+            if let Ok(b) = usize::from_str_radix(clean, 10) {
+                bank = b;
+            }
+        } else if let Some(val_str) = tok.strip_prefix("offset=") {
+            let clean = val_str.trim_matches(|c: char| !c.is_ascii_hexdigit() && c != 'x' && c != 'X');
+            if clean.starts_with("0x") || clean.starts_with("0X") {
+                if let Ok(off) = usize::from_str_radix(&clean[2..], 16) {
+                    offset = off;
+                }
+            } else if let Ok(off) = clean.parse::<usize>() {
+                offset = off;
+            }
+        }
+    }
+
+    // If file_path is specified and file exists, load bytes
+    if let Some(ref path) = file_path {
+        if let Ok(bytes) = std::fs::read(path) {
+            for chunk in bytes.chunks_exact(4) {
+                let val = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                values.push(val);
+            }
+        }
+    }
+
+    Ok(ClWeightBinding {
+        bank,
+        offset,
+        values,
+        file_path,
+    })
+}
 
 pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
     let mut report = ClReport::default();
@@ -257,6 +397,39 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
         line_num += 1;
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+            continue;
+        }
+
+        // Check for Label definitions (e.g. @label: or L00:)
+        if (trimmed.starts_with('@') && trimmed.ends_with(':'))
+            || (trimmed.starts_with('L') && trimmed.ends_with(':') && trimmed.len() <= 20)
+        {
+            report.labels_found += 1;
+            continue;
+        }
+
+        // Check for Multi-Core / Directive definitions (e.g. .core [0,0,0,0]:)
+        if trimmed.starts_with(".core") {
+            report.cores_partitioned += 1;
+            continue;
+        }
+        if trimmed.starts_with(".weights") {
+            let binding = parse_weights_directive(trimmed)
+                .map_err(|e| format!("Line {}: {}", line_num, e))?;
+            report.weights_bound += 1;
+            report.total_weight_bytes += binding.values.len() * 4;
+            continue;
+        }
+        if trimmed.starts_with(".data") || trimmed.starts_with(".section") {
+            continue;
+        }
+        if trimmed.starts_with(".stage")
+            || trimmed.starts_with(".fuse")
+            || trimmed.starts_with(".tensor")
+            || trimmed.starts_with(".flow")
+            || trimmed.starts_with(".layout")
+        {
+            report.directives_found += 1;
             continue;
         }
 
@@ -274,9 +447,9 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
             ));
         }
 
-        if parts.len() != 5 {
+        if parts.len() < 2 || parts.len() > 5 {
             return Err(format!(
-                "Bundle Error at line {}: Each .cl VLIW bundle must contain exactly 4 slots, found {}",
+                "Bundle Error at line {}: Each .cl VLIW bundle must contain between 1 and 4 slots, found {}",
                 line_num,
                 parts.len() - 1
             ));
@@ -285,7 +458,7 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
         let mut dest_regs_in_bundle: HashSet<usize> = HashSet::new();
         let mut optical_count_in_bundle = 0;
 
-        for slot_str in &parts[1..5] {
+        for slot_str in &parts[1..] {
             let slot = parse_slot(slot_str)
                 .map_err(|e| format!("Line {}: {}", line_num, e))?;
 

@@ -9,7 +9,10 @@
 use crate::cl_lang::parse_slot;
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if let Some(hash_pos) = slot.find('#') {
+    if slot.len() == 10 {
+        let chars: Vec<char> = slot.chars().collect();
+        chars[8].to_digit(16)
+    } else if let Some(hash_pos) = slot.find('#') {
         let hex_part: String = slot[hash_pos + 1..]
             .chars()
             .take_while(|c| c.is_ascii_hexdigit())
@@ -56,14 +59,27 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    size_t fused_ops_count;\n");
     out.push_str("    size_t hbm_bytes_saved;\n");
     out.push_str("    bool is_halted;\n");
+    out.push_str("    // Milestone #029: Dedicated AI Silicon ISA Extensions\n");
+    out.push_str("    float softmax_max;\n");
+    out.push_str("    float softmax_sum;\n");
+    out.push_str("    float ssm_state[16];\n");
+    out.push_str("    size_t ai_isa_ops_count;\n");
     out.push_str("} CronSiliconCore;\n\n");
 
-    out.push_str("static inline void cron_silicon_init(CronSiliconCore* core) {\n");
-    out.push_str("    memset(core, 0, sizeof(CronSiliconCore));\n");
-    out.push_str("    core->lfsr_state = 0xACE1u;\n");
-    out.push_str("    for (int i = 0; i < 16; i++) {\n");
-    out.push_str("        core->stdp_weights[i] = 10;\n");
-    out.push_str("    }\n");
+    out.push_str("static inline uint32_t cron_f32_to_u32(float f) {\n");
+    out.push_str("    union { float f; uint32_t u; } cvt; cvt.f = f; return cvt.u;\n");
+    out.push_str("}\n\n");
+
+    out.push_str("static inline float cron_u32_to_f32(uint32_t u) {\n");
+    out.push_str("    union { float f; uint32_t u; } cvt; cvt.u = u; return cvt.f;\n");
+    out.push_str("}\n\n");
+
+    out.push_str("static inline float cron_silu(float x) {\n");
+    out.push_str("    return x / (1.0f + expf(-x));\n");
+    out.push_str("}\n\n");
+
+    out.push_str("static inline float cron_gelu(float x) {\n");
+    out.push_str("    return 0.5f * x * (1.0f + tanhf(0.7978845608f * (x + 0.044715f * x * x * x)));\n");
     out.push_str("}\n\n");
 
     out.push_str("static inline void cron_reversible_swap(uint32_t* a, uint32_t* b) {\n");
@@ -95,12 +111,45 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    return res;\n");
     out.push_str("}\n\n");
 
+    out.push_str("static inline void cron_silicon_init(CronSiliconCore* core) {\n");
+    out.push_str("    memset(core, 0, sizeof(CronSiliconCore));\n");
+    out.push_str("    core->lfsr_state = 0xACE1u;\n");
+    out.push_str("    core->softmax_max = -1.0e9f;\n");
+    out.push_str("    core->softmax_sum = 0.0f;\n");
+    out.push_str("    for (int i = 0; i < 16; i++) {\n");
+    out.push_str("        core->stdp_weights[i] = 10;\n");
+    out.push_str("        core->ssm_state[i] = 0.0f;\n");
+    out.push_str("    }\n");
+
+    // Zero-copy bound weights initialization
+    for line in cl_code.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(".weights") {
+            if let Ok(binding) = crate::cl_lang::parse_weights_directive(trimmed) {
+                for (i, &val) in binding.values.iter().enumerate() {
+                    let idx = binding.offset + i;
+                    if binding.bank < 16 && idx < 16 {
+                        out.push_str(&format!("    core->bank_r[{}][{}] = {:#010X}u;\n", binding.bank, idx, val));
+                    }
+                }
+            }
+        }
+    }
+
+    out.push_str("}\n\n");
+
     out.push_str("void cron_execute_bundles(CronSiliconCore* core) {\n");
 
     let mut bundle_count = 0;
     for line in cl_code.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+        if trimmed.is_empty()
+            || trimmed.starts_with(';')
+            || trimmed.starts_with("//")
+            || trimmed.starts_with('@')
+            || trimmed.starts_with('.')
+            || !trimmed.starts_with('B')
+        {
             continue;
         }
 
@@ -115,16 +164,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         continue;
                     }
 
-                    let d = if slot_str.starts_with("'=") || slot_str.starts_with("==") {
-                        let chars: Vec<char> = slot_str.chars().collect();
-                        if chars.len() >= 4 {
-                            chars[3].to_digit(16).unwrap_or(0) as usize
-                        } else {
-                            0
-                        }
-                    } else {
-                        slot.dest_reg.unwrap_or(0) % 16
-                    };
+                    let d = slot.dest_reg.unwrap_or(0) % 16;
                     let s = slot.src_reg.unwrap_or(0) % 16;
                     let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
                     let imm_val = parse_imm_val(slot_str).unwrap_or(imm_nibble as u32);
@@ -145,6 +185,15 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str(&format!("    core->r[{}] = cron_tile_transpose(core->r[{}]);\n", d, s));
                         }
                         "PO" | "P0" | "P1" => {
+                            if slot.mode == '@' {
+                                out.push_str(&format!("    core->r[{}] = core->bank_r[{}][{}];\n", d, s, imm_nibble % 16));
+                                continue;
+                            }
+                            if slot.mode == ':' {
+                                out.push_str(&format!("    core->bank_r[{}][{}] = core->r[{}];\n", d, imm_nibble % 16, s));
+                                continue;
+                            }
+
                             let (op1, op2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
                                 (format!("core->r[{}]", s), format!("core->r[{}]", imm_nibble))
                             } else {
@@ -232,6 +281,97 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str("    core->fused_ops_count++;\n");
                             out.push_str("    core->hbm_bytes_saved += 64;\n");
                         }
+                        // Milestone #029: Dedicated AI Silicon ISA Extensions
+                        "RM" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str("    {\n");
+                            if slot.mode == '@' {
+                                out.push_str(&format!("        float sc = cron_u32_to_f32(core->bank_r[{}][{}]);\n", s, imm_nibble % 16));
+                                out.push_str("        if (sc == 0.0f) sc = 1.0f;\n");
+                                out.push_str(&format!("        uint32_t inp_u = (core->r[{}] != 0 ? core->r[{}] : core->r[{}]);\n", d, d, s));
+                                out.push_str("        float x = cron_u32_to_f32(inp_u);\n");
+                                out.push_str("        float rms = sqrtf(x * x + 1.0e-5f);\n");
+                                out.push_str(&format!("        core->r[{}] = cron_f32_to_u32((x / rms) * sc);\n", d));
+                            } else {
+                                let sc_expr = if imm_nibble > 0 && imm_nibble < 16 {
+                                    format!("cron_u32_to_f32(core->r[{}])", imm_nibble)
+                                } else {
+                                    "1.0f".to_string()
+                                };
+                                out.push_str(&format!("        float sc = {};\n", sc_expr));
+                                out.push_str("        if (sc == 0.0f) sc = 1.0f;\n");
+                                out.push_str(&format!("        float x = cron_u32_to_f32(core->r[{}]);\n", s));
+                                out.push_str("        float rms = sqrtf(x * x + 1.0e-5f);\n");
+                                out.push_str(&format!("        core->r[{}] = cron_f32_to_u32((x / rms) * sc);\n", d));
+                            }
+                            out.push_str("    }\n");
+                        }
+                        "SM" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str("    {\n");
+                            if slot.mode == '@' {
+                                out.push_str(&format!("        float sc = cron_u32_to_f32(core->bank_r[{}][{}]);\n", s, imm_nibble % 16));
+                                out.push_str("        if (sc == 0.0f) sc = 1.0f;\n");
+                                out.push_str(&format!("        float x = cron_u32_to_f32(core->r[{}]);\n", d));
+                            } else {
+                                let sc_expr = if imm_nibble > 0 && imm_nibble < 16 {
+                                    format!("cron_u32_to_f32(core->r[{}])", imm_nibble)
+                                } else {
+                                    "1.0f".to_string()
+                                };
+                                out.push_str(&format!("        float sc = {};\n", sc_expr));
+                                out.push_str("        if (sc == 0.0f) sc = 1.0f;\n");
+                                out.push_str(&format!("        float x = cron_u32_to_f32(core->r[{}]);\n", s));
+                            }
+                            out.push_str("        float scaled_x = x * sc;\n");
+                            let reset_cond = if slot.mode == '!' { "true" } else { "core->softmax_sum <= 0.0f" };
+                            out.push_str(&format!("        if ({}) {{\n", reset_cond));
+                            out.push_str("            core->softmax_max = scaled_x;\n");
+                            out.push_str("            core->softmax_sum = 1.0f;\n");
+                            out.push_str(&format!("            core->r[{}] = cron_f32_to_u32(1.0f);\n", d));
+                            out.push_str("        } else {\n");
+                            out.push_str("            float old_m = core->softmax_max;\n");
+                            out.push_str("            float new_m = (scaled_x > old_m) ? scaled_x : old_m;\n");
+                            out.push_str("            float exp_old = expf(old_m - new_m);\n");
+                            out.push_str("            float exp_cur = expf(scaled_x - new_m);\n");
+                            out.push_str("            float new_sum = core->softmax_sum * exp_old + exp_cur;\n");
+                            out.push_str("            core->softmax_max = new_m;\n");
+                            out.push_str("            core->softmax_sum = new_sum;\n");
+                            out.push_str(&format!("            core->r[{}] = cron_f32_to_u32(exp_cur / new_sum);\n", d));
+                            out.push_str("        }\n");
+                            out.push_str("    }\n");
+                        }
+                        "SI" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str(&format!("    core->r[{}] = cron_f32_to_u32(cron_silu(cron_u32_to_f32(core->r[{}])));\n", d, s));
+                        }
+                        "GE" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str(&format!("    core->r[{}] = cron_f32_to_u32(cron_gelu(cron_u32_to_f32(core->r[{}])));\n", d, s));
+                        }
+                        "SS" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str("    {\n");
+                            out.push_str(&format!("        size_t bank = ({}u > 0 ? {}u : {}u) % 16;\n", imm_nibble, imm_nibble, s));
+                            out.push_str("        size_t ch = bank;\n");
+                            out.push_str(&format!("        uint32_t inp_u = ({}u > 0 ? core->r[{}] : (core->r[{}] != 0 ? core->r[{}] : (core->r[{}] != 0 ? core->r[{}] : core->r[1])));\n", imm_nibble, s, s, s, d, d));
+                            out.push_str("        float x = cron_u32_to_f32(inp_u);\n");
+                            if slot.mode == '@' {
+                                out.push_str("        float a_bar = cron_u32_to_f32(core->bank_r[bank][0]);\n");
+                                out.push_str("        float b_bar = cron_u32_to_f32(core->bank_r[bank][1]);\n");
+                                out.push_str("        if (a_bar == 0.0f) a_bar = 0.9f;\n");
+                                out.push_str("        if (b_bar == 0.0f) b_bar = 0.1f;\n");
+                            } else {
+                                out.push_str("        float a_bar = 0.9f;\n");
+                                out.push_str("        float b_bar = 0.1f;\n");
+                            }
+                            out.push_str("        float prev_h = core->ssm_state[ch];\n");
+                            out.push_str("        float next_h = a_bar * prev_h + b_bar * x;\n");
+                            out.push_str("        core->ssm_state[ch] = next_h;\n");
+                            out.push_str("        float y = next_h + 0.05f * x;\n");
+                            out.push_str(&format!("        core->r[{}] = cron_f32_to_u32(y);\n", d));
+                            out.push_str("    }\n");
+                        }
                         "HL" => {
                             out.push_str("    core->is_halted = true;\n");
                             out.push_str("    return;\n");
@@ -267,6 +407,9 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("        printf(\"  Streaming Fused Ops:         %zu\\n\", core.fused_ops_count);\n");
     out.push_str("        printf(\"  DRAM/HBM Traffic Saved:      %zu bytes\\n\", core.hbm_bytes_saved);\n");
     out.push_str("    }\n");
+    out.push_str("    if (core.ai_isa_ops_count > 0) {\n");
+    out.push_str("        printf(\"  AI Silicon ISA Ops:          %zu\\n\", core.ai_isa_ops_count);\n");
+    out.push_str("    }\n");
     out.push_str("    printf(\"  Final Register R0:           0x%08X (%u)\\n\", core.r[0], core.r[0]);\n");
     out.push_str("    printf(\"  Final Register R1:           0x%08X (%u)\\n\", core.r[1], core.r[1]);\n");
     out.push_str("    printf(\"  Final Register R4:           0x%08X (%u)\\n\", core.r[4], core.r[4]);\n");
@@ -278,3 +421,63 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
 
     Ok(out)
 }
+
+use std::fs;
+use std::process::Command;
+
+/// Compiles .cl source code directly into a native host binary executable via host C compiler
+pub fn compile_cl_to_native_binary(
+    cl_source: &str,
+    output_binary_path: &str,
+    opt_level: &str,
+) -> Result<(), String> {
+    let c23_code = compile_cl_to_c23(cl_source, "cron_kernel")?;
+    let temp_dir = std::env::temp_dir();
+    let temp_c_file = temp_dir.join(format!("cron_cl_kernel_{}.c", std::process::id()));
+
+    fs::write(&temp_c_file, c23_code)
+        .map_err(|e| format!("Failed to write temporary C source: {}", e))?;
+
+    let compilers = ["gcc", "clang"];
+    let mut success = false;
+    let mut last_err = String::new();
+
+    for cc in &compilers {
+        let opt_flag = if opt_level.starts_with("-O") {
+            opt_level.to_string()
+        } else {
+            format!("-O{}", opt_level)
+        };
+
+        let mut cmd = Command::new(cc);
+        cmd.arg(temp_c_file.to_str().unwrap());
+        cmd.arg("-o");
+        cmd.arg(output_binary_path);
+        cmd.arg(&opt_flag);
+        cmd.arg("-std=c11");
+        cmd.arg("-lm");
+
+        match cmd.output() {
+            Ok(out) => {
+                if out.status.success() {
+                    success = true;
+                    break;
+                } else {
+                    last_err = String::from_utf8_lossy(&out.stderr).to_string();
+                }
+            }
+            Err(e) => {
+                last_err = format!("Failed to invoke {}: {}", cc, e);
+            }
+        }
+    }
+
+    let _ = fs::remove_file(&temp_c_file);
+
+    if success {
+        Ok(())
+    } else {
+        Err(format!("Host C native compilation failed: {}", last_err))
+    }
+}
+

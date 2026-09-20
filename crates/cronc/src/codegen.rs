@@ -418,6 +418,50 @@ impl Codegen {
             Statement::Expr(expr) => {
                 self.compile_expr(expr, 0);
             }
+            Statement::Comptime { .. } => {}
+            // Milestone #022: Esolang-Inspired Language Codegen
+            Statement::InlineVliw { raw_bundles, .. } => {
+                for line in raw_bundles {
+                    if let Some((_cycle, slots_part)) = line.split_once(':') {
+                        for slot_str in slots_part.split_whitespace() {
+                            if let Ok(_slot) = crate::cl_lang::parse_slot(slot_str) {
+                                self.push_slot(VliwSlot::new(slot_str));
+                            }
+                        }
+                    }
+                }
+            }
+            Statement::TapeDecl { .. } => {
+                // Initialize tape pointer: reset $tp0
+                self.push_slot(make_slot('_', "TI", 0, '#', 0, 0, '>'));
+            }
+            Statement::TapeStream { value, is_read, .. } => {
+                if *is_read {
+                    self.push_slot(make_slot('_', "TR", 0, '#', 0, 0, '>'));
+                } else {
+                    let reg = 1;
+                    self.compile_expr(value, reg);
+                    self.push_slot(make_slot('_', "TW", 0, '#', reg, 0, '>'));
+                }
+            }
+            Statement::SystolicBlock { flows, body, .. } => {
+                self.compile_statements(body);
+                for f in flows {
+                    let dir_op = match f.direction.to_uppercase().as_str() {
+                        "WEST" => "DW",
+                        "NORTH" => "DN",
+                        "SOUTH" => "DS",
+                        _ => "DE", // EAST
+                    };
+                    self.push_slot(make_slot('_', dir_op, 0, '#', 0, 0, '>'));
+                }
+            }
+            Statement::RuleDecl { body_exprs, .. } => {
+                for e in body_exprs {
+                    self.compile_expr(e, 0);
+                }
+                self.push_slot(make_slot('_', "UN", 0, '#', 0, 0, '>'));
+            }
         }
     }
 
@@ -501,7 +545,9 @@ impl Codegen {
                     ".." => 0,
                     _ => 2,
                 };
-                if op == "*" || op == "/" {
+                if op == "@" {
+                    self.push_slot(make_slot('_', "MM", dest, '$', r_reg, 0, '>'));
+                } else if op == "*" || op == "/" {
                     self.push_slot(make_slot('_', "MD", dest, '$', r_reg, imm_mode, '>'));
                 } else if op == ">=" {
                     self.push_slot(make_slot('_', "PO", dest, 'G', r_reg, 0, '>'));
@@ -822,6 +868,9 @@ impl Codegen {
                 self.compile_method_call(object, method, args, dest);
             }
             Expr::Grad { .. } | Expr::GradCall { .. } => {
+                self.push_slot(make_slot('\'', "=0", dest, '#', 0, 0, '>'));
+            }
+            Expr::Comptime { .. } => {
                 self.push_slot(make_slot('\'', "=0", dest, '#', 0, 0, '>'));
             }
         }

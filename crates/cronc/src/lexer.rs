@@ -558,12 +558,14 @@ impl Lexer {
                             "impl" => Token::Impl,
                             "schedule" => Token::Schedule,
                             "fuse" => Token::Fuse,
+                            "comptime" => Token::Comptime,
                             "brain" => Token::Brain,
                             "fork" => Token::Fork,
                             "simulate" => Token::Simulate,
                             "abort" => Token::Abort,
                             "then" => Token::Then,
                             "with" => Token::With,
+                            "__vliw_asm__" => Token::InlineVliw,
                             _ => Token::Ident(word),
                         };
                         tokens.push(Spanned::new(tok, span));

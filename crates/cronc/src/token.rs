@@ -49,6 +49,7 @@ pub enum Token {
     Impl,
     Schedule,
     Fuse,
+    Comptime,
 
     // Cognitive DSL Keywords
     Brain,
@@ -57,6 +58,9 @@ pub enum Token {
     Abort,
     Then,
     With,
+
+    // Milestone #022: Esolang-Inspired Language Keywords
+    InlineVliw, // __vliw_asm__
 
     // Identifiers & Literals
     Ident(String),

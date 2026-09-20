@@ -48,7 +48,15 @@ import { STDPLayer, SynapseTrace, create_stdp_layer, stdp_step } from "nn/stdp.c
 import { Channel, channel_create, channel_shutdown } from "concurrency/channel.cr"
 import { TorusRouter, TorusMessage, torus_hop_distance, torus_next_hop } from "concurrency/torus.cr"
 
-// Cognitive Deep Learning & Neuromorphic Autograd
 import { Tensor, tensor_create, tensor_reshape, tensor_fma_simd, tensor_dot_simd } from "tensor/tensor.cr"
 import { TransformerBlock, MultiHeadAttention, FeedForward, RMSNorm, transformer_block_forward } from "nn/transformer.cr"
 import { LIFNeuron, SNNLayer, SNNTapeEntry, create_lif_neuron, snn_layer_forward, snn_layer_backward } from "neuro/snn_autograd.cr"
+
+// Advanced Sensory & Distributed Mesh (Phase 15 Extensions)
+import { DvsPixelEvent, create_dvs_event, accumulate_event_surface, dispatch_dvs_spike_to_cortex } from "vision/dvs_stream.cr"
+import { CochleaChannel, init_cochlea_channel, step_cochlea_filter } from "audio/cochlea.cr"
+import { pgas_ring_all_reduce, optical_cross_chip_broadcast } from "distributed/collectives.cr"
+
+// AI Ecosystem: Native BPE Tokenizer & Autonomous Agent Tool Runtime
+import { BpeVocabConfig, init_bpe_config, is_raw_byte_token, is_special_token, bpe_merge_pair, bpe_encode_4bytes, bpe_decode_to_lead_byte } from "tokenizer/bpe.cr"
+import { HardToolCatalog, init_tool_catalog, AgentFrame, init_agent_frame, dispatch_hard_tool, agent_execute_step } from "agent/runtime.cr"

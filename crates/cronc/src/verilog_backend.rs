@@ -31,6 +31,11 @@ pub fn encode_slot_to_u32(slot: &ClSlot) -> u32 {
         "SH" => 0x13, // Sentry Config
         "RC" => 0x14, // Fallback Re-route
         "SW" => 0x15, // Superposition Wave
+        "RM" => 0x21, // RMSNorm Normalizer
+        "SM" => 0x22, // Streaming Online Flash-Softmax
+        "SI" => 0x23, // SiLU Activation
+        "GE" => 0x24, // GELU Activation
+        "SS" => 0x25, // Selective Scan SSM
         "HL" => 0x3F, // Halt
         "=0" | "=1" | "==" => 0x20, // Immediate Load
         _ => 0x00,    // NOP

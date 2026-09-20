@@ -91,6 +91,162 @@ cargo run --bin cron -- run examples/unified_six_brain_agi.cr
 # 4. .cl машины кодыг буцаан .cr хэл рүү хөрвүүлэх (Decompile)
 cargo run --bin cron -- decompile output.cl -o decompiled.cr
 
-# 5. Нэгдсэн тестүүдийг ажиллуулах
-cargo test
+# 5. Бодит AI загвар (ONNX / SafeTensors) татан авч Sub-byte / BitNet 1.58b болгон буулгах (Import)
+cargo run --bin cron -- import examples/sample_transformer.onnx -o imported.cr --quantize ternary --compile cl
+
+# 6. Төсөлд шинэ хараат сан нэмэх (cron add) ба багц мод харах (cron pkg tree)
+cargo run --bin cron -- add cron/distributed
+cargo run --bin cron -- pkg tree
+cargo run --bin cron -- install
+
+# 7. Физик FPGA/ASIC төхөөрөмж рүү байршуулах ба PCIe DMA үүсгэх (Flash)
+cargo run --bin cron -- flash examples/cl/mini_transformer_attention.cl --target xilinx_u280 --out-dir ./deploy
+
+# 8. Албан ёсны DOR Deadlock-Freedom ба Ландауэр термодинамик шалгалт (Verify)
+cargo run --bin cron -- verify examples/cl/mini_transformer_attention.cl --temp 300.0 --freq 1.0
+
+# 9. Бие даасан .cl Машин Хэлний JIT Ажиллуулагч (0-диск I/O, микросекунд)
+cargo run --bin cron -- cl-run examples/cl/mini_transformer_attention.cl
+
+# 10. AI Vibe-Coding Өөрийгөө Эдгээгч ба CRC-8 Засагч (Heal)
+cargo run --bin cron -- cl-heal examples/cl/mini_transformer_attention.cl -o healed.cl
+
+# 11. VLIW Слотыг нягтруулагч Супер-Оптимайзер (Compaction, IPC -> 4.0)
+cargo run --bin cron -- cl-opt examples/cl/mini_transformer_attention.cl -o optimized.cl
+
+# 12. .cl машинаас шууд SSA LLVM IR болон Verilog RTL синтезлэх
+cargo run --bin cron -- cl-llvm examples/cl/mini_transformer_attention.cl -o kernel.ll
+cargo run --bin cron -- cl-verilog examples/cl/mini_transformer_attention.cl -o core.v
+
+# 13. Интерактив .cl Live Vibe-Coding REPL Силикон Консол
+cargo run --bin cron -- cl-repl
+
+# 14. 256-Цөмт 4D-Torus Орон зайн Linker (NoC чиглүүлэлт, PGAS, C23 ба Verilog гаргах)
+cargo run --bin cron -- cl-link examples/cl/multicore_4d_pipeline.cl -o pipeline.clpack --emit-c pipeline.c --emit-verilog pipeline.v
+
+# 15. Hardware Co-Simulation Bridge (Lockstep Parity with Synthesizable Verilog RTL)
+cargo run --bin cron -- cl-cosim examples/cl/mini_transformer_attention.cl --trace
+
+# 16. DAG Critical-Path VLIW Super-Optimizer (Level 2 Out-of-Order Compaction)
+cargo run --bin cron -- cl-opt examples/cl/mini_transformer_attention.cl --level 2
+
+# 17. PGAS 16-Bank Conflict-Free Formal Verifier (GF(2^4) Galois Field XOR Swizzling)
+cargo run --bin cron -- cl-memcheck examples/cl/mini_transformer_attention.cl
+
+# 18. Автономит AI Vibe-Fuzz & Mutation Resilience Engine (Zero-Crash Invariant)
+cargo run --bin cron -- cl-fuzz --iterations 500
+
+# 19. Hardware Roofline Model & Operational Intensity Benchmark (FLOPs/Byte)
+cargo run --bin cron -- cl-bench examples/cl/mini_transformer_attention.cl
+
+# 20. Golden AI Silicon Micro-Kernel Синтезлэгч (FlashAttn, BitNet, RMSNorm, SwiGLU, RoPE, KV-Cache)
+cargo run --bin cron -- cl-kernel list
+cargo run --bin cron -- cl-kernel flash-attn -o flash_attn.cl
+
+# 21. Standalone Эх Системийн Хост Компилятор (C23/C11 AOT -O3 Native Binary & Direct Execution)
+cargo run --bin cron -- cl-native flash_attn.cl -o flash_attn.exe --run
+
+# 22. Polyhedral VLIW Loop Tiler & Tensor Contraction (GEMM, Conv2D, 16-Bank Conflict-Free)
+cargo run --bin cron -- cl-tile gemm --m 128 --n 128 --k 128 -o tiled_gemm.cl
+cargo run --bin cron -- cl-tile conv --cin 32 --cout 64 --spatial 16 --json
+
+# 23. Multi-Die 5D Hierarchical Mesh & Collective Communication Protocol (AllReduce, AllGather)
+cargo run --bin cron -- cl-cluster topology --chips 4
+cargo run --bin cron -- cl-cluster collective allreduce --chips 4 --bytes 1024 -o allreduce.cl
+cargo run --bin cron -- cl-cluster c23 allreduce.cl --chips 4 -o cluster_sim.c
+
+# 24. 2:4 Бүтцийн Сийрэгжилт (Structural Sparsity) ба Zero-MAC Pruning (2x хурдатгал)
+cargo run --bin cron -- cl-sparse kernel --m 128 --n 128 --k 128 -o sparse_gemm.cl
+cargo run --bin cron -- cl-sparse analyze dummy.dat --json
+
+# 25. Landauer Термодинамик DVFS & Силикон Дулааны Симуляци (ΔS = 0 Fredkin / MZI)
+cargo run --bin cron -- cl-power examples/cl/mini_transformer_attention.cl --freq 2.0 --temp 300.0
+cargo run --bin cron -- cl-power examples/cl/mini_transformer_attention.cl --json
+
+# 26. Spec-to-Silicon Олон Зорилтот Авто-Тохируулагч (Pareto Frontier, DVFS, Слот нягтруулалт)
+cargo run --bin cron -- cl-autotune --m 64 --n 64 --k 64 --metric balanced -o tuned_gemm.cl
+cargo run --bin cron -- cl-autotune --m 32 --n 32 --k 32 --json
+
+# 27. Zero-Copy Олон Хэлбэрт (Multi-Modal) Орон Зайн Урсгал Хөдөлгүүр (Аудио, Видео, Сенсор)
+cargo run --bin cron -- cl-stream vision --dim 224 --patch 16 -o vision_pipe.cl
+cargo run --bin cron -- cl-stream audio --bands 80 --quant 4 --json
+
+# 28. Brain 4 Нейроморф SNN & STDP Пластик Хөдөлгүүр (LIF Нейрон, Растер график, Sub-Byte Crossbar)
+cargo run --bin cron -- cl-snn synth --neurons 16 -o snn_kernel.cl
+cargo run --bin cron -- cl-snn sim --neurons 16 --cycles 30
+cargo run --bin cron -- cl-snn sim --neurons 8 --cycles 16 --json
+
+# 29. Бүтэн Төгсгөлийн LLM Transformer Inference Хөдөлгүүр (BitNet 1.58b, SwiGLU, KV-Cache, RoPE)
+cargo run --bin cron -- cl-infer prompt "CRON" --tokens 8 --dim 64 --layers 2
+cargo run --bin cron -- cl-infer synth --dim 64 --layers 2 -o transformer_kernel.cl
+cargo run --bin cron -- cl-infer prompt "AI" --dim 32 --tokens 4 --json
+
+# 30. Language Server Protocol (LSP 3.17) Сервер (.cl болон .cr бодит цагийн алдаа, Hover, QuickFix)
+cargo run --bin cron -- lsp --version
+cargo run --bin cron -- lsp
+
+# 31. CORDIC & Комплекс Геометр Хөдөлгүүр (Brain 2 Фотоник MZI Фаз, Brain 5 Квант Блох Сфер, RoPE)
+cargo run --bin cron -- cl-cordic rot --angle 0.785398 --iters 16 --orbit
+cargo run --bin cron -- cl-cordic vec --x 3.0 --y 4.0 --iters 16
+cargo run --bin cron -- cl-cordic sphere --theta 1.047 --phi 0.785
+cargo run --bin cron -- cl-cordic synth --iters 16 -o cordic.cl
+cargo run --bin cron -- cl-cordic rot --angle 0.785398 --json
+
+# 32. Циклийн Нарийвчлалтай VCD & Дижитал Логик Анализатор (IEEE 1364-2001 VCD, GTKWave, ASCII Waveform)
+cargo run --bin cron -- cl-vcd examples/cl/mini_transformer_attention.cl
+cargo run --bin cron -- cl-vcd examples/cl/mini_transformer_attention.cl -o trace.vcd --cycles 32
+cargo run --bin cron -- cl-vcd examples/cl/mini_transformer_attention.cl --json
+
+# 33. Автономит Силикон Микро-Кернел PPA & Performance Свиит (Roofline, TOPS/W, EDP, Scoreboard)
+cargo run --bin cron -- cl-perf examples/cl/mini_transformer_attention.cl
+cargo run --bin cron -- cl-perf --all
+cargo run --bin cron -- cl-perf --all --json
+cargo run --bin cron -- cl-perf examples/cl/mini_transformer_attention.cl --freq 3.0 --cores 512
+
+# 34. 4D-Torus Орон Зайн Ачаалал Тэнцвэржүүлэгч (Tensor/Pipeline/Data Parallel, 1F1B, Дулааны зураглал)
+cargo run --bin cron -- cl-balance
+cargo run --bin cron -- cl-balance --batches 32
+cargo run --bin cron -- cl-balance --m 4096 --k 4096 --n 11008 --layers 32 --tp 8 --pp 4 --dp 8
+cargo run --bin cron -- cl-balance --json
+cargo run --bin cron -- cl-balance -o multi_core_bundle.cl
+
+# 35. Динамик Трейс Оптимайзер & 16KB L0 Трейс Кэш (Modulo Scheduling, Software Pipelining, 99% Hit)
+cargo run --bin cron -- cl-trace examples/cl/mini_transformer_attention.cl
+cargo run --bin cron -- cl-trace examples/cl/mini_transformer_attention.cl --cache-kb 32 --trip-count 128
+cargo run --bin cron -- cl-trace examples/cl/mini_transformer_attention.cl --json
+cargo run --bin cron -- cl-trace examples/cl/mini_transformer_attention.cl -o modulo_pipelined.cl
+
+# 36. 4D-Torus 9-Port Virtual Channel Router & Синтезлэгдэх Verilog RTL (Dally-Seitz Escape, Кредит урсгал)
+cargo run --bin cron -- cl-router inspect
+cargo run --bin cron -- cl-router synth -o noc_router_4d.v
+cargo run --bin cron -- cl-router sim --cycles 32
+cargo run --bin cron -- cl-router inspect --json
+
+# 37. Esolang-Inspired AI Silicon Coprocessor (Malbolge, Befunge, Brainfuck, Assembly, Prolog)
+cargo run --bin cron -- cl-esoteric demo
+cargo run --bin cron -- cl-esoteric tape
+cargo run --bin cron -- cl-esoteric trit
+cargo run --bin cron -- cl-esoteric systolic
+cargo run --bin cron -- cl-esoteric unify
+cargo run --bin cron -- cl-esoteric synth -o esoteric_coprocessor.v
+cargo run --bin cron -- cl-esoteric demo --json
+
+# 38. Esolang-Accelerated .cr Language Compiler & C23 Native Lowering (Tape, Wavefront, VLIW Asm, Rules)
+cargo run --bin cron -- check examples/esoteric_transformer_bitnet.cr
+cargo run --bin cron -- build examples/esoteric_transformer_bitnet.cr
+cargo run --bin cron -- c23 examples/esoteric_transformer_bitnet.cr -o esoteric_transformer_bitnet.c
+cargo run --bin cron -- cl-run esoteric_transformer_bitnet.cl
+
+# 39. AI Vibe-Coding Тодорхойлолт ба JSON Schema / System Prompt үүсгэгч
+cargo run --bin cron -- vibe-spec --format prompt
+cargo run --bin cron -- cl-schema -o cron_schema.json
+
+# 40. Автономит AI Vibe-Loop (Heal + Opt + JIT + JSON үр дүн нэг дор)
+cargo run --bin cron -- vibe-loop examples/cl/mini_transformer_attention.cl
+cargo run --bin cron -- vibe-loop examples/cl/mini_transformer_attention.cl --json
+cargo run --bin cron -- vibe-loop --code "B0000: '==01#00A> _OP01$28F> _NO00#000> _HL00#000!" --json
+
+# 41. Бүх нэгдсэн тестүүдийг ажиллуулах (490+ тест, 100% ногоон)
+cargo test --workspace
 ```
+

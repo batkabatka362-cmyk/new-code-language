@@ -5,6 +5,14 @@
 
 #![allow(clippy::missing_safety_doc)]
 
+pub mod fiber;
+pub mod http_server;
+pub mod mmap_streamer;
+
+pub use fiber::{FiberChannel, FiberConfig, FiberHandle, FiberScheduler, FiberState};
+pub use http_server::{HttpRequest, HttpServerConfig, LiveHttpServer, RegionScratchpad};
+pub use mmap_streamer::{LayerMetadata, PagedWeightStreamer, StreamerTelemetry};
+
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::slice;

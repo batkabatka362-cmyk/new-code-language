@@ -22,7 +22,7 @@ struct Tensor<T> {
     grad_val: f32
 }
 
-// Sub-tensor View with offset and length
+// Sub-tensor View with offset and length (Zero-Copy Window into Tensor)
 struct TensorView<T> {
     data: T,
     offset: i32,
@@ -56,6 +56,32 @@ def tensor_create<T>(d0: i32, d1: i32, d2: i32, d3: i32, init_val: T, requires_g
 // Compute 1D linear storage index from 4D coordinates
 def tensor_linear_offset<T>(t: Tensor<T>, i0: i32, i1: i32, i2: i32, i3: i32) -> i32 {
     return (i0 * t.s0) + (i1 * t.s1) + (i2 * t.s2) + (i3 * t.s3)
+}
+
+// Dimension queries
+def tensor_get_d0<T>(t: Tensor<T>) -> i32 { return t.d0 }
+def tensor_get_d1<T>(t: Tensor<T>) -> i32 { return t.d1 }
+def tensor_get_d2<T>(t: Tensor<T>) -> i32 { return t.d2 }
+def tensor_get_d3<T>(t: Tensor<T>) -> i32 { return t.d3 }
+
+// Zero-copy tensor slice view
+def tensor_slice<T>(t: Tensor<T>, offset: i32, length: i32, stride: i32) -> TensorView<T> {
+    return TensorView<T> {
+        data: t.data,
+        offset: offset,
+        length: length,
+        stride: stride
+    }
+}
+
+// Sub-slice view of existing view (0 allocations)
+def tensor_view_subslice<T>(v: TensorView<T>, sub_offset: i32, sub_len: i32) -> TensorView<T> {
+    return TensorView<T> {
+        data: v.data,
+        offset: v.offset + (sub_offset * v.stride),
+        length: sub_len,
+        stride: v.stride
+    }
 }
 
 // Reshape tensor dimensions preserving total element capacity
@@ -100,6 +126,11 @@ def tensor_dot_simd(a: vec8f, b: vec8f) -> f32 {
 def tensor_gemm_simd(a: vec8f, b: vec8f, bias: f32) -> f32 {
     let dot = simd_dot(a, b)
     return dot + bias
+}
+
+// Vectorized bias addition
+def tensor_add_bias_simd(a: vec8f, bias: vec8f) -> vec8f {
+    return simd_add(a, bias)
 }
 
 // Accumulate gradient into tensor

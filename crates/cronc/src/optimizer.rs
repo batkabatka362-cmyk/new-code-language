@@ -174,6 +174,20 @@ impl Optimizer {
                     self.fold_constants_stmts(&mut branch.body);
                 }
             }
+            Statement::TapeStream { value, .. } => {
+                *value = self.fold_expr(value.clone());
+            }
+            Statement::SystolicBlock { body, .. } => {
+                self.fold_constants_stmts(body);
+            }
+            Statement::RuleDecl { body_exprs, .. } => {
+                for e in body_exprs {
+                    *e = self.fold_expr(e.clone());
+                }
+            }
+            Statement::Comptime { body, .. } | Statement::ProofContract(body) => {
+                self.fold_constants_stmts(body);
+            }
             _ => {}
         }
     }
@@ -547,6 +561,12 @@ impl Optimizer {
                         self.eliminate_dead_code_stmts(&mut arm.body);
                     }
                 }
+                Statement::SystolicBlock { body, .. } => {
+                    self.eliminate_dead_code_stmts(body);
+                }
+                Statement::Comptime { body, .. } | Statement::ProofContract(body) => {
+                    self.eliminate_dead_code_stmts(body);
+                }
                 _ => {}
             }
         }
@@ -631,6 +651,28 @@ impl Optimizer {
                 self.collect_references_expr(action);
                 if let Some(wa) = with_arg {
                     self.collect_references_expr(wa);
+                }
+            }
+            Statement::TapeDecl { name, .. } => {
+                self.referenced_vars.insert(name.clone());
+            }
+            Statement::TapeStream { target_tape, value, .. } => {
+                self.referenced_vars.insert(target_tape.clone());
+                self.collect_references_expr(value);
+            }
+            Statement::SystolicBlock { body, .. } => {
+                for s in body {
+                    self.collect_references_stmt(s);
+                }
+            }
+            Statement::RuleDecl { body_exprs, .. } => {
+                for e in body_exprs {
+                    self.collect_references_expr(e);
+                }
+            }
+            Statement::Comptime { body, .. } | Statement::ProofContract(body) => {
+                for s in body {
+                    self.collect_references_stmt(s);
                 }
             }
             _ => {}
@@ -798,6 +840,15 @@ impl Optimizer {
                 }
                 Statement::Return(Some(e)) => {
                     *e = self.strength_reduce_expr(e.clone());
+                }
+                Statement::TapeStream { value, .. } => {
+                    *value = self.strength_reduce_expr(value.clone());
+                }
+                Statement::SystolicBlock { body, .. } => {
+                    self.strength_reduce_stmts(body);
+                }
+                Statement::Comptime { body, .. } | Statement::ProofContract(body) => {
+                    self.strength_reduce_stmts(body);
                 }
                 _ => {}
             }
@@ -1088,6 +1139,11 @@ impl Optimizer {
                         self.licm_stmts(fb);
                     }
                 }
+                Statement::SystolicBlock { body, .. }
+                | Statement::Comptime { body, .. }
+                | Statement::ProofContract(body) => {
+                    self.licm_stmts(body);
+                }
                 _ => {}
             }
 
@@ -1125,6 +1181,14 @@ impl Optimizer {
                 }
                 Statement::Region { body, .. } | Statement::Brain { body, .. } | Statement::Fuse { body, .. } => {
                     modified.extend(self.collect_modified_vars(body));
+                }
+                Statement::SystolicBlock { body, .. }
+                | Statement::Comptime { body, .. }
+                | Statement::ProofContract(body) => {
+                    modified.extend(self.collect_modified_vars(body));
+                }
+                Statement::TapeStream { target_tape, .. } => {
+                    modified.insert(target_tape.clone());
                 }
                 _ => {}
             }

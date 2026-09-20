@@ -8,8 +8,13 @@ description = "Unified CLI for the CRON Programming Language"
 name = "cron"
 path = "src/main.rs"
 
+[lib]
+name = "cron_cli"
+path = "src/lib.rs"
+
 [dependencies]
 cronc = { path = "../cronc" }
 cron-vm = { path = "../cron-vm" }
 cron-decompile = { path = "../cron-decompile" }
 cron-lsp = { path = "../cron-lsp" }
+cron-rt = { path = "../cron-rt" }

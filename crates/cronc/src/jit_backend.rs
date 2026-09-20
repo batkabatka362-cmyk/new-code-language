@@ -1279,6 +1279,7 @@ pub fn run_source_jit(source: &str) -> Result<i64, String> {
     let mut parser = crate::parser::Parser::new(tokens);
     let mut program = parser.parse_program().map_err(|e| format!("Parser error: {}", e))?;
 
+    let _ = crate::comptime::evaluate_and_fold_program(&mut program);
     let _ = crate::autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = crate::checker::SemanticChecker::new();

@@ -17,6 +17,8 @@ def attn_head_loss(w_v: f32, w_q: f32, x: f32, target: f32) -> f32 {
 }
 
 def main() -> i32 {
+    cron_telemetry_init("training_telemetry.csv")
+
     // 1. Initial attention head parameter weights
     let mut w_v: f32 = 0.1
     let w_q: f32 = 0.5
@@ -30,8 +32,14 @@ def main() -> i32 {
     // 3. Multi-step gradient descent training loop (15 epochs)
     let mut epoch: i32 = 0
     while epoch < 15 {
+        // Measure current epoch loss
+        let cur_loss: f32 = attn_head_loss(w_v, w_q, x, target)
+
         // Compute analytical gradient wrt value weight w_v using native grad()
         let grad_wv = grad(attn_head_loss, wrt: "w_v")(w_v, w_q, x, target)
+
+        // Record telemetry to terminal and CSV disk file
+        cron_telemetry_log(epoch, cur_loss, grad_wv, w_v)
 
         // Gradient descent parameter update step: w_v = w_v - lr * grad
         w_v = w_v - (lr * grad_wv)
@@ -41,6 +49,9 @@ def main() -> i32 {
 
     // 4. Measure final loss after training
     let final_loss: f32 = attn_head_loss(w_v, w_q, x, target)
+
+    cron_telemetry_log(epoch, final_loss, 0.0, w_v)
+    cron_telemetry_close()
 
     // Prediction: x * w_q * w_v = 2.0 * 0.5 * 4.0 = 4.0
     let pred: f32 = x * w_q * w_v

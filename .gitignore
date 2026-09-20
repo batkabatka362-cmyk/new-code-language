@@ -6,3 +6,18 @@
 *.egg-info
 __pycache__/
 *.pyc
+
+# Native compilation objects and temp files
+*.o
+*.obj
+*.out
+*.c.out
+*.clpatch.bin
+*.vcd
+
+# Generated telemetry data
+/telemetry/
+*.csv
+agi_agent_telemetry.json
+training_telemetry.csv
+

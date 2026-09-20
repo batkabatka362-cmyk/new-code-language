@@ -1,0 +1,19 @@
+CRON-Pure-Rust-ONNX-Synthesizer:Ø
+"
+x_in
+w_qq_outq_proj"MatMul
+"
+x_in
+w_kk_outk_proj"MatMul
+
+q_outq_actact_proj"ReluBitNetTransformerAttentionLayer*M
+"@š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?Bw_q*M
+"@š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?š™™?Bw_kZ
+x_in
+
+
+b
+q_act
+
+
+

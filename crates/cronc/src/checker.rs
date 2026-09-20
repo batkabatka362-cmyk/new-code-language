@@ -125,6 +125,8 @@ impl SemanticChecker {
             "tensor_init", "tensor_ones", "tensor_zeros",
             // Phase 12: Kernel Fusion & Streaming builtins
             "tensor_scale", "tensor_softmax_maxsub", "tensor_gelu", "tensor_bias",
+            // Real-World Training & AGI Telemetry builtins
+            "cron_telemetry_init", "cron_telemetry_log", "cron_telemetry_close", "cron_save_agi_state",
         ] {
             known_functions.insert(f.to_string());
         }
@@ -560,6 +562,43 @@ impl SemanticChecker {
                         }
                     }
                     return Some(ret.clone());
+                }
+                None
+            }
+            Expr::Binary { op, left, right } => {
+                if op == "@" {
+                    let type_a = self.infer_expr_type(left)?;
+                    let type_b = self.infer_expr_type(right)?;
+                    let (dims_a, elem_a) = Self::parse_tensor_shape(&type_a)?;
+                    let (dims_b, _) = Self::parse_tensor_shape(&type_b)?;
+                    if dims_a.len() >= 2 && dims_b.len() >= 2 {
+                        let m = dims_a[dims_a.len() - 2].clone();
+                        let n = dims_b[dims_b.len() - 1].clone();
+                        let mut out_dims = Vec::new();
+                        if dims_a.len() > 2 {
+                            for d in &dims_a[..dims_a.len() - 2] {
+                                out_dims.push(d.clone());
+                            }
+                        } else if dims_b.len() > 2 {
+                            for d in &dims_b[..dims_b.len() - 2] {
+                                out_dims.push(d.clone());
+                            }
+                        }
+                        out_dims.push(m);
+                        out_dims.push(n);
+                        return Some(format!("tensor<{}, {}>", out_dims.join(", "), elem_a));
+                    }
+                } else if matches!(op.as_str(), "+" | "-" | "*" | "/") {
+                    if let Some(t_left) = self.infer_expr_type(left) {
+                        if t_left.starts_with("tensor<") {
+                            return Some(t_left);
+                        }
+                    }
+                    if let Some(t_right) = self.infer_expr_type(right) {
+                        if t_right.starts_with("tensor<") {
+                            return Some(t_right);
+                        }
+                    }
                 }
                 None
             }
@@ -1016,6 +1055,60 @@ impl SemanticChecker {
             Statement::Expr(expr) => {
                 self.check_expr(expr)?;
             }
+            Statement::Comptime { body, .. } => {
+                for s in body {
+                    self.check_statement(s)?;
+                }
+            }
+            // Milestone #022: Esolang-Inspired Language Checking
+            Statement::InlineVliw { raw_bundles, span } => {
+                if raw_bundles.is_empty() {
+                    return Err(TypeError::new("E0020", "Empty __vliw_asm__ block: At least one VLIW bundle expected".to_string(), *span));
+                }
+                let program_text = raw_bundles.join("\n");
+                if let Err(e) = crate::cl_lang::verify_cl_program(&program_text) {
+                    return Err(TypeError::new("E0021", format!("Inline VLIW verification failure: {}", e), *span));
+                }
+            }
+            Statement::TapeDecl { name, capacity, span, .. } => {
+                if *capacity == 0 {
+                    return Err(TypeError::new("E0022", format!("Invalid tape capacity for '{}': Capacity must be > 0", name), *span));
+                }
+                self.insert_var(VarInfo {
+                    name: name.clone(),
+                    is_lin: false,
+                    is_grad: false,
+                    is_mut: true,
+                    is_consumed: false,
+                    is_tainted: false,
+                    is_capability: false,
+                    def_span: *span,
+                    var_type: Some("RingTape".to_string()),
+                    in_region: false,
+                });
+            }
+            Statement::TapeStream { target_tape, value, span, .. } => {
+                self.check_expr(value)?;
+                if self.lookup_var(target_tape).is_none() {
+                    return Err(TypeError::new("E0023", format!("Undefined tape stream buffer '{}'", target_tape), *span));
+                }
+            }
+            Statement::SystolicBlock { flows, body, .. } => {
+                for f in flows {
+                    let d = f.direction.to_uppercase();
+                    if d != "EAST" && d != "WEST" && d != "NORTH" && d != "SOUTH" && d != "UP" && d != "DOWN" {
+                        return Err(TypeError::new("E0024", format!("Invalid systolic flow direction '{}' for tensor '{}'. Expected EAST, WEST, NORTH, SOUTH", f.direction, f.tensor_name), f.span));
+                    }
+                }
+                self.push_scope();
+                self.check_statements(body)?;
+                self.pop_scope();
+            }
+            Statement::RuleDecl { body_exprs, .. } => {
+                for e in body_exprs {
+                    self.check_expr(e)?;
+                }
+            }
         }
         Ok(())
     }
@@ -1242,9 +1335,46 @@ impl SemanticChecker {
                     self.check_expr(el)?;
                 }
             }
-            Expr::Binary { left, right, .. } => {
+            Expr::Binary { op, left, right } => {
                 self.check_expr(left)?;
                 self.check_expr(right)?;
+                if op == "@" {
+                    let type_a = self.infer_expr_type(left);
+                    let type_b = self.infer_expr_type(right);
+                    if let (Some(t_a), Some(t_b)) = (type_a, type_b) {
+                        if let (Some((dims_a, _)), Some((dims_b, _))) = (Self::parse_tensor_shape(&t_a), Self::parse_tensor_shape(&t_b)) {
+                            if dims_a.len() < 2 || dims_b.len() < 2 {
+                                return Err(TypeError::new(
+                                    "E0016",
+                                    format!("Matrix multiplication '@' requires tensors of rank >= 2, but received rank {} ({}) and rank {} ({})", dims_a.len(), t_a, dims_b.len(), t_b),
+                                    left.span(),
+                                ));
+                            }
+                            let inner_a = &dims_a[dims_a.len() - 1];
+                            let outer_b = &dims_b[dims_b.len() - 2];
+                            if inner_a != outer_b {
+                                return Err(TypeError::new(
+                                    "E0016",
+                                    format!("Tensor dimension mismatch: cannot multiply tensor with inner dimension '{}' ({}) by tensor with outer dimension '{}' ({})", inner_a, t_a, outer_b, t_b),
+                                    right.span(),
+                                ).with_note("Milestone #030: First-class '@' matrix operator guarantees inner contraction dimension equality at compile-time")
+                                 .with_help(format!("Ensure inner dimension '{}' equals outer dimension '{}'", inner_a, outer_b)));
+                            }
+                            let batch_rank_a = dims_a.len() - 2;
+                            let batch_rank_b = dims_b.len() - 2;
+                            let check_batches = batch_rank_a.min(batch_rank_b);
+                            for i in 0..check_batches {
+                                if dims_a[i] != dims_b[i] {
+                                    return Err(TypeError::new(
+                                        "E0016",
+                                        format!("Tensor batch dimension mismatch at axis {}: '{}' ({}) vs '{}' ({})", i, dims_a[i], t_a, dims_b[i], t_b),
+                                        right.span(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Expr::Unary { operand, .. } => {
                 self.check_expr(operand)?;
@@ -1284,6 +1414,14 @@ impl SemanticChecker {
             }
             Expr::LiteralInt(_) | Expr::LiteralHex(_) | Expr::LiteralFloat(_)
             | Expr::LiteralAxis(_) | Expr::LiteralString(_) | Expr::LiteralBool(_) => {}
+            Expr::Comptime { body, result, .. } => {
+                for s in body {
+                    self.check_statement(s)?;
+                }
+                if let Some(res) = result {
+                    self.check_expr(res)?;
+                }
+            }
         }
         Ok(())
     }

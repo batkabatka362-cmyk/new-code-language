@@ -932,6 +932,12 @@ impl Parser {
                 let body = self.parse_block()?;
                 Ok(Statement::Fuse { attrs, body, span })
             }
+            Token::Comptime => {
+                let span = self.current_span();
+                self.advance(); // comptime
+                let body = self.parse_block()?;
+                Ok(Statement::Comptime { body, span })
+            }
             Token::Brain => {
                 let span = self.current_span();
                 self.advance(); // brain
@@ -1157,8 +1163,201 @@ impl Parser {
                     span,
                 })
             }
+            Token::InlineVliw => {
+                let span = self.current_span();
+                self.advance(); // __vliw_asm__
+                self.expect(&Token::OpenBrace)?;
+                let mut raw_bundles = Vec::new();
+                while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+                    if matches!(self.peek(), Token::StringLit(_)) {
+                        if let Token::StringLit(s) = self.advance() {
+                            raw_bundles.push(s);
+                            self.match_token(&Token::Comma);
+                        }
+                    } else if let Token::Ident(line) = self.advance() {
+                        let mut full_line = line;
+                        while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+                            if self.match_token(&Token::Semicolon) {
+                                break;
+                            }
+                            match self.advance() {
+                                Token::Colon => full_line.push(':'),
+                                Token::Ident(s) => { full_line.push(' '); full_line.push_str(&s); },
+                                Token::StringLit(s) => { full_line.push(' '); full_line.push_str(&s); },
+                                _ => {}
+                            }
+                        }
+                        raw_bundles.push(full_line);
+                    } else {
+                        self.advance();
+                    }
+                }
+                self.expect(&Token::CloseBrace)?;
+                Ok(Statement::InlineVliw { raw_bundles, span })
+            }
+            Token::Ident(ref kw) if kw == "tape" && matches!(self.peek_offset(1), Token::Ident(_)) => {
+                let span = self.current_span();
+                self.advance(); // tape
+                let name = match self.advance() {
+                    Token::Ident(n) => n,
+                    other => return Err(format!("Expected tape identifier, got {:?}", other)),
+                };
+                self.expect(&Token::Colon)?;
+                let type_name = match self.advance() {
+                    Token::Ident(n) => n,
+                    other => return Err(format!("Expected tape type (e.g. RingTape[T, N]), got {:?}", other)),
+                };
+                let (elem_type, capacity) = if type_name == "RingTape" && self.match_token(&Token::OpenBracket) {
+                    let elem = match self.advance() {
+                        Token::Ident(n) => n,
+                        other => return Err(format!("Expected element type in RingTape, got {:?}", other)),
+                    };
+                    self.expect(&Token::Comma)?;
+                    let cap = match self.advance() {
+                        Token::IntLit(c) => c as usize,
+                        other => return Err(format!("Expected integer capacity in RingTape, got {:?}", other)),
+                    };
+                    self.expect(&Token::CloseBracket)?;
+                    (elem, cap)
+                } else {
+                    (type_name, 256)
+                };
+                Ok(Statement::TapeDecl { name, elem_type, capacity, span })
+            }
+            Token::Ident(ref kw) if kw == "rule" && matches!(self.peek_offset(1), Token::Ident(_)) => {
+                let span = self.current_span();
+                self.advance(); // rule
+                let name = match self.advance() {
+                    Token::Ident(n) => n,
+                    other => return Err(format!("Expected rule name, got {:?}", other)),
+                };
+                self.expect(&Token::OpenParen)?;
+                let mut head_params = Vec::new();
+                while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                    if let Token::Ident(p) = self.advance() {
+                        head_params.push(p);
+                    }
+                    self.match_token(&Token::Comma);
+                }
+                self.expect(&Token::CloseParen)?;
+                let mut body_exprs = Vec::new();
+                if self.match_token(&Token::Colon) {
+                    self.match_token(&Token::Minus); // :-
+                    while !self.check(&Token::Semicolon) && !self.check(&Token::Eof) {
+                        let expr = self.parse_expr()?;
+                        body_exprs.push(expr);
+                        if !self.match_token(&Token::Comma) {
+                            break;
+                        }
+                    }
+                    self.match_token(&Token::Semicolon);
+                } else if self.check(&Token::OpenBrace) {
+                    let block = self.parse_block()?;
+                    for s in block {
+                        if let Statement::Expr(e) = s {
+                            body_exprs.push(e);
+                        }
+                    }
+                }
+                Ok(Statement::RuleDecl { name, head_params, body_exprs, span })
+            }
+            Token::At if matches!(self.peek_offset(1), Token::Ident(ref n) if n == "systolic") => {
+                let span = self.current_span();
+                self.advance(); // @
+                self.advance(); // systolic
+                let mut mesh_rows = 16;
+                let mut mesh_cols = 16;
+                let mut topology = "4D-Torus".to_string();
+                if self.match_token(&Token::OpenParen) {
+                    while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                        if let Token::Ident(k) = self.advance() {
+                            self.match_token(&Token::Colon);
+                            if k == "mesh" && self.match_token(&Token::OpenBracket) {
+                                if let Token::IntLit(r) = self.advance() { mesh_rows = r as usize; }
+                                self.match_token(&Token::Comma);
+                                if let Token::IntLit(c) = self.advance() { mesh_cols = c as usize; }
+                                self.match_token(&Token::CloseBracket);
+                            } else if k == "topology" {
+                                if let Token::Ident(t) = self.advance() { topology = t; }
+                            }
+                        }
+                        if !self.match_token(&Token::Comma) {
+                            break;
+                        }
+                    }
+                    self.expect(&Token::CloseParen)?;
+                }
+                if matches!(self.peek(), Token::Ident(ref b) if b == "block") {
+                    self.advance();
+                    if let Token::Ident(_) = self.peek() {
+                        self.advance();
+                    }
+                }
+                self.expect(&Token::OpenBrace)?;
+                let mut flows = Vec::new();
+                let mut body = Vec::new();
+                while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+                    if self.match_token(&Token::Semicolon) {
+                        continue;
+                    }
+                    if matches!(self.peek(), Token::Ident(ref f) if f == "flow") {
+                        self.advance();
+                        let f_span = self.current_span();
+                        let t_name = match self.advance() {
+                            Token::Ident(n) => n,
+                            other => return Err(format!("Expected tensor identifier after 'flow', got {:?}", other)),
+                        };
+                        self.expect(&Token::Arrow)?;
+                        let dir = match self.advance() {
+                            Token::Ident(d) => d,
+                            other => return Err(format!("Expected flow direction (EAST, WEST, NORTH, SOUTH), got {:?}", other)),
+                        };
+                        flows.push(SystolicFlowDecl {
+                            tensor_name: t_name,
+                            direction: dir,
+                            span: f_span,
+                        });
+                        self.match_token(&Token::Semicolon);
+                    } else {
+                        body.push(self.parse_statement()?);
+                        self.match_token(&Token::Semicolon);
+                    }
+                }
+                self.expect(&Token::CloseBrace)?;
+                Ok(Statement::SystolicBlock {
+                    mesh_rows,
+                    mesh_cols,
+                    topology,
+                    flows,
+                    body,
+                    span,
+                })
+            }
             _ => {
                 let expr = self.parse_expr()?;
+
+                // Check for tape streaming statements: ident << expr or ident >> expr
+                if let Expr::Binary { ref op, ref left, ref right } = expr {
+                    if op == "<<" {
+                        if let Expr::Ident(ref name, id_span) = **left {
+                            return Ok(Statement::TapeStream {
+                                target_tape: name.clone(),
+                                value: (**right).clone(),
+                                is_read: false,
+                                span: id_span,
+                            });
+                        }
+                    } else if op == ">>" {
+                        if let Expr::Ident(ref name, id_span) = **left {
+                            return Ok(Statement::TapeStream {
+                                target_tape: name.clone(),
+                                value: (**right).clone(),
+                                is_read: true,
+                                span: id_span,
+                            });
+                        }
+                    }
+                }
 
                 // Check for assignment: ident = expr  or  ident += expr
                 if let Expr::Ident(ref name, id_span) = expr {
@@ -1506,11 +1705,20 @@ impl Parser {
 
     fn parse_multiplicative_expr(&mut self) -> Result<Expr, String> {
         let mut expr = self.parse_unary_expr()?;
-        while matches!(self.peek(), Token::Star | Token::Slash | Token::Percent) {
+        while matches!(self.peek(), Token::Star | Token::Slash | Token::Percent | Token::At) {
+            if self.peek() == &Token::At {
+                if matches!(self.peek_offset(1), Token::Ident(ref n) if n == "systolic" || n == "sram" || n == "hbm" || n == "noc") {
+                    break;
+                }
+                if self.pos > 0 && self.pos < self.tokens.len() && self.tokens[self.pos].span.line > self.tokens[self.pos - 1].span.line {
+                    break;
+                }
+            }
             let op = match self.advance() {
                 Token::Star => "*",
                 Token::Slash => "/",
                 Token::Percent => "%",
+                Token::At => "@",
                 _ => unreachable!(),
             }.to_string();
             let right = self.parse_unary_expr()?;
@@ -1592,6 +1800,14 @@ impl Parser {
                 let operand = self.parse_unary_expr()?;
                 Ok(Expr::Unary {
                     op: "not".to_string(),
+                    operand: Box::new(operand),
+                })
+            }
+            Token::Shr => {
+                self.advance();
+                let operand = self.parse_unary_expr()?;
+                Ok(Expr::Unary {
+                    op: ">>".to_string(),
                     operand: Box::new(operand),
                 })
             }
@@ -1837,6 +2053,33 @@ impl Parser {
                     let inner = self.parse_expr()?;
                     Ok(Expr::Spawn(Box::new(inner)))
                 }
+            }
+            Token::Comptime => {
+                let span = self.current_span();
+                self.advance(); // comptime
+                self.expect(&Token::OpenBrace)?;
+                let mut body = Vec::new();
+                let mut result = None;
+                while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+                    if self.match_token(&Token::Semicolon) {
+                        continue;
+                    }
+                    if self.check(&Token::Let) || self.check(&Token::While) || self.check(&Token::For) || self.check(&Token::If) {
+                        body.push(self.parse_statement()?);
+                    } else {
+                        let expr = self.parse_expr()?;
+                        if self.match_token(&Token::Semicolon) {
+                            body.push(Statement::Expr(expr));
+                        } else if self.check(&Token::CloseBrace) {
+                            result = Some(Box::new(expr));
+                            break;
+                        } else {
+                            body.push(Statement::Expr(expr));
+                        }
+                    }
+                }
+                self.expect(&Token::CloseBrace)?;
+                Ok(Expr::Comptime { body, result, span })
             }
             Token::If => {
                 self.advance(); // if

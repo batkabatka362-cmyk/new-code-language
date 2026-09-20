@@ -220,6 +220,54 @@ pub enum Statement {
         arms: Vec<MatchArm>,
         span: Span,
     },
+    /// Compile-Time Metaprogramming execution block
+    Comptime {
+        body: Vec<Statement>,
+        span: Span,
+    },
+    // Milestone #022: Esolang-Inspired Language Statements
+    /// Assembly: Inline 4-way VLIW slot machine assembly block
+    InlineVliw {
+        raw_bundles: Vec<String>,
+        span: Span,
+    },
+    /// Brainfuck: Hardware auto-advancing tape ring buffer declaration
+    TapeDecl {
+        name: String,
+        elem_type: String,
+        capacity: usize,
+        span: Span,
+    },
+    /// Brainfuck: Tape stream write (tape << val) or stream read (val = >> tape)
+    TapeStream {
+        target_tape: String,
+        value: Expr,
+        is_read: bool,
+        span: Span,
+    },
+    /// Befunge: Spatial 2D/4D wavefront systolic array block
+    SystolicBlock {
+        mesh_rows: usize,
+        mesh_cols: usize,
+        topology: String,
+        flows: Vec<SystolicFlowDecl>,
+        body: Vec<Statement>,
+        span: Span,
+    },
+    /// Prolog: Horn-clause neuro-symbolic rule declaration
+    RuleDecl {
+        name: String,
+        head_params: Vec<String>,
+        body_exprs: Vec<Expr>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SystolicFlowDecl {
+    pub tensor_name: String,
+    pub direction: String,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -267,6 +315,12 @@ impl Statement {
             Statement::Return(_) => Span::default(),
             Statement::Expr(e) => e.span(),
             Statement::Match { span, .. } => *span,
+            Statement::Comptime { span, .. } => *span,
+            Statement::InlineVliw { span, .. } => *span,
+            Statement::TapeDecl { span, .. } => *span,
+            Statement::TapeStream { span, .. } => *span,
+            Statement::SystolicBlock { span, .. } => *span,
+            Statement::RuleDecl { span, .. } => *span,
         }
     }
 }
@@ -356,6 +410,12 @@ pub enum Expr {
         args: Vec<CallArg>,
         span: Span,
     },
+    /// Compile-time metaprogramming block: comptime { ... }
+    Comptime {
+        body: Vec<Statement>,
+        result: Option<Box<Expr>>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -368,6 +428,7 @@ impl Expr {
             Expr::ChannelRecv { span, .. } => *span,
             Expr::Grad { span, .. } => *span,
             Expr::GradCall { span, .. } => *span,
+            Expr::Comptime { span, .. } => *span,
             _ => Span::default(),
         }
     }

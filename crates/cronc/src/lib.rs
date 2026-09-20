@@ -27,14 +27,164 @@ pub mod cl_binary;
 pub mod gpu_backend;
 pub mod autotune;
 pub mod cl_c23;
+pub mod cl_llvm;
+pub mod cl_jit;
+pub mod cl_heal;
+pub mod cl_opt;
+pub mod model_importer;
+pub mod comptime;
+pub mod silicon_flash;
+pub mod formal_verify;
+pub mod cl_spec;
+pub mod cl_link;
+pub mod vibe_loop;
+pub mod cl_cosim;
+pub mod cl_memcheck;
+pub mod cl_fuzz;
+pub mod cl_bench;
+pub mod cl_kernel;
+pub mod cl_tile;
+pub mod cl_cluster;
+pub mod cl_sparse;
+pub mod cl_power;
+pub mod cl_autotune;
+pub mod cl_stream;
+pub mod cl_snn;
+pub mod cl_infer;
+pub mod cl_cordic;
+pub mod cl_vcd;
+pub mod cl_perf;
+pub mod cl_balance;
+pub mod cl_trace;
+pub mod cl_router;
+pub mod cl_esoteric;
+pub mod cl_optic;
+pub mod cl_patch;
+pub mod cl_compare;
+pub mod fusion;
+pub mod constrained_sampler;
+pub mod speculative_decoding;
 
+pub use fusion::{
+    emit_flash_attention_2_c, emit_fused_rmsnorm_linear_c, emit_fused_swiglu_c,
+    emit_fused_transformer_block_c, verify_zero_heap_allocations, FusionGraph,
+    FusionGroup, FusionNode, FusionOpKind,
+};
+
+pub use cl_compare::{
+    comparison_to_json, evaluate_workload, generate_whitepaper_markdown,
+    get_system_specs, render_ascii_comparison_scoreboard, run_comparison_suite,
+    BaselineFilter, ComparisonSuiteReport, SystemSpec, SystemWorkloadResult,
+    WorkloadComparison, WorkloadKind, BOLTZMANN_CONSTANT, LANDAUER_LIMIT_PER_BIT_JOULES,
+    ROOM_TEMP_KELVIN,
+};
+
+pub use cl_patch::{
+    apply_cl_patch, format_patch_ascii_hud, patch_package_to_json,
+    synthesize_patch_controller_verilog, ClPatchPackage, ClPatchReport,
+    MicrocodePatchEntry, PatchAction, MAX_PATCH_ENTRIES,
+};
+
+pub use cl_optic::{
+    analyze_cl_optic, format_optic_ascii_hud, optic_report_to_json,
+    synthesize_optical_power_verilog, ClOpticOptions, ClOpticReport,
+    LossBreakdown, MeshTopology, WdmChannelInfo,
+};
+
+
+pub use cl_esoteric::{
+    render_ascii_esoteric_hud, synthesize_verilog_esoteric_coprocessor,
+    BefungeSystolicGrid, EsotericCoprocessor, HardwareStatusFlags,
+    HardwareTapePointers, PrologUnificationEngine, SystolicDirection,
+    Trit, TritWord, UnificationMatchResult, ZohlState,
+};
+pub use cl_router::{
+    render_ascii_router_hud, synthesize_verilog_router, Flit, FlitType,
+    NoCRouterConfig, NoCRouterSimulation, RouterPort, VirtualChannel,
+};
+pub use cl_trace::{
+    optimize_cl_trace, render_ascii_trace_schedule, parse_cl_bundles, is_slot_nop,
+    ModuloSchedule, TraceCacheConfig, TraceCacheReport, TraceOptimizationResult,
+};
+pub use cl_balance::{
+    balance_workload, derive_optimal_strategy, render_ascii_mesh_heatmap,
+    synthesize_multicore_cl_bundle, BalanceConfig, CoreWorkloadAssignment,
+    ParallelismStrategy, WorkloadBalancePlan,
+};
+pub use cl_perf::{
+    profile_cl_kernel, run_cl_perf_suite, render_ascii_ppa_scoreboard,
+    ClPerfConfig, ClPerfSuiteReport, PpaMetrics,
+};
+pub use cl_vcd::{
+    dump_vcd, generate_vcd_trace, render_ascii_waveform,
+    PipelineCycleSnapshot, VcdConfig, VcdSignalDef, VcdSignalType, VcdTraceReport,
+};
+pub use cl_cordic::{
+    compute_magnitude_angle, compute_rope_frequencies, compute_sin_cos,
+    compute_sinh_cosh, render_ascii_bloch_sphere, render_ascii_phase_orbit,
+    run_cordic, synthesize_cordic_cl, CordicConfig, CordicMode, CordicResult,
+};
+pub use cl_infer::{
+    generate_tokens, synthesize_transformer_cl, transformer_forward_step,
+    GenerationResult, InferenceTelemetry, KVCache, TransformerConfig,
+};
+pub use cl_snn::{
+    simulate_snn, synthesize_snn_kernel,
+    LifNeuronConfig, StdpConfig, SpikeEvent, SnnSimulationResult,
+};
+pub use cl_autotune::{
+    run_cl_autotune, synthesize_tuned_cl_kernel, compute_pareto_frontier,
+    AutotuneCandidate, AutotuneConfig, AutotuneReport,
+};
+pub use cl_stream::{
+    synthesize_streaming_pipeline, StreamModality, StreamPipelineConfig,
+    StreamReport, StreamStage,
+};
+pub use cl_sparse::{
+    compress_2_4_matrix, decompress_2_4_matrix, prune_to_2_4,
+    analyze_matrix_sparsity, synthesize_sparse_2_4_gemm,
+    Compressed2_4, SparsityReport,
+};
+pub use cl_power::{
+    analyze_cl_power, ClPowerOptions, ClPowerReport,
+    MAX_CHIP_TDP_WATTS, THROTTLE_TEMPERATURE_CELSIUS,
+};
+pub use cl_tile::{tile_gemm, tile_conv2d, derive_optimal_gemm_tiles, TileOptions, TileResult};
+pub use cl_cluster::{ClusterCoord, CollectiveSchedule, CollectiveType, synthesize_collective_schedule, render_cluster_topology_ascii, generate_distributed_c23_harness};
+pub use cl_lang::{verify_cl_program, audit_alphabet_coverage, parse_slot, parse_weights_directive, ClReport, ClSlot, ClWeightBinding};
+pub use cl_spec::{generate_cl_spec, generate_cl_ebnf_grammar, generate_cl_json_schema, generate_cl_ai_system_prompt, SpecFormat};
+pub use cl_link::{ClLinker, ClLinkReport, Coord4D, CoreProgram, InterCoreChannel};
+pub use vibe_loop::{run_vibe_loop, VibeLoopConfig, VibeLoopResult, VibeStatus, VibeDiagnostic};
+pub use cl_cosim::{run_cl_cosim, ClCosimReport, CosimCycleRecord, CosimOptions, VerilogRtlCoreSimulator};
+pub use cl_memcheck::{verify_cl_memory_access, ClMemcheckReport, MemcheckOptions, CycleBankConflict, compute_linear_bank, compute_swizzled_bank, prove_strided_conflict_freedom};
+pub use cl_fuzz::{run_cl_fuzz, ClFuzzReport, FuzzOptions, MutationStrategy};
+pub use cl_bench::{analyze_cl_roofline, ClBenchReport, RooflineRegime, PEAK_CORE_COMPUTE_GFLOPS, PEAK_CORE_SRAM_BW_GBPS, ROOFLINE_KNEE_OI};
+pub use cl_kernel::{
+    generate_flash_attention, generate_bitnet_gemm, generate_rmsnorm,
+    generate_swiglu, generate_rope, generate_kv_cache_stream,
+    list_available_kernels, synthesize_kernel, KernelDescriptor,
+};
+pub use cl_llvm::{compile_cl_to_llvm, ClLlvmCompiler};
+pub use cl_jit::{run_cl_jit, execute_cl_on_core, ClJitCore};
+pub use cl_heal::{heal_cl_program, heal_slot_crc, ClHealReport, CANONICAL_NOP};
+pub use cl_opt::{optimize_cl_program, optimize_cl_program_advanced, ClOptConfig, ClOptLevel, ClOptReport};
+pub use comptime::{evaluate_and_fold_program, ComptimeEvaluator, ComptimeValue, ComptimeEnv};
+pub use silicon_flash::{generate_hardware_package, emit_hardware_package, FlashConfig, HardwarePackage, HostInterface, SiliconTarget};
+pub use formal_verify::{FormalVerifier, FormalVerificationReport};
 pub use scheduler::{AOTHazardScheduler, IRInstruction};
 pub use jit_backend::run_source_jit;
 pub use cl_binary::{assemble_cl_to_clb, disassemble_clb_to_cl};
 pub use optimizer::Optimizer;
 pub use fdo::{parse_fdo_profile, analyze_profile, compact_nop_bundles, fdo_recompile};
 pub use autotune::{SiliconAutotuner, AutotuneDecision};
-pub use cl_c23::compile_cl_to_c23;
+pub use cl_c23::{compile_cl_to_c23, compile_cl_to_native_binary};
+pub use model_importer::{
+    import_model_file, lower_onnx_graph, lower_safetensors_model,
+    ImportOptions, ImportedModel, LoweredCode, LoweringOptions,
+    QuantizationMode, QuantizationReport, QuantizedTensor,
+    SafeTensorDType, SafeTensorData, SafeTensorsModel,
+    OnnxGraph, OnnxModel, OnnxNode, OnnxTensor,
+};
 
 use checker::SemanticChecker;
 use codegen::Codegen;
@@ -69,6 +219,7 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
         }
     };
 
+    let _ = comptime::evaluate_and_fold_program(&mut program);
     let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
@@ -125,6 +276,7 @@ pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
         }
     };
 
+    let _ = comptime::evaluate_and_fold_program(&mut program);
     let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
@@ -177,6 +329,7 @@ pub fn compile_to_c23_with_name(source: &str, file_label: Option<&str>) -> Resul
         }
     };
 
+    let _ = comptime::evaluate_and_fold_program(&mut program);
     let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
@@ -231,6 +384,7 @@ pub fn compile_to_llvm_with_name(source: &str, file_label: Option<&str>) -> Resu
         }
     };
 
+    let _ = comptime::evaluate_and_fold_program(&mut program);
     let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
@@ -289,6 +443,7 @@ pub fn compile_to_ptx_with_name(source: &str, file_label: Option<&str>) -> Resul
         }
     };
 
+    let _ = comptime::evaluate_and_fold_program(&mut program);
     let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
@@ -343,6 +498,7 @@ pub fn compile_to_metal_with_name(source: &str, file_label: Option<&str>) -> Res
         }
     };
 
+    let _ = comptime::evaluate_and_fold_program(&mut program);
     let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
@@ -417,6 +573,12 @@ pub fn compile_native_binary(source: &str, output_path: &std::path::Path, extra_
     } else {
         Err(format!("Native linking failed: {}", last_err))
     }
+}
+
+pub fn compile_native_shared_library(source: &str, output_path: &std::path::Path, extra_flags: &[&str]) -> Result<(), String> {
+    let mut flags = vec!["-shared"];
+    flags.extend_from_slice(extra_flags);
+    compile_native_binary(source, output_path, &flags)
 }
 
 
