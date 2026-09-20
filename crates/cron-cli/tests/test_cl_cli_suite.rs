@@ -1685,6 +1685,56 @@ fn test_cli_verify_proof_badge_and_json() {
     assert!(s_json.contains("\"total_lemmas\": 6"));
 }
 
+#[test]
+fn test_cli_quantum_sim_bell_hud_and_json() {
+    // 1. ASCII HUD mode
+    let out_hud = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["quantum-sim", "--qubits", "2", "--bell"])
+        .output()
+        .expect("Failed to execute cron quantum-sim --bell");
+    assert!(out_hud.status.success(), "cron quantum-sim --bell must exit 0");
+    let s_hud = String::from_utf8_lossy(&out_hud.stdout);
+    assert!(s_hud.contains("CRON QUANTUM-PHOTONIC CO-PROCESSOR"));
+    assert!(s_hud.contains("Qubit Register: 2"));
+    assert!(s_hud.contains("Entanglement Entropy:"));
+    assert!(s_hud.contains("BLOCH SPHERE COORDINATES"));
+
+    // 2. JSON mode
+    let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["quantum-sim", "--qubits", "2", "--bell", "--json"])
+        .output()
+        .expect("Failed to execute cron quantum-sim --json");
+    assert!(out_json.status.success(), "cron quantum-sim --json must exit 0");
+    let s_json = String::from_utf8_lossy(&out_json.stdout);
+    assert!(s_json.contains("\"num_qubits\": 2"));
+    assert!(s_json.contains("\"entanglement_entropy\":"));
+    assert!(s_json.contains("\"bloch_vectors\":"));
+}
+
+#[test]
+fn test_cli_quantum_sim_ghz_and_qft() {
+    // 1. GHZ 3-qubit state
+    let out_ghz = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["quantum-sim", "--qubits", "3", "--ghz", "--json"])
+        .output()
+        .expect("Failed to execute cron quantum-sim --ghz");
+    assert!(out_ghz.status.success(), "cron quantum-sim --ghz must exit 0");
+    let s_ghz = String::from_utf8_lossy(&out_ghz.stdout);
+    assert!(s_ghz.contains("\"num_qubits\": 3"));
+    assert!(s_ghz.contains("\"total_gates\": 3"));
+
+    // 2. QFT 3-qubit state
+    let out_qft = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["quantum-sim", "--qubits", "3", "--qft", "--json"])
+        .output()
+        .expect("Failed to execute cron quantum-sim --qft");
+    assert!(out_qft.status.success(), "cron quantum-sim --qft must exit 0");
+    let s_qft = String::from_utf8_lossy(&out_qft.stdout);
+    assert!(s_qft.contains("\"num_qubits\": 3"));
+    assert!(s_qft.contains("\"probabilities\":"));
+}
+
+
 
 
 

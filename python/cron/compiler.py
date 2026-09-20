@@ -526,3 +526,49 @@ def verify_proof_certificate(cl_file_or_code: str,
     return {"raw_output": res.stdout, "status": "verified"}
 
 
+def simulate_quantum_bell_state(num_qubits: int = 2, json_output: bool = True) -> Dict[str, Any]:
+    """Simulate canonical Quantum Bell State (|Phi+>) or GHZ state on MZI Co-Processor.
+
+    Args:
+        num_qubits: 2 for Bell state, 3+ for GHZ state.
+        json_output: If True, returns structured JSON report.
+
+    Returns:
+        Dict with keys: num_qubits, total_gates, entanglement_entropy,
+        dominant_state_index, dominant_state_prob, bloch_vectors, probabilities.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "quantum-sim", "--qubits", str(num_qubits), "--bell"]
+    if json_output:
+        cmd.append("--json")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON quantum-sim error:\n{res.stderr or res.stdout}")
+    if json_output:
+        return _extract_json(res.stdout)
+    return {"raw_output": res.stdout, "status": "completed"}
+
+
+def simulate_quantum_qft(num_qubits: int = 3, json_output: bool = True) -> Dict[str, Any]:
+    """Simulate an N-qubit Quantum Fourier Transform on the Optical MZI Mesh.
+
+    Args:
+        num_qubits: Number of qubits (1..16).
+        json_output: If True, returns structured JSON report.
+
+    Returns:
+        Dict with quantum state simulation report.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "quantum-sim", "--qubits", str(num_qubits), "--qft"]
+    if json_output:
+        cmd.append("--json")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON quantum-sim qft error:\n{res.stderr or res.stdout}")
+    if json_output:
+        return _extract_json(res.stdout)
+    return {"raw_output": res.stdout, "status": "completed"}
+
+
+

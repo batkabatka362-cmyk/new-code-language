@@ -245,6 +245,20 @@ namespace Cron.NET
             [MarshalAs(UnmanagedType.LPStr)] string clCode,
             [MarshalAs(UnmanagedType.LPStr)] string workloadName,
             out IntPtr outCertificateJson);
+
+        // Section 16: Quantum-Photonic Co-Processor & Qubit Emulation
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_quantum_bell_state_simulate(
+            nuint numQubits,
+            out double outEntropy,
+            out IntPtr outReportJson);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_quantum_qft_simulate(
+            nuint numQubits,
+            out IntPtr outReportJson);
     }
 
     /// <summary>
@@ -836,5 +850,49 @@ namespace Cron.NET
             return (certified, certJson);
         }
     }
+
+    /// <summary>
+    /// Quantum-Photonic Co-Processor &amp; Qubit Emulation Backend.
+    /// Simulates linear optical quantum circuits, MZI beam splitters, Bell/GHZ entanglement,
+    /// and Quantum Fourier Transforms (QFT) with SU(2^N) state vector precision.
+    /// </summary>
+    public static class CronQuantumSimulator
+    {
+        /// <summary>
+        /// Simulates a canonical Bell state (2 qubits) or GHZ state (3+ qubits).
+        /// Returns bipartite von Neumann entanglement entropy and structured JSON report.
+        /// </summary>
+        public static (double entropy, string reportJson) SimulateBellState(int numQubits = 2)
+        {
+            bool ok = NativeMethods.cron_quantum_bell_state_simulate(
+                (nuint)numQubits, out double entropy, out IntPtr jsonPtr);
+
+            if (!ok || jsonPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to simulate quantum Bell state.");
+
+            string reportJson = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(jsonPtr);
+
+            return (entropy, reportJson);
+        }
+
+        /// <summary>
+        /// Simulates an N-qubit Quantum Fourier Transform (QFT).
+        /// </summary>
+        public static string SimulateQft(int numQubits = 3)
+        {
+            bool ok = NativeMethods.cron_quantum_qft_simulate(
+                (nuint)numQubits, out IntPtr jsonPtr);
+
+            if (!ok || jsonPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to simulate Quantum Fourier Transform.");
+
+            string reportJson = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(jsonPtr);
+
+            return reportJson;
+        }
+    }
 }
+
 

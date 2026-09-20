@@ -238,6 +238,21 @@ CRON_API bool cron_proof_verify(
     char** out_certificate_json
 );
 
+/* ------------------------------------------------------------------------- */
+/* 16. Quantum-Photonic Co-Processor & Qubit Emulation C-ABI                 */
+/* ------------------------------------------------------------------------- */
+
+CRON_API bool cron_quantum_bell_state_simulate(
+    size_t num_qubits,
+    double* out_entropy,
+    char** out_report_json
+);
+
+CRON_API bool cron_quantum_qft_simulate(
+    size_t num_qubits,
+    char** out_report_json
+);
+
 #ifdef __cplusplus
 }
 #endif

@@ -29,6 +29,8 @@ from .compiler import (
     get_swarm_tui_telemetry,
     synthesize_mcts_kernel,
     verify_proof_certificate,
+    simulate_quantum_bell_state,
+    simulate_quantum_qft,
 )
 from .torch_bridge import (
     CronBitLinear,
@@ -74,6 +76,8 @@ __all__ = [
     "get_swarm_tui_telemetry",
     "synthesize_mcts_kernel",
     "verify_proof_certificate",
+    "simulate_quantum_bell_state",
+    "simulate_quantum_qft",
     "CronBitLinear",
     "CronRMSNorm",
     "CronRingTapeAttention",

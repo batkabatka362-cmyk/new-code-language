@@ -1105,3 +1105,69 @@ pub unsafe extern "C" fn cron_proof_verify(
     cert.is_certified
 }
 
+// ============================================================================
+// Section 18: Quantum-Photonic Co-Processor & Qubit Emulation C-ABI
+// ============================================================================
+
+/// Simulates a canonical Quantum Bell State (|Phi+>) or GHZ state.
+/// Populates out_report_json and returns true on success.
+#[no_mangle]
+pub unsafe extern "C" fn cron_quantum_bell_state_simulate(
+    num_qubits: usize,
+    out_entropy: *mut f64,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if out_report_json.is_null() {
+        return false;
+    }
+
+    let n = num_qubits.clamp(2, 16);
+    let qc = if n == 2 {
+        cronc::cl_quantum::QuantumCircuit::bell_pair()
+    } else {
+        cronc::cl_quantum::QuantumCircuit::ghz_state()
+    };
+
+    let (_, report) = cronc::cl_quantum::run_quantum_simulation(&qc);
+
+    if !out_entropy.is_null() {
+        *out_entropy = report.entanglement_entropy;
+    }
+
+    let json_c = match CString::new(report.to_json()) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    *out_report_json = json_c.into_raw();
+    true
+}
+
+/// Simulates a multi-qubit Quantum Fourier Transform (QFT).
+/// Populates out_report_json and returns true on success.
+#[no_mangle]
+pub unsafe extern "C" fn cron_quantum_qft_simulate(
+    num_qubits: usize,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if out_report_json.is_null() {
+        return false;
+    }
+
+    let n = num_qubits.clamp(1, 16);
+    let mut qc = cronc::cl_quantum::QuantumCircuit::new(n);
+    qc.x(0); // input |00...1>
+    let qubits: Vec<usize> = (0..n).collect();
+    qc.qft(qubits);
+
+    let (_, report) = cronc::cl_quantum::run_quantum_simulation(&qc);
+
+    let json_c = match CString::new(report.to_json()) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    *out_report_json = json_c.into_raw();
+    true
+}
+

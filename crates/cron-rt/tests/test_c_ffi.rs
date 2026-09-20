@@ -500,6 +500,55 @@ fn test_ffi_proof_verify() {
     }
 }
 
+#[test]
+fn test_ffi_quantum_bell_state() {
+    let mut entropy: f64 = 0.0;
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_quantum_bell_state_simulate(
+            2,
+            &mut entropy,
+            &mut json_ptr,
+        )
+    };
+    assert!(ok);
+    assert!(!json_ptr.is_null());
+    assert!((entropy - 2.0f64.ln()).abs() < 1e-4);
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"num_qubits\": 2"));
+    assert!(json_str.contains("\"entanglement_entropy\":"));
+    assert!(json_str.contains("\"bloch_vectors\":"));
+
+    unsafe {
+        cron_string_free(json_ptr);
+    }
+}
+
+#[test]
+fn test_ffi_quantum_qft() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_quantum_qft_simulate(
+            3,
+            &mut json_ptr,
+        )
+    };
+    assert!(ok);
+    assert!(!json_ptr.is_null());
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"num_qubits\": 3"));
+    assert!(json_str.contains("\"total_gates\":"));
+    assert!(json_str.contains("\"probabilities\":"));
+
+    unsafe {
+        cron_string_free(json_ptr);
+    }
+}
+
 
 
 

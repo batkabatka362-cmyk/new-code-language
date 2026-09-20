@@ -607,6 +607,9 @@ fn main() {
         "verify-proof" | "proof" => {
             handle_verify_proof_command(&args[2..]);
         }
+        "quantum-sim" | "quantum" => {
+            handle_quantum_sim_command(&args[2..]);
+        }
         "add" => {
             if args.len() < 3 {
                 eprintln!("Error: Missing package name. Usage: cron add <package> [--path <dir>] [--features f1,f2]");
@@ -6016,5 +6019,89 @@ fn handle_verify_proof_command(args: &[String]) {
         std::process::exit(1);
     }
 }
+
+fn handle_quantum_sim_command(args: &[String]) {
+    let mut num_qubits = 2;
+    let mut mode = "bell".to_string();
+    let mut emit_json = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--qubits" | "-q" if i + 1 < args.len() => {
+                if let Ok(v) = args[i + 1].parse::<usize>() {
+                    num_qubits = v.clamp(1, 16);
+                }
+                i += 2;
+            }
+            "--bell" => {
+                mode = "bell".to_string();
+                i += 1;
+            }
+            "--ghz" => {
+                mode = "ghz".to_string();
+                i += 1;
+            }
+            "--qft" => {
+                mode = "qft".to_string();
+                i += 1;
+            }
+            "--walk" => {
+                mode = "walk".to_string();
+                i += 1;
+            }
+            "--json" => {
+                emit_json = true;
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    let qc = match mode.as_str() {
+        "bell" => cronc::cl_quantum::QuantumCircuit::bell_pair(),
+        "ghz" => {
+            let n = num_qubits.max(3);
+            let mut c = cronc::cl_quantum::QuantumCircuit::new(n);
+            c.h(0);
+            for q in 0..(n - 1) {
+                c.cnot(q, q + 1);
+            }
+            c
+        }
+        "qft" => {
+            let n = num_qubits.max(1);
+            let mut c = cronc::cl_quantum::QuantumCircuit::new(n);
+            c.x(0);
+            let qubits: Vec<usize> = (0..n).collect();
+            c.qft(qubits);
+            c
+        }
+        "walk" => {
+            // Quantum Random Walk on spatial modes using MZI Beam Splitter
+            let n = num_qubits.max(2);
+            let mut c = cronc::cl_quantum::QuantumCircuit::new(n);
+            c.h(0); // Coin flip
+            for step in 0..n.min(4) {
+                let q1 = step % n;
+                let q2 = (step + 1) % n;
+                c.beam_splitter(q1, q2, std::f64::consts::PI / 4.0, 0.0);
+            }
+            c
+        }
+        _ => cronc::cl_quantum::QuantumCircuit::bell_pair(),
+    };
+
+    let (_, report) = cronc::cl_quantum::run_quantum_simulation(&qc);
+
+    if emit_json {
+        println!("{}", report.to_json());
+    } else {
+        println!("{}", report.render_ascii_hud());
+    }
+}
+
 
 

@@ -72,6 +72,7 @@ pub mod cl_swarm_synthesis;
 pub mod cl_swarm_tui;
 pub mod cl_reasoning;
 pub mod cl_proof;
+pub mod cl_quantum;
 
 pub use bpe_tokenizer::{
     BpeTokenizer, BOS_TOKEN, EOS_TOKEN, IM_END_TOKEN, IM_START_TOKEN, TOOL_CALL_TOKEN,
@@ -108,6 +109,11 @@ pub use cl_reasoning::{
 
 pub use cl_proof::{
     FormalProofCertificate, ProofKind, ProofLemma, ProofVerifier,
+};
+
+pub use cl_quantum::{
+    run_quantum_simulation, Complex64, QuantumCircuit, QuantumGate, QuantumSimulationReport,
+    QuantumState,
 };
 
 pub use fusion::{
