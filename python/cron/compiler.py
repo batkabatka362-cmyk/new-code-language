@@ -355,3 +355,32 @@ def run_agent_swarm(task: str = "Distributed Neuromorphic Consensus Optimization
         return _extract_json(res.stdout)
     return {"raw_output": res.stdout, "status": "completed"}
 
+
+def run_cluster_swarm(task: str = "Distributed 4,096-Core Multi-Chip Consensus Optimization",
+                      json_output: bool = True) -> Dict[str, Any]:
+    """Executes a distributed 4,096-core autonomous multi-agent swarm task across 16 chips on a 6D-Torus.
+
+    Launches 4,096 specialized agents across 16 physical silicon sockets (4x4 optical board grid)
+    interconnected via 3.2 Tbps DWDM optical waveguides and 4D-Torus intra-chip NoC flits,
+    executing a two-tier hierarchical consensus protocol.
+
+    Args:
+        task: Task description for the 16-chip cluster to execute and reach global quorum on.
+        json_output: If True, returns parsed JSON telemetry dict. Otherwise raw text.
+
+    Returns:
+        Dict with keys: task, consensus_achieved, consensus_score, total_chips, total_cores,
+        active_cores, packets_routed, inter_chip_packets, intra_chip_packets, avg_hops,
+        max_hops, optical_bandwidth_tbps, latency_us, status.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "swarm", "--cluster", "--task", task]
+    if json_output:
+        cmd.append("--json")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON cluster swarm error:\n{res.stderr or res.stdout}")
+    if json_output:
+        return _extract_json(res.stdout)
+    return {"raw_output": res.stdout, "status": "completed"}
+

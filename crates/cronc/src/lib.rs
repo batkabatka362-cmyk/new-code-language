@@ -67,6 +67,7 @@ pub mod speculative_decoding;
 pub mod bpe_tokenizer;
 pub mod cl_multimodal;
 pub mod cl_swarm;
+pub mod cl_swarm_cluster;
 
 pub use bpe_tokenizer::{
     BpeTokenizer, BOS_TOKEN, EOS_TOKEN, IM_END_TOKEN, IM_START_TOKEN, TOOL_CALL_TOKEN,
@@ -80,6 +81,12 @@ pub use cl_multimodal::{
 pub use cl_swarm::{
     AgentRole, AgentState, AutonomousAgent, DimensionOrderRouter, PacketKind, SwarmMesh,
     SwarmPacket, SwarmReport, SwarmTelemetry,
+};
+
+pub use cl_swarm_cluster::{
+    ClusterAgent, ClusterDORRouter, ClusterSwarmMesh, ClusterSwarmPacket, ClusterSwarmReport,
+    ClusterSwarmTelemetry, Coord6D, HierarchyLevel, CLUSTER_CHIPS_X, CLUSTER_CHIPS_Y,
+    CORES_PER_CHIP, TOTAL_CHIPS, TOTAL_CLUSTER_CORES,
 };
 
 pub use fusion::{

@@ -176,6 +176,16 @@ CRON_API CronSwarmOpaque* cron_swarm_create_256(void);
 CRON_API bool cron_swarm_execute_task(CronSwarmOpaque* swarm, const char* task_desc, char** out_report_json);
 CRON_API void cron_swarm_free(CronSwarmOpaque* swarm);
 
+/* ------------------------------------------------------------------------- */
+/* 12. 4,096-Core Multi-Chip Distributed Swarm Cluster C-ABI                  */
+/* ------------------------------------------------------------------------- */
+
+typedef struct CronClusterSwarmOpaque CronClusterSwarmOpaque;
+
+CRON_API CronClusterSwarmOpaque* cron_cluster_swarm_create_4096(void);
+CRON_API bool cron_cluster_swarm_execute_task(CronClusterSwarmOpaque* cluster, const char* task_desc, char** out_report_json);
+CRON_API void cron_cluster_swarm_free(CronClusterSwarmOpaque* cluster);
+
 #ifdef __cplusplus
 }
 #endif

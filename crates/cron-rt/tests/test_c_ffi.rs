@@ -337,4 +337,29 @@ fn test_ffi_swarm_256_mesh() {
     }
 }
 
+#[test]
+fn test_ffi_cluster_swarm_4096() {
+    let cluster = cron_cluster_swarm_create_4096();
+    assert!(!cluster.is_null());
+
+    let task = CString::new("Partition 4,096-core BitNet FlashAttention across 16 optical sockets").unwrap();
+    let mut report_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe { cron_cluster_swarm_execute_task(cluster, task.as_ptr(), &mut report_ptr) };
+    assert!(ok);
+    assert!(!report_ptr.is_null());
+
+    let report_str = unsafe { CStr::from_ptr(report_ptr).to_str().unwrap() };
+    assert!(report_str.contains("\"consensus_achieved\":true"));
+    assert!(report_str.contains("\"total_chips\":16"));
+    assert!(report_str.contains("\"total_cores\":4096"));
+    assert!(report_str.contains("\"inter_chip_packets\":"));
+    assert!(report_str.contains("\"optical_bandwidth_tbps\":"));
+
+    unsafe {
+        cron_string_free(report_ptr);
+        cron_cluster_swarm_free(cluster);
+    }
+}
+
 

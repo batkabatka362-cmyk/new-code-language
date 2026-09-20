@@ -1517,5 +1517,30 @@ fn test_cli_cl_compare() {
     assert!(bench_str.contains("BitNet b1.58 Ternary GEMM"));
 }
 
+#[test]
+fn test_cli_swarm_256_and_cluster_4096() {
+    // 1. Single-chip 256 core swarm
+    let s256_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm", "--task", "Test 256-core consensus", "--json"])
+        .output()
+        .expect("Failed to execute cron swarm --json");
+    assert!(s256_out.status.success(), "cron swarm --json must exit 0");
+    let s256_str = String::from_utf8_lossy(&s256_out.stdout);
+    assert!(s256_str.contains("\"consensus_achieved\": true"));
+    assert!(s256_str.contains("\"status\": \"quorum_reached\""));
+
+    // 2. 16-chip 4,096 core multi-chip swarm cluster
+    let s4096_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm", "--cluster", "--task", "Test 4096-core cluster consensus", "--json"])
+        .output()
+        .expect("Failed to execute cron swarm --cluster --json");
+    assert!(s4096_out.status.success(), "cron swarm --cluster --json must exit 0");
+    let s4096_str = String::from_utf8_lossy(&s4096_out.stdout);
+    assert!(s4096_str.contains("\"consensus_achieved\": true"));
+    assert!(s4096_str.contains("\"total_chips\": 16"));
+    assert!(s4096_str.contains("\"total_cores\": 4096"));
+    assert!(s4096_str.contains("\"status\": \"global_quorum_reached\""));
+}
+
 
 

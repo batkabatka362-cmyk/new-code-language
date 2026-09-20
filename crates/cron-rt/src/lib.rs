@@ -844,3 +844,69 @@ pub unsafe extern "C" fn cron_swarm_free(swarm: *mut CronSwarmOpaque) {
         drop(Box::from_raw(swarm));
     }
 }
+
+// ----------------------------------------------------------------------------
+// 14. 4,096-Core Multi-Chip Distributed Swarm Cluster C-ABI
+// ----------------------------------------------------------------------------
+
+pub struct CronClusterSwarmOpaque {
+    pub inner: cronc::cl_swarm_cluster::ClusterSwarmMesh,
+}
+
+#[no_mangle]
+pub extern "C" fn cron_cluster_swarm_create_4096() -> *mut CronClusterSwarmOpaque {
+    let cluster = Box::new(CronClusterSwarmOpaque {
+        inner: cronc::cl_swarm_cluster::ClusterSwarmMesh::new_4096(),
+    });
+    Box::into_raw(cluster)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cluster_swarm_execute_task(
+    cluster: *mut CronClusterSwarmOpaque,
+    task_desc: *const c_char,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if cluster.is_null() || task_desc.is_null() || out_report_json.is_null() {
+        return false;
+    }
+
+    let c_str = CStr::from_ptr(task_desc);
+    let task = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let report = (*cluster).inner.execute_task(task);
+
+    let json = format!(
+        "{{\"task\":\"{}\",\"consensus_achieved\":{},\"consensus_score\":{:.2},\"total_chips\":{},\"total_cores\":{},\"active_cores\":{},\"total_packets\":{},\"inter_chip_packets\":{},\"intra_chip_packets\":{},\"avg_hops\":{:.2},\"max_hops\":{},\"optical_bandwidth_tbps\":{:.2},\"latency_us\":{:.2}}}",
+        report.task.replace('"', "\\\""),
+        report.consensus_achieved,
+        report.telemetry.consensus_score,
+        report.telemetry.total_chips,
+        report.telemetry.total_cores,
+        report.telemetry.active_cores,
+        report.telemetry.total_packets_routed,
+        report.telemetry.inter_chip_packets,
+        report.telemetry.intra_chip_packets,
+        report.telemetry.avg_hop_count,
+        report.telemetry.max_hop_count,
+        report.telemetry.aggregate_optical_bandwidth_tbps,
+        report.telemetry.consensus_latency_us
+    );
+
+    if let Ok(c_json) = CString::new(json) {
+        *out_report_json = c_json.into_raw();
+        true
+    } else {
+        false
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cluster_swarm_free(cluster: *mut CronClusterSwarmOpaque) {
+    if !cluster.is_null() {
+        drop(Box::from_raw(cluster));
+    }
+}

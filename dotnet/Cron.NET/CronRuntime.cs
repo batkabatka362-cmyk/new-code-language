@@ -190,6 +190,19 @@ namespace Cron.NET
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void cron_swarm_free(IntPtr swarm);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr cron_cluster_swarm_create_4096();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_cluster_swarm_execute_task(
+            IntPtr cluster,
+            [MarshalAs(UnmanagedType.LPStr)] string taskDesc,
+            out IntPtr outReportJson);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void cron_cluster_swarm_free(IntPtr cluster);
     }
 
     /// <summary>
@@ -237,6 +250,53 @@ namespace Cron.NET
         }
 
         ~CronSwarmMesh() => Dispose();
+    }
+
+    /// <summary>
+    /// 4,096-Core Multi-Chip Distributed Swarm Cluster (16 Chips x 256 Cores) on 6D-Torus.
+    /// </summary>
+    public sealed class CronClusterSwarmMesh : IDisposable
+    {
+        private IntPtr _handle;
+        private bool _disposed;
+
+        public CronClusterSwarmMesh()
+        {
+            _handle = NativeMethods.cron_cluster_swarm_create_4096();
+            if (_handle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to allocate 4,096-Core Swarm Cluster.");
+            }
+        }
+
+        public string ExecuteTask(string task)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(CronClusterSwarmMesh));
+            bool ok = NativeMethods.cron_cluster_swarm_execute_task(_handle, task, out IntPtr jsonPtr);
+            if (!ok || jsonPtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Cluster swarm execution failed on 6D-Torus.");
+            }
+
+            string report = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(jsonPtr);
+            return report;
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                if (_handle != IntPtr.Zero)
+                {
+                    NativeMethods.cron_cluster_swarm_free(_handle);
+                    _handle = IntPtr.Zero;
+                }
+                _disposed = true;
+            }
+        }
+
+        ~CronClusterSwarmMesh() => Dispose();
     }
 
     /// <summary>

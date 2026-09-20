@@ -23,6 +23,7 @@ from .compiler import (
     extract_vision_patches,
     compute_mel_spectrogram,
     run_agent_swarm,
+    run_cluster_swarm,
 )
 from .torch_bridge import (
     CronBitLinear,
@@ -62,6 +63,7 @@ __all__ = [
     "extract_vision_patches",
     "compute_mel_spectrogram",
     "run_agent_swarm",
+    "run_cluster_swarm",
     "CronBitLinear",
     "CronRMSNorm",
     "CronRingTapeAttention",
