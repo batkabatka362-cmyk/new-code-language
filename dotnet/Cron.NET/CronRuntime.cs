@@ -213,6 +213,21 @@ namespace Cron.NET
             [MarshalAs(UnmanagedType.I1)] bool runJit,
             out IntPtr outCode,
             out IntPtr outReportJson);
+
+        // Section 14: Swarm TUI Visualizer
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_swarm_tui_render_snapshot(
+            nuint ticks,
+            uint viewMode,
+            [MarshalAs(UnmanagedType.I1)] bool useColor,
+            out IntPtr outSnapshot);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_swarm_tui_telemetry_json(
+            nuint ticks,
+            out IntPtr outJson);
     }
 
     /// <summary>
@@ -700,5 +715,54 @@ namespace Cron.NET
         }
 
         ~CronTensor4D() => Dispose();
+    }
+
+    /// <summary>
+    /// Interactive Real-Time TUI Swarm &amp; Torus Traffic Visualizer.
+    /// Provides headless snapshot rendering and JSON telemetry export
+    /// for the 256-Core 4D-Torus and 4,096-Core 16-Chip DWDM Optical Cluster.
+    /// </summary>
+    public static class CronSwarmTui
+    {
+        /// <summary>4D Torus Plane &amp; Spatial Core Matrix view.</summary>
+        public const uint ViewTorusPlane = 1;
+        /// <summary>16-Chip DWDM Optical Swarm Cluster Grid view.</summary>
+        public const uint ViewClusterMacro = 2;
+        /// <summary>9-Port Crossbar Switch &amp; VC Buffer Heatmap view.</summary>
+        public const uint ViewRouterHeatmap = 3;
+        /// <summary>Swarm Self-Synthesis &amp; Vibe-Healing Telemetry view.</summary>
+        public const uint ViewSwarmTelemetry = 4;
+
+        /// <summary>
+        /// Advances the simulation by <paramref name="ticks"/> cycles and returns a
+        /// rendered ANSI terminal frame snapshot.
+        /// </summary>
+        public static string RenderSnapshot(int ticks, uint viewMode = ViewTorusPlane, bool useColor = true)
+        {
+            bool ok = NativeMethods.cron_swarm_tui_render_snapshot(
+                (nuint)ticks, viewMode, useColor, out IntPtr snapshotPtr);
+            if (!ok || snapshotPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to render swarm TUI snapshot.");
+
+            string result = Marshal.PtrToStringAnsi(snapshotPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(snapshotPtr);
+            return result;
+        }
+
+        /// <summary>
+        /// Advances the simulation by <paramref name="ticks"/> cycles and returns
+        /// a structured JSON telemetry string.
+        /// </summary>
+        public static string GetTelemetryJson(int ticks)
+        {
+            bool ok = NativeMethods.cron_swarm_tui_telemetry_json(
+                (nuint)ticks, out IntPtr jsonPtr);
+            if (!ok || jsonPtr == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to retrieve swarm TUI telemetry JSON.");
+
+            string result = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(jsonPtr);
+            return result;
+        }
     }
 }

@@ -959,3 +959,63 @@ pub unsafe extern "C" fn cron_swarm_synthesize_and_heal(
     *out_report_json = json_cstring.into_raw();
     true
 }
+
+// ----------------------------------------------------------------------------
+// 16. Swarm Interactive Real-Time TUI Visualizer C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_swarm_tui_render_snapshot(
+    ticks: usize,
+    view_mode: u32,
+    use_color: bool,
+    out_snapshot: *mut *mut c_char,
+) -> bool {
+    if out_snapshot.is_null() {
+        return false;
+    }
+
+    let mode = cronc::cl_swarm_tui::TuiViewMode::from_index(view_mode as usize);
+    let config = cronc::cl_swarm_tui::SwarmTuiConfig {
+        use_color,
+        active_view: mode,
+        ..Default::default()
+    };
+
+    let mut model = cronc::cl_swarm_tui::SwarmTuiModel::new(config);
+    let snapshot = model.render_snapshot(ticks);
+
+    match CString::new(snapshot) {
+        Ok(c_s) => {
+            *out_snapshot = c_s.into_raw();
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_swarm_tui_telemetry_json(
+    ticks: usize,
+    out_json: *mut *mut c_char,
+) -> bool {
+    if out_json.is_null() {
+        return false;
+    }
+
+    let config = cronc::cl_swarm_tui::SwarmTuiConfig::default();
+    let mut model = cronc::cl_swarm_tui::SwarmTuiModel::new(config);
+    for _ in 0..ticks {
+        model.step_tick();
+    }
+
+    let json = model.telemetry_json();
+    match CString::new(json) {
+        Ok(c_s) => {
+            *out_json = c_s.into_raw();
+            true
+        }
+        Err(_) => false,
+    }
+}
+

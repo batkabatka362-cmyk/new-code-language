@@ -25,6 +25,8 @@ from .compiler import (
     run_agent_swarm,
     run_cluster_swarm,
     synthesize_kernel,
+    render_swarm_tui,
+    get_swarm_tui_telemetry,
 )
 from .torch_bridge import (
     CronBitLinear,
@@ -66,6 +68,8 @@ __all__ = [
     "run_agent_swarm",
     "run_cluster_swarm",
     "synthesize_kernel",
+    "render_swarm_tui",
+    "get_swarm_tui_telemetry",
     "CronBitLinear",
     "CronRMSNorm",
     "CronRingTapeAttention",

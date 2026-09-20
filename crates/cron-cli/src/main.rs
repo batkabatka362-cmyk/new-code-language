@@ -28,8 +28,10 @@ fn print_help() {
     println!("    stream-infer [--layers <n>] [--grammar <json>] Zero-VRAM paged streaming inference (<64MB RAM)");
     println!("    chat [--model <m>] [--page-mb <n>] Interactive AI Terminal & live streaming chat engine");
     println!("    multimodal [--vision] [--audio] Multi-modal sensory streaming engine (Vision Patch + Audio Mel)");
-    println!("    swarm [--task <desc>] [--cluster] 256/4,096-Core autonomous multi-agent swarm runtime on 4D/6D-Torus NoC");
+    println!("    swarm [--task <desc>] [--cluster] [--tui] 256/4,096-Core autonomous multi-agent swarm runtime on 4D/6D-Torus NoC");
     println!("    swarm-synthesize [--prompt <p>] Closed-loop autonomous multi-agent synthesis & continuous vibe-healing");
+    println!("    swarm-tui [--mode <m>] [--snapshot] [--ticks <n>] Interactive real-time TUI Swarm & Torus Traffic Visualizer");
+    println!("    monitor [--mode <m>] [--snapshot] Live terminal monitoring HUD for 4D/6D Torus & Multi-Agent Swarm");
     println!("    add <package> [--path <dir>]   Add dependency to cron.toml and update cron.lock");
     println!("    remove <package>               Remove dependency from cron.toml and lockfile");
     println!("    install                        Resolve dependencies and verify cryptographic lockfile");
@@ -384,6 +386,7 @@ fn main() {
             let mut task = "Distributed Neuromorphic Consensus Optimization".to_string();
             let mut emit_json = false;
             let mut is_cluster = false;
+            let mut is_tui = false;
 
             let mut i = 2;
             while i < args.len() {
@@ -392,6 +395,9 @@ fn main() {
                     i += 2;
                 } else if args[i] == "--json" {
                     emit_json = true;
+                    i += 1;
+                } else if args[i] == "--tui" {
+                    is_tui = true;
                     i += 1;
                 } else if args[i] == "--cluster" || args[i] == "--chips" {
                     is_cluster = true;
@@ -402,6 +408,11 @@ fn main() {
                 } else {
                     i += 1;
                 }
+            }
+
+            if is_tui {
+                handle_swarm_tui_command(&args[2..]);
+                return;
             }
 
             if is_cluster {
@@ -586,6 +597,9 @@ fn main() {
                 println!("STATUS: AUTONOMOUS SWARM SELF-SYNTHESIS CERTIFIED (SSS+ TIER)");
                 println!();
             }
+        }
+        "swarm-tui" | "monitor" => {
+            handle_swarm_tui_command(&args[2..]);
         }
         "add" => {
             if args.len() < 3 {
@@ -5670,4 +5684,172 @@ fn handle_cl_compare_command(args: &[String]) {
         }
     }
 }
+
+fn handle_swarm_tui_command(args: &[String]) {
+    let mut mode = cronc::cl_swarm_tui::TuiViewMode::TorusPlane;
+    let mut ticks: Option<usize> = None;
+    let mut is_snapshot = false;
+    let mut emit_json = false;
+    let mut use_color = true;
+    let mut hz: u64 = 10;
+    let mut z_slice: usize = 0;
+    let mut w_slice: usize = 0;
+    let mut chip_idx: usize = 0;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--mode" | "-m" if i + 1 < args.len() => {
+                let m = args[i + 1].to_lowercase();
+                if m.contains("plane") || m == "1" {
+                    mode = cronc::cl_swarm_tui::TuiViewMode::TorusPlane;
+                } else if m.contains("cluster") || m == "2" {
+                    mode = cronc::cl_swarm_tui::TuiViewMode::ClusterMacro;
+                } else if m.contains("router") || m.contains("noc") || m == "3" {
+                    mode = cronc::cl_swarm_tui::TuiViewMode::RouterHeatmap;
+                } else if m.contains("telemetry") || m.contains("swarm") || m == "4" {
+                    mode = cronc::cl_swarm_tui::TuiViewMode::SwarmTelemetry;
+                }
+                i += 2;
+            }
+            "--ticks" | "-t" if i + 1 < args.len() => {
+                if let Ok(v) = args[i + 1].parse::<usize>() {
+                    ticks = Some(v);
+                }
+                i += 2;
+            }
+            "--snapshot" => {
+                is_snapshot = true;
+                i += 1;
+            }
+            "--json" => {
+                emit_json = true;
+                i += 1;
+            }
+            "--no-color" => {
+                use_color = false;
+                i += 1;
+            }
+            "--fps" | "--hz" if i + 1 < args.len() => {
+                if let Ok(v) = args[i + 1].parse::<u64>() {
+                    hz = v.clamp(1, 60);
+                }
+                i += 2;
+            }
+            "--z" if i + 1 < args.len() => {
+                if let Ok(v) = args[i + 1].parse::<usize>() {
+                    z_slice = v % 4;
+                }
+                i += 2;
+            }
+            "--w" if i + 1 < args.len() => {
+                if let Ok(v) = args[i + 1].parse::<usize>() {
+                    w_slice = v % 4;
+                }
+                i += 2;
+            }
+            "--chip" if i + 1 < args.len() => {
+                if let Ok(v) = args[i + 1].parse::<usize>() {
+                    chip_idx = v % 16;
+                }
+                i += 2;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    let config = cronc::cl_swarm_tui::SwarmTuiConfig {
+        tick_rate_hz: hz,
+        use_color,
+        active_view: mode,
+        selected_z: z_slice,
+        selected_w: w_slice,
+        selected_chip: chip_idx,
+        selected_core_x: 0,
+        selected_core_y: 0,
+    };
+
+    let mut model = cronc::cl_swarm_tui::SwarmTuiModel::new(config);
+
+    if emit_json {
+        let run_ticks = ticks.unwrap_or(1);
+        for _ in 0..run_ticks {
+            model.step_tick();
+        }
+        println!("{}", model.telemetry_json());
+        return;
+    }
+
+    if is_snapshot || ticks.is_some() {
+        let run_ticks = ticks.unwrap_or(1);
+        for _ in 0..run_ticks {
+            model.step_tick();
+        }
+        println!("{}", model.render_frame(92, 24));
+        return;
+    }
+
+    // Interactive Loop
+    use std::io::Write;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let stdin = std::io::stdin();
+        let mut buffer = String::new();
+        while let Ok(bytes_read) = stdin.read_line(&mut buffer) {
+            if bytes_read == 0 {
+                break;
+            }
+            for ch in buffer.chars() {
+                let _ = tx.send(ch);
+            }
+            buffer.clear();
+        }
+    });
+
+    let interval = std::time::Duration::from_millis(1000 / hz);
+    let mut last_tick = std::time::Instant::now();
+    let mut frame_count = 0usize;
+
+    loop {
+        // Handle input keys
+        while let Ok(key) = rx.try_recv() {
+            match key {
+                '1' => model.set_view_mode(cronc::cl_swarm_tui::TuiViewMode::TorusPlane),
+                '2' => model.set_view_mode(cronc::cl_swarm_tui::TuiViewMode::ClusterMacro),
+                '3' => model.set_view_mode(cronc::cl_swarm_tui::TuiViewMode::RouterHeatmap),
+                '4' => model.set_view_mode(cronc::cl_swarm_tui::TuiViewMode::SwarmTelemetry),
+                ' ' => model.toggle_pause(),
+                's' | 'n' => model.step_tick(),
+                'z' => model.cycle_z(true),
+                'Z' => model.cycle_z(false),
+                'w' => model.cycle_w(true),
+                'W' => model.cycle_w(false),
+                'c' => model.inject_fault(),
+                'p' => model.inject_packet(0, 15),
+                'q' | 'Q' => return,
+                _ => {}
+            }
+        }
+
+        if last_tick.elapsed() >= interval {
+            last_tick = std::time::Instant::now();
+            if !model.is_paused {
+                model.step_tick();
+            }
+
+            print!("\x1b[2J\x1b[H{}", model.render_frame(92, 24));
+            std::io::stdout().flush().ok();
+            frame_count += 1;
+
+            if frame_count >= 1000 {
+                break;
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(15));
+    }
+}
+
 

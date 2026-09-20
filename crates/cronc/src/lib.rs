@@ -69,6 +69,7 @@ pub mod cl_multimodal;
 pub mod cl_swarm;
 pub mod cl_swarm_cluster;
 pub mod cl_swarm_synthesis;
+pub mod cl_swarm_tui;
 
 pub use bpe_tokenizer::{
     BpeTokenizer, BOS_TOKEN, EOS_TOKEN, IM_END_TOKEN, IM_START_TOKEN, TOOL_CALL_TOKEN,
@@ -92,6 +93,10 @@ pub use cl_swarm_cluster::{
 
 pub use cl_swarm_synthesis::{
     SwarmSynthesizer, SwarmSynthesisStep, SynthesisConfig, SynthesisReport,
+};
+
+pub use cl_swarm_tui::{
+    SwarmTuiConfig, SwarmTuiModel, TuiPacketTrail, TuiViewMode,
 };
 
 pub use fusion::{

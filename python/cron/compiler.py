@@ -415,3 +415,53 @@ def synthesize_kernel(prompt: str = "Synthesize BitNet 1.58b ternary GEMM with o
         return _extract_json(res.stdout)
     return {"raw_output": res.stdout, "status": "completed"}
 
+
+def render_swarm_tui(ticks: int = 10,
+                     mode: str = "plane",
+                     use_color: bool = True) -> str:
+    """Render a headless snapshot of the Interactive Real-Time TUI Swarm & Torus Traffic Visualizer.
+
+    Advances the silicon simulation by `ticks` cycles and returns a rendered ANSI
+    terminal frame showing the 4D-Torus fabric, 16-Chip DWDM cluster, NoC router
+    heatmap, or vibe-healing telemetry — depending on `mode`.
+
+    Args:
+        ticks: Number of simulation cycles to advance before snapshot.
+        mode: View mode - "plane" (4D Torus), "cluster" (16-Chip Grid),
+              "router"/"noc" (VC Buffer Heatmap), "telemetry"/"swarm" (Vibe-Healing).
+        use_color: If True, includes ANSI color escape codes.
+
+    Returns:
+        Rendered ANSI terminal frame as a string.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "swarm-tui", "--snapshot", "--ticks", str(ticks), "--mode", mode]
+    if not use_color:
+        cmd.append("--no-color")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON swarm-tui error:\n{res.stderr or res.stdout}")
+    return res.stdout
+
+
+def get_swarm_tui_telemetry(ticks: int = 10) -> Dict[str, Any]:
+    """Retrieve structured JSON telemetry from the Swarm TUI simulation engine.
+
+    Advances the 4D/6D-Torus silicon simulation by `ticks` cycles and returns
+    a JSON dict containing tick_count, IPC, temperature, energy, chip traffic,
+    consensus status, and packet routing statistics.
+
+    Args:
+        ticks: Number of simulation cycles to advance.
+
+    Returns:
+        Dict with keys: tick_count, simulated_ipc, simulated_temp_c, simulated_energy_pj,
+        total_packets_routed, total_healed_faults, active_view, chip_traffic_gbps, etc.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "swarm-tui", "--json", "--ticks", str(ticks)]
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON swarm-tui telemetry error:\n{res.stderr or res.stdout}")
+    return _extract_json(res.stdout)
+

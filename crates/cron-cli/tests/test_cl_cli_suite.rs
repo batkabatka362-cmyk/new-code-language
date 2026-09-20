@@ -1561,5 +1561,79 @@ fn test_cli_swarm_synthesize() {
     assert!(out_str.contains("\"status\": \"synthesis_complete\""));
 }
 
+#[test]
+fn test_cli_swarm_tui_modes() {
+    // 1. Torus Plane mode snapshot
+    let out_plane = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm-tui", "--snapshot", "--mode", "plane", "--no-color", "--ticks", "5"])
+        .output()
+        .expect("Failed to execute cron swarm-tui --mode plane");
+    assert!(out_plane.status.success(), "cron swarm-tui --mode plane must exit 0");
+    let s_plane = String::from_utf8_lossy(&out_plane.stdout);
+    assert!(s_plane.contains("4D-TORUS 2D PLANE SLICE") || s_plane.contains("TORUS"));
+
+    // 2. Cluster Macro mode snapshot
+    let out_cluster = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm-tui", "--snapshot", "--mode", "cluster", "--no-color", "--ticks", "3"])
+        .output()
+        .expect("Failed to execute cron swarm-tui --mode cluster");
+    assert!(out_cluster.status.success(), "cron swarm-tui --mode cluster must exit 0");
+    let s_cluster = String::from_utf8_lossy(&out_cluster.stdout);
+    assert!(s_cluster.contains("16-CHIP CLUSTER MACRO TOPOLOGY") || s_cluster.contains("CLUSTER"));
+
+    // 3. Router Heatmap mode snapshot
+    let out_router = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm-tui", "--snapshot", "--mode", "router", "--no-color", "--ticks", "3"])
+        .output()
+        .expect("Failed to execute cron swarm-tui --mode router");
+    assert!(out_router.status.success(), "cron swarm-tui --mode router must exit 0");
+    let s_router = String::from_utf8_lossy(&out_router.stdout);
+    assert!(s_router.contains("ROUTER & VC VIRTUAL CHANNEL CONGESTION") || s_router.contains("ROUTER"));
+
+    // 4. Swarm Telemetry mode snapshot
+    let out_telemetry = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm-tui", "--snapshot", "--mode", "telemetry", "--no-color", "--ticks", "3"])
+        .output()
+        .expect("Failed to execute cron swarm-tui --mode telemetry");
+    assert!(out_telemetry.status.success(), "cron swarm-tui --mode telemetry must exit 0");
+    let s_telemetry = String::from_utf8_lossy(&out_telemetry.stdout);
+    assert!(s_telemetry.contains("AUTONOMOUS SWARM SELF-SYNTHESIS") || s_telemetry.contains("VIBE-HEALING"));
+}
+
+#[test]
+fn test_cli_monitor_alias_and_swarm_flag() {
+    // Test 'cron monitor --snapshot' alias
+    let out_mon = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["monitor", "--snapshot", "--no-color", "--ticks", "2"])
+        .output()
+        .expect("Failed to execute cron monitor --snapshot");
+    assert!(out_mon.status.success(), "cron monitor must exit 0");
+    let s_mon = String::from_utf8_lossy(&out_mon.stdout);
+    assert!(!s_mon.is_empty());
+
+    // Test 'cron swarm --tui --snapshot' flag
+    let out_swarm_tui = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm", "--tui", "--snapshot", "--no-color", "--ticks", "2"])
+        .output()
+        .expect("Failed to execute cron swarm --tui --snapshot");
+    assert!(out_swarm_tui.status.success(), "cron swarm --tui must exit 0");
+    let s_swarm_tui = String::from_utf8_lossy(&out_swarm_tui.stdout);
+    assert!(!s_swarm_tui.is_empty());
+}
+
+#[test]
+fn test_cli_swarm_tui_json() {
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm-tui", "--json", "--ticks", "4"])
+        .output()
+        .expect("Failed to execute cron swarm-tui --json");
+    assert!(out.status.success(), "cron swarm-tui --json must exit 0");
+    let out_str = String::from_utf8_lossy(&out.stdout);
+    assert!(out_str.contains("\"tick_count\": 4"));
+    assert!(out_str.contains("\"simulated_ipc\":"));
+    assert!(out_str.contains("\"chip_traffic_gbps\":"));
+}
+
+
 
 

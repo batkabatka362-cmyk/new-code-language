@@ -199,9 +199,31 @@ CRON_API bool cron_swarm_synthesize_and_heal(
     char** out_report_json
 );
 
+/* ------------------------------------------------------------------------- */
+/* 14. Real-Time Swarm TUI Live Visualizer C-ABI                             */
+/* ------------------------------------------------------------------------- */
+
+#define CRON_TUI_VIEW_TORUS_PLANE     1
+#define CRON_TUI_VIEW_CLUSTER_MACRO    2
+#define CRON_TUI_VIEW_ROUTER_HEATMAP   3
+#define CRON_TUI_VIEW_SWARM_TELEMETRY  4
+
+CRON_API bool cron_swarm_tui_render_snapshot(
+    size_t ticks,
+    uint32_t view_mode,
+    bool use_color,
+    char** out_snapshot
+);
+
+CRON_API bool cron_swarm_tui_telemetry_json(
+    size_t ticks,
+    char** out_json
+);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* CRON_RT_H */
+
 

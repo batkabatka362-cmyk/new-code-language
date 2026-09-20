@@ -396,4 +396,51 @@ fn test_ffi_swarm_synthesize_and_heal() {
     }
 }
 
+#[test]
+fn test_ffi_swarm_tui_render_snapshot() {
+    let mut snapshot_ptr: *mut c_char = std::ptr::null_mut();
+    let ok = unsafe {
+        cron_swarm_tui_render_snapshot(
+            5,
+            1, // TorusPlane
+            false,
+            &mut snapshot_ptr,
+        )
+    };
+    assert!(ok);
+    assert!(!snapshot_ptr.is_null());
+
+    let snapshot_str = unsafe { CStr::from_ptr(snapshot_ptr).to_str().unwrap() };
+    assert!(snapshot_str.contains("CRON 4D/6D SILICON SWARM"));
+    assert!(snapshot_str.contains("4D TORUS"));
+    assert!(snapshot_str.contains("Tick: 00005"));
+
+    unsafe {
+        cron_string_free(snapshot_ptr);
+    }
+}
+
+#[test]
+fn test_ffi_swarm_tui_telemetry_json() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let ok = unsafe {
+        cron_swarm_tui_telemetry_json(
+            3,
+            &mut json_ptr,
+        )
+    };
+    assert!(ok);
+    assert!(!json_ptr.is_null());
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"tick_count\": 3"));
+    assert!(json_str.contains("\"simulated_ipc\":"));
+    assert!(json_str.contains("\"chip_traffic_gbps\":"));
+
+    unsafe {
+        cron_string_free(json_ptr);
+    }
+}
+
+
 
