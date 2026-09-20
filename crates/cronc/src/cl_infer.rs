@@ -10,7 +10,15 @@
 // 100% Pure Rust - Zero External Dependencies
 // ============================================================================
 
+use crate::bpe_tokenizer::BpeTokenizer;
 use crate::cl_heal::heal_cl_program;
+use crate::model_importer::ternary::ternary_gemv;
+
+/// Layer weight provider trait for zero-VRAM paged streaming inference
+pub trait LayerWeightProvider {
+    /// Returns (packed_2bit_weights, scales) for tensor name in layer `layer_idx`.
+    fn get_tensor(&self, layer_idx: usize, tensor_name: &str) -> Option<(Vec<u8>, Vec<f32>)>;
+}
 
 /// Configuration for the Transformer Model.
 #[derive(Debug, Clone, PartialEq)]
@@ -194,12 +202,62 @@ pub fn swiglu_forward(
 // Single-Token Transformer Forward Step
 // ============================================================================
 
+/// Helper to generate deterministic pseudo-weight matrices for silicon inference.
+pub fn pseudo_weight_matrix(in_dim: usize, out_dim: usize, seed: usize) -> Vec<f64> {
+    let mut w = vec![0.0; in_dim * out_dim];
+    let s = (seed + 1) as f64;
+    for i in 0..w.len() {
+        w[i] = (s * (i + 1) as f64 * 0.4567).sin() * 0.8;
+    }
+    w
+}
+
+/// Helper to project activations using either real ternary GEMV (if packed weights are available)
+/// or fallback to linear_project.
+fn project_or_ternary(
+    x: &[f64],
+    provider: Option<&dyn LayerWeightProvider>,
+    layer_idx: usize,
+    tensor_name: &str,
+    in_dim: usize,
+    out_dim: usize,
+    fallback_seed: usize,
+    is_ternary: bool,
+    enable_sparsity: bool,
+) -> Vec<f64> {
+    if let Some(prov) = provider {
+        if let Some((packed, scales)) = prov.get_tensor(layer_idx, tensor_name) {
+            let act_f32: Vec<f32> = x.iter().map(|&v| v as f32).collect();
+            let mut out_f32 = vec![0.0f32; out_dim];
+            if scales.len() == out_dim && packed.len() >= out_dim * ((in_dim + 3) / 4) {
+                ternary_gemv(&packed, &act_f32, &scales, &mut out_f32, in_dim, out_dim);
+                return out_f32.into_iter().map(|v| v as f64).collect();
+            }
+        }
+    }
+
+    let w = pseudo_weight_matrix(in_dim, out_dim, fallback_seed);
+    linear_project(x, &w, in_dim, out_dim, is_ternary, enable_sparsity)
+}
+
 /// Performs a full forward pass of the multi-layer transformer for a single token at sequence position `pos`.
 pub fn transformer_forward_step(
     token_id: usize,
     pos: usize,
     config: &TransformerConfig,
     kv_cache: &mut KVCache,
+) -> Vec<f64> {
+    transformer_forward_step_paged(token_id, pos, config, kv_cache, None)
+}
+
+/// Performs a full forward pass of the multi-layer transformer for a single token using zero-VRAM
+/// paged streaming layer weights (or fallback pseudo-weights).
+pub fn transformer_forward_step_paged(
+    token_id: usize,
+    pos: usize,
+    config: &TransformerConfig,
+    kv_cache: &mut KVCache,
+    weight_provider: Option<&dyn LayerWeightProvider>,
 ) -> Vec<f64> {
     // 1. Embedding lookup: deterministic pseudo-random embedding vector
     let mut x = vec![0.0; config.hidden_dim];
@@ -216,11 +274,40 @@ pub fn transformer_forward_step(
         // Pre-Attention RMSNorm
         let x_norm = rmsnorm(&x, &gamma, eps);
 
-        // Attention Q, K, V projections
-        let w_qkv = pseudo_weight_matrix(config.hidden_dim, config.hidden_dim, l * 3 + 1);
-        let mut q = linear_project(&x_norm, &w_qkv, config.hidden_dim, config.hidden_dim, config.is_ternary_bitnet, config.enable_2_4_sparsity);
-        let mut k = linear_project(&x_norm, &w_qkv, config.hidden_dim, config.hidden_dim, config.is_ternary_bitnet, config.enable_2_4_sparsity);
-        let v = linear_project(&x_norm, &w_qkv, config.hidden_dim, config.hidden_dim, config.is_ternary_bitnet, config.enable_2_4_sparsity);
+        // Attention Q, K, V projections (multiplication-free ternary GEMV if streamed)
+        let mut q = project_or_ternary(
+            &x_norm,
+            weight_provider,
+            l,
+            "q_proj",
+            config.hidden_dim,
+            config.hidden_dim,
+            l * 3 + 1,
+            config.is_ternary_bitnet,
+            config.enable_2_4_sparsity,
+        );
+        let mut k = project_or_ternary(
+            &x_norm,
+            weight_provider,
+            l,
+            "k_proj",
+            config.hidden_dim,
+            config.hidden_dim,
+            l * 3 + 1,
+            config.is_ternary_bitnet,
+            config.enable_2_4_sparsity,
+        );
+        let v = project_or_ternary(
+            &x_norm,
+            weight_provider,
+            l,
+            "v_proj",
+            config.hidden_dim,
+            config.hidden_dim,
+            l * 3 + 1,
+            config.is_ternary_bitnet,
+            config.enable_2_4_sparsity,
+        );
 
         // Apply RoPE to Query and Key
         for h in 0..config.num_heads {
@@ -276,8 +363,17 @@ pub fn transformer_forward_step(
         }
 
         // Out-projection & Residual connection
-        let w_out = pseudo_weight_matrix(config.hidden_dim, config.hidden_dim, l * 3 + 2);
-        let proj = linear_project(&attn_out, &w_out, config.hidden_dim, config.hidden_dim, config.is_ternary_bitnet, config.enable_2_4_sparsity);
+        let proj = project_or_ternary(
+            &attn_out,
+            weight_provider,
+            l,
+            "o_proj",
+            config.hidden_dim,
+            config.hidden_dim,
+            l * 3 + 2,
+            config.is_ternary_bitnet,
+            config.enable_2_4_sparsity,
+        );
         for i in 0..config.hidden_dim {
             x[i] += proj[i];
         }
@@ -286,17 +382,42 @@ pub fn transformer_forward_step(
         let ffn_norm = rmsnorm(&x, &gamma, eps);
 
         // SwiGLU Gated MLP FeedForward Block
-        let w_gate = pseudo_weight_matrix(config.hidden_dim, config.intermediate_dim, l * 5 + 1);
-        let w_up = pseudo_weight_matrix(config.hidden_dim, config.intermediate_dim, l * 5 + 2);
-        let w_down = pseudo_weight_matrix(config.intermediate_dim, config.hidden_dim, l * 5 + 3);
-
-        let ffn_out = swiglu_forward(
+        let gate = project_or_ternary(
             &ffn_norm,
-            &w_gate,
-            &w_up,
-            &w_down,
+            weight_provider,
+            l,
+            "gate_proj",
             config.hidden_dim,
             config.intermediate_dim,
+            l * 5 + 1,
+            config.is_ternary_bitnet,
+            config.enable_2_4_sparsity,
+        );
+        let up = project_or_ternary(
+            &ffn_norm,
+            weight_provider,
+            l,
+            "up_proj",
+            config.hidden_dim,
+            config.intermediate_dim,
+            l * 5 + 2,
+            config.is_ternary_bitnet,
+            config.enable_2_4_sparsity,
+        );
+
+        let mut activated = vec![0.0; config.intermediate_dim];
+        for i in 0..config.intermediate_dim {
+            activated[i] = silu(gate[i]) * up[i];
+        }
+
+        let ffn_out = project_or_ternary(
+            &activated,
+            weight_provider,
+            l,
+            "down_proj",
+            config.intermediate_dim,
+            config.hidden_dim,
+            l * 5 + 3,
             config.is_ternary_bitnet,
             config.enable_2_4_sparsity,
         );
@@ -311,23 +432,18 @@ pub fn transformer_forward_step(
     let final_norm = rmsnorm(&x, &gamma, eps);
 
     // 4. LM Head Projection to vocabulary logits
-    let w_head = pseudo_weight_matrix(config.hidden_dim, config.vocab_size, 999);
-    linear_project(&final_norm, &w_head, config.hidden_dim, config.vocab_size, false, false)
+    project_or_ternary(
+        &final_norm,
+        weight_provider,
+        9999,
+        "lm_head",
+        config.hidden_dim,
+        config.vocab_size,
+        999,
+        false,
+        false,
+    )
 }
-
-/// Helper to generate deterministic pseudo-weight matrices for silicon inference.
-fn pseudo_weight_matrix(in_dim: usize, out_dim: usize, seed: usize) -> Vec<f64> {
-    let mut w = vec![0.0; in_dim * out_dim];
-    let s = (seed + 1) as f64;
-    for i in 0..w.len() {
-        w[i] = (s * (i + 1) as f64 * 0.4567).sin() * 0.8;
-    }
-    w
-}
-
-// ============================================================================
-// Autoregressive Token Generation Engine
-// ============================================================================
 
 /// Runs full autoregressive token generation given a text prompt.
 pub fn generate_tokens(
@@ -336,28 +452,56 @@ pub fn generate_tokens(
     temperature: f64,
     config: &TransformerConfig,
 ) -> GenerationResult {
+    let default_bpe = BpeTokenizer::from_default_vocab();
+    generate_tokens_autoregressive_paged(
+        prompt,
+        max_new_tokens,
+        temperature,
+        config,
+        &default_bpe,
+        None,
+        |_id, _str| {},
+    )
+}
+
+/// Runs full autoregressive token generation using BPE subwords and zero-VRAM paged weights.
+pub fn generate_tokens_autoregressive_paged<F>(
+    prompt: &str,
+    max_new_tokens: usize,
+    temperature: f64,
+    config: &TransformerConfig,
+    tokenizer: &BpeTokenizer,
+    weight_provider: Option<&dyn LayerWeightProvider>,
+    mut on_token_emitted: F,
+) -> GenerationResult
+where
+    F: FnMut(u32, &str),
+{
     let mut kv_cache = KVCache::new(config.num_layers, config.max_seq_len, config.hidden_dim);
 
-    // Byte-level tokenization
-    let prompt_bytes = prompt.as_bytes();
-    let mut token_ids: Vec<usize> = prompt_bytes.iter().map(|&b| (b as usize) % config.vocab_size).collect();
+    // 1. Subword BPE tokenization
+    let mut token_ids: Vec<usize> = tokenizer
+        .encode(prompt)
+        .into_iter()
+        .map(|id| (id as usize) % config.vocab_size)
+        .collect();
     if token_ids.is_empty() {
-        token_ids.push(42); // Default BOS token
+        token_ids.push((tokenizer.bos_token_id() as usize) % config.vocab_size);
     }
 
     let prompt_tokens_len = token_ids.len();
 
-    // 1. Prefill Phase
+    // 2. Prefill Phase
     let start_instant = std::time::Instant::now();
     for pos in 0..prompt_tokens_len {
-        let _ = transformer_forward_step(token_ids[pos], pos, config, &mut kv_cache);
+        let _ = transformer_forward_step_paged(token_ids[pos], pos, config, &mut kv_cache, weight_provider);
     }
     let prefill_elapsed_us = start_instant.elapsed().as_micros() as f64;
     let ttft_us = prefill_elapsed_us.max(1.0);
 
-    // 2. Decode Phase (Token by Token)
+    // 3. Decode Phase (Token by Token)
     let decode_start = std::time::Instant::now();
-    let mut generated_bytes = Vec::new();
+    let mut generated_text = String::new();
 
     for step in 0..max_new_tokens {
         let current_pos = prompt_tokens_len + step;
@@ -366,20 +510,20 @@ pub fn generate_tokens(
         }
 
         let last_token = *token_ids.last().unwrap();
-        let logits = transformer_forward_step(last_token, current_pos, config, &mut kv_cache);
+        let logits = transformer_forward_step_paged(last_token, current_pos, config, &mut kv_cache, weight_provider);
 
         // Sample next token
         let next_token = sample_token(&logits, temperature);
         token_ids.push(next_token);
 
-        // Convert token back to ASCII char if printable
-        let byte_val = (next_token % 128) as u8;
-        let ch = if byte_val >= 32 && byte_val <= 126 {
-            byte_val as char
-        } else {
-            ' '
-        };
-        generated_bytes.push(ch);
+        // Subword BPE decode
+        let token_str = tokenizer.decode(&[next_token as u32]);
+        generated_text.push_str(&token_str);
+        on_token_emitted(next_token as u32, &token_str);
+
+        if (next_token as u32) == tokenizer.eos_token_id() {
+            break;
+        }
     }
 
     let decode_elapsed_us = decode_start.elapsed().as_micros() as f64;
@@ -398,9 +542,7 @@ pub fn generate_tokens(
         0.0
     };
 
-    // 4D-Torus cycles estimate: 4-issue VLIW running @ 2.0 GHz
     let total_cycles = (total_tokens as u64) * (config.num_layers as u64) * 8;
-    // Energy rating: Sub-byte ternary MACs consume 0.04 pJ per token
     let energy_per_token_pj = (config.num_layers as f64) * 0.85;
     let kv_cache_occupancy_pct = ((total_tokens as f64) / (config.max_seq_len as f64)) * 100.0;
 
@@ -420,7 +562,7 @@ pub fn generate_tokens(
 
     GenerationResult {
         prompt: prompt.to_string(),
-        generated_text: generated_bytes.into_iter().collect(),
+        generated_text,
         token_ids,
         telemetry,
         synthesized_cl_kernel,

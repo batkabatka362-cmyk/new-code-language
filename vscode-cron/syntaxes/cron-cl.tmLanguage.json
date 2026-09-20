@@ -1,12 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "CRON Low-Level",
+  "name": "CRON Low-Level (CL 2.0)",
   "scopeName": "source.cron-cl",
   "patterns": [
     { "include": "#comments" },
+    { "include": "#semantic_directives" },
+    { "include": "#core_directive" },
+    { "include": "#label_declaration" },
     { "include": "#bundle_header" },
-    { "include": "#immediate_slot" },
-    { "include": "#operation_slot" }
+    { "include": "#cl2_slot" }
   ],
   "repository": {
     "comments": {
@@ -17,33 +19,54 @@
         }
       ]
     },
+    "semantic_directives": {
+      "patterns": [
+        {
+          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights))\\b",
+          "captures": {
+            "1": { "name": "keyword.control.directive.cron-cl" }
+          }
+        }
+      ]
+    },
+    "core_directive": {
+      "patterns": [
+        {
+          "match": "^\\s*(\\.core)\\s+(\\[[0-9,\\s]+\\]):",
+          "captures": {
+            "1": { "name": "keyword.control.core.cron-cl" },
+            "2": { "name": "entity.name.type.coordinates.cron-cl" }
+          }
+        }
+      ]
+    },
+    "label_declaration": {
+      "patterns": [
+        {
+          "name": "entity.name.function.label.cron-cl",
+          "match": "@[A-Za-z0-9_]+:"
+        }
+      ]
+    },
     "bundle_header": {
       "patterns": [
         {
           "name": "entity.name.section.bundle.cron-cl",
-          "match": "\\bB[0-9]{4}:"
+          "match": "\\bB[0-9A-Fa-f]{4}:"
         }
       ]
     },
-    "immediate_slot": {
+    "cl2_slot": {
       "patterns": [
         {
-          "name": "constant.numeric.immediate.cron-cl",
-          "match": "'[0-9A-Fa-f]{8}[>!]"
-        }
-      ]
-    },
-    "operation_slot": {
-      "patterns": [
-        {
-          "match": "(_)([A-Z0-9]{2})([0-9A-Fa-f]{2})([$#@])([0-9A-Fa-f])([0-9A-Fa-f])([0-9A-Fa-f])([>!])",
+          "match": "([_'~@%&^|$#\\\\()])([A-Za-z0-9=]{2})([0-9A-Fa-f]{2})([$#@+\\-*/&|^~%=<>?!.:\\[\\]{}()\\\\])([A-Za-z0-9xyzwdulrio]{1,3})([0-9A-Za-z!@#$%^&*()_+=\\-\\[\\]{}|;:,.<>?/~`\\\\])([0-9A-Za-z])([>!?;\\]})|])",
           "captures": {
-            "1": { "name": "punctuation.definition.slot.cron-cl" },
+            "1": { "name": "punctuation.definition.prefix.cron-cl" },
             "2": { "name": "keyword.operator.opcode.cron-cl" },
             "3": { "name": "variable.other.register.dest.cron-cl" },
             "4": { "name": "punctuation.separator.mode.cron-cl" },
             "5": { "name": "variable.other.register.src.cron-cl" },
-            "6": { "name": "constant.numeric.parity.cron-cl" },
+            "6": { "name": "constant.numeric.crc8.cron-cl" },
             "7": { "name": "constant.numeric.imm.cron-cl" },
             "8": { "name": "keyword.control.terminator.cron-cl" }
           }

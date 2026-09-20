@@ -120,6 +120,62 @@ CRON_API int64_t  cron_channel_try_recv_c(uint64_t channel_id);
 CRON_API void     cron_channel_close_c(uint64_t channel_id);
 CRON_API int64_t  cron_torus_distance_c(int64_t c1, int64_t c2);
 
+/* ------------------------------------------------------------------------- */
+/* 8. AI BitNet 1.58-Bit Ternary & CL 2.0 Native Silicon C-ABI               */
+/* ------------------------------------------------------------------------- */
+
+CRON_API bool    cron_ternary_quantize(const float* weights, size_t count, uint8_t* out_packed, float* out_scale);
+CRON_API float   cron_ternary_dot_product(const uint8_t* packed_weights, const float* activations, size_t count, float scale);
+CRON_API bool    cron_cl_audit(const char* cl_source, char** out_report_json);
+
+/* ------------------------------------------------------------------------- */
+/* 9. BPE Tokenizer & Autoregressive Inference C-ABI                         */
+/* ------------------------------------------------------------------------- */
+
+typedef struct CronBpeTokenizerOpaque CronBpeTokenizerOpaque;
+
+CRON_API CronBpeTokenizerOpaque* cron_bpe_create_default(void);
+CRON_API bool cron_bpe_encode(CronBpeTokenizerOpaque* tokenizer, const char* text, uint32_t* out_ids, size_t max_ids, size_t* out_len);
+CRON_API bool cron_bpe_decode(CronBpeTokenizerOpaque* tokenizer, const uint32_t* ids, size_t num_ids, char** out_str);
+CRON_API void cron_bpe_free(CronBpeTokenizerOpaque* tokenizer);
+
+/* ------------------------------------------------------------------------- */
+/* 10. Multi-Modal Vision & Audio Silicon C-ABI                              */
+/* ------------------------------------------------------------------------- */
+
+CRON_API bool cron_vision_extract_patches(
+    const uint8_t* rgb_data,
+    size_t width,
+    size_t height,
+    size_t channels,
+    size_t patch_size,
+    size_t embed_dim,
+    float* out_embeddings,
+    size_t max_elements,
+    size_t* out_patch_count
+);
+
+CRON_API bool cron_audio_mel_spectrogram(
+    const float* pcm_samples,
+    size_t num_samples,
+    size_t sample_rate,
+    size_t mel_bands,
+    size_t embed_dim,
+    float* out_embeddings,
+    size_t max_elements,
+    size_t* out_frame_count
+);
+
+/* ------------------------------------------------------------------------- */
+/* 11. 256-Core Autonomous Swarm Mesh C-ABI                                  */
+/* ------------------------------------------------------------------------- */
+
+typedef struct CronSwarmOpaque CronSwarmOpaque;
+
+CRON_API CronSwarmOpaque* cron_swarm_create_256(void);
+CRON_API bool cron_swarm_execute_task(CronSwarmOpaque* swarm, const char* task_desc, char** out_report_json);
+CRON_API void cron_swarm_free(CronSwarmOpaque* swarm);
+
 #ifdef __cplusplus
 }
 #endif

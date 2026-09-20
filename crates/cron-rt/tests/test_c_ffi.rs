@@ -176,3 +176,165 @@ fn test_ffi_torus_distance() {
     assert_eq!(cron_torus_distance_c(0, 0), 0);
 }
 
+#[test]
+fn test_ffi_ternary_quantize_and_dot_product() {
+    let weights = [1.5f32, -0.8, 0.0, 1.2, -1.0, 0.1, -0.05, 2.0];
+    let mut packed = [0u8; 2];
+    let mut scale = 0.0f32;
+
+    let ok = unsafe {
+        cron_ternary_quantize(
+            weights.as_ptr(),
+            weights.len(),
+            packed.as_mut_ptr(),
+            &mut scale,
+        )
+    };
+    assert!(ok);
+    assert!(scale > 0.0);
+
+    let activations = [1.0f32, 2.0, 3.0, 1.0, 4.0, 0.5, 1.5, 2.0];
+    let dot = unsafe {
+        cron_ternary_dot_product(
+            packed.as_ptr(),
+            activations.as_ptr(),
+            activations.len(),
+            scale,
+        )
+    };
+    assert!(dot.is_finite());
+}
+
+#[test]
+fn test_ffi_cl_audit() {
+    let cl_code = CString::new(r#"
+.core [0, 0, 0, 0]:
+@entry:
+B0000: '==01#010> '==02#020> _MD05$001> _HL00#000!
+"#).unwrap();
+
+    let mut report_ptr: *mut c_char = std::ptr::null_mut();
+    let ok = unsafe { cron_cl_audit(cl_code.as_ptr(), &mut report_ptr) };
+    assert!(ok);
+    assert!(!report_ptr.is_null());
+
+    let report_str = unsafe { CStr::from_ptr(report_ptr).to_str().unwrap() };
+    assert!(report_str.contains("\"total_bundles\":1"));
+    assert!(report_str.contains("\"total_slots\":4"));
+    assert!(report_str.contains("\"hazards\":0"));
+
+    unsafe { cron_string_free(report_ptr); }
+}
+
+#[test]
+fn test_ffi_bpe_tokenizer() {
+    let tok = cron_bpe_create_default();
+    assert!(!tok.is_null());
+
+    let text = CString::new("CRON BitNet 1.58b AI").unwrap();
+    let mut out_ids = [0u32; 64];
+    let mut out_len = 0usize;
+
+    let ok = unsafe {
+        cron_bpe_encode(
+            tok,
+            text.as_ptr(),
+            out_ids.as_mut_ptr(),
+            out_ids.len(),
+            &mut out_len,
+        )
+    };
+    assert!(ok);
+    assert!(out_len > 0);
+
+    let mut out_str: *mut c_char = std::ptr::null_mut();
+    let decode_ok = unsafe {
+        cron_bpe_decode(
+            tok,
+            out_ids.as_ptr(),
+            out_len,
+            &mut out_str,
+        )
+    };
+    assert!(decode_ok);
+    assert!(!out_str.is_null());
+
+    let decoded = unsafe { CStr::from_ptr(out_str).to_str().unwrap() };
+    assert_eq!(decoded, "CRON BitNet 1.58b AI");
+
+    unsafe {
+        cron_string_free(out_str);
+        cron_bpe_free(tok);
+    }
+}
+
+#[test]
+fn test_ffi_multimodal_vision_and_audio() {
+    // 1. Vision patch extraction via C-ABI
+    let width = 64;
+    let height = 64;
+    let rgb = vec![128u8; width * height * 3];
+    let mut vis_emb = vec![0.0f32; 16 * 32];
+    let mut patch_count = 0usize;
+
+    let vis_ok = unsafe {
+        cron_vision_extract_patches(
+            rgb.as_ptr(),
+            width,
+            height,
+            3,
+            16,
+            32,
+            vis_emb.as_mut_ptr(),
+            vis_emb.len(),
+            &mut patch_count,
+        )
+    };
+    assert!(vis_ok);
+    assert_eq!(patch_count, 16);
+
+    // 2. Audio Mel-spectrogram via C-ABI
+    let pcm = vec![0.5f32; 1600];
+    let mut aud_emb = vec![0.0f32; 32 * 32];
+    let mut frame_count = 0usize;
+
+    let aud_ok = unsafe {
+        cron_audio_mel_spectrogram(
+            pcm.as_ptr(),
+            pcm.len(),
+            16000,
+            80,
+            32,
+            aud_emb.as_mut_ptr(),
+            aud_emb.len(),
+            &mut frame_count,
+        )
+    };
+    assert!(aud_ok);
+    assert!(frame_count > 0);
+}
+
+#[test]
+fn test_ffi_swarm_256_mesh() {
+    let swarm = cron_swarm_create_256();
+    assert!(!swarm.is_null());
+
+    let task = CString::new("Synthesize ternary quantization matrix across 256 cores").unwrap();
+    let mut report_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe { cron_swarm_execute_task(swarm, task.as_ptr(), &mut report_ptr) };
+    assert!(ok);
+    assert!(!report_ptr.is_null());
+
+    let report_str = unsafe { CStr::from_ptr(report_ptr).to_str().unwrap() };
+    assert!(report_str.contains("\"consensus_achieved\":true"));
+    assert!(report_str.contains("\"active_agents\":256"));
+    assert!(report_str.contains("\"avg_hops\":"));
+
+    unsafe {
+        cron_string_free(report_ptr);
+        cron_swarm_free(swarm);
+    }
+}
+
+

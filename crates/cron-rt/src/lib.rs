@@ -527,3 +527,320 @@ pub extern "C" fn cron_torus_distance_c(c1: i64, c2: i64) -> i64 {
     cronc::jit_backend::jit_torus_distance(c1, c2)
 }
 
+// ----------------------------------------------------------------------------
+// 10. AI BitNet 1.58-Bit Ternary & CL 2.0 Native Silicon C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_ternary_quantize(
+    weights: *const f32,
+    count: usize,
+    out_packed: *mut u8,
+    out_scale: *mut f32,
+) -> bool {
+    if weights.is_null() || out_packed.is_null() || out_scale.is_null() || count == 0 {
+        return false;
+    }
+
+    let slice = slice::from_raw_parts(weights, count);
+    let (ternary, params) = cronc::model_importer::ternary::quantize_to_ternary(slice);
+    let packed = cronc::model_importer::ternary::pack_ternary_2bit(&ternary);
+
+    let out_slice = slice::from_raw_parts_mut(out_packed, packed.len());
+    out_slice.copy_from_slice(&packed);
+    *out_scale = params.scale;
+
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_ternary_dot_product(
+    packed_weights: *const u8,
+    activations: *const f32,
+    count: usize,
+    scale: f32,
+) -> f32 {
+    if packed_weights.is_null() || activations.is_null() || count == 0 {
+        return 0.0;
+    }
+
+    let packed_len = (count + 3) / 4;
+    let packed_slice = slice::from_raw_parts(packed_weights, packed_len);
+    let act_slice = slice::from_raw_parts(activations, count);
+
+    cronc::model_importer::ternary::ternary_dot_product(packed_slice, act_slice, scale)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cl_audit(
+    cl_source: *const c_char,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if cl_source.is_null() || out_report_json.is_null() {
+        return false;
+    }
+
+    let c_str = CStr::from_ptr(cl_source);
+    let cl_code = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let verify_res = cronc::cl_lang::verify_cl_program(cl_code);
+    let audit_res = cronc::cl_lang::audit_alphabet_coverage(cl_code);
+
+    let (total_bundles, total_slots, hazards_count) = match verify_res {
+        Ok(v) => (v.total_bundles, v.total_slots, v.hazards.len()),
+        Err(_) => (0, 0, 0),
+    };
+
+    let json = format!(
+        "{{\"total_bundles\":{},\"total_slots\":{},\"hazards\":{},\"unique_chars\":{},\"coverage_pct\":{:.2},\"entropy\":{:.4}}}",
+        total_bundles,
+        total_slots,
+        hazards_count,
+        audit_res.unique_characters_used,
+        audit_res.coverage_percentage,
+        audit_res.entropy_bits_per_char
+    );
+
+    if let Ok(c_json) = CString::new(json) {
+        *out_report_json = c_json.into_raw();
+        true
+    } else {
+        false
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 11. BPE Tokenizer & Autoregressive Inference C-ABI
+// ----------------------------------------------------------------------------
+
+pub struct CronBpeTokenizerOpaque {
+    pub inner: cronc::bpe_tokenizer::BpeTokenizer,
+}
+
+#[no_mangle]
+pub extern "C" fn cron_bpe_create_default() -> *mut CronBpeTokenizerOpaque {
+    let tok = Box::new(CronBpeTokenizerOpaque {
+        inner: cronc::bpe_tokenizer::BpeTokenizer::from_default_vocab(),
+    });
+    Box::into_raw(tok)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_bpe_encode(
+    tokenizer: *mut CronBpeTokenizerOpaque,
+    text: *const c_char,
+    out_ids: *mut u32,
+    max_ids: usize,
+    out_len: *mut usize,
+) -> bool {
+    if tokenizer.is_null() || text.is_null() || out_ids.is_null() || out_len.is_null() {
+        return false;
+    }
+
+    let c_str = CStr::from_ptr(text);
+    let s = match c_str.to_str() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let tok = &(*tokenizer).inner;
+    let ids = tok.encode(s);
+    let copy_count = ids.len().min(max_ids);
+    let out_slice = slice::from_raw_parts_mut(out_ids, copy_count);
+    out_slice.copy_from_slice(&ids[..copy_count]);
+    *out_len = ids.len();
+
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_bpe_decode(
+    tokenizer: *mut CronBpeTokenizerOpaque,
+    ids: *const u32,
+    num_ids: usize,
+    out_str: *mut *mut c_char,
+) -> bool {
+    if tokenizer.is_null() || ids.is_null() || out_str.is_null() {
+        return false;
+    }
+
+    let tok = &(*tokenizer).inner;
+    let slice = slice::from_raw_parts(ids, num_ids);
+    let decoded = tok.decode(slice);
+
+    if let Ok(c_res) = CString::new(decoded) {
+        *out_str = c_res.into_raw();
+        true
+    } else {
+        false
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_bpe_free(tokenizer: *mut CronBpeTokenizerOpaque) {
+    if !tokenizer.is_null() {
+        drop(Box::from_raw(tokenizer));
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 12. Multi-Modal Vision & Audio Silicon C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_vision_extract_patches(
+    rgb_data: *const u8,
+    width: usize,
+    height: usize,
+    channels: usize,
+    patch_size: usize,
+    embed_dim: usize,
+    out_embeddings: *mut f32,
+    max_elements: usize,
+    out_patch_count: *mut usize,
+) -> bool {
+    if rgb_data.is_null() || out_embeddings.is_null() || out_patch_count.is_null() {
+        return false;
+    }
+
+    let total_bytes = width * height * channels;
+    let rgb_slice = slice::from_raw_parts(rgb_data, total_bytes);
+
+    let config = cronc::cl_multimodal::VisionConfig {
+        width,
+        height,
+        channels,
+        patch_size,
+        embed_dim,
+        is_ternary: true,
+    };
+
+    let patches = cronc::cl_multimodal::VisionPatchProcessor::extract_patches(rgb_slice, &config);
+    let projected = cronc::cl_multimodal::VisionPatchProcessor::project_patches(&patches, &config);
+
+    *out_patch_count = projected.len();
+    let total_emb_elements = projected.len() * embed_dim;
+    let copy_count = total_emb_elements.min(max_elements);
+
+    let out_slice = slice::from_raw_parts_mut(out_embeddings, copy_count);
+    let mut offset = 0;
+    for emb in &projected {
+        for &val in emb {
+            if offset < copy_count {
+                out_slice[offset] = val;
+                offset += 1;
+            }
+        }
+    }
+
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_audio_mel_spectrogram(
+    pcm_samples: *const f32,
+    num_samples: usize,
+    sample_rate: usize,
+    mel_bands: usize,
+    embed_dim: usize,
+    out_embeddings: *mut f32,
+    max_elements: usize,
+    out_frame_count: *mut usize,
+) -> bool {
+    if pcm_samples.is_null() || out_embeddings.is_null() || out_frame_count.is_null() {
+        return false;
+    }
+
+    let pcm_slice = slice::from_raw_parts(pcm_samples, num_samples);
+    let config = cronc::cl_multimodal::AudioConfig {
+        sample_rate,
+        fft_size: 512,
+        hop_length: 160,
+        mel_bands,
+        embed_dim,
+    };
+
+    let mel_frames = cronc::cl_multimodal::AudioSpectrogramProcessor::compute_mel_spectrogram(pcm_slice, &config);
+    let projected = cronc::cl_multimodal::AudioSpectrogramProcessor::project_audio_frames(&mel_frames, embed_dim);
+
+    *out_frame_count = projected.len();
+    let total_elements = projected.len() * embed_dim;
+    let copy_count = total_elements.min(max_elements);
+
+    let out_slice = slice::from_raw_parts_mut(out_embeddings, copy_count);
+    let mut offset = 0;
+    for frame in &projected {
+        for &val in frame {
+            if offset < copy_count {
+                out_slice[offset] = val;
+                offset += 1;
+            }
+        }
+    }
+
+    true
+}
+
+// ----------------------------------------------------------------------------
+// 13. 256-Core Autonomous Swarm Mesh C-ABI
+// ----------------------------------------------------------------------------
+
+pub struct CronSwarmOpaque {
+    pub inner: cronc::cl_swarm::SwarmMesh,
+}
+
+#[no_mangle]
+pub extern "C" fn cron_swarm_create_256() -> *mut CronSwarmOpaque {
+    let swarm = Box::new(CronSwarmOpaque {
+        inner: cronc::cl_swarm::SwarmMesh::new_256(),
+    });
+    Box::into_raw(swarm)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_swarm_execute_task(
+    swarm: *mut CronSwarmOpaque,
+    task_desc: *const c_char,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if swarm.is_null() || task_desc.is_null() || out_report_json.is_null() {
+        return false;
+    }
+
+    let c_str = CStr::from_ptr(task_desc);
+    let task = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let report = (*swarm).inner.execute_task(task);
+
+    let json = format!(
+        "{{\"task\":\"{}\",\"consensus_achieved\":{},\"consensus_score\":{:.2},\"active_agents\":{},\"total_packets\":{},\"avg_hops\":{:.2},\"max_hops\":{},\"latency_us\":{:.2}}}",
+        report.task.replace('"', "\\\""),
+        report.consensus_achieved,
+        report.telemetry.consensus_score,
+        report.telemetry.active_agents,
+        report.telemetry.total_packets_routed,
+        report.telemetry.avg_hop_count,
+        report.telemetry.max_hop_count,
+        report.telemetry.consensus_latency_us
+    );
+
+    if let Ok(c_json) = CString::new(json) {
+        *out_report_json = c_json.into_raw();
+        true
+    } else {
+        false
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_swarm_free(swarm: *mut CronSwarmOpaque) {
+    if !swarm.is_null() {
+        drop(Box::from_raw(swarm));
+    }
+}

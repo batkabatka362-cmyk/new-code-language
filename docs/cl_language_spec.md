@@ -1,9 +1,9 @@
 # CRON Low-Level Machine Language (.cl) — Official Architecture Specification
 
-**Version:** 88.0 (SSS+ Grade Enterprise Standard)  
+**Version:** 90.0 (CL 2.0 SSS+ Enterprise Architecture Standard)  
 **Target Architecture:** 256-Core ($4 \times 4 \times 4 \times 4$) 4D-Torus Photonic/Neuromorphic Processor  
 **Formal Foundations:** 798-Page System Architecture Manual (Pages 46–55, 88–95, 146–165)  
-**Encoding Paradigm:** Machine-Native, AI-Native, Deterministic 128-Bit VLIW, 94-Character ASCII Saturated  
+**Encoding Paradigm:** Machine-Native, AI-Native, Deterministic Variable-Width VLIW, 94-Character ASCII Saturated  
 
 ---
 
@@ -12,22 +12,35 @@
 `.cl` (Cognitive Low-level) бол зүгээр нэг компиляторын завсрын хоёртын файл бус, харин **биет цахиур (RTL Silicon) болон хиймэл оюун ухаанд (AI Agent / Autonomous Cognitive Unit) шууд зориулагдсан бие даасан машин-түвшний програмчлалын хэл** юм.
 
 * **Хүмүүст зориулсан `.cr`:** Өндөр түвшний сэтгэхүй, шугаман төрөл (`lin`), амьдралын хугацааны бүсчлэл (`region`), логик дүрмүүд.
-* **AI болон машинд зориулсан `.cl`:** Ямар ч хоёрдмол утгагүй (Zero Ambiguity), яг 10 тэмдэгттэй, 8 дахь тэмдэгт дээрээ алдаа илрүүлэх CRC-8 ATM / Parity хамгаалалттай, 1 багцад 4 үйлдэл зэрэгцүүлсэн 128 битийн VLIW хэл.
-* **94 Тэмдэгтийн Бүрэн Цагаан Толгой (Full 94-Character Alphabet):** ASCII 33 (`!`) -аас 126 (`~`) хүртэлх хэвлэгдэх бүх 94 тэмдэгтийг функциональ үүргүүдэд хуваарилан, мэдээллийн нягтралыг (Shannon Entropy $H \approx 6.55$ bits/char) дээд зэргээр хангасан.
+* **AI болон машинд зориулсан `.cl` (CL 2.0):** Ямар ч хоёрдмол утгагүй (Zero Ambiguity), хувьсах өргөнтэй (1..4 слот), алдаа илрүүлэх CRC-8 ATM / Parity хамгаалалттай, хоосон NOP зай үрэхгүй VLIW хэл.
+* **94 Тэмдэгтийн Бүрэн Цагаан Толгой (Full 94-Character Alphabet):** ASCII 33 (`!`) -аас 126 (`~`) хүртэлх хэвлэгдэх бүх 94 тэмдэгтийг функциональ үүргүүдэд хуваарилан, мэдээллийн нягтралыг (Shannon Entropy $H \approx 5.1036$ bits/char) дээд зэргээр хангасан.
+* **Семантик AI Директивүүд (Zero Comment Waste):** Хэрэгцээгүй тайлбар комментуудыг бүрэн халж, компилятор өөрөө баталгаажуулдаг `.stage`, `.tensor`, `.fuse`, `.flow`, `.layout`, `.weights` бүтцийг ашигладаг.
 
 ---
 
-## 2. Кодын Бүтэц ба Багцын Бүтэц (Bundle Structure)
+## 2. Кодын Бүтэц ба Багцын Бүтэц (Bundle Structure & EBNF)
 
-`.cl` хэлний эх код нь тактын дараалал бүхий 128-битийн VLIW багцуудаас бүрдэнэ:
+### 2.1 Семантик AI Директивүүд (Semantic Directives)
+Файлын эхэнд компилятор ба техник хангамжид зориулсан глобал тохиргоог тунхаглана:
 
 ```cl
-B<cycle_index>: <Slot_0> <Slot_1> <Slot_2> <Slot_3>
+.stage "<model_id>", params="<N>", precision="<type>", d_model=<D>, heads=<H>, kv_heads=<KV>, intermediate=<FFN>, zero_overhead=true
+.tensor %Q: [<dim1>, <dim2>], %K: [...], %V: [...], %O: [...]
+.fuse [<Layer1> -> <Layer2> & <Layer3> -> <Layer4>]
+.flow (Core[x1,y1,z1,w1] -> Core[x2,y2,z2,w2] -> ...) {dor=XYZW}
+.layout {TP=<n>, EP=<n>, CP=<n>, PP=<n>, dim="4x4x4x4", chip="256_core_torus"}
+.weights bank=<id>, offset=<off>: [<f1>, <f2>, ...]
 ```
 
-* **Багцын өргөн:** 128 бит (32 бит $\times$ 4 слот).
-* **Слотын тоо:** Багц бүр яг 4 слоттой (байхгүй тохиолдолд `_NO00#000>` NOP суулгана).
-* **Такт:** Цахиурын 1 тактанд 4 слот бие биеэсээ хамааралгүйгээр зэрэгцээ ажиллана.
+### 2.2 Хувьсах Өргөнтэй VLIW Багц (Variable-Width Bundles)
+CL 2.0-д багц бүр нь 1-ээс 4 хүртэлх слотыг динамикаар агуулж болно:
+
+```cl
+B<cycle_index>: <Slot_0> [<Slot_1>] [<Slot_2>] [<Slot_3>]
+```
+
+* **Хувьсах өргөн:** 1..4 слот (хоосон NOP зай үрэх шаардлагагүй). Оруулсан слотуудыг техник хангамж 0-switching power-gated байдлаар гүйцэтгэнэ.
+* **Такт:** Цахиурын 1 тактанд бүх слотууд зэрэгцээ ажиллана.
 * **Хазард Шалгалт (Hazard Free):** 1 багц дотор ижил регистрт зэрэг бичих (WAW) болон 0-такт сааталтайгаар бичигдэж буй регистрийг шууд унших (RAW) нь хориотой бөгөөд `cron cl-audit` компилятор/шалгагчаар баталгаажна.
 
 ---

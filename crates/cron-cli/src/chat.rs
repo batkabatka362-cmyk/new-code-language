@@ -11,6 +11,8 @@
 // ============================================================================
 
 use cron_rt::PagedWeightStreamer;
+use cronc::bpe_tokenizer::BpeTokenizer;
+use cronc::cl_infer::{generate_tokens_autoregressive_paged, TransformerConfig};
 use cronc::constrained_sampler::{ConstrainedSampler, GrammarMode};
 use cronc::speculative_decoding::SpeculativeEngine;
 use std::io::{self, BufRead, Write};
@@ -57,6 +59,8 @@ pub struct ChatSession {
     pub config: ChatConfig,
     pub streamer: PagedWeightStreamer,
     pub spec_engine: SpeculativeEngine,
+    pub tokenizer: BpeTokenizer,
+    pub tf_config: TransformerConfig,
     pub turns_count: usize,
     pub total_tokens_emitted: usize,
 }
@@ -79,11 +83,25 @@ impl ChatSession {
             PagedWeightStreamer::new_synthetic(config.num_layers, layer_bytes, page_bytes)
         };
         let spec_engine = SpeculativeEngine::new(config.k_speculative);
+        let tokenizer = BpeTokenizer::from_default_vocab();
+        let tf_config = TransformerConfig {
+            vocab_size: tokenizer.vocab_size(),
+            hidden_dim: 64,
+            num_layers: config.num_layers,
+            num_heads: 4,
+            head_dim: 16,
+            intermediate_dim: 128,
+            max_seq_len: 256,
+            is_ternary_bitnet: true,
+            enable_2_4_sparsity: true,
+        };
 
         Self {
             config,
             streamer,
             spec_engine,
+            tokenizer,
+            tf_config,
             turns_count: 0,
             total_tokens_emitted: 0,
         }
@@ -94,9 +112,9 @@ impl ChatSession {
         self.turns_count += 1;
         let start_time = Instant::now();
 
-        // 1. Byte-level prompt tokenization
-        let prompt_bytes = user_input.as_bytes();
-        let prompt_token_count = prompt_bytes.len().max(1);
+        // 1. Subword BPE prompt tokenization
+        let prompt_ids = self.tokenizer.encode(user_input);
+        let prompt_token_count = prompt_ids.len().max(1);
 
         // 2. Sliding-window paged layer streaming (strictly bounded RSS)
         let page_bytes = self.config.page_size_mb * 1024 * 1024;
@@ -107,7 +125,6 @@ impl ChatSession {
         }
 
         // 3. Speculative decoding lookahead
-        let prompt_ids: Vec<u32> = prompt_bytes.iter().map(|&b| b as u32).collect();
         let target_len = 24;
         let _generated_ids = self.spec_engine.run_speculative_decoding(&prompt_ids, target_len, |_ctx, drafts| {
             let mut evals = Vec::new();
@@ -122,8 +139,8 @@ impl ChatSession {
             evals
         });
 
-        // 4. Grammar-constrained decoding
-        let response_text = if self.config.grammar_mode == "json" {
+        // 4. Grammar-constrained decoding vs Autoregressive Generation
+        let output_tokens = if self.config.grammar_mode == "json" {
             let mut sampler = ConstrainedSampler::new(GrammarMode::StrictJson);
             let json_body = format!(
                 "{{\"model\": \"{}\", \"response\": \"Executed in 16MB RAM\", \"turn\": {}}}",
@@ -131,28 +148,41 @@ impl ChatSession {
             );
             for ch in json_body.chars() {
                 let _ = sampler.consume_char(ch);
+                write!(out, "{}", ch)?;
+                out.flush()?;
             }
-            sampler.emitted_text
+            writeln!(out)?;
+            json_body.split_whitespace().count().max(1)
         } else {
-            // Natural language response synthesized with zero-copy stream
-            format!(
-                "CRON cognitive engine processed '{}' across {} layers with {} MB resident set.",
+            // Live Autoregressive Token-by-Token Streaming with BPE Decoding
+            write!(
+                out,
+                "CRON cognitive engine processed '{}' across {} layers with {} MB resident set. Generated: ",
                 user_input.trim(),
                 self.config.num_layers,
                 self.config.page_size_mb
-            )
-        };
-
-        // 5. Stream response characters to output
-        for ch in response_text.chars() {
-            write!(out, "{}", ch)?;
+            )?;
             out.flush()?;
-        }
-        writeln!(out)?;
+            let mut emitted_count = 0;
+            let result = generate_tokens_autoregressive_paged(
+                user_input,
+                16,
+                0.7,
+                &self.tf_config,
+                &self.tokenizer,
+                None,
+                |_tok_id, tok_str| {
+                    let _ = write!(out, "{}", tok_str);
+                    let _ = out.flush();
+                    emitted_count += 1;
+                },
+            );
+            writeln!(out)?;
+            result.telemetry.generated_tokens.max(emitted_count).max(1)
+        };
 
         let elapsed = start_time.elapsed();
         let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
-        let output_tokens = response_text.split_whitespace().count().max(1);
         self.total_tokens_emitted += output_tokens;
         let tokens_per_sec = (output_tokens as f64) / elapsed.as_secs_f64().max(1e-6);
 

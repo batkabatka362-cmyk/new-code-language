@@ -64,6 +64,23 @@ pub mod cl_compare;
 pub mod fusion;
 pub mod constrained_sampler;
 pub mod speculative_decoding;
+pub mod bpe_tokenizer;
+pub mod cl_multimodal;
+pub mod cl_swarm;
+
+pub use bpe_tokenizer::{
+    BpeTokenizer, BOS_TOKEN, EOS_TOKEN, IM_END_TOKEN, IM_START_TOKEN, TOOL_CALL_TOKEN,
+};
+
+pub use cl_multimodal::{
+    AudioConfig, AudioSpectrogramProcessor, ModalityKind, MultiModalFusion, UnifiedToken,
+    VisionConfig, VisionPatchProcessor,
+};
+
+pub use cl_swarm::{
+    AgentRole, AgentState, AutonomousAgent, DimensionOrderRouter, PacketKind, SwarmMesh,
+    SwarmPacket, SwarmReport, SwarmTelemetry,
+};
 
 pub use fusion::{
     emit_flash_attention_2_c, emit_fused_rmsnorm_linear_c, emit_fused_swiglu_c,
@@ -125,8 +142,9 @@ pub use cl_cordic::{
     run_cordic, synthesize_cordic_cl, CordicConfig, CordicMode, CordicResult,
 };
 pub use cl_infer::{
-    generate_tokens, synthesize_transformer_cl, transformer_forward_step,
-    GenerationResult, InferenceTelemetry, KVCache, TransformerConfig,
+    generate_tokens, generate_tokens_autoregressive_paged, synthesize_transformer_cl,
+    transformer_forward_step, transformer_forward_step_paged, GenerationResult,
+    InferenceTelemetry, KVCache, LayerWeightProvider, TransformerConfig,
 };
 pub use cl_snn::{
     simulate_snn, synthesize_snn_kernel,
