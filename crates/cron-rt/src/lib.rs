@@ -910,3 +910,52 @@ pub unsafe extern "C" fn cron_cluster_swarm_free(cluster: *mut CronClusterSwarmO
         drop(Box::from_raw(cluster));
     }
 }
+
+// ----------------------------------------------------------------------------
+// 15. Autonomous Swarm Self-Synthesis & Vibe-Healing C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_swarm_synthesize_and_heal(
+    prompt: *const c_char,
+    max_iterations: usize,
+    auto_heal: bool,
+    run_jit: bool,
+    out_code: *mut *mut c_char,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if prompt.is_null() || out_code.is_null() || out_report_json.is_null() {
+        return false;
+    }
+
+    let c_str = CStr::from_ptr(prompt);
+    let prompt_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let synthesizer = cronc::cl_swarm_synthesis::SwarmSynthesizer::new();
+    let config = cronc::cl_swarm_synthesis::SynthesisConfig {
+        max_iterations: if max_iterations == 0 { 5 } else { max_iterations },
+        auto_heal,
+        auto_opt: true,
+        run_jit,
+        target_chip: None,
+    };
+
+    let report = synthesizer.synthesize_and_heal(prompt_str, &config);
+
+    let code_cstring = match CString::new(report.final_code.clone()) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let json_cstring = match CString::new(report.to_json()) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    *out_code = code_cstring.into_raw();
+    *out_report_json = json_cstring.into_raw();
+    true
+}

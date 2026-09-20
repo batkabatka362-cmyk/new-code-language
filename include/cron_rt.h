@@ -186,6 +186,19 @@ CRON_API CronClusterSwarmOpaque* cron_cluster_swarm_create_4096(void);
 CRON_API bool cron_cluster_swarm_execute_task(CronClusterSwarmOpaque* cluster, const char* task_desc, char** out_report_json);
 CRON_API void cron_cluster_swarm_free(CronClusterSwarmOpaque* cluster);
 
+/* ------------------------------------------------------------------------- */
+/* 13. Autonomous Swarm Self-Synthesis & Vibe-Healing C-ABI                  */
+/* ------------------------------------------------------------------------- */
+
+CRON_API bool cron_swarm_synthesize_and_heal(
+    const char* prompt,
+    size_t max_iterations,
+    bool auto_heal,
+    bool run_jit,
+    char** out_code,
+    char** out_report_json
+);
+
 #ifdef __cplusplus
 }
 #endif

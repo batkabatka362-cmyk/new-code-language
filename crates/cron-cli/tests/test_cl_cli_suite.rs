@@ -1542,5 +1542,24 @@ fn test_cli_swarm_256_and_cluster_4096() {
     assert!(s4096_str.contains("\"status\": \"global_quorum_reached\""));
 }
 
+#[test]
+fn test_cli_swarm_synthesize() {
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&[
+            "swarm-synthesize",
+            "--prompt",
+            "Synthesize FlashAttention-2 forward tile",
+            "--json",
+        ])
+        .output()
+        .expect("Failed to execute cron swarm-synthesize --json");
+
+    assert!(out.status.success(), "cron swarm-synthesize must exit 0");
+    let out_str = String::from_utf8_lossy(&out.stdout);
+    assert!(out_str.contains("\"consensus_achieved\": true"));
+    assert!(out_str.contains("\"detected_operators\": [\"flash-attn\"]"));
+    assert!(out_str.contains("\"status\": \"synthesis_complete\""));
+}
+
 
 

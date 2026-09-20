@@ -362,4 +362,38 @@ fn test_ffi_cluster_swarm_4096() {
     }
 }
 
+#[test]
+fn test_ffi_swarm_synthesize_and_heal() {
+    let prompt = CString::new("Synthesize FlashAttention-2 with optical MZI attention").unwrap();
+    let mut code_ptr: *mut c_char = std::ptr::null_mut();
+    let mut report_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_swarm_synthesize_and_heal(
+            prompt.as_ptr(),
+            3,
+            true,
+            true,
+            &mut code_ptr,
+            &mut report_ptr,
+        )
+    };
+    assert!(ok);
+    assert!(!code_ptr.is_null());
+    assert!(!report_ptr.is_null());
+
+    let code_str = unsafe { CStr::from_ptr(code_ptr).to_str().unwrap() };
+    assert!(code_str.contains(".core [0, 0, 0, 0]:"));
+    assert!(code_str.contains("flash-attn"));
+
+    let report_str = unsafe { CStr::from_ptr(report_ptr).to_str().unwrap() };
+    assert!(report_str.contains("\"consensus_achieved\": true"));
+    assert!(report_str.contains("\"status\": \"synthesis_complete\""));
+
+    unsafe {
+        cron_string_free(code_ptr);
+        cron_string_free(report_ptr);
+    }
+}
+
 

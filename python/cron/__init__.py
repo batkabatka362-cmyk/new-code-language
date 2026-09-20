@@ -24,6 +24,7 @@ from .compiler import (
     compute_mel_spectrogram,
     run_agent_swarm,
     run_cluster_swarm,
+    synthesize_kernel,
 )
 from .torch_bridge import (
     CronBitLinear,
@@ -64,6 +65,7 @@ __all__ = [
     "compute_mel_spectrogram",
     "run_agent_swarm",
     "run_cluster_swarm",
+    "synthesize_kernel",
     "CronBitLinear",
     "CronRMSNorm",
     "CronRingTapeAttention",

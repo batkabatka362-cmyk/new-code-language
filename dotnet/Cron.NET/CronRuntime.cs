@@ -203,6 +203,16 @@ namespace Cron.NET
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void cron_cluster_swarm_free(IntPtr cluster);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_swarm_synthesize_and_heal(
+            [MarshalAs(UnmanagedType.LPStr)] string prompt,
+            nuint maxIterations,
+            [MarshalAs(UnmanagedType.I1)] bool autoHeal,
+            [MarshalAs(UnmanagedType.I1)] bool runJit,
+            out IntPtr outCode,
+            out IntPtr outReportJson);
     }
 
     /// <summary>
@@ -297,6 +307,42 @@ namespace Cron.NET
         }
 
         ~CronClusterSwarmMesh() => Dispose();
+    }
+
+    /// <summary>
+    /// Autonomous Swarm Self-Synthesis & Continuous Silicon Vibe-Healing Engine.
+    /// </summary>
+    public static class CronSwarmSynthesizer
+    {
+        public static (string code, string reportJson) SynthesizeAndHeal(
+            string prompt,
+            int maxIterations = 5,
+            bool autoHeal = true,
+            bool runJit = true)
+        {
+            if (string.IsNullOrEmpty(prompt)) throw new ArgumentNullException(nameof(prompt));
+
+            bool ok = NativeMethods.cron_swarm_synthesize_and_heal(
+                prompt,
+                (nuint)maxIterations,
+                autoHeal,
+                runJit,
+                out IntPtr codePtr,
+                out IntPtr jsonPtr);
+
+            if (!ok || codePtr == IntPtr.Zero || jsonPtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Autonomous swarm synthesis failed.");
+            }
+
+            string code = Marshal.PtrToStringAnsi(codePtr) ?? string.Empty;
+            string report = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+
+            NativeMethods.cron_string_free(codePtr);
+            NativeMethods.cron_string_free(jsonPtr);
+
+            return (code, report);
+        }
     }
 
     /// <summary>

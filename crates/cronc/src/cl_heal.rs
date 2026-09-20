@@ -95,11 +95,21 @@ pub fn heal_cl_program(source: &str) -> Result<ClHealReport, String> {
             continue;
         }
 
-        let slots: Vec<String> = if let Some((_header, slots_part)) = trimmed.split_once(':') {
-            slots_part.split_whitespace().map(|s| s.to_string()).collect()
+        let slots_raw = if let Some((_header, slots_part)) = trimmed.split_once(':') {
+            slots_part
         } else {
-            trimmed.split_whitespace().map(|s| s.to_string()).collect()
+            trimmed
         };
+
+        let slots_code = if let Some((code, _)) = slots_raw.split_once("//") {
+            code
+        } else if let Some((code, _)) = slots_raw.split_once(';') {
+            code
+        } else {
+            slots_raw
+        };
+
+        let slots: Vec<String> = slots_code.split_whitespace().map(|s| s.to_string()).collect();
 
         if slots.is_empty() {
             continue;

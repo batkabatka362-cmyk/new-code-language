@@ -384,3 +384,34 @@ def run_cluster_swarm(task: str = "Distributed 4,096-Core Multi-Chip Consensus O
         return _extract_json(res.stdout)
     return {"raw_output": res.stdout, "status": "completed"}
 
+
+def synthesize_kernel(prompt: str = "Synthesize BitNet 1.58b ternary GEMM with optical attention",
+                      max_iterations: int = 5,
+                      json_output: bool = True) -> Dict[str, Any]:
+    """Autonomous Swarm Self-Synthesis & Continuous Silicon Vibe-Healing.
+
+    Decomposes natural language AI workload prompt into 6-Brain hardware targets,
+    synthesizes candidate 4-slot VLIW microcode (.cl), automatically repairs CRC-8
+    tokens and RAW/WAW pipeline hazards, and verifies execution on real-time JIT VM.
+
+    Args:
+        prompt: Natural language AI operator/workload specification.
+        max_iterations: Maximum vibe-healing iterative refinement attempts.
+        json_output: If True, returns parsed JSON telemetry dict. Otherwise raw text.
+
+    Returns:
+        Dict with keys: prompt, consensus_achieved, consensus_score, healed, fixed_crc_count,
+        resolved_hazards, initial_ipc, optimized_ipc, speedup_percentage, execution_cycles,
+        detected_operators, target_brains, registers, latency_us, status.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "swarm-synthesize", "--prompt", prompt, "--max-iter", str(max_iterations)]
+    if json_output:
+        cmd.append("--json")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON swarm synthesis error:\n{res.stderr or res.stdout}")
+    if json_output:
+        return _extract_json(res.stdout)
+    return {"raw_output": res.stdout, "status": "completed"}
+
