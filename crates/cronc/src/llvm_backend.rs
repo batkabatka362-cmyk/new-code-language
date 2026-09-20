@@ -716,6 +716,9 @@ impl LlvmBackend {
                 self.emit_line(&format!("{} = call i64 @channel_recv(ptr {})", call_reg, ch_reg));
                 (call_reg, "i64".to_string())
             }
+            Expr::Ref(inner) | Expr::RefMut(inner) => {
+                self.emit_expr(inner)
+            }
             _ => ("0".to_string(), "i64".to_string()),
         }
     }

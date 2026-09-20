@@ -1811,6 +1811,18 @@ impl Parser {
                     operand: Box::new(operand),
                 })
             }
+            Token::Amp => {
+                self.advance(); // consume '&'
+                if self.match_token(&Token::Mut) {
+                    // &mut expr
+                    let operand = self.parse_unary_expr()?;
+                    Ok(Expr::RefMut(Box::new(operand)))
+                } else {
+                    // &expr
+                    let operand = self.parse_unary_expr()?;
+                    Ok(Expr::Ref(Box::new(operand)))
+                }
+            }
             _ => self.parse_postfix_expr(),
         }
     }

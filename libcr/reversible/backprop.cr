@@ -31,7 +31,7 @@ def reversible_backward_step(
     let lin reconstructed_input = backward(consume(output_state))
 
     // 2. Compute input gradient via Jacobian-transpose product
-    let lin input_grad = upstream_grad ^ (reconstructed_input / 2)
+    let lin input_grad = consume(upstream_grad) ^ (reconstructed_input / 2)
 
     return (reconstructed_input, input_grad)
 }

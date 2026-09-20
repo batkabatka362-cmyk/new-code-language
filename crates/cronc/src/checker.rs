@@ -1422,6 +1422,9 @@ impl SemanticChecker {
                     self.check_expr(res)?;
                 }
             }
+            Expr::Ref(inner) | Expr::RefMut(inner) => {
+                self.check_expr(inner)?;
+            }
         }
         Ok(())
     }

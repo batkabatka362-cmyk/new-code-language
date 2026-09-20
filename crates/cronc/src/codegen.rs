@@ -873,6 +873,10 @@ impl Codegen {
             Expr::Comptime { .. } => {
                 self.push_slot(make_slot('\'', "=0", dest, '#', 0, 0, '>'));
             }
+            Expr::Ref(inner) | Expr::RefMut(inner) => {
+                // References compile to the inner expression value (pass-through)
+                self.compile_expr(inner, dest);
+            }
         }
     }
 

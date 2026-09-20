@@ -67,7 +67,7 @@ def handle_request_zero_alloc(
     let path = parse_method_fast(raw_req_ptr + 5, 8) // "/predict"
 
     // 2. Allocate response scratchpad in 0-Cycle regional memory
-    let (arena_after_alloc, resp_buffer_ptr) = arena_alloc(arena, 1024)
+    let (arena_after_alloc, resp_buffer_ptr) = arena_alloc(consume(arena), 1024)
 
     // 3. Construct response object pointing directly into region
     let resp = HttpResponse {
@@ -86,10 +86,10 @@ def process_transaction(
     req_ptr: u64,
     req_len: u32
 ) -> (linear RegionArena, i32) {
-    let (active_arena, resp) = handle_request_zero_alloc(arena, req_ptr, req_len)
+    let (active_arena, resp) = handle_request_zero_alloc(consume(arena), req_ptr, req_len)
     let status = resp.status_code
 
     // 0-Cycle Instant Deallocation: reset regional pointer without OS free() or GC pause
-    let reset_arena = arena_reset(active_arena)
+    let reset_arena = arena_reset(consume(active_arena))
     return (reset_arena, status)
 }

@@ -22,6 +22,7 @@ def photonic_self_attention(
     
     // Step 2: Vector Predication on Attention Heads (Power-gated)
     let lin masked_scores = predicated_op(score_latent, score_latent, mask=mask)
+    consume(score_latent)
     
     // Step 3: Value Projection
     let lin context = optical_gemm(consume(masked_scores), consume(value))

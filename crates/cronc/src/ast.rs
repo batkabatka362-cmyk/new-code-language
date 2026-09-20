@@ -416,6 +416,10 @@ pub enum Expr {
         result: Option<Box<Expr>>,
         span: Span,
     },
+    /// Immutable reference expression: &expr
+    Ref(Box<Expr>),
+    /// Mutable reference expression: &mut expr
+    RefMut(Box<Expr>),
 }
 
 impl Expr {
@@ -429,6 +433,7 @@ impl Expr {
             Expr::Grad { span, .. } => *span,
             Expr::GradCall { span, .. } => *span,
             Expr::Comptime { span, .. } => *span,
+            Expr::Ref(inner) | Expr::RefMut(inner) => inner.span(),
             _ => Span::default(),
         }
     }

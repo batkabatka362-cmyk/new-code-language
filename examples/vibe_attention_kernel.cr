@@ -31,12 +31,13 @@ _main:
             reversible_swap(&mut r6_1, &mut trans_r3)
             spatial_broadcast(0)
             consume(syn_state)
+            export spike_r11 as exported_spike_r11
             export w_seed as final_core_state
             consume(ternary_acc)
         }
 
         await_dma_channel(channel=1)
-        spatial_broadcast(spike_r11)
+        spatial_broadcast(exported_spike_r11)
     }
     pgas_barrier()
 .END

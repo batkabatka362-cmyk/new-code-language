@@ -24,10 +24,11 @@ export def inline compute_attention_head(
 
     ; 2. Landauer zero-heat Reversible Softmax balancing (Brain 3)
     let lin norm_qk, lin residual : linear rev_t = reversible_swap(
-        qk_dot as rev_t,
-        k_proj as rev_t,
+        consume(qk_dot) as rev_t,
+        consume(k_proj) as rev_t,
         ctrl=therm_mask
     )
+    consume(residual)
 
     ; 3. Context Value multiplication: Scale Value wave by attention weights
     let lin head_context : linear vec4_i8 = optical_gemm(wave=consume(v_wave))

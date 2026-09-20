@@ -426,6 +426,9 @@ impl<'a> ComptimeEvaluator<'a> {
             Expr::Comptime { body, result, .. } => {
                 self.eval_block(body, result.as_deref(), env)
             }
+            Expr::Ref(inner) | Expr::RefMut(inner) => {
+                self.eval_expr(inner, env)
+            }
             _ => Err(format!("Unsupported expression in compile-time evaluation: {:?}", expr)),
         }
     }
@@ -844,6 +847,9 @@ fn fold_expr(expr: &mut Expr, functions: &[FunctionDecl]) -> Result<(), String> 
             for arg in args {
                 fold_expr(&mut arg.value, functions)?;
             }
+        }
+        Expr::Ref(inner) | Expr::RefMut(inner) => {
+            fold_expr(inner, functions)?;
         }
         _ => {}
     }

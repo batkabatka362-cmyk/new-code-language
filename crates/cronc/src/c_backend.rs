@@ -1553,6 +1553,12 @@ impl CBackend {
             Expr::ChannelRecv { channel, .. } => {
                 format!("channel_recv({})", self.transpile_expr(channel))
             }
+            Expr::Ref(inner) => {
+                format!("&({})", self.transpile_expr(inner))
+            }
+            Expr::RefMut(inner) => {
+                format!("&({})", self.transpile_expr(inner))
+            }
             _ => "0".to_string(),
         }
     }
