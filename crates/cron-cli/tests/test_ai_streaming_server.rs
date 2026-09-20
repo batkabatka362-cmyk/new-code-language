@@ -22,19 +22,33 @@ fn test_live_ai_streaming_server_and_benchmark() {
         workers: 2,
     };
     let server = LiveHttpServer::new(config);
+    let is_running = server.is_running.clone();
 
     // Spawn server in background
     let server_thread = thread::spawn(move || {
         let _ = server.start(Some(shutdown_rx));
     });
 
-    // Give server a moment to bind
+    // Wait for server to bind and start running
+    for _ in 0..100 {
+        if is_running.load(std::sync::atomic::Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
     thread::sleep(Duration::from_millis(50));
 
     // 1. Verify /v1/chat/completions SSE Streaming
     {
-        let mut stream = TcpStream::connect(("127.0.0.1", port))
-            .expect("Failed to connect to CRON AI streaming server");
+        let mut stream = None;
+        for _ in 0..50 {
+            if let Ok(s) = TcpStream::connect(("127.0.0.1", port)) {
+                stream = Some(s);
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let mut stream = stream.expect("Failed to connect to CRON AI streaming server");
 
         let body = r#"{"model":"cron-bitnet-1.58b","messages":[{"role":"user","content":"Hello CRON"}],"stream":true}"#;
         let req = format!(

@@ -1024,15 +1024,19 @@ impl Parser {
                 let mut arms = Vec::new();
                 while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
                     let arm_span = self.current_span();
-                    println!("Inside match loop, current token: {:?}", self.peek());
                     let pattern = self.parse_match_pattern()?;
+                    let guard = if self.match_token(&Token::If) {
+                        Some(self.parse_expr()?)
+                    } else {
+                        None
+                    };
                     self.expect(&Token::FatArrow)?;
                     let body = if self.check(&Token::OpenBrace) {
                         self.parse_block()?
                     } else {
                         vec![self.parse_statement()?]
                     };
-                    arms.push(MatchArm { pattern, body, span: arm_span });
+                    arms.push(MatchArm { pattern, guard, body, span: arm_span });
                     self.match_token(&Token::Comma);
                 }
                 self.expect(&Token::CloseBrace)?;
@@ -1442,10 +1446,38 @@ impl Parser {
     }
 
     fn parse_match_pattern(&mut self) -> Result<MatchPattern, String> {
+        let first = self.parse_single_match_pattern()?;
+        if self.match_token(&Token::Pipe) {
+            let mut patterns = vec![first];
+            loop {
+                patterns.push(self.parse_single_match_pattern()?);
+                if !self.match_token(&Token::Pipe) {
+                    break;
+                }
+            }
+            Ok(MatchPattern::Or(patterns))
+        } else {
+            Ok(first)
+        }
+    }
+
+    fn parse_single_match_pattern(&mut self) -> Result<MatchPattern, String> {
         match self.peek() {
             Token::Underscore => {
                 self.advance();
                 Ok(MatchPattern::Wildcard)
+            }
+            Token::OpenParen => {
+                self.advance();
+                let mut elements = Vec::new();
+                while !self.check(&Token::CloseParen) && !self.check(&Token::Eof) {
+                    elements.push(self.parse_match_pattern()?);
+                    if !self.match_token(&Token::Comma) {
+                        break;
+                    }
+                }
+                self.expect(&Token::CloseParen)?;
+                Ok(MatchPattern::Tuple(elements))
             }
             Token::Ident(_) => {
                 let name = match self.advance() {
@@ -1471,7 +1503,9 @@ impl Parser {
                             Token::Underscore => bindings.push("_".to_string()),
                             other => return Err(format!("Expected binding identifier in match arm, got {:?}", other)),
                         }
-                        self.match_token(&Token::Comma);
+                        if !self.match_token(&Token::Comma) {
+                            break;
+                        }
                     }
                     self.expect(&Token::CloseParen)?;
                 }
@@ -2000,6 +2034,32 @@ impl Parser {
                 self.advance();
                 Ok(Expr::LiteralAxis(val))
             }
+            Token::Match => {
+                let span = self.current_span();
+                self.advance(); // match
+                let expr = self.parse_expr()?;
+                self.expect(&Token::OpenBrace)?;
+                let mut arms = Vec::new();
+                while !self.check(&Token::CloseBrace) && !self.check(&Token::Eof) {
+                    let arm_span = self.current_span();
+                    let pattern = self.parse_match_pattern()?;
+                    let guard = if self.match_token(&Token::If) {
+                        Some(self.parse_expr()?)
+                    } else {
+                        None
+                    };
+                    self.expect(&Token::FatArrow)?;
+                    let body = if self.check(&Token::OpenBrace) {
+                        self.parse_block()?
+                    } else {
+                        vec![self.parse_statement()?]
+                    };
+                    arms.push(MatchArm { pattern, guard, body, span: arm_span });
+                    self.match_token(&Token::Comma);
+                }
+                self.expect(&Token::CloseBrace)?;
+                Ok(Expr::Match { expr: Box::new(expr), arms, span })
+            }
             Token::Consume => {
                 let span = self.current_span();
                 self.advance(); // consume
@@ -2144,8 +2204,18 @@ impl Parser {
             }
             Token::Ident(name) => {
                 let id_span = self.current_span();
-                let id = name.clone();
+                let mut id = name.clone();
                 self.advance();
+
+                if self.check(&Token::Colon) && self.peek_offset(1) == &Token::Colon {
+                    self.advance(); // :
+                    self.advance(); // :
+                    let variant = match self.advance() {
+                        Token::Ident(v) => v,
+                        other => return Err(format!("Expected variant name after '::', got {:?}", other)),
+                    };
+                    id = format!("{}::{}", id, variant);
+                }
 
                 // Check for generic type arguments: e.g. LinearGuard<T> { ... } or call<T>(...)
                 let mut full_id = id.clone();
@@ -2247,9 +2317,6 @@ impl Parser {
                 Ok(Expr::Ident(name, id_span))
             }
             other => {
-                println!("Unexpected token in expression at pos {}: {:?}", self.pos, other);
-                println!("Previous token: {:?}", if self.pos > 0 { &self.tokens[self.pos - 1].value } else { &Token::Eof });
-                println!("Next token: {:?}", if self.pos + 1 < self.tokens.len() { &self.tokens[self.pos + 1].value } else { &Token::Eof });
                 Err(format!("Unexpected token in expression at pos {}: {:?}", self.pos, other))
             }
         }

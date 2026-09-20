@@ -11,6 +11,7 @@ import { broadcast_4d_sphere, open_simplex_pipe, sync_neighborhood } from "core/
 import { wave_t, ext_addr_t, spk_stamp, rev_t, pack_wave } from "core/types.cr"
 import { DynamicVec, vec_new, vec_push_back, vec_pop } from "core/vec.cr"
 import { HyperTreeNode, create_hyper_node, hyper_tree_traverse_step } from "core/hyper_tree.cr"
+import { Option, Result, is_some, is_none, unwrap_or, is_ok, is_err, unwrap_result_or } from "core/option_result.cr"
 
 // Brain 1: Symbolic & Causal Unification
 import { KnowledgeGraphPartition, Triple, init_kg_partition, assert_triple } from "symbolic/knowledge_graph.cr"

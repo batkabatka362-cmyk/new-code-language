@@ -92,6 +92,8 @@ pub struct SemanticChecker {
     known_impls: HashMap<(String, String), HashSet<String>>,
     pub fn_param_types: HashMap<String, Vec<(String, String)>>,
     pub fn_return_types: HashMap<String, String>,
+    pub known_enums: HashMap<String, Vec<String>>,
+    pub known_enum_payloads: HashMap<(String, String), Option<Vec<String>>>,
 }
 
 impl Default for SemanticChecker {
@@ -154,6 +156,8 @@ impl SemanticChecker {
             known_impls: HashMap::new(),
             fn_param_types: HashMap::new(),
             fn_return_types: HashMap::new(),
+            known_enums: HashMap::new(),
+            known_enum_payloads: HashMap::new(),
         }
     }
 
@@ -231,9 +235,14 @@ impl SemanticChecker {
             self.known_types.insert(t.name.clone(), t.target_type.clone());
         }
 
-        // Register algebraic enum types
+        // Register algebraic enum types and their variants for exhaustiveness checking
         for e in &program.enums {
             self.known_types.insert(e.name.clone(), "enum".to_string());
+            let variant_names: Vec<String> = e.variants.iter().map(|v| v.name.clone()).collect();
+            for v in &e.variants {
+                self.known_enum_payloads.insert((e.name.clone(), v.name.clone()), v.payload.clone());
+            }
+            self.known_enums.insert(e.name.clone(), variant_names);
         }
 
         // Register trait contracts (Milestone #005: zero-vtable static traits)
@@ -296,6 +305,7 @@ impl SemanticChecker {
                 }
                 func_checker.known_traits = self.known_traits.clone();
                 func_checker.known_impls = self.known_impls.clone();
+                func_checker.known_enums = self.known_enums.clone();
                 func_checker.fn_param_types = self.fn_param_types.clone();
                 func_checker.fn_return_types = self.fn_return_types.clone();
                 for param in &method.params {
@@ -329,6 +339,7 @@ impl SemanticChecker {
             }
             func_checker.known_traits = self.known_traits.clone();
             func_checker.known_impls = self.known_impls.clone();
+            func_checker.known_enums = self.known_enums.clone();
             func_checker.fn_param_types = self.fn_param_types.clone();
             func_checker.fn_return_types = self.fn_return_types.clone();
             for param in &func.params {
@@ -357,6 +368,7 @@ impl SemanticChecker {
             brain_checker.known_types = self.known_types.clone();
             brain_checker.known_traits = self.known_traits.clone();
             brain_checker.known_impls = self.known_impls.clone();
+            brain_checker.known_enums = self.known_enums.clone();
             brain_checker.fn_param_types = self.fn_param_types.clone();
             brain_checker.fn_return_types = self.fn_return_types.clone();
             brain_checker.check_statements(&brain.body)?;
@@ -501,9 +513,19 @@ impl SemanticChecker {
     pub fn infer_expr_type(&self, expr: &Expr) -> Option<String> {
         match expr {
             Expr::Ident(name, _) | Expr::Consume(name, _) => {
+                if let Some((enum_name, _)) = name.split_once("::") {
+                    if self.known_enums.contains_key(enum_name) {
+                        return Some(enum_name.to_string());
+                    }
+                }
                 self.lookup_var(name).and_then(|v| v.var_type.clone())
             }
             Expr::Call { callee, args } => {
+                if let Some((enum_name, _)) = callee.split_once("::") {
+                    if self.known_enums.contains_key(enum_name) {
+                        return Some(enum_name.to_string());
+                    }
+                }
                 if callee == "tensor_matmul" && args.len() >= 2 {
                     let type_a = self.infer_expr_type(&args[0].value)?;
                     let type_b = self.infer_expr_type(&args[1].value)?;
@@ -988,30 +1010,67 @@ impl SemanticChecker {
                     self.pop_scope();
                 }
             }
-            Statement::Match { expr, arms, span: _ } => {
+            Statement::Match { expr, arms, span } => {
                 self.check_expr(expr)?;
+
+                let match_enum_name = self.infer_enum_name_from_expr(expr);
+
+                // Collect covered variants for exhaustiveness checking
+                let mut covered_variants: HashSet<String> = HashSet::new();
+                let mut has_wildcard = false;
+                let mut wildcard_seen = false;
+
                 for arm in arms {
+                    if wildcard_seen {
+                        return Err(TypeError::new(
+                            "E0021",
+                            "Unreachable pattern: match arm appears after an unguarded wildcard pattern".to_string(),
+                            arm.span,
+                        )
+                        .with_note("Milestone #050: Reachability analysis detects dead match branches")
+                        .with_help("Remove the unreachable pattern or place it before the wildcard pattern"));
+                    }
+
                     self.push_scope();
-                    if let MatchPattern::Variant { bindings, .. } = &arm.pattern {
-                        for b in bindings {
-                            if b != "_" {
-                                self.insert_var(VarInfo {
-                                    name: b.clone(),
-                                    is_lin: false,
-                                    is_grad: false,
-                                    is_mut: false,
-                                    is_consumed: false,
-                                    is_tainted: false,
-                                    is_capability: false,
-                                    def_span: arm.span,
-                                    var_type: None,
-                                    in_region: self.in_region,
-                                });
+
+                    // Register pattern bindings and collect coverage info
+                    self.register_pattern_bindings(&arm.pattern, arm.span, match_enum_name.as_deref(), &mut covered_variants, &mut has_wildcard);
+
+                    if matches!(arm.pattern, MatchPattern::Wildcard) && arm.guard.is_none() {
+                        wildcard_seen = true;
+                    }
+
+                    // Check guard expression if present
+                    if let Some(guard) = &arm.guard {
+                        self.check_expr(guard)?;
+                    }
+
+                    self.check_statements(&arm.body)?;
+                    self.pop_scope();
+                }
+
+                // Exhaustiveness verification: if the match target is an enum, verify all variants are covered
+                if !has_wildcard && !covered_variants.is_empty() {
+                    if let Some(enum_name) = match_enum_name {
+                        if let Some(all_variants) = self.known_enums.get(&enum_name).cloned() {
+                            let missing: Vec<&String> = all_variants.iter()
+                                .filter(|v| !covered_variants.contains(*v))
+                                .collect();
+                            if !missing.is_empty() {
+                                return Err(TypeError::new(
+                                    "E0020",
+                                    format!(
+                                        "Non-exhaustive match: enum '{}' variants not covered: {}",
+                                        enum_name,
+                                        missing.iter().map(|v| format!("'{}'", v)).collect::<Vec<_>>().join(", ")
+                                    ),
+                                    *span,
+                                )
+                                .with_note("Milestone #050: Exhaustive pattern matching ensures all ADT variants are handled at compile-time")
+                                .with_help("Add the missing variant arms or use a wildcard '_' pattern to cover all remaining cases"));
                             }
                         }
                     }
-                    self.check_statements(&arm.body)?;
-                    self.pop_scope();
                 }
             }
             Statement::Export {
@@ -1132,6 +1191,17 @@ impl SemanticChecker {
     fn check_expr(&mut self, expr: &Expr) -> Result<(), TypeError> {
         match expr {
             Expr::Ident(name, span) => {
+                if let Some((enum_name, variant_name)) = name.split_once("::") {
+                    if let Some(variants) = self.known_enums.get(enum_name) {
+                        if !variants.contains(&variant_name.to_string()) {
+                            return Err(TypeError::new(
+                                "E0022",
+                                format!("Unknown variant '{}' for enum '{}'", variant_name, enum_name),
+                                *span,
+                            ));
+                        }
+                    }
+                }
                 if !self.in_region {
                     if let Some(var) = self.lookup_var(name) {
                         if var.in_region && !self.exported_vars.contains(name) {
@@ -1173,6 +1243,17 @@ impl SemanticChecker {
                 }
             }
             Expr::Call { callee, args } => {
+                if let Some((enum_name, variant_name)) = callee.split_once("::") {
+                    if let Some(variants) = self.known_enums.get(enum_name) {
+                        if !variants.contains(&variant_name.to_string()) {
+                            return Err(TypeError::new(
+                                "E0022",
+                                format!("Unknown variant '{}' for enum '{}'", variant_name, enum_name),
+                                args.first().map(|a| a.value.span()).unwrap_or_default(),
+                            ));
+                        }
+                    }
+                }
                 if callee == "secure_patch_icache" {
                     // Taint checking (Pages 749-752)
                     for arg in args {
@@ -1425,6 +1506,61 @@ impl SemanticChecker {
             Expr::Ref(inner) | Expr::RefMut(inner) => {
                 self.check_expr(inner)?;
             }
+            Expr::Match { expr, arms, span } => {
+                self.check_expr(expr)?;
+                let match_enum_name = self.infer_enum_name_from_expr(expr);
+                let mut covered_variants: HashSet<String> = HashSet::new();
+                let mut has_wildcard = false;
+                let mut wildcard_seen = false;
+
+                for arm in arms {
+                    if wildcard_seen {
+                        return Err(TypeError::new(
+                            "E0021",
+                            "Unreachable pattern: match arm appears after an unguarded wildcard pattern".to_string(),
+                            arm.span,
+                        )
+                        .with_note("Milestone #050: Reachability analysis detects dead match branches")
+                        .with_help("Remove the unreachable pattern or place it before the wildcard pattern"));
+                    }
+
+                    self.push_scope();
+                    self.register_pattern_bindings(&arm.pattern, arm.span, match_enum_name.as_deref(), &mut covered_variants, &mut has_wildcard);
+
+                    if matches!(arm.pattern, MatchPattern::Wildcard) && arm.guard.is_none() {
+                        wildcard_seen = true;
+                    }
+
+                    if let Some(guard) = &arm.guard {
+                        self.check_expr(guard)?;
+                    }
+                    self.check_statements(&arm.body)?;
+                    self.pop_scope();
+                }
+                // Exhaustiveness check for match expressions
+                if !has_wildcard && !covered_variants.is_empty() {
+                    if let Some(enum_name) = match_enum_name {
+                        if let Some(all_variants) = self.known_enums.get(&enum_name).cloned() {
+                            let missing: Vec<&String> = all_variants.iter()
+                                .filter(|v| !covered_variants.contains(*v))
+                                .collect();
+                            if !missing.is_empty() {
+                                return Err(TypeError::new(
+                                    "E0020",
+                                    format!(
+                                        "Non-exhaustive match expression: enum '{}' variants not covered: {}",
+                                        enum_name,
+                                        missing.iter().map(|v| format!("'{}'", v)).collect::<Vec<_>>().join(", ")
+                                    ),
+                                    *span,
+                                )
+                                .with_note("Milestone #050: Exhaustive pattern matching ensures all ADT variants are handled at compile-time")
+                                .with_help("Add the missing variant arms or use a wildcard '_' pattern"));
+                            }
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -1447,5 +1583,103 @@ impl SemanticChecker {
             }
         }
         Ok(())
+    }
+
+    /// Recursively register pattern bindings and collect coverage information
+    fn register_pattern_bindings(
+        &mut self,
+        pattern: &MatchPattern,
+        span: Span,
+        enum_name_hint: Option<&str>,
+        covered_variants: &mut HashSet<String>,
+        has_wildcard: &mut bool,
+    ) {
+        match pattern {
+            MatchPattern::Variant { enum_name, variant_name, bindings } => {
+                covered_variants.insert(variant_name.clone());
+                let en_opt = enum_name.as_deref().or(enum_name_hint);
+                for (idx, b) in bindings.iter().enumerate() {
+                    if b != "_" {
+                        let var_type = en_opt.and_then(|en| {
+                            self.known_enum_payloads.get(&(en.to_string(), variant_name.clone()))
+                                .and_then(|p| p.as_ref())
+                                .and_then(|payloads| payloads.get(idx).cloned())
+                        });
+                        self.insert_var(VarInfo {
+                            name: b.clone(),
+                            is_lin: false,
+                            is_grad: false,
+                            is_mut: false,
+                            is_consumed: false,
+                            is_tainted: false,
+                            is_capability: false,
+                            def_span: span,
+                            var_type,
+                            in_region: self.in_region,
+                        });
+                    }
+                }
+            }
+            MatchPattern::Wildcard => {
+                *has_wildcard = true;
+            }
+            MatchPattern::Literal(_) => {
+                // Literal patterns don't bind variables or contribute to enum exhaustiveness
+            }
+            MatchPattern::Tuple(sub_patterns) => {
+                for sub in sub_patterns {
+                    self.register_pattern_bindings(sub, span, enum_name_hint, covered_variants, has_wildcard);
+                }
+            }
+            MatchPattern::Or(alternatives) => {
+                // Or-patterns: each alternative contributes to coverage
+                for alt in alternatives {
+                    self.register_pattern_bindings(alt, span, enum_name_hint, covered_variants, has_wildcard);
+                }
+            }
+        }
+    }
+
+    /// Infer the enum type name from a match target expression
+    fn infer_enum_name_from_expr(&self, expr: &Expr) -> Option<String> {
+        if let Some(t) = self.infer_expr_type(expr) {
+            if self.known_enums.contains_key(&t) {
+                return Some(t);
+            }
+        }
+        match expr {
+            Expr::Ident(name, _) => {
+                if let Some((enum_name, _)) = name.split_once("::") {
+                    if self.known_enums.contains_key(enum_name) {
+                        return Some(enum_name.to_string());
+                    }
+                }
+                if let Some(var) = self.lookup_var(name) {
+                    if let Some(var_type) = &var.var_type {
+                        if self.known_enums.contains_key(var_type) {
+                            return Some(var_type.clone());
+                        }
+                    }
+                }
+                None
+            }
+            Expr::Call { callee, .. } => {
+                if let Some((enum_name, _)) = callee.split_once("::") {
+                    if self.known_enums.contains_key(enum_name) {
+                        return Some(enum_name.to_string());
+                    }
+                }
+                if let Some(ret_type) = self.fn_return_types.get(callee) {
+                    if self.known_enums.contains_key(ret_type) {
+                        return Some(ret_type.clone());
+                    }
+                }
+                None
+            }
+            Expr::FieldAccess { .. } | Expr::Index { .. } => {
+                None
+            }
+            _ => None,
+        }
     }
 }

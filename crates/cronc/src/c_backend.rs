@@ -953,6 +953,10 @@ impl CBackend {
         self.emit_line(&format!("{}_Tag tag;", e.name));
         self.emit_line("int64_t payload_int;");
         self.emit_line("double payload_float;");
+        self.emit_line("int64_t field0;");
+        self.emit_line("int64_t field1;");
+        self.emit_line("int64_t field2;");
+        self.emit_line("int64_t field3;");
         self.indent_level -= 1;
         self.emit_line(&format!("}} {};", e.name));
         self.emit_line("");
@@ -1326,28 +1330,32 @@ impl CBackend {
                 self.indent_level += 1;
                 self.emit_line(&format!("auto _match_target = {};", expr_str));
                 for (i, arm) in arms.iter().enumerate() {
-                    let cond = match &arm.pattern {
-                        MatchPattern::Wildcard => "true".to_string(),
-                        MatchPattern::Literal(lit) => {
-                            format!("_match_target == {}", self.transpile_expr(lit))
-                        }
-                        MatchPattern::Variant { variant_name, enum_name, .. } => {
-                            if let Some(en) = enum_name {
-                                format!("_match_target.tag == {}_{}", en.to_uppercase(), variant_name.to_uppercase())
-                            } else {
-                                format!("_match_target == {}", variant_name)
-                            }
-                        }
+                    let cond = self.transpile_match_pattern(&arm.pattern, "_match_target");
+                    let full_cond = if let Some(g) = &arm.guard {
+                        format!("{} && ({})", cond, self.transpile_expr(g))
+                    } else {
+                        cond
                     };
 
                     let if_kw = if i == 0 { "if" } else { "} else if" };
-                    if cond == "true" {
-                        self.emit_line("} else {");
+                    if full_cond == "true" {
+                        if i == 0 {
+                            self.emit_line("if (true) {");
+                        } else {
+                            self.emit_line("} else {");
+                        }
                     } else {
-                        self.emit_line(&format!("{} ({}) {{", if_kw, cond));
+                        self.emit_line(&format!("{} ({}) {{", if_kw, full_cond));
                     }
 
                     self.indent_level += 1;
+                    if let MatchPattern::Variant { bindings, .. } = &arm.pattern {
+                        for (b_idx, b) in bindings.iter().enumerate() {
+                            if b != "_" {
+                                self.emit_line(&format!("auto {} = _match_target.field{};", b, b_idx));
+                            }
+                        }
+                    }
                     for s in &arm.body {
                         self.emit_statement(s);
                     }
@@ -1401,7 +1409,13 @@ impl CBackend {
             Expr::LiteralBool(b) => if *b { "true".to_string() } else { "false".to_string() },
             Expr::LiteralString(s) => format!("\"{}\"", s.escape_default()),
             Expr::LiteralAxis(axis) => format!("\"{}\"", axis),
-            Expr::Ident(id, _) => id.clone(),
+            Expr::Ident(id, _) => {
+                if let Some((enum_name, variant_name)) = id.split_once("::") {
+                    format!("(({}){{ .tag = {}_{} }})", enum_name, enum_name.to_uppercase(), variant_name.to_uppercase())
+                } else {
+                    id.clone()
+                }
+            }
             Expr::Unary { op, operand } => {
                 format!("({}{})", op, self.transpile_expr(operand))
             }
@@ -1426,6 +1440,17 @@ impl CBackend {
                 }
             }
             Expr::Call { callee, args } => {
+                if let Some((enum_name, variant_name)) = callee.split_once("::") {
+                    let mut init = format!("(({}){{ .tag = {}_{}", enum_name, enum_name.to_uppercase(), variant_name.to_uppercase());
+                    for (i, a) in args.iter().enumerate() {
+                        init.push_str(&format!(", .field{} = (int64_t)({})", i, self.transpile_expr(&a.value)));
+                        if i == 0 {
+                            init.push_str(&format!(", .payload_int = (int64_t)({})", self.transpile_expr(&a.value)));
+                        }
+                    }
+                    init.push_str(" })");
+                    return init;
+                }
                 let base_callee = callee.split('<').next().unwrap_or(callee);
                 if base_callee == "channel_new" && !args.is_empty() {
                     return format!("channel_new({})", self.transpile_expr(&args[0].value));
@@ -1559,7 +1584,72 @@ impl CBackend {
             Expr::RefMut(inner) => {
                 format!("&({})", self.transpile_expr(inner))
             }
+            Expr::Match { expr, arms, .. } => {
+                let mut out = String::new();
+                out.push_str("([&]() {\n");
+                out.push_str(&format!("    auto _match_target = {};\n", self.transpile_expr(expr)));
+                for (i, arm) in arms.iter().enumerate() {
+                    let cond = self.transpile_match_pattern(&arm.pattern, "_match_target");
+                    let full_cond = if let Some(g) = &arm.guard {
+                        format!("{} && ({})", cond, self.transpile_expr(g))
+                    } else {
+                        cond
+                    };
+                    let if_kw = if i == 0 { "    if" } else { "    else if" };
+                    if full_cond == "true" {
+                        if i == 0 {
+                            out.push_str("    if (true) {\n");
+                        } else {
+                            out.push_str("    else {\n");
+                        }
+                    } else {
+                        out.push_str(&format!("{} ({}) {{\n", if_kw, full_cond));
+                    }
+                    if let Some(last_s) = arm.body.last() {
+                        match last_s {
+                            Statement::Return(Some(r)) => {
+                                out.push_str(&format!("        return {};\n", self.transpile_expr(r)));
+                            }
+                            Statement::Expr(e) => {
+                                out.push_str(&format!("        return {};\n", self.transpile_expr(e)));
+                            }
+                            _ => {
+                                out.push_str("        return 0;\n");
+                            }
+                        }
+                    } else {
+                        out.push_str("        return 0;\n");
+                    }
+                    out.push_str("    }\n");
+                }
+                out.push_str("    return 0;\n})()");
+                out
+            }
             _ => "0".to_string(),
+        }
+    }
+
+    fn transpile_match_pattern(&self, pat: &MatchPattern, target: &str) -> String {
+        match pat {
+            MatchPattern::Wildcard => "true".to_string(),
+            MatchPattern::Literal(lit) => format!("({} == {})", target, self.transpile_expr(lit)),
+            MatchPattern::Variant { variant_name, enum_name, .. } => {
+                if let Some(en) = enum_name {
+                    format!("{}.tag == {}_{}", target, en.to_uppercase(), variant_name.to_uppercase())
+                } else {
+                    format!("{} == {}", target, variant_name)
+                }
+            }
+            MatchPattern::Or(patterns) => {
+                let parts: Vec<String> = patterns.iter().map(|p| self.transpile_match_pattern(p, target)).collect();
+                format!("({})", parts.join(" || "))
+            }
+            MatchPattern::Tuple(patterns) => {
+                let parts: Vec<String> = patterns.iter().enumerate().map(|(idx, p)| {
+                    self.transpile_match_pattern(p, &format!("{}._{}", target, idx))
+                }).collect();
+                format!("({})", parts.join(" && "))
+            }
         }
     }
 
@@ -1859,6 +1949,7 @@ impl CBackend {
                     expr: Self::substitute_expr(expr, params, args),
                     arms: arms.iter().map(|a| MatchArm {
                         pattern: a.pattern.clone(),
+                        guard: a.guard.as_ref().map(|g| Self::substitute_expr(g, params, args)),
                         body: a.body.iter().map(|s| Self::substitute_statement(s, params, args)).collect(),
                         span: a.span,
                     }).collect(),
@@ -2045,6 +2136,7 @@ impl CBackend {
                     expr: Self::mangled_expr(expr),
                     arms: arms.iter().map(|a| MatchArm {
                         pattern: a.pattern.clone(),
+                        guard: a.guard.as_ref().map(Self::mangled_expr),
                         body: a.body.iter().map(Self::mangled_statement).collect(),
                         span: a.span,
                     }).collect(),

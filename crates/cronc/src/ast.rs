@@ -273,6 +273,7 @@ pub struct SystolicFlowDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchArm {
     pub pattern: MatchPattern,
+    pub guard: Option<Expr>,
     pub body: Vec<Statement>,
     pub span: Span,
 }
@@ -285,6 +286,8 @@ pub enum MatchPattern {
         bindings: Vec<String>,
     },
     Literal(Expr),
+    Tuple(Vec<MatchPattern>),
+    Or(Vec<MatchPattern>),
     Wildcard,
 }
 
@@ -420,6 +423,12 @@ pub enum Expr {
     Ref(Box<Expr>),
     /// Mutable reference expression: &mut expr
     RefMut(Box<Expr>),
+    /// Pattern match expression: match target { arm => val, ... }
+    Match {
+        expr: Box<Expr>,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -434,6 +443,7 @@ impl Expr {
             Expr::GradCall { span, .. } => *span,
             Expr::Comptime { span, .. } => *span,
             Expr::Ref(inner) | Expr::RefMut(inner) => inner.span(),
+            Expr::Match { span, .. } => *span,
             _ => Span::default(),
         }
     }

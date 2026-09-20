@@ -405,8 +405,15 @@ impl Codegen {
             }
             Statement::Export { .. } => {}
             Statement::Match { expr, arms, .. } => {
-                self.compile_expr(expr, 1);
-                for arm in arms {
+                let target_reg = 1;
+                self.compile_expr(expr, target_reg);
+                for (i, arm) in arms.iter().enumerate() {
+                    let cond_reg = 14;
+                    self.push_slot(make_slot('_', "SW", cond_reg, '$', target_reg, i.min(15), '>'));
+                    if let Some(guard) = &arm.guard {
+                        self.compile_expr(guard, cond_reg);
+                        self.push_slot(make_slot('_', "AN", cond_reg, '$', cond_reg, 0, '>'));
+                    }
                     self.compile_statements(&arm.body);
                 }
             }
@@ -876,6 +883,23 @@ impl Codegen {
             Expr::Ref(inner) | Expr::RefMut(inner) => {
                 // References compile to the inner expression value (pass-through)
                 self.compile_expr(inner, dest);
+            }
+            Expr::Match { expr, arms, .. } => {
+                // Compile match expression: evaluate target, then generate branching slots
+                self.compile_expr(expr, dest);
+                for (i, arm) in arms.iter().enumerate() {
+                    let arm_dest = (dest + i + 1) % 16;
+                    let cond_reg = 14;
+                    self.push_slot(make_slot('_', "SW", cond_reg, '$', dest, i.min(15), '>'));
+                    if let Some(guard) = &arm.guard {
+                        self.compile_expr(guard, cond_reg);
+                        self.push_slot(make_slot('_', "AN", cond_reg, '$', cond_reg, 0, '>'));
+                    }
+                    for stmt in &arm.body {
+                        self.compile_statement(stmt);
+                    }
+                    self.push_slot(make_slot('?', "==", arm_dest, '#', dest, i.min(15), '>'));
+                }
             }
         }
     }

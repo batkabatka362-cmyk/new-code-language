@@ -4,7 +4,7 @@
 // ============================================================================
 
 use cronc::compile_source;
-use cronc::fdo::{parse_fdo_profile, analyze_profile, compact_nop_bundles, fdo_recompile};
+use cronc::fdo::{parse_fdo_profile, analyze_profile, fdo_recompile};
 
 fn sample_cr_program() -> &'static str {
     r#"
@@ -203,7 +203,7 @@ fn test_fdo_recompile_reduces_nop_count() {
   B0003: exec=1 nops=3 optical_stall=false raw_stall=false
 "#;
 
-    let (optimized, analysis) = fdo_recompile(nop_heavy_cl, prof)
+    let (optimized, _analysis) = fdo_recompile(nop_heavy_cl, prof)
         .expect("FDO recompilation failed");
 
     assert!(!optimized.is_empty(), "Optimized output must not be empty");

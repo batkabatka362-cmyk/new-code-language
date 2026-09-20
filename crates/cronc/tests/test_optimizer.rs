@@ -4,7 +4,7 @@
 // while reducing instruction count and improving VLIW bundle efficiency.
 // ============================================================================
 
-use cronc::optimizer::{Optimizer, OptimizationReport};
+use cronc::optimizer::Optimizer;
 use cronc::compile_source;
 
 fn compile_optimized(source: &str) -> String {
