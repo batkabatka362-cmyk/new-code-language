@@ -73,6 +73,13 @@ pub mod cl_swarm_tui;
 pub mod cl_reasoning;
 pub mod cl_proof;
 pub mod cl_quantum;
+pub mod cl_swarm_wafer;
+
+pub use cl_swarm_wafer::{
+    Coord8D, PipelineSchedule, WaferAgent, WaferDORRouter, WaferHierarchy, WaferSwarmMesh,
+    WaferSwarmPacket, WaferSwarmReport, WaferSwarmTelemetry, CORES_PER_DIE,
+    TOTAL_DIES, TOTAL_WAFER_CORES, WAFER_DIES_X, WAFER_DIES_Y,
+};
 
 pub use bpe_tokenizer::{
     BpeTokenizer, BOS_TOKEN, EOS_TOKEN, IM_END_TOKEN, IM_START_TOKEN, TOOL_CALL_TOKEN,

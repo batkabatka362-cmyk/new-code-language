@@ -549,6 +549,52 @@ fn test_ffi_quantum_qft() {
     }
 }
 
+#[test]
+fn test_ffi_wafer_swarm_lifecycle() {
+    let wafer = cron_wafer_swarm_create_65536();
+    assert!(!wafer.is_null());
+
+    let task = CString::new("Partition 65536 Cores for Distributed Attention").unwrap();
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_wafer_swarm_execute_task(wafer, task.as_ptr(), &mut json_ptr)
+    };
+    assert!(ok);
+    assert!(!json_ptr.is_null());
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"consensus_achieved\": true"));
+    assert!(json_str.contains("\"total_dies\": 256"));
+    assert!(json_str.contains("\"total_cores\": 65536"));
+    assert!(json_str.contains("\"tier3_wafer_quorum\": true"));
+
+    unsafe {
+        cron_string_free(json_ptr);
+        cron_wafer_swarm_free(wafer);
+    }
+}
+
+#[test]
+fn test_ffi_wafer_swarm_execute_oneshot() {
+    let task = CString::new("Execute 1F1B Wafer Pipeline Check").unwrap();
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_wafer_swarm_execute(task.as_ptr(), &mut json_ptr)
+    };
+    assert!(ok);
+    assert!(!json_ptr.is_null());
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"pipeline_stages\": 16"));
+    assert!(json_str.contains("\"consensus_achieved\": true"));
+
+    unsafe {
+        cron_string_free(json_ptr);
+    }
+}
+
 
 
 

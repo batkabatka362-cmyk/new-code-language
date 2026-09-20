@@ -1734,6 +1734,44 @@ fn test_cli_quantum_sim_ghz_and_qft() {
     assert!(s_qft.contains("\"probabilities\":"));
 }
 
+#[test]
+fn test_cli_wafer_sim() {
+    // 1. ASCII HUD mode
+    let out_hud = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["wafer-sim", "--task", "Distributed Wafer Attention Synthesis"])
+        .output()
+        .expect("Failed to execute cron wafer-sim");
+    assert!(out_hud.status.success(), "cron wafer-sim must exit 0");
+    let s_hud = String::from_utf8_lossy(&out_hud.stdout);
+    assert!(s_hud.contains("CRON 65,536-CORE WAFER-SCALE AUTONOMOUS SWARM RUNTIME"));
+    assert!(s_hud.contains("256-Die 65,536-Core 8D Hyper-Torus"));
+    assert!(s_hud.contains("[WAFER CONVERGENCE]"));
+
+    // 2. JSON mode
+    let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["wafer-sim", "--task", "Wafer Model Partitioning", "--json"])
+        .output()
+        .expect("Failed to execute cron wafer-sim --json");
+    assert!(out_json.status.success(), "cron wafer-sim --json must exit 0");
+    let s_json = String::from_utf8_lossy(&out_json.stdout);
+    assert!(s_json.contains("\"total_dies\": 256"));
+    assert!(s_json.contains("\"total_cores\": 65536"));
+    assert!(s_json.contains("\"consensus_achieved\": true"));
+    assert!(s_json.contains("\"pipeline_stages\": 16"));
+}
+
+#[test]
+fn test_cli_swarm_wafer_flag() {
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(&["swarm", "--wafer", "--task", "Pipeline Parallelism Swarm Test", "--json"])
+        .output()
+        .expect("Failed to execute cron swarm --wafer");
+    assert!(out.status.success(), "cron swarm --wafer must exit 0");
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("\"total_cores\": 65536"));
+    assert!(s.contains("\"tier3_wafer_quorum\": true"));
+}
+
 
 
 

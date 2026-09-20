@@ -31,6 +31,7 @@ from .compiler import (
     verify_proof_certificate,
     simulate_quantum_bell_state,
     simulate_quantum_qft,
+    run_wafer_swarm,
 )
 from .torch_bridge import (
     CronBitLinear,
@@ -78,6 +79,7 @@ __all__ = [
     "verify_proof_certificate",
     "simulate_quantum_bell_state",
     "simulate_quantum_qft",
+    "run_wafer_swarm",
     "CronBitLinear",
     "CronRMSNorm",
     "CronRingTapeAttention",

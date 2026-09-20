@@ -1171,3 +1171,81 @@ pub unsafe extern "C" fn cron_quantum_qft_simulate(
     true
 }
 
+// ============================================================================
+// Section 19: 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Engine C-ABI
+// ============================================================================
+
+pub struct CronWaferSwarmOpaque {
+    pub inner: cronc::cl_swarm_wafer::WaferSwarmMesh,
+}
+
+#[no_mangle]
+pub extern "C" fn cron_wafer_swarm_create_65536() -> *mut CronWaferSwarmOpaque {
+    let wafer = Box::new(CronWaferSwarmOpaque {
+        inner: cronc::cl_swarm_wafer::WaferSwarmMesh::new_65536(),
+    });
+    Box::into_raw(wafer)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_wafer_swarm_execute_task(
+    wafer: *mut CronWaferSwarmOpaque,
+    task_desc: *const c_char,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if wafer.is_null() || task_desc.is_null() || out_report_json.is_null() {
+        return false;
+    }
+
+    let c_str = CStr::from_ptr(task_desc);
+    let task = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let report = (*wafer).inner.execute_task(task);
+    let json = report.to_json();
+
+    if let Ok(c_json) = CString::new(json) {
+        *out_report_json = c_json.into_raw();
+        true
+    } else {
+        false
+    }
+}
+
+/// One-shot execution of a wafer swarm task across 65,536 cores.
+#[no_mangle]
+pub unsafe extern "C" fn cron_wafer_swarm_execute(
+    task_desc: *const c_char,
+    out_report_json: *mut *mut c_char,
+) -> bool {
+    if task_desc.is_null() || out_report_json.is_null() {
+        return false;
+    }
+
+    let c_str = CStr::from_ptr(task_desc);
+    let task = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let mut mesh = cronc::cl_swarm_wafer::WaferSwarmMesh::new_65536();
+    let report = mesh.execute_task(task);
+    let json = report.to_json();
+
+    if let Ok(c_json) = CString::new(json) {
+        *out_report_json = c_json.into_raw();
+        true
+    } else {
+        false
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_wafer_swarm_free(wafer: *mut CronWaferSwarmOpaque) {
+    if !wafer.is_null() {
+        drop(Box::from_raw(wafer));
+    }
+}
+

@@ -571,4 +571,32 @@ def simulate_quantum_qft(num_qubits: int = 3, json_output: bool = True) -> Dict[
     return {"raw_output": res.stdout, "status": "completed"}
 
 
+def run_wafer_swarm(task: str = "Distributed 65,536-Core Wafer-Scale Supercomputing Consensus",
+                     json_output: bool = True) -> Dict[str, Any]:
+    """Executes a wafer-scale 65,536-core autonomous multi-agent swarm task across 256 dies on an 8D Hyper-Torus.
+
+    Launches 65,536 specialized agents across 256 physical dies (16x16 wafer grid)
+    interconnected via 12.8 Tbps silicon photonic waveguides etched directly into
+    the interposer, executing a three-tier hierarchical consensus protocol with
+    1F1B zero-bubble pipeline parallelism.
+
+    Args:
+        task: Task description for the 256-die wafer to execute and reach global quorum on.
+        json_output: If True, returns parsed JSON telemetry dict. Otherwise raw text.
+
+    Returns:
+        Dict with wafer swarm telemetry and consensus results.
+    """
+    cron_exe = find_cron_executable()
+    cmd = [cron_exe, "wafer-sim", "--task", task]
+    if json_output:
+        cmd.append("--json")
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    if res.returncode != 0:
+        raise RuntimeError(f"CRON wafer swarm error:\n{res.stderr or res.stdout}")
+    if json_output:
+        return _extract_json(res.stdout)
+    return {"raw_output": res.stdout, "status": "completed"}
+
+
 

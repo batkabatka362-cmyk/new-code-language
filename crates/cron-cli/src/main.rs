@@ -77,6 +77,7 @@ fn print_help() {
     println!("    cl-patch <create|apply|inspect|synth> Post-Silicon Hardware Microcode Patch Table & ISA Extension");
     println!("    cl-compare [target|all] [opts] Real-World Performance & Efficiency Benchmark vs PyTorch/CUDA & Mojo");
     println!("    bench [target|all] [opts]      Competitive Benchmark Validation Engine & Technical Whitepaper");
+    println!("    wafer-sim [--task \"...\"] [--json] 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Simulation & 1F1B Pipeline");
     println!("    vibe-spec [--format f] [-o s]  Generate AI Vibe-Coding specification (EBNF, JSON Schema, LLM Prompt)");
     println!("    cl-schema [-o schema.json]     Generate machine-readable JSON Schema for .cl language");
     println!("    debug <file.cl|.cr> [--core N] [--batch \"...\"] Interactive Photonic & Torus Debugger TUI");
@@ -386,6 +387,7 @@ fn main() {
             let mut task = "Distributed Neuromorphic Consensus Optimization".to_string();
             let mut emit_json = false;
             let mut is_cluster = false;
+            let mut is_wafer = false;
             let mut is_tui = false;
 
             let mut i = 2;
@@ -399,6 +401,9 @@ fn main() {
                 } else if args[i] == "--tui" {
                     is_tui = true;
                     i += 1;
+                } else if args[i] == "--wafer" {
+                    is_wafer = true;
+                    i += 1;
                 } else if args[i] == "--cluster" || args[i] == "--chips" {
                     is_cluster = true;
                     i += 1;
@@ -408,6 +413,11 @@ fn main() {
                 } else {
                     i += 1;
                 }
+            }
+
+            if is_wafer {
+                handle_wafer_sim_command(&args[2..]);
+                return;
             }
 
             if is_tui {
@@ -609,6 +619,9 @@ fn main() {
         }
         "quantum-sim" | "quantum" => {
             handle_quantum_sim_command(&args[2..]);
+        }
+        "wafer-sim" | "wafer" => {
+            handle_wafer_sim_command(&args[2..]);
         }
         "add" => {
             if args.len() < 3 {
@@ -6100,6 +6113,49 @@ fn handle_quantum_sim_command(args: &[String]) {
         println!("{}", report.to_json());
     } else {
         println!("{}", report.render_ascii_hud());
+    }
+}
+
+fn handle_wafer_sim_command(args: &[String]) {
+    let mut task = "Distributed 65,536-Core Wafer-Scale Supercomputing Consensus".to_string();
+    let mut emit_json = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--task" | "-t" if i + 1 < args.len() => {
+                task = args[i + 1].clone();
+                i += 2;
+            }
+            "--json" => {
+                emit_json = true;
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    if !emit_json {
+        println!("================================================================================");
+        println!(" CRON 65,536-CORE WAFER-SCALE AUTONOMOUS SWARM RUNTIME (16x16 DIES, 8D-TORUS)");
+        println!(" Topology: 256 Dies x 256 Cores (16x16 Wafer Grid x 4x4x4x4 Torus NoC, 8D-DOR)");
+        println!(" Interconnect: 12.8 Tbps/die Waveguide Mesh (3,276.8 Tbps Total Photonic BW)");
+        println!(" Pipeline: 1F1B Zero-Bubble Parallelism Engine (16 Stages)");
+        println!(" Task: {}", task);
+        println!("================================================================================");
+    }
+
+    let mut mesh = cronc::cl_swarm_wafer::WaferSwarmMesh::new_65536();
+    let report = mesh.execute_task(&task);
+
+    if emit_json {
+        println!("{}", report.to_json());
+    } else {
+        println!("{}", report.ascii_wafer_hud);
+        println!("\n[WAFER CONVERGENCE]");
+        println!("{}", report.resolution);
     }
 }
 

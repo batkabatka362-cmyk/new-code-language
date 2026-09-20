@@ -259,6 +259,26 @@ namespace Cron.NET
         public static extern bool cron_quantum_qft_simulate(
             nuint numQubits,
             out IntPtr outReportJson);
+
+        // Section 17: 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Engine
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr cron_wafer_swarm_create_65536();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_wafer_swarm_execute_task(
+            IntPtr wafer,
+            [MarshalAs(UnmanagedType.LPStr)] string taskDesc,
+            out IntPtr outReportJson);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_wafer_swarm_execute(
+            [MarshalAs(UnmanagedType.LPStr)] string taskDesc,
+            out IntPtr outReportJson);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void cron_wafer_swarm_free(IntPtr wafer);
     }
 
     /// <summary>
@@ -892,6 +912,69 @@ namespace Cron.NET
 
             return reportJson;
         }
+    }
+
+    /// <summary>
+    /// 65,536-Core 8D Hyper-Torus Wafer-Scale Supercomputing Swarm Engine (256 Dies x 256 Cores).
+    /// </summary>
+    public sealed class CronWaferSwarmMesh : IDisposable
+    {
+        private IntPtr _handle;
+        private bool _disposed;
+
+        public CronWaferSwarmMesh()
+        {
+            _handle = NativeMethods.cron_wafer_swarm_create_65536();
+            if (_handle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to allocate 65,536-Core Wafer Swarm Mesh.");
+            }
+        }
+
+        public string ExecuteTask(string task)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(CronWaferSwarmMesh));
+            bool ok = NativeMethods.cron_wafer_swarm_execute_task(_handle, task, out IntPtr jsonPtr);
+            if (!ok || jsonPtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Wafer swarm execution failed on 8D Hyper-Torus.");
+            }
+
+            string report = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(jsonPtr);
+            return report;
+        }
+
+        /// <summary>
+        /// One-shot execution of a wafer-scale swarm task.
+        /// </summary>
+        public static string Simulate(string task)
+        {
+            bool ok = NativeMethods.cron_wafer_swarm_execute(task, out IntPtr jsonPtr);
+            if (!ok || jsonPtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to execute wafer-scale simulation.");
+            }
+
+            string report = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
+            NativeMethods.cron_string_free(jsonPtr);
+            return report;
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                if (_handle != IntPtr.Zero)
+                {
+                    NativeMethods.cron_wafer_swarm_free(_handle);
+                    _handle = IntPtr.Zero;
+                }
+                _disposed = true;
+            }
+        }
+
+        ~CronWaferSwarmMesh() => Dispose();
     }
 }
 

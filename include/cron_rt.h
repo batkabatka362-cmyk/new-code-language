@@ -253,6 +253,27 @@ CRON_API bool cron_quantum_qft_simulate(
     char** out_report_json
 );
 
+/* ------------------------------------------------------------------------- */
+/* 17. 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Engine C-ABI             */
+/* ------------------------------------------------------------------------- */
+
+typedef struct CronWaferSwarmOpaque CronWaferSwarmOpaque;
+
+CRON_API CronWaferSwarmOpaque* cron_wafer_swarm_create_65536(void);
+
+CRON_API bool cron_wafer_swarm_execute_task(
+    CronWaferSwarmOpaque* wafer,
+    const char* task_desc,
+    char** out_report_json
+);
+
+CRON_API bool cron_wafer_swarm_execute(
+    const char* task_desc,
+    char** out_report_json
+);
+
+CRON_API void cron_wafer_swarm_free(CronWaferSwarmOpaque* wafer);
+
 #ifdef __cplusplus
 }
 #endif
