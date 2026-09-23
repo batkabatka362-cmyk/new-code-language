@@ -45,6 +45,8 @@ from .torch_bridge import (
     fused_rmsnorm_linear,
     fused_swiglu,
     flash_attention_2,
+    export_torch_model,
+    from_torch,
 )
 from .simulator import Simulator
 from .photonic import PhotonicBridge
@@ -91,6 +93,8 @@ __all__ = [
     "fused_rmsnorm_linear",
     "fused_swiglu",
     "flash_attention_2",
+    "export_torch_model",
+    "from_torch",
     "Simulator",
     "PhotonicBridge",
     "CronKernel",

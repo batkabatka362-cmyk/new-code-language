@@ -3947,6 +3947,15 @@ fn main() {
                 out_bin = args[4].clone();
             }
 
+            if out_bin.ends_with(".ll") {
+                if let Err(e) = fs::write(&out_bin, &llvm_ir) {
+                    eprintln!("Error writing LLVM IR to '{}': {}", out_bin, e);
+                    std::process::exit(1);
+                }
+                println!("[SUCCESS] Generated SSA LLVM IR: '{}'", out_bin);
+                return;
+            }
+
             let temp_ll = format!("{}.tmp.ll", file_stem);
             if let Err(e) = fs::write(&temp_ll, &llvm_ir) {
                 eprintln!("Error writing intermediate LLVM file '{}': {}", temp_ll, e);
@@ -3970,8 +3979,30 @@ fn main() {
                     std::process::exit(1);
                 }
                 Err(e) => {
-                    eprintln!("Failed to invoke 'clang': {}. You can use 'cron emit-llvm' to generate .ll IR directly.", e);
-                    std::process::exit(1);
+                    println!("[FALLBACK] 'clang' not found ({}). Falling back to Native C23 (-O3) compilation...", e);
+                    let c_code = match cronc::compile_to_c23(&content) {
+                        Ok(c) => c,
+                        Err(err) => {
+                            eprintln!("C23 fallback error: {}", err);
+                            std::process::exit(1);
+                        }
+                    };
+                    let temp_c = format!("{}.tmp.c", file_stem);
+                    let _ = fs::write(&temp_c, &c_code);
+                    let gcc_res = std::process::Command::new("gcc")
+                        .args(["-std=c2x", "-O3", &temp_c, "-o", &out_bin])
+                        .status();
+                    let _ = fs::remove_file(&temp_c);
+                    match gcc_res {
+                        Ok(st) if st.success() => {
+                            println!("[SUCCESS] Generated native binary via C23 fallback: '{}'", out_bin);
+                            println!("Run directly: ./{}", out_bin);
+                        }
+                        _ => {
+                            eprintln!("Failed to invoke 'clang' or 'gcc'. Use 'cron emit-llvm' to generate .ll IR directly.");
+                            std::process::exit(1);
+                        }
+                    }
                 }
             }
         }
