@@ -634,3 +634,165 @@ CRON_EXPORT void cron_fused_transformer_block(
         }
     }
 }
+
+// ============================================================================
+// 4D Clifford Algebra Cl(4,0) Spacetime Tensor Folding Acceleration
+// Based on top3.pdf Blueprint (Pages 59-67)
+// ============================================================================
+
+static inline uint8_t c140_prefix_xor(uint8_t b) {
+    uint8_t b0 = b & 1;
+    uint8_t b1 = (b >> 1) & 1;
+    uint8_t b2 = (b >> 2) & 1;
+    return b0 | ((b0 ^ b1) << 1) | ((b0 ^ b1 ^ b2) << 2);
+}
+
+static inline float c140_blade_sign(uint8_t a, uint8_t b) {
+    uint8_t p = c140_prefix_xor(b);
+    uint8_t val = (a >> 1) & p;
+    // Count ones in 3-bit val
+    int count = (val & 1) + ((val >> 1) & 1) + ((val >> 2) & 1);
+    return (count & 1) ? -1.0f : 1.0f;
+}
+
+CRON_EXPORT void cron_c140_geometric_product(
+    const float* a,
+    const float* b,
+    float* c
+) {
+    for (int k = 0; k < 16; ++k) c[k] = 0.0f;
+    for (uint8_t i = 0; i < 16; ++i) {
+        float ai = a[i];
+        if (ai == 0.0f) continue;
+        for (uint8_t j = 0; j < 16; ++j) {
+            float bj = b[j];
+            if (bj == 0.0f) continue;
+            uint8_t k = i ^ j;
+            float s = c140_blade_sign(i, j);
+            c[k] += ai * bj * s;
+        }
+    }
+}
+
+CRON_EXPORT void cron_c140_rotor_sandwich(
+    const float* rotor_8,
+    const float* x_16,
+    float* out_16
+) {
+    // Rotor 8 components: [s, e12, e13, e14, e23, e24, e34, e1234]
+    // Blades: 0=s, 3=e12, 5=e13, 9=e14, 6=e23, 10=e24, 12=e34, 15=e1234
+    float R[16] = {0};
+    float R_rev[16] = {0};
+
+    R[0] = rotor_8[0];
+    R[3] = rotor_8[1];
+    R[5] = rotor_8[2];
+    R[9] = rotor_8[3];
+    R[6] = rotor_8[4];
+    R[10] = rotor_8[5];
+    R[12] = rotor_8[6];
+    R[15] = rotor_8[7];
+
+    // Reversion: bivectors flip sign
+    R_rev[0] = rotor_8[0];
+    R_rev[3] = -rotor_8[1];
+    R_rev[5] = -rotor_8[2];
+    R_rev[9] = -rotor_8[3];
+    R_rev[6] = -rotor_8[4];
+    R_rev[10] = -rotor_8[5];
+    R_rev[12] = -rotor_8[6];
+    R_rev[15] = rotor_8[7];
+
+    float temp[16];
+    cron_c140_geometric_product(R, x_16, temp);
+    cron_c140_geometric_product(temp, R_rev, out_16);
+}
+
+static inline void c140_rotor_to_matrix(const float* r, float M[4][4]) {
+    float s = r[0];
+    float b12 = r[1];
+    float b13 = r[2];
+    float b14 = r[3];
+    float b23 = r[4];
+    float b24 = r[5];
+    float b34 = r[6];
+    float p = r[7];
+
+    M[0][0] = s*s - b12*b12 - b13*b13 - b14*b14 + b23*b23 + b24*b24 + b34*b34 - p*p;
+    M[0][1] = 2.0f * (s*b12 - b13*b23 - b14*b24 + b34*p);
+    M[0][2] = 2.0f * (s*b13 + b12*b23 - b14*b34 - b24*p);
+    M[0][3] = 2.0f * (s*b14 + b12*b24 + b13*b34 + b23*p);
+
+    M[1][0] = 2.0f * (-s*b12 - b13*b23 - b14*b24 - b34*p);
+    M[1][1] = s*s - b12*b12 + b13*b13 + b14*b14 - b23*b23 - b24*b24 + b34*b34 - p*p;
+    M[1][2] = 2.0f * (s*b23 - b12*b13 + b14*p - b24*b34);
+    M[1][3] = 2.0f * (s*b24 - b12*b14 - b13*p + b23*b34);
+
+    M[2][0] = 2.0f * (-s*b13 + b12*b23 - b14*b34 + b24*p);
+    M[2][1] = 2.0f * (-s*b23 - b12*b13 - b14*p - b24*b34);
+    M[2][2] = s*s + b12*b12 - b13*b13 + b14*b14 - b23*b23 + b24*b24 - b34*b34 - p*p;
+    M[2][3] = 2.0f * (s*b34 + b12*p - b13*b14 - b23*b24);
+
+    M[3][0] = 2.0f * (-s*b14 + b12*b24 + b13*b34 - b23*p);
+    M[3][1] = 2.0f * (-s*b24 - b12*b14 + b13*p + b23*b34);
+    M[3][2] = 2.0f * (-s*b34 - b12*p - b13*b14 - b23*b24);
+    M[3][3] = s*s + b12*b12 + b13*b13 - b14*b14 + b23*b23 - b24*b24 - b34*b34 - p*p;
+}
+
+CRON_EXPORT void cron_c140_vector_rotate_4d(
+    const float* rotor_8,
+    const float* v_in,
+    float* v_out,
+    int64_t count
+) {
+    float M[4][4];
+    c140_rotor_to_matrix(rotor_8, M);
+
+    #pragma omp parallel for schedule(static) if(count > 1024)
+    for (int64_t i = 0; i < count; ++i) {
+        const float* v = &v_in[i * 4];
+        float* out = &v_out[i * 4];
+        float v0 = v[0], v1 = v[1], v2 = v[2], v3 = v[3];
+        out[0] = M[0][0]*v0 + M[0][1]*v1 + M[0][2]*v2 + M[0][3]*v3;
+        out[1] = M[1][0]*v0 + M[1][1]*v1 + M[1][2]*v2 + M[1][3]*v3;
+        out[2] = M[2][0]*v0 + M[2][1]*v1 + M[2][2]*v2 + M[2][3]*v3;
+        out[3] = M[3][0]*v0 + M[3][1]*v1 + M[3][2]*v2 + M[3][3]*v3;
+    }
+}
+
+CRON_EXPORT void cron_c140_tensor_folding_batch(
+    const float* x_in,
+    const float* rotors_8,
+    float* x_out,
+    int64_t num_vectors,
+    int64_t num_rotors
+) {
+    if (num_rotors <= 0) {
+        memcpy(x_out, x_in, num_vectors * 4 * sizeof(float));
+        return;
+    }
+
+    // Precompute rotation matrices for all rotors
+    float (*matrices)[4][4] = (float (*)[4][4])malloc(num_rotors * sizeof(float[4][4]));
+    if (!matrices) return;
+
+    for (int64_t r = 0; r < num_rotors; ++r) {
+        c140_rotor_to_matrix(&rotors_8[r * 8], matrices[r]);
+    }
+
+    #pragma omp parallel for schedule(static) if(num_vectors > 512)
+    for (int64_t i = 0; i < num_vectors; ++i) {
+        int64_t r_idx = i % num_rotors;
+        const float (*M)[4] = matrices[r_idx];
+        const float* v = &x_in[i * 4];
+        float* out = &x_out[i * 4];
+        float v0 = v[0], v1 = v[1], v2 = v[2], v3 = v[3];
+        out[0] = M[0][0]*v0 + M[0][1]*v1 + M[0][2]*v2 + M[0][3]*v3;
+        out[1] = M[1][0]*v0 + M[1][1]*v1 + M[1][2]*v2 + M[1][3]*v3;
+        out[2] = M[2][0]*v0 + M[2][1]*v1 + M[2][2]*v2 + M[2][3]*v3;
+        out[3] = M[3][0]*v0 + M[3][1]*v1 + M[3][2]*v2 + M[3][3]*v3;
+    }
+
+    free(matrices);
+}
+

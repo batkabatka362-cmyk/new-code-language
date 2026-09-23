@@ -188,6 +188,68 @@ CRON_EXPORT void cron_fused_transformer_block(
     int64_t FF
 );
 
+/**
+ * 4D Clifford Algebra Cl(4,0) Full Geometric Product: C = A * B.
+ * 16-blade multivector multiplication with branchless prefix-XOR POPCNT Cayley table.
+ *
+ * @param a  Input multivector A [16 blades]
+ * @param b  Input multivector B [16 blades]
+ * @param c  Output multivector C [16 blades]
+ */
+CRON_EXPORT void cron_c140_geometric_product(
+    const float* a,
+    const float* b,
+    float* c
+);
+
+/**
+ * 4D Clifford Algebra Cl(4,0) Rotor Sandwich Product: X' = R * X * ~R.
+ *
+ * @param rotor_8  Even rotor [scalar, e12, e13, e14, e23, e24, e34, e1234]
+ * @param x_16     Input multivector X [16 blades]
+ * @param out_16   Output rotated multivector X' [16 blades]
+ */
+CRON_EXPORT void cron_c140_rotor_sandwich(
+    const float* rotor_8,
+    const float* x_16,
+    float* out_16
+);
+
+/**
+ * Vectorized 4D Rotor Vector Rotation: v' = R * v * ~R for array of 4D vectors.
+ * Uses exact branchless SO(4) quadratic forms and AVX2 FMA vectorization.
+ *
+ * @param rotor_8   Even rotor [scalar, e12, e13, e14, e23, e24, e34, e1234]
+ * @param v_in      Array of 4D vectors [count * 4]
+ * @param v_out     Output array of rotated 4D vectors [count * 4]
+ * @param count     Number of 4D vectors
+ */
+CRON_EXPORT void cron_c140_vector_rotate_4d(
+    const float* rotor_8,
+    const float* v_in,
+    float* v_out,
+    int64_t count
+);
+
+/**
+ * High-Throughput Spacetime Tensor Folding Batch:
+ * Applies an array of rotors to fold/rotate batches of 4D vectors,
+ * replacing heavy W * x GEMM with memory-free geometric rotations.
+ *
+ * @param x_in         Input tensor [num_vectors * 4]
+ * @param rotors_8     Array of rotors [num_rotors * 8]
+ * @param x_out        Output folded tensor [num_vectors * 4]
+ * @param num_vectors  Total number of 4D vectors
+ * @param num_rotors   Number of rotors (cycled over vectors)
+ */
+CRON_EXPORT void cron_c140_tensor_folding_batch(
+    const float* x_in,
+    const float* rotors_8,
+    float* x_out,
+    int64_t num_vectors,
+    int64_t num_rotors
+);
+
 #ifdef __cplusplus
 }
 #endif

@@ -2954,7 +2954,7 @@ fn main() {
         "cl-compare" | "bench" => {
             handle_cl_compare_command(&args[2..]);
         }
-        "build-native-lib" => {
+        "build-native-lib" | "build-native" => {
             let mut out_path = None;
             let mut i = 2;
             while i < args.len() {

@@ -51,6 +51,14 @@ from .torch_bridge import (
 from .simulator import Simulator
 from .photonic import PhotonicBridge
 from .kernel import CronKernel, install_kernel_spec
+from .clifford import (
+    Multivector4D,
+    Rotor4D,
+    CliffordLinear,
+    fold_tensor_4d,
+    blade_index,
+    blade_sign,
+)
 
 __version__ = "1.0.0"
 __all__ = [
@@ -99,5 +107,9 @@ __all__ = [
     "PhotonicBridge",
     "CronKernel",
     "install_kernel_spec",
+    "Multivector4D",
+    "Rotor4D",
+    "CliffordLinear",
+    "fold_tensor_4d",
 ]
 

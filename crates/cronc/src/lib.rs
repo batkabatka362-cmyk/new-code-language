@@ -74,6 +74,12 @@ pub mod cl_reasoning;
 pub mod cl_proof;
 pub mod cl_quantum;
 pub mod cl_swarm_wafer;
+pub mod clifford;
+
+pub use clifford::{
+    blade_index, blade_sign, fold_tensor_4d, prefix_xor, Multivector4D, Rotor4D,
+    BLADE_COUNT, BLADE_NAMES, CAYLEY_INDEX, CAYLEY_SIGN,
+};
 
 pub use cl_swarm_wafer::{
     Coord8D, PipelineSchedule, WaferAgent, WaferDORRouter, WaferHierarchy, WaferSwarmMesh,
