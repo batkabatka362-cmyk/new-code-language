@@ -45,6 +45,53 @@ pub struct ClWeightBinding {
     pub file_path: Option<String>,
 }
 
+/// Rich semantic directives supported in .cl machine language
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClDirective {
+    Stage {
+        id: String,
+        params: String,
+        precision: String,
+        d_model: usize,
+        heads: usize,
+        kv_heads: usize,
+        intermediate: usize,
+        zero_overhead: bool,
+    },
+    Tensor {
+        name: String,
+        dims: Vec<usize>,
+    },
+    Fuse {
+        chain: String,
+    },
+    Flow {
+        route: String,
+        dor: String,
+    },
+    Layout {
+        tp: usize,
+        ep: usize,
+        cp: usize,
+        pp: usize,
+        dim: String,
+        chip: String,
+    },
+    Weights(ClWeightBinding),
+    Clifford {
+        rotor: String,
+        vector: String,
+        algebra: String,
+    },
+    Core {
+        coords: [usize; 4],
+    },
+    Custom {
+        name: String,
+        content: String,
+    },
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ClReport {
     pub total_bundles: usize,
@@ -58,6 +105,7 @@ pub struct ClReport {
     pub weights_bound: usize,
     pub total_weight_bytes: usize,
     pub directives_found: usize,
+    pub directives_parsed: Vec<ClDirective>,
 }
 
 pub const KNOWN_OPCODES: &[&str] = &[
@@ -389,6 +437,188 @@ pub fn parse_weights_directive(line: &str) -> Result<ClWeightBinding, String> {
     })
 }
 
+/// Helper that splits comma-separated directive tokens while respecting quotes and parentheses
+fn split_directive_tokens(input: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut paren_depth = 0;
+
+    for c in input.chars() {
+        match c {
+            '"' => {
+                in_quotes = !in_quotes;
+                current.push(c);
+            }
+            '(' | '[' | '{' if !in_quotes => {
+                paren_depth += 1;
+                current.push(c);
+            }
+            ')' | ']' | '}' if !in_quotes => {
+                if paren_depth > 0 {
+                    paren_depth -= 1;
+                }
+                current.push(c);
+            }
+            ',' if !in_quotes && paren_depth == 0 => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    tokens.push(trimmed.to_string());
+                }
+                current.clear();
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        tokens.push(trimmed.to_string());
+    }
+    tokens
+}
+
+/// Parse any semantic directive line (.clifford, .stage, .tensor, .fuse, .flow, .layout, .core, .weights)
+pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
+    let trimmed = line.trim();
+    if trimmed.starts_with(".weights") {
+        return parse_weights_directive(trimmed).map(ClDirective::Weights);
+    }
+
+    if trimmed.starts_with(".clifford") {
+        let rest = trimmed[".clifford".len()..].trim();
+        let mut rotor = "Rotor4D".to_string();
+        let mut vector = "Vector4D".to_string();
+        let mut algebra = "Cl(4,0)".to_string();
+        for token in split_directive_tokens(rest) {
+            let tok = token.trim();
+            if let Some(val) = tok.strip_prefix("rotor=") {
+                rotor = val.trim().trim_matches('"').to_string();
+            } else if let Some(val) = tok.strip_prefix("vector=") {
+                vector = val.trim().trim_matches('"').to_string();
+            } else if let Some(val) = tok.strip_prefix("algebra=") {
+                algebra = val.trim().trim_matches('"').to_string();
+            }
+        }
+        return Ok(ClDirective::Clifford { rotor, vector, algebra });
+    }
+
+    if trimmed.starts_with(".stage") {
+        let rest = trimmed[".stage".len()..].trim();
+        let mut id = String::new();
+        let mut params = String::new();
+        let mut precision = "f32".to_string();
+        let mut d_model = 64;
+        let mut heads = 4;
+        let mut kv_heads = 4;
+        let mut intermediate = 128;
+        let mut zero_overhead = true;
+
+        if let Some(start_q) = rest.find('"') {
+            if let Some(end_q) = rest[start_q + 1..].find('"') {
+                id = rest[start_q + 1..start_q + 1 + end_q].to_string();
+            }
+        }
+
+        for token in split_directive_tokens(rest) {
+            let tok = token.trim();
+            if let Some(val) = tok.strip_prefix("params=") {
+                params = val.trim_matches('"').to_string();
+            } else if let Some(val) = tok.strip_prefix("precision=") {
+                precision = val.trim_matches('"').to_string();
+            } else if let Some(val) = tok.strip_prefix("d_model=") {
+                if let Ok(n) = val.parse::<usize>() { d_model = n; }
+            } else if let Some(val) = tok.strip_prefix("heads=") {
+                if let Ok(n) = val.parse::<usize>() { heads = n; }
+            } else if let Some(val) = tok.strip_prefix("kv_heads=") {
+                if let Ok(n) = val.parse::<usize>() { kv_heads = n; }
+            } else if let Some(val) = tok.strip_prefix("intermediate=") {
+                if let Ok(n) = val.parse::<usize>() { intermediate = n; }
+            } else if let Some(val) = tok.strip_prefix("zero_overhead=") {
+                zero_overhead = val == "true";
+            }
+        }
+        return Ok(ClDirective::Stage { id, params, precision, d_model, heads, kv_heads, intermediate, zero_overhead });
+    }
+
+    if trimmed.starts_with(".fuse") {
+        let rest = trimmed[".fuse".len()..].trim();
+        return Ok(ClDirective::Fuse { chain: rest.to_string() });
+    }
+
+    if trimmed.starts_with(".tensor") {
+        let rest = trimmed[".tensor".len()..].trim();
+        let mut dims = Vec::new();
+        let name = if let Some(colon_pos) = rest.find(':') {
+            let n = rest[..colon_pos].trim().to_string();
+            let dim_part = &rest[colon_pos + 1..];
+            if let Some(open) = dim_part.find('[') {
+                if let Some(close) = dim_part.find(']') {
+                    for d in dim_part[open + 1..close].split(',') {
+                        if let Ok(v) = d.trim().parse::<usize>() {
+                            dims.push(v);
+                        }
+                    }
+                }
+            }
+            n
+        } else {
+            rest.to_string()
+        };
+        return Ok(ClDirective::Tensor { name, dims });
+    }
+
+    if trimmed.starts_with(".flow") {
+        let rest = trimmed[".flow".len()..].trim();
+        let mut route = rest.to_string();
+        let mut dor = "XYZW".to_string();
+        if let Some(dor_pos) = rest.find("dor=") {
+            dor = rest[dor_pos + 4..].trim_matches(|c: char| c == '}' || c == ' ' || c == '"').to_string();
+            if let Some(brace_pos) = rest.find('{') {
+                route = rest[..brace_pos].trim().to_string();
+            }
+        }
+        return Ok(ClDirective::Flow { route, dor });
+    }
+
+    if trimmed.starts_with(".layout") {
+        let rest = trimmed[".layout".len()..].trim();
+        let mut tp = 1; let mut ep = 1; let mut cp = 1; let mut pp = 1;
+        let mut dim = "4x4x4x4".to_string();
+        let mut chip = "256_core_torus".to_string();
+        for token in rest.trim_matches(|c| c == '{' || c == '}').split(',') {
+            let tok = token.trim();
+            if let Some(val) = tok.strip_prefix("TP=") { if let Ok(n) = val.parse::<usize>() { tp = n; } }
+            else if let Some(val) = tok.strip_prefix("EP=") { if let Ok(n) = val.parse::<usize>() { ep = n; } }
+            else if let Some(val) = tok.strip_prefix("CP=") { if let Ok(n) = val.parse::<usize>() { cp = n; } }
+            else if let Some(val) = tok.strip_prefix("PP=") { if let Ok(n) = val.parse::<usize>() { pp = n; } }
+            else if let Some(val) = tok.strip_prefix("dim=") { dim = val.trim_matches('"').to_string(); }
+            else if let Some(val) = tok.strip_prefix("chip=") { chip = val.trim_matches('"').to_string(); }
+        }
+        return Ok(ClDirective::Layout { tp, ep, cp, pp, dim, chip });
+    }
+
+    if trimmed.starts_with(".core") {
+        let rest = trimmed[".core".len()..].trim().trim_end_matches(':').trim();
+        let mut coords = [0usize; 4];
+        if let Some(open) = rest.find('[') {
+            if let Some(close) = rest.find(']') {
+                let parts: Vec<&str> = rest[open + 1..close].split(',').collect();
+                for (i, p) in parts.iter().enumerate().take(4) {
+                    if let Ok(val) = p.trim().parse::<usize>() {
+                        coords[i] = val;
+                    }
+                }
+            }
+        }
+        return Ok(ClDirective::Core { coords });
+    }
+
+    let name = trimmed.split_whitespace().next().unwrap_or(trimmed).to_string();
+    Ok(ClDirective::Custom { name, content: trimmed.to_string() })
+}
+
 pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
     let mut report = ClReport::default();
     let mut line_num = 0;
@@ -408,29 +638,28 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
             continue;
         }
 
-        // Check for Multi-Core / Directive definitions (e.g. .core [0,0,0,0]:)
-        if trimmed.starts_with(".core") {
-            report.cores_partitioned += 1;
-            continue;
-        }
-        if trimmed.starts_with(".weights") {
-            let binding = parse_weights_directive(trimmed)
-                .map_err(|e| format!("Line {}: {}", line_num, e))?;
-            report.weights_bound += 1;
-            report.total_weight_bytes += binding.values.len() * 4;
-            continue;
-        }
-        if trimmed.starts_with(".data") || trimmed.starts_with(".section") {
-            continue;
-        }
-        if trimmed.starts_with(".stage")
-            || trimmed.starts_with(".fuse")
-            || trimmed.starts_with(".tensor")
-            || trimmed.starts_with(".flow")
-            || trimmed.starts_with(".layout")
-        {
-            report.directives_found += 1;
-            continue;
+        // Check for Semantic Directives
+        if trimmed.starts_with('.') {
+            if trimmed.starts_with(".data") || trimmed.starts_with(".section") {
+                continue;
+            }
+            if let Ok(directive) = parse_directive(trimmed) {
+                match &directive {
+                    ClDirective::Core { .. } => {
+                        report.cores_partitioned += 1;
+                    }
+                    ClDirective::Weights(binding) => {
+                        report.weights_bound += 1;
+                        report.total_weight_bytes += binding.values.len() * 4;
+                        report.directives_found += 1;
+                    }
+                    _ => {
+                        report.directives_found += 1;
+                    }
+                }
+                report.directives_parsed.push(directive);
+                continue;
+            }
         }
 
         let parts: Vec<&str> = trimmed.split_whitespace().collect();

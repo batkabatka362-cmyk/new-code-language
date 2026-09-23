@@ -188,6 +188,9 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     let has_barrier = all_slots.iter().any(|s| s.op == "bb");
     let has_optical = all_slots.iter().any(|s| s.op == "OP" || s.op == "WD");
     let has_fuse = all_slots.iter().any(|s| s.op == "FU" || s.op == "FE");
+    let has_clifford = cl_code.contains(".clifford")
+        || cl_code.contains("clifford_so4_rot")
+        || (all_slots.iter().any(|s| s.op == "TT") && all_slots.iter().filter(|s| s.op == "MD").count() >= 4);
 
     let mut out = String::new();
     out.push_str("// ============================================================================\n");
@@ -197,6 +200,11 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     out.push_str("// ============================================================================\n\n");
     out.push_str(&format!(".MODULE {}\n", module_name));
     out.push_str(".ENTRY _main\n\n");
+
+    if has_clifford {
+        out.push_str("// CRON Cl(4,0) Spacetime Clifford Algebra Engine\n");
+        out.push_str("use cron.clifford::{Rotor4D, Vector4D, rotor_rotate_vector}\n\n");
+    }
 
     if has_spawn {
         out.push_str("async def background_fiber_task(channel: u32) -> u32 {\n");
@@ -216,6 +224,13 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     }
 
     let mut indent = "    ";
+
+    if has_clifford {
+        out.push_str(&format!("{}// Cl(4,0) Rotor-Vector Spacetime Rotation\n", indent));
+        out.push_str(&format!("{}let rotor = Rotor4D {{ s: 1.0, e12: 0.0, e13: 0.0, e14: 0.0, e23: 0.0, e24: 0.0, e34: 0.0, p: 0.0 }}\n", indent));
+        out.push_str(&format!("{}let v = Vector4D {{ x: 1.0, y: 0.0, z: 0.0, w: 0.0 }}\n", indent));
+        out.push_str(&format!("{}let v_rot = rotor_rotate_vector(rotor, v)\n\n", indent));
+    }
 
     if has_sentry {
         out.push_str(&format!("{}resilient_compute [fallback_target=X+, max_thermal_thresh=180] {{\n", indent));

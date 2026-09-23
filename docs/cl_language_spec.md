@@ -216,4 +216,59 @@ cron sim examples/pure_machine_agent.cl
 
 # 4. .cl машинаас .cr дээд хэл рүү декомпил хийх
 cron decompile examples/pure_machine_agent.cl -o blueprint.cr
+
+# 5. .cl машины кодыг автоматаар форматлах ба CRC-8 алдааг нөхөх
+cron cl-fmt examples/cl/clifford_rotate4d.cl -o formatted.cl
+
+# 6. .cl кодын тактын хуваарь, регистрийн төлөвийг эх кодын түвшинд шалгах
+cron cl-debug-meta examples/cl/clifford_rotate4d.cl
+
+# 7. 4D Clifford Algebra Cl(4,0) эргэлтийн гол цөмийг синтез хийх
+cron cl-kernel clifford-rotate4d -o clifford_kernel.cl
 ```
+
+---
+
+## 9. 4D Clifford Algebra Cl(4,0) Цахиурын Өргөтгөл (Geometric Silicon Engine)
+
+CRON-ийн $Cl(4,0)$ Spacetime Algebra нь стандарт $W \cdot x$ ерөнхий матриц үржвэрийг (GEMM) 4D орон зайн эргэлтээр ($v' = R v \tilde{R}$) орлуулан, санах ойн зурвасын ачааллыг 4 дахин бууруулдаг:
+
+* **Бүтэц (Rotor in Spin(4) = SU(2) × SU(2)):** 8 скаляр бүрэлдэхүүн ($s, e_{12}, e_{13}, e_{14}, e_{23}, e_{24}, e_{34}, p$).
+* **Машин түвшний гүйцэтгэл:**
+  - `_MD` (Ternary MAC): Квадратик хэлбэрийн элементүүдийг $O(1)$ хугацаанд тооцоолох.
+  - `_TT` (Tensor Transpose): $4 \times 4$ эргэлтийн матрицыг регистр дотор байрлуулах.
+  - `_PO` (SIMD ALU): 4D орон-цагийн вектортой матриц-вектор үржвэрийг салбарлалтгүй (branchless) 1-2 тактад гүйцэтгэх.
+* **Албан ёсны Директив:** `.clifford rotor=Rotor4D, vector=Vector4D, algebra="Cl(4,0)"`.
+
+---
+
+## 10. Семантик Директивүүдийн Дүрэм (Semantic Directives Reference)
+
+`.cl` машин хэл нь файлын эхэнд компилятор болон техник хангамжид зориулсан директивүүдийг дэмждэг:
+
+| Директив | Формат | Зориулалт |
+|---|---|---|
+| `.clifford` | `.clifford rotor=..., vector=..., algebra="..."` | Geometric Algebra төрлийг зааж өгөх |
+| `.stage` | `.stage "<id>", params="...", precision="...", d_model=N, ...` | Моделийн түвшний гиперпараметр тодорхойлох |
+| `.tensor` | `.tensor %Q: [dim1, dim2], %K: [...]` | Олон хэмжээст тензорын хэмжээс тунхаглах |
+| `.fuse` | `.fuse [Layer1 -> Layer2 & Layer3 -> Layer4]` | Дараалсан цөмүүдийг нэгтгэн HBM бичилтийг алгасах |
+| `.flow` | `.flow (Core[0,0,0,0] -> Core[0,0,1,0]) {dor=XYZW}` | 4D-Torus сүлжээний урсгалын чиглэл заах |
+| `.layout` | `.layout {TP=1, EP=1, CP=1, PP=1, dim="4x4x4x4"}` | Зэрэгцээ тооцооллын кластер зохион байгуулалт |
+| `.core` | `.core [x, y, z, w]:` | 4D координатын дагуух цөмийн кодын хил заах |
+| `.weights` | `.weights bank=N, offset=M: [f1, f2, ...]` | SRAM банкны анхны жингүүдийг ачаалах |
+
+---
+
+## 11. Машин Хэрэгслийн Экосистем (Toolchain Architecture)
+
+`.cl` машин хэл нь бүтэн циклтэй автоматжуулалтын хэрэгслүүдээр тоноглогдсон:
+
+```
+[.cr Өндөр хэл] ──(cron build)──> [.cl Машин код] ──(cron cl-opt)──> [Super-Optimized .cl]
+      ▲                                   │                                 │
+      │                               (cron cl-fmt)                    (cron cl-cosim)
+(cron decompile)                          │                                 │
+      │                             [Canonical .cl]                   [Verilog RTL Parity]
+      └───────────────────────────────────┴─────────────────────────────────┘
+```
+

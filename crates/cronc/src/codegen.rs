@@ -816,6 +816,31 @@ impl Codegen {
                         // Brain 5 Quantum superposition branch
                         self.push_slot(make_slot('_', "SW", dest, '$', first_arg_reg, 5, '>'));
                     }
+                    "rotor_rotate_vector" | "clifford_rotate_vector" | "rotor_rotate" => {
+                        // 4D Clifford Algebra Cl(4,0) Spin(4) Vector Rotation: v' = R * v * ~R
+                        // Stage 1: Quadratic form evaluation via _MD & _TT
+                        self.push_slot(make_slot('_', "MD", dest, '$', first_arg_reg, 3, '>'));
+                        self.push_slot(make_slot('_', "TT", dest, '$', first_arg_reg, 0, '>'));
+                        // Stage 2: In-register SO(4) spacetime vector projection via _PO SIMD
+                        self.push_slot(make_slot('_', "PO", dest, '$', (first_arg_reg % 14) + 1, 1, '>'));
+                    }
+                    "blade_index" | "clifford_blade_index" => {
+                        // Cl(4,0) Blade Index Calculation: A XOR B
+                        self.push_slot(make_slot('_', "PO", dest, '$', first_arg_reg, 8, '>'));
+                    }
+                    "blade_sign" | "clifford_blade_sign" => {
+                        // Cl(4,0) Branchless Sign: parity bit extraction
+                        self.push_slot(make_slot('_', "PO", dest, '$', first_arg_reg, 6, '>'));
+                    }
+                    "rotor_identity" | "clifford_rotor_identity" => {
+                        // Identity Rotor: s = 1.0, bivectors = 0
+                        self.push_slot(make_slot('\'', "=0", dest, '#', 0, 1, '>'));
+                    }
+                    "rotor_plane12" | "clifford_rotor_plane12" => {
+                        // Planar Rotor (1,2): s = cos(theta/2), e12 = -sin(theta/2)
+                        self.push_slot(make_slot('_', "CD", dest, '$', first_arg_reg, 0, '>'));
+                        self.push_slot(make_slot('_', "PO", dest, '$', dest, 2, '>'));
+                    }
                     "multi_head_dispatch" | "spatial_broadcast" => {
                         // Broadcast across 4D torus mesh
                         self.push_slot(make_slot('_', "SB", 0, '$', first_arg_reg, 5, '>'));

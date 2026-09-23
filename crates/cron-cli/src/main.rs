@@ -49,6 +49,8 @@ fn print_help() {
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
     println!("    cl-opt <file.cl> [-o out.cl]   VLIW slot compaction super-optimizer for .cl (IPC -> 4.0)");
+    println!("    cl-fmt <file.cl> [-o out.cl]   Format and canonicalize .cl machine code with NOP padding & CRC heal");
+    println!("    cl-debug-meta <file.cl>        Inspect source-level debugger metadata, register symbols & cycles");
     println!("    cl-repl                        Start interactive .cl Vibe-Coding live silicon console");
     println!("    vibe-loop <file|--code>        Autonomous AI Vibe-Loop: Heal + Opt + JIT + JSON telemetry in one pass");
     println!("    cl-link <file.cl> [options]    Spatial Linker: partition across 256 cores, resolve NoC, DOR & PGAS");
@@ -1889,6 +1891,89 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+        }
+        "cl-fmt" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing input file. Usage: cron cl-fmt <file.cl> [-o <out.cl>] [--no-pad] [--no-heal]");
+                std::process::exit(1);
+            }
+            let input_path = &args[2];
+            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
+                eprintln!("Error reading '{}': {}", input_path, e);
+                std::process::exit(1);
+            });
+
+            let mut out_path = None;
+            let mut opts = cronc::ClFmtOptions::default();
+
+            let mut i = 3;
+            while i < args.len() {
+                if args[i] == "-o" && i + 1 < args.len() {
+                    out_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "--no-pad" {
+                    opts.pad_nops = false;
+                    i += 1;
+                } else if args[i] == "--no-heal" {
+                    opts.heal_crc = false;
+                    i += 1;
+                } else {
+                    i += 1;
+                }
+            }
+
+            match cronc::format_cl_program(&cl_code, &opts) {
+                Ok(formatted) => {
+                    if let Some(path) = out_path {
+                        if let Err(e) = fs::write(&path, &formatted) {
+                            eprintln!("Error writing formatted code to '{}': {}", path, e);
+                            std::process::exit(1);
+                        }
+                        println!("[SUCCESS] Formatted .cl written to '{}'", path);
+                    } else {
+                        print!("{}", formatted);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[FORMAT ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        "cl-debug-meta" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing input file. Usage: cron cl-debug-meta <file.cl>");
+                std::process::exit(1);
+            }
+            let input_path = &args[2];
+            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
+                eprintln!("Error reading '{}': {}", input_path, e);
+                std::process::exit(1);
+            });
+
+            let debug_info = cronc::ClDebugInfo::extract_from_cl(&cl_code);
+            println!("============================================================");
+            println!("        CRON .cl SOURCE-LEVEL DEBUG METADATA REPORT         ");
+            println!("============================================================");
+            println!("  File:                 {}", input_path);
+            println!("  Total Bundles Tracked:{}", debug_info.bundle_meta.len());
+            println!("  Tracked Variables:    {}", debug_info.symbols.len());
+            println!("------------------------------------------------------------");
+            println!("  Cycle  | Source Label | Opcodes Scheduled");
+            println!("  -------+--------------+-----------------------------------");
+            let mut cycles: Vec<usize> = debug_info.bundle_meta.keys().copied().collect();
+            cycles.sort_unstable();
+            for c in cycles.iter().take(20) {
+                if let Some(m) = debug_info.bundle_meta.get(c) {
+                    let label = m.source_loc.as_ref().map(|s| s.symbol.as_str()).unwrap_or("-");
+                    println!("  B{:04}  | {: <12} | {}", c, label, m.slot_annotations.join(" "));
+                }
+            }
+            if cycles.len() > 20 {
+                println!("  ... ({} more cycles tracked)", cycles.len() - 20);
+            }
+            println!("============================================================");
+            println!("{}", debug_info.render_register_table());
         }
         "cl-repl" => {
             cron_cli::cl_repl::start_cl_repl();

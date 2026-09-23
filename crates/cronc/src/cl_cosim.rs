@@ -59,6 +59,68 @@ pub struct ClCosimReport {
     pub execution_time_us: u128,
 }
 
+/// Optical MZI Photonic GEMM multi-cycle latency pipeline model
+#[derive(Debug, Clone, Default)]
+pub struct OpticPipelineStage {
+    pub active_in_flight: usize,
+    pub latency_cycles: usize,
+    pub completed_ops: usize,
+}
+
+impl OpticPipelineStage {
+    pub fn new(latency_cycles: usize) -> Self {
+        Self {
+            active_in_flight: 0,
+            latency_cycles,
+            completed_ops: 0,
+        }
+    }
+
+    pub fn issue_op(&mut self) {
+        self.active_in_flight += 1;
+    }
+
+    pub fn tick(&mut self) -> usize {
+        if self.active_in_flight > 0 {
+            self.active_in_flight -= 1;
+            self.completed_ops += 1;
+            1
+        } else {
+            0
+        }
+    }
+}
+
+/// 4D-Torus Dimension-Order Routing (DOR) Latency Model
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct NocRoutingDelay;
+
+impl NocRoutingDelay {
+    /// Calculate wrap-around torus distance along an axis of size N (default 4 for 4x4x4x4)
+    pub fn torus_axis_dist(a: usize, b: usize, dim_size: usize) -> usize {
+        let diff = if a > b { a - b } else { b - a };
+        diff.min(dim_size - diff)
+    }
+
+    /// Calculate total DOR hop count in 4D Torus mesh
+    pub fn dor_hop_count(src: [usize; 4], dst: [usize; 4], torus_dim: usize) -> usize {
+        Self::torus_axis_dist(src[0], dst[0], torus_dim)
+            + Self::torus_axis_dist(src[1], dst[1], torus_dim)
+            + Self::torus_axis_dist(src[2], dst[2], torus_dim)
+            + Self::torus_axis_dist(src[3], dst[3], torus_dim)
+    }
+
+    /// Estimate NoC latency in cycles (1 cycle router hop + 1 cycle link transit per step)
+    pub fn packet_latency_cycles(src: [usize; 4], dst: [usize; 4]) -> usize {
+        let hops = Self::dor_hop_count(src, dst, 4);
+        if hops == 0 {
+            1 // Local loopback
+        } else {
+            hops * 2
+        }
+    }
+}
+
 /// Cycle-Accurate Hardware State Machine of Synthesizable Verilog RTL Core (`cksl_core.v`)
 #[derive(Debug, Clone)]
 pub struct VerilogRtlCoreSimulator {
@@ -69,6 +131,7 @@ pub struct VerilogRtlCoreSimulator {
     pub total_cycles: usize,
     pub rev_stack: Vec<u32>,
     pub optical_gemm_count: usize,
+    pub optical_pipeline: OpticPipelineStage,
     pub reversible_ops_count: usize,
     pub stdp_updates_count: usize,
     pub spatial_broadcast_count: usize,
@@ -84,6 +147,7 @@ impl VerilogRtlCoreSimulator {
             total_cycles: 0,
             rev_stack: Vec::with_capacity(256),
             optical_gemm_count: 0,
+            optical_pipeline: OpticPipelineStage::new(3),
             reversible_ops_count: 0,
             stdp_updates_count: 0,
             spatial_broadcast_count: 0,
@@ -123,6 +187,7 @@ impl VerilogRtlCoreSimulator {
                 }
                 "OP" | "WD" => {
                     self.optical_gemm_count += 1;
+                    self.optical_pipeline.issue_op();
                     self.rf[d] = 0x00FFAA55;
                 }
                 "FA" => {

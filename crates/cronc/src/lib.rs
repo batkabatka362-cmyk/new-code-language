@@ -75,6 +75,24 @@ pub mod cl_proof;
 pub mod cl_quantum;
 pub mod cl_swarm_wafer;
 pub mod clifford;
+pub mod cl_debug;
+pub mod cl_fmt;
+pub mod cl_metaplasticity;
+pub mod cl_thermodynamics;
+pub mod cl_clifford_optics;
+pub mod cl_sagi_bridge;
+pub mod cl_torus_coherence;
+pub mod cl_metacognitive;
+
+pub use cl_metaplasticity::{BcmConfig, MetaplasticEngine, MetaplasticSynapse};
+pub use cl_thermodynamics::{ThermodynamicOptimizer, TileThermodynamicState};
+pub use cl_clifford_optics::{Multivector16, MziPhaseRotor};
+pub use cl_sagi_bridge::{NeuromodulatorState, SagiBrainBridge, SagiBrainKind, SagiBridgeMailbox};
+pub use cl_torus_coherence::{Torus4DCoord, Torus4DMesh, TorusMicroPacket};
+pub use cl_metacognitive::{CognitiveAnomaly, MetacognitiveEngine, SoundnessInvariant};
+
+pub use cl_debug::{BundleDebugMeta, ClDebugInfo, RegisterSymbol, SourceLocation};
+pub use cl_fmt::{format_cl_program, ClFmtOptions};
 
 pub use clifford::{
     blade_index, blade_sign, fold_tensor_4d, prefix_xor, Multivector4D, Rotor4D,
@@ -216,17 +234,24 @@ pub use cl_power::{
 };
 pub use cl_tile::{tile_gemm, tile_conv2d, derive_optimal_gemm_tiles, TileOptions, TileResult};
 pub use cl_cluster::{ClusterCoord, CollectiveSchedule, CollectiveType, synthesize_collective_schedule, render_cluster_topology_ascii, generate_distributed_c23_harness};
-pub use cl_lang::{verify_cl_program, audit_alphabet_coverage, parse_slot, parse_weights_directive, ClReport, ClSlot, ClWeightBinding};
+pub use cl_lang::{
+    verify_cl_program, audit_alphabet_coverage, parse_slot, parse_weights_directive,
+    parse_directive, ClDirective, ClReport, ClSlot, ClWeightBinding,
+};
 pub use cl_spec::{generate_cl_spec, generate_cl_ebnf_grammar, generate_cl_json_schema, generate_cl_ai_system_prompt, SpecFormat};
 pub use cl_link::{ClLinker, ClLinkReport, Coord4D, CoreProgram, InterCoreChannel};
 pub use vibe_loop::{run_vibe_loop, VibeLoopConfig, VibeLoopResult, VibeStatus, VibeDiagnostic};
-pub use cl_cosim::{run_cl_cosim, ClCosimReport, CosimCycleRecord, CosimOptions, VerilogRtlCoreSimulator};
+pub use cl_cosim::{
+    run_cl_cosim, ClCosimReport, CosimCycleRecord, CosimOptions,
+    NocRoutingDelay, OpticPipelineStage, VerilogRtlCoreSimulator,
+};
 pub use cl_memcheck::{verify_cl_memory_access, ClMemcheckReport, MemcheckOptions, CycleBankConflict, compute_linear_bank, compute_swizzled_bank, prove_strided_conflict_freedom};
 pub use cl_fuzz::{run_cl_fuzz, ClFuzzReport, FuzzOptions, MutationStrategy};
 pub use cl_bench::{analyze_cl_roofline, ClBenchReport, RooflineRegime, PEAK_CORE_COMPUTE_GFLOPS, PEAK_CORE_SRAM_BW_GBPS, ROOFLINE_KNEE_OI};
 pub use cl_kernel::{
     generate_flash_attention, generate_bitnet_gemm, generate_rmsnorm,
     generate_swiglu, generate_rope, generate_kv_cache_stream,
+    generate_clifford_rotate4d,
     list_available_kernels, synthesize_kernel, KernelDescriptor,
 };
 pub use cl_llvm::{compile_cl_to_llvm, ClLlvmCompiler};
