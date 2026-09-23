@@ -84,6 +84,14 @@ pub fn list_available_kernels() -> Vec<KernelDescriptor> {
             typical_ipc: 3.8,
             operational_intensity: 6.0,
         },
+        KernelDescriptor {
+            name: "sagi-metaplastic-v99",
+            display_name: "SAGI Superintelligence Metaplastic Kernel",
+            description: "6-Brain Mailbox Dispatch + In-SRAM BCM Metaplasticity + Onsager Zero-Power Quenching",
+            target_silicon_brain: "All 6 Brains (SAGI Sovereign Unified Silicon Architecture)",
+            typical_ipc: 4.0,
+            operational_intensity: 9.5,
+        },
     ]
 }
 
@@ -97,8 +105,9 @@ pub fn synthesize_kernel(name: &str, dim: usize, seq: usize) -> Result<String, S
         "rope" | "rotary" => Ok(generate_rope(dim)),
         "kv-cache" | "kv" | "cache" => Ok(generate_kv_cache_stream(seq)),
         "clifford-rotate4d" | "clifford" | "clifford4d" | "rotor" => Ok(generate_clifford_rotate4d(dim)),
+        "sagi-metaplastic-v99" | "sagi" | "metaplastic" | "superintelligence" => Ok(generate_sagi_metaplastic_v99(dim)),
         other => Err(format!(
-            "Unknown kernel template '{}'. Available kernels: flash-attn, bitnet-gemm, rmsnorm, swiglu, rope, kv-cache, clifford-rotate4d. Run 'cron cl-kernel list'.",
+            "Unknown kernel template '{}'. Available kernels: flash-attn, bitnet-gemm, rmsnorm, swiglu, rope, kv-cache, clifford-rotate4d, sagi-metaplastic-v99. Run 'cron cl-kernel list'.",
             other
         )),
     }
@@ -348,6 +357,57 @@ B0009: _PO01+120> _ST04#030> _SB00#000> _HL00$008!
 "#,
         dim.max(4),
         dim.max(4)
+    );
+
+    canonicalize_kernel(&raw)
+}
+
+/// 8. SAGI Sovereign Superintelligence V99 Kernel
+pub fn generate_sagi_metaplastic_v99(dim: usize) -> String {
+    let raw = format!(
+        r#"; ============================================================================
+; CRON GOLDEN AI MICRO-KERNEL: SAGI Superintelligence Metaplastic Kernel (V99)
+; Target: 256-Core 4D-Torus Photonic Neuromorphic Silicon Core
+; Dimension: {} | 100% Conflict-Free 16-Bank SRAM Layout
+; ============================================================================
+
+.stage "sagi_superintelligence_v99", params="32", precision="f32", d_model={}, heads=4, kv_heads=4, intermediate=64, zero_overhead=true
+.clifford rotor=Rotor4D, vector=Vector4D, algebra="Cl(4,0)"
+
+@sagi_brain_init:
+; Cycle 0: Load SAGI 6-Brain Mailbox Header [Src=ALife(4), Dst=MCTS(3), Opcode=0x01A0]
+B0000: '==01#000> '==02#004> '==03#008> '==04#00C>
+; Cycle 1: Load Neuromodulator Vector [DA=512, SER=512, ACH=512, NE=512]
+B0001: '==05#010> '==06#014> '==07#018> '==08#01C>
+
+@clifford_spacetime_rotation:
+; Cycle 2: Load 4D Space-Time Rotor (s, e12, e13, e14)
+B0002: '==09#020> '==0A#024> '==0B#028> '==0C#02C>
+; Cycle 3: Compute Rotor Quadratic Forms (s^2, e12^2, e13^2) in RD, RE, RF
+B0003: _MD0D*110> _MD0E*220> _MD0F*330> _NO00#000>
+; Cycle 4: Fold 4D Tensor Coordinates with Optical MZI Phase Rotors
+B0004: _PO0D-DE0> _NO00#000> _NO00#000> _NO00#000>
+; Cycle 5: Square e14 term into R1
+B0005: _MD01*440> _NO00#000> _NO00#000> _NO00#000>
+
+@bcm_metaplastic_update:
+; Cycle 6: Read pre/post synaptic activations into R2, R3, threshold in R4
+B0006: '==02#030> '==03#034> '==04#038> _NO00#000>
+; Cycle 7: Calculate Phi = post * (post - theta_m)
+B0007: _PO05-340> _NO00#000> _NO00#000> _NO00#000>
+; Cycle 8: Scale Weight Delta = eta * Phi * pre, In-SRAM Weight Patch
+B0008: _MD06*530> _NO00#000> _NO00#000> _NO00#000>
+; Cycle 9: Write back updated synaptic weight
+B0009: _MD07*620> _ST07#040> _NO00#000> _NO00#000>
+
+@onsager_thermal_quench:
+; Cycle 10: Check Local Tile Thermodynamic Entropy & Flux
+B0010: _PO08-880> _NO00#000> _NO00#000> _NO00#000>
+; Cycle 11: Broadcast 4D Torus DOR Micro-Packet to Neighbor Core and Halt
+B0011: _PO01+120> _ST04#030> _SB00#000> _HL00$008!
+"#,
+        dim.max(16),
+        dim.max(16)
     );
 
     canonicalize_kernel(&raw)

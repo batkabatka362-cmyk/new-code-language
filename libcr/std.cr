@@ -61,3 +61,11 @@ import { pgas_ring_all_reduce, optical_cross_chip_broadcast } from "distributed/
 // AI Ecosystem: Native BPE Tokenizer & Autonomous Agent Tool Runtime
 import { BpeVocabConfig, init_bpe_config, is_raw_byte_token, is_special_token, bpe_merge_pair, bpe_encode_4bytes, bpe_decode_to_lead_byte } from "tokenizer/bpe.cr"
 import { HardToolCatalog, init_tool_catalog, AgentFrame, init_agent_frame, dispatch_hard_tool, agent_execute_step } from "agent/runtime.cr"
+
+// SAGI Sovereign Superintelligence Subsystem (libcr/sagi)
+import { SagiMailboxFrame, create_sagi_mailbox, dispatch_sagi_directive } from "sagi/bridge.cr"
+import { NeuromodulatorPool, create_neuromodulator_pool, step_bcm_weight } from "sagi/metaplasticity.cr"
+import { ThermalState, create_thermal_state, evaluate_quench } from "sagi/thermodynamics.cr"
+import { OpticalRotor2D, create_optical_rotor } from "sagi/mzi_rotor.cr"
+import { Torus4DCoordinate, create_torus_coord, compute_manhattan_distance_4d } from "sagi/torus_noc.cr"
+
