@@ -46,7 +46,7 @@ fn test_cl_kernel_memcheck_conflict_freedom() {
 
         if !report.is_provably_conflict_free {
             println!("KERNEL CODE:\n{}", kernel_code);
-            println!("{}", report.format_ascii_report(&name));
+            println!("{}", report.format_ascii_report(name));
         }
         assert!(
             report.is_provably_conflict_free,

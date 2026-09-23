@@ -224,7 +224,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                                 '+' => val1.wrapping_add(val2),
                                 '-' => val1.wrapping_sub(val2),
                                 '*' => val1.wrapping_mul(val2),
-                                '/' => if val2 != 0 { val1 / val2 } else { 0 },
+                                '/' => val1.checked_div(val2).unwrap_or(0),
                                 '%' => if val2 != 0 { val1 % val2 } else { 0 },
                                 '&' => val1 & val2,
                                 '|' => val1 | val2,
@@ -248,9 +248,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         }
                         "RF" => {
                             core.reversible_ops_count += 1;
-                            let tmp = core.r[d];
-                            core.r[d] = core.r[s];
-                            core.r[s] = tmp;
+                            core.r.swap(d, s);
                         }
                         "TO" => {
                             core.reversible_ops_count += 1;
@@ -419,7 +417,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         "GE" => {
                             core.ai_isa_ops_count += 1;
                             let x = f32::from_bits(core.r[s]);
-                            let sqrt_2_over_pi = 0.7978845608f32;
+                            let sqrt_2_over_pi = 0.797_884_6_f32;
                             let inner = sqrt_2_over_pi * (x + 0.044715f32 * x * x * x);
                             let res = 0.5f32 * x * (1.0f32 + inner.tanh());
                             core.r[d] = res.to_bits();
@@ -428,9 +426,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             core.ai_isa_ops_count += 1;
                             let bank = if imm_nibble > 0 { imm_nibble % 16 } else { s % 16 };
                             let ch = bank;
-                            let inp_val = if imm_nibble > 0 {
-                                core.r[s]
-                            } else if core.r[s] != 0 {
+                            let inp_val = if imm_nibble > 0 || core.r[s] != 0 {
                                 core.r[s]
                             } else if core.r[d] != 0 {
                                 core.r[d]

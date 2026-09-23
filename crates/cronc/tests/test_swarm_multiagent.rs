@@ -338,12 +338,10 @@ fn test_ascii_swarm_matrix_contains_all_role_symbols() {
 
 #[test]
 fn test_packet_kind_variants() {
-    let kinds = vec![
-        PacketKind::TaskBroadcast,
+    let kinds = [PacketKind::TaskBroadcast,
         PacketKind::Proposal,
         PacketKind::Vote,
-        PacketKind::ConsensusResult,
-    ];
+        PacketKind::ConsensusResult];
     // Ensure equality and debug formatting work
     assert_eq!(kinds[0], PacketKind::TaskBroadcast);
     assert_ne!(kinds[0], PacketKind::Vote);

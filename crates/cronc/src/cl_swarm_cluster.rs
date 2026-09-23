@@ -152,15 +152,15 @@ impl ClusterDORRouter {
         let wrap = |d: usize| d.min(4 - d);
 
         // Inter-chip 2D Torus distance
-        let dcx = (c1.chip_x as isize - c2.chip_x as isize).abs() as usize;
-        let dcy = (c1.chip_y as isize - c2.chip_y as isize).abs() as usize;
+        let dcx = (c1.chip_x as isize - c2.chip_x as isize).unsigned_abs();
+        let dcy = (c1.chip_y as isize - c2.chip_y as isize).unsigned_abs();
         let inter_chip_dist = wrap(dcx) + wrap(dcy);
 
         // Intra-chip 4D Torus distance
-        let dx = (c1.x as isize - c2.x as isize).abs() as usize;
-        let dy = (c1.y as isize - c2.y as isize).abs() as usize;
-        let dz = (c1.z as isize - c2.z as isize).abs() as usize;
-        let dw = (c1.w as isize - c2.w as isize).abs() as usize;
+        let dx = (c1.x as isize - c2.x as isize).unsigned_abs();
+        let dy = (c1.y as isize - c2.y as isize).unsigned_abs();
+        let dz = (c1.z as isize - c2.z as isize).unsigned_abs();
+        let dw = (c1.w as isize - c2.w as isize).unsigned_abs();
         let intra_chip_dist = wrap(dx) + wrap(dy) + wrap(dz) + wrap(dw);
 
         inter_chip_dist + intra_chip_dist

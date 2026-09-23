@@ -690,7 +690,7 @@ fn main() {
         }
         "pkg" => {
             if args.len() < 3 {
-                println!("USAGE: cron pkg <tree|list|publish|verify>");
+                println!("USAGE: cron pkg <tree|list|publish|verify|search>");
                 return;
             }
             let cur_dir = env::current_dir().unwrap();
@@ -746,8 +746,19 @@ fn main() {
                         }
                     }
                 }
+                "search" => {
+                    let query = if args.len() >= 4 { &args[3] } else { "" };
+                    let registry = pkg::PackageRegistry::new();
+                    let matches = registry.search_packages(query);
+                    println!("[CRON PACKAGE REGISTRY] Found {} matching package(s):", matches.len());
+                    println!("{:<20} {:<10} {:<24} DESCRIPTION", "PACKAGE", "VERSION", "TARGET");
+                    println!("{:-<20} {:-<10} {:-<24} {:-<40}", "", "", "", "");
+                    for pkg in matches {
+                        println!("{:<20} {:<10} {:<24} {}", pkg.name, pkg.latest_version, pkg.hardware_target, pkg.description);
+                    }
+                }
                 other => {
-                    eprintln!("Unknown pkg subcommand '{}'. Valid: tree, list, publish, verify", other);
+                    eprintln!("Unknown pkg subcommand '{}'. Valid: tree, list, publish, verify, search", other);
                 }
             }
         }
@@ -2483,10 +2494,9 @@ fn main() {
             }
 
             if let Some(path) = out_file {
-                let content = if emit_cr && res.cr_blueprint.is_some() {
-                    res.cr_blueprint.as_ref().unwrap()
-                } else {
-                    &res.canonical_cl_code
+                let content = match (emit_cr, res.cr_blueprint.as_ref()) {
+                    (true, Some(bp)) => bp,
+                    _ => &res.canonical_cl_code,
                 };
                 if let Err(e) = fs::write(&path, content) {
                     eprintln!("Failed to write output to '{}': {}", path, e);
@@ -2965,14 +2975,14 @@ fn main() {
             println!("[BUILDING CRON NATIVE SHARED ACCELERATOR] Target: {}", target_dll);
             let c_source = "src_native/cron_native.c";
             let mut cmd = std::process::Command::new("gcc");
-            cmd.args(&["-std=c2x", "-shared", "-O3", "-mavx2", "-mfma", "-fopenmp", "-static-libgcc", c_source, "-o", &target_dll]);
+            cmd.args(["-std=c2x", "-shared", "-O3", "-mavx2", "-mfma", "-fopenmp", "-static-libgcc", c_source, "-o", &target_dll]);
             match cmd.status() {
                 Ok(s) if s.success() => {
                     println!("[SUCCESS] Native shared library compiled successfully: {}", target_dll);
                 }
                 _ => {
                     let mut cmd2 = std::process::Command::new("gcc");
-                    cmd2.args(&["-std=c2x", "-shared", "-O3", "-mavx2", "-mfma", "-static-libgcc", c_source, "-o", &target_dll]);
+                    cmd2.args(["-std=c2x", "-shared", "-O3", "-mavx2", "-mfma", "-static-libgcc", c_source, "-o", &target_dll]);
                     if let Ok(s2) = cmd2.status() {
                         if s2.success() {
                             println!("[SUCCESS] Native shared library compiled (single-threaded fallback): {}", target_dll);
@@ -4018,13 +4028,13 @@ fn main() {
             let mut i = 3;
             while i < args.len() {
                 if args[i] == "--target" && i + 1 < args.len() {
-                    config.target = cronc::SiliconTarget::from_str(&args[i + 1]).unwrap_or_else(|e| {
+                    config.target = cronc::SiliconTarget::parse_target(&args[i + 1]).unwrap_or_else(|e| {
                         eprintln!("Error: {}", e);
                         std::process::exit(1);
                     });
                     i += 2;
                 } else if args[i] == "--interface" && i + 1 < args.len() {
-                    config.interface = cronc::HostInterface::from_str(&args[i + 1]).unwrap_or_else(|e| {
+                    config.interface = cronc::HostInterface::parse_interface(&args[i + 1]).unwrap_or_else(|e| {
                         eprintln!("Error: {}", e);
                         std::process::exit(1);
                     });
@@ -4418,7 +4428,7 @@ fn handle_cl_cluster_command(args: &[String]) {
             } else {
                 "allreduce"
             };
-            let col_type = match cronc::CollectiveType::from_str(col_name) {
+            let col_type = match cronc::CollectiveType::parse_collective(col_name) {
                 Ok(t) => t,
                 Err(e) => {
                     eprintln!("{}", e);
@@ -4476,7 +4486,7 @@ fn handle_cl_cluster_command(args: &[String]) {
             }
         }
         "run" => {
-            handle_cluster_command(&args[..]);
+            handle_cluster_command(args);
         }
         other => {
             eprintln!("Unknown cl-cluster action '{}'. Available: topology, collective, c23, run", other);
@@ -4627,7 +4637,7 @@ fn handle_cl_cordic_command(args: &[String]) {
             }
         }
         "synth" | "kernel" => {
-            let mode = cronc::CordicMode::from_str(&mode_str).unwrap_or(cronc::CordicMode::CircularRotation);
+            let mode = cronc::CordicMode::parse_mode(&mode_str).unwrap_or(cronc::CordicMode::CircularRotation);
             let config = cronc::CordicConfig {
                 mode,
                 iterations: iters,
@@ -4822,8 +4832,7 @@ fn handle_cl_perf_command(args: &[String]) {
         } else {
             print!("{}", cronc::render_ascii_ppa_scoreboard(&suite_report));
         }
-    } else {
-        let path = input_file.unwrap();
+    } else if let Some(path) = input_file {
         let content = match fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
@@ -5304,7 +5313,7 @@ fn handle_cl_optic_command(args: &[String]) {
                 i += 2;
             }
             "--lambda" if i + 1 < args.len() => {
-                wdm_channels = args[i + 1].parse().unwrap_or(8).min(16).max(1);
+                wdm_channels = args[i + 1].parse().unwrap_or(8).clamp(1, 16);
                 i += 2;
             }
             "--topology" if i + 1 < args.len() => {

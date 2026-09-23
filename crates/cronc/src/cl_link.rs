@@ -45,10 +45,10 @@ impl Coord4D {
 
     /// Manhattan distance on 4D-Torus with toroidal wrap-around
     pub fn torus_manhattan_distance(&self, other: &Coord4D) -> usize {
-        let dx = (self.x as isize - other.x as isize).abs() as usize;
-        let dy = (self.y as isize - other.y as isize).abs() as usize;
-        let dz = (self.z as isize - other.z as isize).abs() as usize;
-        let dw = (self.w as isize - other.w as isize).abs() as usize;
+        let dx = (self.x as isize - other.x as isize).unsigned_abs();
+        let dy = (self.y as isize - other.y as isize).unsigned_abs();
+        let dz = (self.z as isize - other.z as isize).unsigned_abs();
+        let dw = (self.w as isize - other.w as isize).unsigned_abs();
 
         let hop_x = dx.min(4 - dx);
         let hop_y = dy.min(4 - dy);
@@ -437,9 +437,9 @@ impl ClLinker {
         sorted_cores.sort_by_key(|c| c.core_id);
 
         for core in &sorted_cores {
-            c.push_str(&format!("// ------------------------------------------------------------\n"));
+            c.push_str("// ------------------------------------------------------------\n");
             c.push_str(&format!("// Core [{}, {}, {}, {}] (ID: {})\n", core.coord.x, core.coord.y, core.coord.z, core.coord.w, core.core_id));
-            c.push_str(&format!("// ------------------------------------------------------------\n"));
+            c.push_str("// ------------------------------------------------------------\n");
             c.push_str(&format!("static void step_core_{}(CronCoreState* c) {{\n", core.core_id));
             c.push_str("    if (c->halted) return;\n");
             c.push_str("    switch (c->pc) {\n");
@@ -566,7 +566,7 @@ impl ClLinker {
             v.push_str(&format!("    wire core_{}_halted;\n", core.core_id));
             v.push_str(&format!("    wire [31:0] core_{}_r0;\n", core.core_id));
         }
-        v.push_str("\n");
+        v.push('\n');
 
         // Instantiation of active cores
         for core in &sorted_cores {

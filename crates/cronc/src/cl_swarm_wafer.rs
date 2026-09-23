@@ -68,6 +68,7 @@ pub struct Coord8D {
 }
 
 impl Coord8D {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         wafer_x: usize, wafer_y: usize,
         chip_x: usize, chip_y: usize,
@@ -381,7 +382,7 @@ impl WaferSwarmReport {
         s.push_str(&format!("  \"pipeline_bubbles\": {},\n", self.telemetry.pipeline_bubbles));
         s.push_str(&format!("  \"latency_us\": {:.4},\n", self.telemetry.consensus_latency_us));
         s.push_str(&format!("  \"resolution\": \"{}\"\n", self.resolution));
-        s.push_str("}");
+        s.push('}');
         s
     }
 }
@@ -473,7 +474,7 @@ impl WaferSwarmMesh {
             // Determine hierarchy level
             let hierarchy = if id == 0 {
                 WaferHierarchy::WaferRoot
-            } else if local_id == 0 && (die_id % 16 == 0) {
+            } else if local_id == 0 && die_id.is_multiple_of(16) {
                 WaferHierarchy::QuadrantLeader
             } else if local_id == 0 {
                 WaferHierarchy::DieLeader

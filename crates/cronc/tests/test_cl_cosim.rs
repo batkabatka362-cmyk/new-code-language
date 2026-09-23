@@ -112,7 +112,7 @@ fn test_cl_cosim_divergence_detection_and_reporting() {
     rtl.rf[0] = 10;
     rtl.rf[1] = 5;
 
-    rtl.step_cycle(&[slot.clone()], &["_PO00+100>"]);
+    rtl.step_cycle(std::slice::from_ref(&slot), &["_PO00+100>"]);
 
     // After adding R1 (5) to R0 (10), R0 must be 15
     assert_eq!(rtl.rf[0], 15);

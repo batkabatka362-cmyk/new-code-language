@@ -179,7 +179,7 @@ fn test_schedule_c23_native_execution() {
     std::fs::write(&c_file, &c_code).expect("Failed to write temporary C file");
 
     let gcc_check = Command::new("gcc").arg("--version").output();
-    if let Ok(_) = gcc_check {
+    if gcc_check.is_ok() {
         let compile_output = Command::new("gcc")
             .arg("-O2")
             .arg(&c_file)

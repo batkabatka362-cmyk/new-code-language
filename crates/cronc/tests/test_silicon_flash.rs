@@ -16,9 +16,11 @@ fn test_generate_hardware_package_alveo_u280() {
     "#;
 
     let verilog_rtl = compile_to_verilog(source, "cron_top").expect("Failed to synthesize Verilog RTL");
-    let mut config = FlashConfig::default();
-    config.target = SiliconTarget::XilinxAlveoU280;
-    config.interface = HostInterface::PcieGen5x16;
+    let config = FlashConfig {
+        target: SiliconTarget::XilinxAlveoU280,
+        interface: HostInterface::PcieGen5x16,
+        ..Default::default()
+    };
 
     let pkg = generate_hardware_package(&verilog_rtl, "SiliconDeployment", &config);
 
@@ -73,10 +75,12 @@ fn test_generate_hardware_package_custom_asic() {
     "#;
 
     let verilog_rtl = compile_to_verilog(source, "cron_top").expect("Failed to synthesize Verilog RTL");
-    let mut config = FlashConfig::default();
-    config.target = SiliconTarget::CustomAsicN5;
-    config.core_clock_mhz = 1500; // 1.5 GHz ASIC core
-    config.noc_clock_mhz = 800;   // 800 MHz ASIC NoC
+    let config = FlashConfig {
+        target: SiliconTarget::CustomAsicN5,
+        core_clock_mhz: 1500, // 1.5 GHz ASIC core
+        noc_clock_mhz: 800,   // 800 MHz ASIC NoC
+        ..Default::default()
+    };
 
     let pkg = generate_hardware_package(&verilog_rtl, "AsicTapeout", &config);
 

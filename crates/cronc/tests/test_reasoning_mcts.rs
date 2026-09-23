@@ -13,7 +13,7 @@ fn test_mcts_initial_state_and_config() {
     let config = MctsConfig::default();
     assert_eq!(config.simulations, 200);
     assert_eq!(config.rollout_depth, 16);
-    assert!((config.c_puct - 1.4142).abs() < 0.001);
+    assert!((config.c_puct - std::f64::consts::SQRT_2).abs() < 0.001);
 
     let scheduler = MctsScheduler::new(config);
     assert_eq!(scheduler.config.target_ipc, 4.0);

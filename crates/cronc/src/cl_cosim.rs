@@ -145,7 +145,7 @@ impl VerilogRtlCoreSimulator {
                         '+' => val1.wrapping_add(val2),
                         '-' => val1.wrapping_sub(val2),
                         '*' => val1.wrapping_mul(val2),
-                        '/' => if val2 != 0 { val1 / val2 } else { 0 },
+                        '/' => val1.checked_div(val2).unwrap_or(0),
                         '%' => if val2 != 0 { val1 % val2 } else { 0 },
                         '&' => val1 & val2,
                         '|' => val1 | val2,
@@ -169,9 +169,7 @@ impl VerilogRtlCoreSimulator {
                 }
                 "RF" => {
                     self.reversible_ops_count += 1;
-                    let tmp = self.rf[d];
-                    self.rf[d] = self.rf[s];
-                    self.rf[s] = tmp;
+                    self.rf.swap(d, s);
                 }
                 "TO" => {
                     self.reversible_ops_count += 1;
@@ -371,7 +369,7 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                                 '+' => val1.wrapping_add(val2),
                                 '-' => val1.wrapping_sub(val2),
                                 '*' => val1.wrapping_mul(val2),
-                                '/' => if val2 != 0 { val1 / val2 } else { 0 },
+                                '/' => val1.checked_div(val2).unwrap_or(0),
                                 '%' => if val2 != 0 { val1 % val2 } else { 0 },
                                 '&' => val1 & val2,
                                 '|' => val1 | val2,
@@ -395,9 +393,7 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                         }
                         "RF" => {
                             soft_core.reversible_ops_count += 1;
-                            let tmp = soft_core.r[d];
-                            soft_core.r[d] = soft_core.r[s];
-                            soft_core.r[s] = tmp;
+                            soft_core.r.swap(d, s);
                         }
                         "TO" => {
                             soft_core.reversible_ops_count += 1;

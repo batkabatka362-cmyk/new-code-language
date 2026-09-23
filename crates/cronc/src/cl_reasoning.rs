@@ -106,7 +106,7 @@ impl Default for MctsConfig {
         Self {
             simulations: 200,
             rollout_depth: 16,
-            c_puct: 1.41421356, // sqrt(2)
+            c_puct: std::f64::consts::SQRT_2, // sqrt(2)
             target_ipc: 4.0,
             weight_ipc: 0.40,
             weight_latency: 0.30,
@@ -748,7 +748,7 @@ impl MctsScheduler {
 
         let search_latency_ms = start_time.elapsed().as_secs_f64() * 1000.0;
 
-        let result = MctsSynthesisResult {
+        MctsSynthesisResult {
             prompt: prompt.to_string(),
             initial_ipc,
             optimized_ipc,
@@ -762,8 +762,6 @@ impl MctsScheduler {
             final_bundles,
             cl_code,
             search_stats_json: String::new(),
-        };
-
-        result
+        }
     }
 }

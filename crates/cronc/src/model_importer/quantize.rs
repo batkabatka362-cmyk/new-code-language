@@ -74,7 +74,7 @@ pub fn quantize_ternary_158b(name: &str, shape: &[usize], values: &[f32]) -> Qua
 
     for &w in values {
         let scaled = w / gamma;
-        let clamped = scaled.max(-1.0).min(1.0);
+        let clamped = scaled.clamp(-1.0, 1.0);
         let q = clamped.round() as i8; // -1, 0, or 1
         ternary_vals.push(q);
 
@@ -167,7 +167,7 @@ pub fn quantize_int4(name: &str, shape: &[usize], values: &[f32]) -> QuantizedTe
 
     for &w in values {
         let scaled = w / alpha;
-        let clamped = scaled.max(-8.0).min(7.0);
+        let clamped = scaled.clamp(-8.0, 7.0);
         let q = clamped.round() as i8;
         int4_vals.push(q);
 

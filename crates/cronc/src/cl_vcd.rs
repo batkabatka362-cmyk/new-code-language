@@ -206,7 +206,7 @@ pub fn dump_vcd(snapshots: &[PipelineCycleSnapshot], config: &VcdConfig) -> (Str
 
     // Emit variable definitions
     for sig in &signals {
-        let type_str = if sig.width == 1 { "wire" } else { "wire" };
+        let type_str = "wire";
         out.push_str(&format!(
             "$var {} {} {} {} $end\n",
             type_str, sig.width, sig.id, sig.name
@@ -519,9 +519,8 @@ pub fn generate_vcd_trace(cl_source: &str, config: &VcdConfig) -> Result<VcdTrac
         }
 
         let mut slot_strs = ["NOP".to_string(), "NOP".to_string(), "NOP".to_string(), "NOP".to_string()];
-        for i in 0..raw_slots.len().min(4) {
-            slot_strs[i] = raw_slots[i].clone();
-        }
+        let n = raw_slots.len().min(4);
+        slot_strs[..n].clone_from_slice(&raw_slots[..n]);
 
         let slot_str_refs: Vec<&str> = slot_strs.iter().map(|s| s.as_str()).collect();
 

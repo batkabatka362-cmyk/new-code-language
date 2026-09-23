@@ -66,7 +66,7 @@ pub fn prune_to_2_4(matrix: &[i8], rows: usize, cols: usize) -> Vec<i8> {
 
 /// Compress a 2:4 compliant matrix into packed values and 2-bit coordinate metadata
 pub fn compress_2_4_matrix(matrix: &[i8], rows: usize, cols: usize) -> Result<Compressed2_4, String> {
-    if cols % 4 != 0 {
+    if !cols.is_multiple_of(4) {
         return Err(format!("Matrix columns ({}) must be a multiple of 4 for 2:4 structural sparsity", cols));
     }
 

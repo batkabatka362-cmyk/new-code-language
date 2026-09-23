@@ -16,6 +16,12 @@ pub struct ReplSession {
     pub step_count: usize,
 }
 
+impl Default for ReplSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReplSession {
     pub fn new() -> Self {
         Self {

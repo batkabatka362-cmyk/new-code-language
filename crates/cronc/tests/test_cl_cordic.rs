@@ -4,7 +4,7 @@ use cronc::{
     run_cordic, synthesize_cordic_cl, verify_cl_program, run_cl_jit,
     CordicConfig, CordicMode,
 };
-use std::f64::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4, FRAC_PI_6, PI};
+use std::f64::consts::{FRAC_1_SQRT_2, FRAC_PI_2, FRAC_PI_3, FRAC_PI_4, FRAC_PI_6, PI};
 
 #[test]
 fn test_cordic_sin_cos_accuracy() {
@@ -155,7 +155,7 @@ fn test_cordic_bloch_sphere_and_telemetry() {
     assert!(sphere_ascii.contains("Spherical Angles"));
     assert!(sphere_ascii.contains("Cartesian Vector"));
 
-    let orbit_ascii = render_ascii_phase_orbit(&[(1.0, 0.0), (0.7071, 0.7071)]);
+    let orbit_ascii = render_ascii_phase_orbit(&[(1.0, 0.0), (FRAC_1_SQRT_2, FRAC_1_SQRT_2)]);
     assert!(orbit_ascii.contains("Phase-Space Coordinate Trajectory"));
 
     let config = CordicConfig {

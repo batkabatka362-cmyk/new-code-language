@@ -91,7 +91,7 @@ B0001: _SM07$100> _SS08@200> _NO00#000> _HL00!000>
         "SiLU output mismatch: actual {}, expected {}", actual_silu, expected_silu);
 
     // Verify GELU:
-    let inner = 0.7978845608f32 * (val_x + 0.044715f32 * val_x * val_x * val_x);
+    let inner = 0.797_884_6_f32 * (val_x + 0.044715f32 * val_x * val_x * val_x);
     let expected_gelu = 0.5f32 * val_x * (1.0f32 + inner.tanh());
     let actual_gelu = f32::from_bits(core.r[6]);
     assert!((actual_gelu - expected_gelu).abs() < 1e-4,

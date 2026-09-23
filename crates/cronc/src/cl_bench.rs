@@ -248,7 +248,7 @@ fn render_ascii_roofline(kernel_oi: f64, kernel_gflops: f64) -> String {
     let marker_line = if is_compute {
         format!("   80 GFLOPs |---------------------------------[*]-------- Peak Silicon Ceiling (80.0 GFLOPs) <- Operating Point ({:.2} GFLOPs)\n", kernel_gflops)
     } else {
-        format!("   80 GFLOPs |------------------------------------------- Peak Silicon Ceiling (80.0 GFLOPs)\n")
+        "   80 GFLOPs |------------------------------------------- Peak Silicon Ceiling (80.0 GFLOPs)\n".to_string()
     };
 
     chart.push_str(&marker_line);
@@ -260,7 +260,7 @@ fn render_ascii_roofline(kernel_oi: f64, kernel_gflops: f64) -> String {
         chart.push_str("             |                             /             \n");
     }
     chart.push_str("   40 GFLOPs |                            /              \n");
-    if !is_compute && kernel_gflops < 30.0 && kernel_gflops >= 10.0 {
+    if !is_compute && (10.0..30.0).contains(&kernel_gflops) {
         chart.push_str(&format!("             |               [*]         /               <- Operating Point ({:.2} GFLOPs)\n", kernel_gflops));
     } else {
         chart.push_str("             |                          /                \n");

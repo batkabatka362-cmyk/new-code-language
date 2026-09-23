@@ -38,7 +38,7 @@ fn test_vision_patch_extraction_and_shapes() {
     for patch in &patches {
         assert_eq!(patch.len(), expected_patch_dim);
         for &val in patch {
-            assert!(val >= -1.0 && val <= 1.0, "Normalized values must fall in [-1.0, 1.0]");
+            assert!((-1.0..=1.0).contains(&val), "Normalized values must fall in [-1.0, 1.0]");
         }
     }
 }
@@ -90,9 +90,9 @@ fn test_audio_stft_and_mel_filterbank() {
     // Synthesize 1-second 440 Hz test tone at 16 kHz
     let num_samples = 16000;
     let mut pcm = vec![0.0f32; num_samples];
-    for i in 0..num_samples {
+    for (i, sample) in pcm.iter_mut().enumerate() {
         let t = i as f32 / config.sample_rate as f32;
-        pcm[i] = (2.0 * std::f32::consts::PI * 440.0 * t).sin() * 0.8;
+        *sample = (2.0 * std::f32::consts::PI * 440.0 * t).sin() * 0.8;
     }
 
     let mel_frames = AudioSpectrogramProcessor::compute_mel_spectrogram(&pcm, &config);

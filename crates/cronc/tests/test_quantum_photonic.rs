@@ -77,8 +77,8 @@ fn test_quantum_ghz_state_three_qubit() {
     assert!((probs[7] - 0.5).abs() < 1e-10, "P(|111>) must be 0.5");
 
     // All intermediate basis states should have 0 probability
-    for i in 1..7 {
-        assert!(probs[i] < 1e-12, "P(|{:03b}>) must be 0", i);
+    for (i, &p) in probs.iter().enumerate().take(7).skip(1) {
+        assert!(p < 1e-12, "P(|{:03b}>) must be 0", i);
     }
 
     assert_eq!(report.num_qubits, 3);

@@ -489,7 +489,7 @@ pub fn render_ascii_router_hud(sim: &NoCRouterSimulation) -> String {
                 out.push_str("  ·  │");
             }
         }
-        out.push_str("\n");
+        out.push('\n');
     }
     out.push_str("  ─────────────────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┴────\n\n");
 
@@ -499,7 +499,7 @@ pub fn render_ascii_router_hud(sim: &NoCRouterSimulation) -> String {
     out.push_str(&format!("  Total Flits Injected:    {} flits (128-bit payload)\n", sim.total_flits_injected));
     out.push_str(&format!("  Total Flits Traversed:   {} crossbar switches\n", sim.total_flits_traversed));
     out.push_str(&format!("  Total Flits Ejected:     {} delivered to core\n", sim.total_flits_ejected));
-    out.push_str(&format!("  Peak Aggregate BW:       360.00 GB/s (9 Ports x 16 Bytes x 2.5 GHz)\n"));
+    out.push_str("  Peak Aggregate BW:       360.00 GB/s (9 Ports x 16 Bytes x 2.5 GHz)\n");
     out.push_str(&format!("  Active Traversal BW:     {:.2} GB/s aggregate\n", throughput_gbps));
     out.push_str("───────────────────────────────────────────────────────────────────────────────\n");
 

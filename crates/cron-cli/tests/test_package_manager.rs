@@ -241,3 +241,43 @@ fn test_libcr_vision_audio_collectives_compilation() {
     let vliw_coll = compile_source(&collectives_code);
     assert!(vliw_coll.is_ok(), "collectives.cr must compile cleanly: {:?}", vliw_coll.err());
 }
+
+#[test]
+fn test_package_search_and_new_libs() {
+    let registry = PackageRegistry::new();
+
+    // 1. Search math
+    let math_results = registry.search_packages("math");
+    assert_eq!(math_results.len(), 1);
+    assert_eq!(math_results[0].name, "cron/math");
+
+    // 2. Search kv
+    let kv_results = registry.search_packages("kv");
+    assert_eq!(kv_results.len(), 1);
+    assert_eq!(kv_results[0].name, "cron/kv");
+
+    // 3. Search common query
+    let all = registry.search_packages("");
+    assert!(all.len() >= 7);
+
+    // 4. Verify compilation of new libraries
+    let (math_path, kv_path) = if Path::new("libcr").exists() {
+        (
+            Path::new("libcr/math/math.cr").to_path_buf(),
+            Path::new("libcr/kv/kv_cache.cr").to_path_buf(),
+        )
+    } else {
+        (
+            Path::new("../../libcr/math/math.cr").to_path_buf(),
+            Path::new("../../libcr/kv/kv_cache.cr").to_path_buf(),
+        )
+    };
+
+    let math_code = fs::read_to_string(&math_path).expect("Read math.cr");
+    let vliw_math = compile_source(&math_code);
+    assert!(vliw_math.is_ok(), "math.cr must compile cleanly: {:?}", vliw_math.err());
+
+    let kv_code = fs::read_to_string(&kv_path).expect("Read kv_cache.cr");
+    let vliw_kv = compile_source(&kv_code);
+    assert!(vliw_kv.is_ok(), "kv_cache.cr must compile cleanly: {:?}", vliw_kv.err());
+}

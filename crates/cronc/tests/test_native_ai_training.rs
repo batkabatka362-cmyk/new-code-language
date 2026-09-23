@@ -51,7 +51,7 @@ fn test_native_ai_training_pipeline_convergence() {
     fs::write(&c_file, &c_code).expect("Failed to write temporary C file");
 
     let compile_status = Command::new("gcc")
-        .args(&[
+        .args([
             "-O3",
             c_file.to_str().unwrap(),
             "-o",

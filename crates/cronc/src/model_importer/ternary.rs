@@ -70,7 +70,7 @@ pub fn quantize_to_ternary(weights: &[f32]) -> (Vec<i8>, TernaryQuantParams) {
 ///   11: -1
 ///   10: Reserved (treated as 0)
 pub fn pack_ternary_2bit(ternary: &[i8]) -> Vec<u8> {
-    let num_bytes = (ternary.len() + 3) / 4;
+    let num_bytes = ternary.len().div_ceil(4);
     let mut packed = Vec::with_capacity(num_bytes);
 
     for chunk in ternary.chunks(4) {
@@ -152,7 +152,7 @@ pub fn ternary_gemv(
     in_features: usize,
     out_features: usize,
 ) {
-    let row_bytes = (in_features + 3) / 4;
+    let row_bytes = in_features.div_ceil(4);
     assert_eq!(scales.len(), out_features);
     assert!(packed_matrix.len() >= out_features * row_bytes);
     assert_eq!(out.len(), out_features);

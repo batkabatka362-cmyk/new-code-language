@@ -67,8 +67,10 @@ fn test_vibe_loop_syntax_error_diagnostics_and_recommendations() {
     // Unrepairable invalid prefix and unknown opcode
     let invalid_source = "B0000: ^ZZ99$999> _NO00#000> _NO00#000> _NO00#000>\n";
 
-    let mut config = VibeLoopConfig::default();
-    config.auto_heal = false; // Disable auto heal to test raw diagnostic reporting
+    let config = VibeLoopConfig {
+        auto_heal: false, // Disable auto heal to test raw diagnostic reporting
+        ..Default::default()
+    };
 
     let result = run_vibe_loop(invalid_source, &config);
 

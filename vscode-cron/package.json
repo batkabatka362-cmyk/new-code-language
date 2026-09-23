@@ -1,8 +1,8 @@
 {
   "name": "cron-lang",
   "displayName": "CRON Cognitive Language Support",
-  "description": "Language support, syntax highlighting, and LSP 3.17 engine for CRON (.cr) & CRON Low-Level (.cl) 256-Core 4D-Torus Processor",
-  "version": "1.0.0",
+  "description": "Language support, syntax highlighting, snippets, and LSP 3.17 engine for CRON (.cr) & CRON Low-Level (.cl) 256-Core 4D-Torus Processor",
+  "version": "1.1.0",
   "publisher": "cron-ai",
   "engines": {
     "vscode": "^1.80.0"
@@ -44,7 +44,25 @@
         "path": "./syntaxes/cron-cl.tmLanguage.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "cron",
+        "path": "./snippets/cron.json"
+      },
+      {
+        "language": "cron-cl",
+        "path": "./snippets/cron-cl.json"
+      }
+    ],
     "commands": [
+      {
+        "command": "cron.quickMenu",
+        "title": "CRON: Open Quick Command Palette"
+      },
+      {
+        "command": "cron.check",
+        "title": "CRON: Check Linear Types & Syntax"
+      },
       {
         "command": "cron.buildC23",
         "title": "CRON: Compile .cr to C23"
@@ -52,6 +70,10 @@
       {
         "command": "cron.runNative",
         "title": "CRON: Execute Native Host Binary"
+      },
+      {
+        "command": "cron.verifySafety",
+        "title": "CRON: Verify Landauer Thermodynamics & Deadlock Safety"
       },
       {
         "command": "cron.healCl",
@@ -64,8 +86,64 @@
       {
         "command": "cron.runJitCl",
         "title": "CRON .cl: Execute Machine Code on JIT Simulator"
+      },
+      {
+        "command": "cron.clPerf",
+        "title": "CRON .cl: Benchmark Silicon Roofline & TOPS/W"
+      },
+      {
+        "command": "cron.clVcd",
+        "title": "CRON .cl: Generate Digital Logic VCD Waveform"
+      },
+      {
+        "command": "cron.openSwarmTui",
+        "title": "CRON: Launch 256-Core Swarm Silicon TUI Monitor"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "cron.check",
+          "when": "editorLangId == cron",
+          "group": "cron_group@1"
+        },
+        {
+          "command": "cron.runNative",
+          "when": "editorLangId == cron",
+          "group": "cron_group@2"
+        },
+        {
+          "command": "cron.buildC23",
+          "when": "editorLangId == cron",
+          "group": "cron_group@3"
+        },
+        {
+          "command": "cron.verifySafety",
+          "when": "editorLangId == cron || editorLangId == cron-cl",
+          "group": "cron_group@4"
+        },
+        {
+          "command": "cron.runJitCl",
+          "when": "editorLangId == cron-cl",
+          "group": "cron_group@1"
+        },
+        {
+          "command": "cron.healCl",
+          "when": "editorLangId == cron-cl",
+          "group": "cron_group@2"
+        },
+        {
+          "command": "cron.optCl",
+          "when": "editorLangId == cron-cl",
+          "group": "cron_group@3"
+        },
+        {
+          "command": "cron.clPerf",
+          "when": "editorLangId == cron-cl",
+          "group": "cron_group@4"
+        }
+      ]
+    },
     "configuration": {
       "title": "CRON Language Support",
       "properties": {

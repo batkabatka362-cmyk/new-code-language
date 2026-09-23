@@ -144,9 +144,7 @@ impl WorkloadBalancePlan {
 /// Auto-derive optimal TP, PP, DP strategy for a given core count and layer count
 pub fn derive_optimal_strategy(cores: usize, layers: usize) -> ParallelismStrategy {
     if cores == 256 {
-        if layers >= 32 {
-            ParallelismStrategy::new(8, 4, 8)
-        } else if layers >= 16 {
+        if layers >= 16 {
             ParallelismStrategy::new(8, 4, 8)
         } else if layers >= 8 {
             ParallelismStrategy::new(16, 2, 8)
@@ -190,7 +188,7 @@ pub fn balance_workload(config: &BalanceConfig) -> Result<WorkloadBalancePlan, S
         None => derive_optimal_strategy(config.total_cores, config.layers),
     };
 
-    let layers_per_stage = (config.layers + strategy.pp - 1) / strategy.pp;
+    let layers_per_stage = config.layers.div_ceil(strategy.pp);
     let m = config.tensor_m as f64;
     let k = config.tensor_k as f64;
     let n = config.tensor_n as f64;

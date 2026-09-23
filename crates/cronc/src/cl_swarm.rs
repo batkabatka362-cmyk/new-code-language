@@ -118,10 +118,10 @@ impl DimensionOrderRouter {
         c1: (usize, usize, usize, usize),
         c2: (usize, usize, usize, usize),
     ) -> usize {
-        let dx = (c1.0 as isize - c2.0 as isize).abs() as usize;
-        let dy = (c1.1 as isize - c2.1 as isize).abs() as usize;
-        let dz = (c1.2 as isize - c2.2 as isize).abs() as usize;
-        let dw = (c1.3 as isize - c2.3 as isize).abs() as usize;
+        let dx = (c1.0 as isize - c2.0 as isize).unsigned_abs();
+        let dy = (c1.1 as isize - c2.1 as isize).unsigned_abs();
+        let dz = (c1.2 as isize - c2.2 as isize).unsigned_abs();
+        let dw = (c1.3 as isize - c2.3 as isize).unsigned_abs();
 
         let wrap = |d: usize| d.min(4 - d);
         wrap(dx) + wrap(dy) + wrap(dz) + wrap(dw)

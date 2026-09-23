@@ -160,7 +160,7 @@ def main() -> int {
     fs::write(&temp_c, &c_code).expect("Failed to write temporary C source");
 
     let gcc_status = Command::new("gcc")
-        .args(&[
+        .args([
             "-O2",
             "-std=c2x",
             temp_c.to_str().unwrap(),

@@ -20,7 +20,7 @@ fn get_attention_cl_path() -> String {
 fn test_cli_cl_run_execution() {
     let cl_path = get_attention_cl_path();
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-run", &cl_path])
+        .args(["cl-run", &cl_path])
         .output()
         .expect("Failed to execute cron cl-run");
 
@@ -39,7 +39,7 @@ fn test_cli_cl_llvm_transpilation() {
     let out_ll = temp_dir.join("test_cl_transpile.ll");
 
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-llvm", &cl_path, "-o", out_ll.to_str().unwrap()])
+        .args(["cl-llvm", &cl_path, "-o", out_ll.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-llvm");
 
@@ -59,7 +59,7 @@ fn test_cli_cl_verilog_synthesis() {
     let out_v = temp_dir.join("test_cl_core.v");
 
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-verilog", &cl_path, "-o", out_v.to_str().unwrap()])
+        .args(["cl-verilog", &cl_path, "-o", out_v.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-verilog");
 
@@ -85,7 +85,7 @@ fn test_cli_cl_heal_and_opt() {
 
     // 1. Run cl-heal
     let heal_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-heal", broken_file.to_str().unwrap(), "-o", healed_file.to_str().unwrap()])
+        .args(["cl-heal", broken_file.to_str().unwrap(), "-o", healed_file.to_str().unwrap()])
         .output()
         .expect("Failed to execute cl-heal");
     assert!(heal_out.status.success());
@@ -95,7 +95,7 @@ fn test_cli_cl_heal_and_opt() {
 
     // 2. Run cl-opt
     let opt_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-opt", healed_file.to_str().unwrap(), "-o", opt_file.to_str().unwrap()])
+        .args(["cl-opt", healed_file.to_str().unwrap(), "-o", opt_file.to_str().unwrap()])
         .output()
         .expect("Failed to execute cl-opt");
     assert!(opt_out.status.success());
@@ -112,7 +112,7 @@ fn test_cli_cl_direct_verify_and_flash() {
 
     // Verify directly on .cl
     let verify_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["verify", &cl_path])
+        .args(["verify", &cl_path])
         .output()
         .expect("Failed to run verify on .cl");
     assert!(verify_out.status.success());
@@ -124,7 +124,7 @@ fn test_cli_cl_direct_verify_and_flash() {
     let temp_dir = std::env::temp_dir();
     let deploy_dir = temp_dir.join("test_cl_deploy_output");
     let flash_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "flash",
             &cl_path,
             "--target",
@@ -150,7 +150,7 @@ fn test_cli_vibe_spec_and_schema() {
 
     // 1. Test vibe-spec --format prompt
     let spec_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["vibe-spec", "--format", "prompt", "-o", spec_file.to_str().unwrap()])
+        .args(["vibe-spec", "--format", "prompt", "-o", spec_file.to_str().unwrap()])
         .output()
         .expect("Failed to execute vibe-spec");
     assert!(spec_out.status.success());
@@ -160,7 +160,7 @@ fn test_cli_vibe_spec_and_schema() {
 
     // 2. Test cl-schema
     let schema_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-schema", "-o", schema_file.to_str().unwrap()])
+        .args(["cl-schema", "-o", schema_file.to_str().unwrap()])
         .output()
         .expect("Failed to execute cl-schema");
     assert!(schema_out.status.success());
@@ -184,7 +184,7 @@ fn test_cli_cl_link_multicore_pipeline() {
     let out_v = temp_dir.join("pipeline_top.v");
 
     let link_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-link",
             pipeline_cl.to_str().unwrap(),
             "-o",
@@ -221,7 +221,7 @@ fn test_cli_vibe_loop_json_and_inline() {
 
     // 1. Test vibe-loop on file with --json output
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["vibe-loop", pipeline_cl.to_str().unwrap(), "--json"])
+        .args(["vibe-loop", pipeline_cl.to_str().unwrap(), "--json"])
         .output()
         .expect("Failed to execute cron vibe-loop --json");
 
@@ -234,7 +234,7 @@ fn test_cli_vibe_loop_json_and_inline() {
 
     // 2. Test vibe-loop with inline code (--code)
     let inline_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "vibe-loop",
             "--code",
             "B0000: '==01#00A> _NO00#000> _NO00#000> _NO00#000>\nB0001: _OP01$28F> _NO00#000> _NO00#000> _HL00#000!",
@@ -257,7 +257,7 @@ fn test_cli_cl_cosim_trace_and_json() {
 
     // 1. Test cl-cosim with ASCII trace HUD
     let trace_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-cosim", kernel_cl.to_str().unwrap(), "--trace"])
+        .args(["cl-cosim", kernel_cl.to_str().unwrap(), "--trace"])
         .output()
         .expect("Failed to execute cron cl-cosim --trace");
 
@@ -270,7 +270,7 @@ fn test_cli_cl_cosim_trace_and_json() {
 
     // 2. Test cl-cosim with pure JSON telemetry
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-cosim", kernel_cl.to_str().unwrap(), "--json"])
+        .args(["cl-cosim", kernel_cl.to_str().unwrap(), "--json"])
         .output()
         .expect("Failed to execute cron cl-cosim --json");
 
@@ -289,7 +289,7 @@ fn test_cli_cl_opt_level2_dag() {
     let kernel_cl = manifest_dir.join("../../examples/cl/mini_transformer_attention.cl");
 
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-opt", kernel_cl.to_str().unwrap(), "--level", "2"])
+        .args(["cl-opt", kernel_cl.to_str().unwrap(), "--level", "2"])
         .output()
         .expect("Failed to execute cron cl-opt --level 2");
 
@@ -308,7 +308,7 @@ fn test_cli_cl_memcheck_verification() {
 
     // 1. Test cl-memcheck with ASCII Report
     let ascii_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-memcheck", kernel_cl.to_str().unwrap()])
+        .args(["cl-memcheck", kernel_cl.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-memcheck");
 
@@ -321,7 +321,7 @@ fn test_cli_cl_memcheck_verification() {
 
     // 2. Test cl-memcheck with JSON telemetry
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-memcheck", kernel_cl.to_str().unwrap(), "--json"])
+        .args(["cl-memcheck", kernel_cl.to_str().unwrap(), "--json"])
         .output()
         .expect("Failed to execute cron cl-memcheck --json");
 
@@ -341,7 +341,7 @@ fn test_cli_cl_memcheck_verification() {
     fs::write(&conflict_file, conflict_cl).unwrap();
 
     let strict_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-memcheck", conflict_file.to_str().unwrap(), "--no-swizzle", "--strict"])
+        .args(["cl-memcheck", conflict_file.to_str().unwrap(), "--no-swizzle", "--strict"])
         .output()
         .expect("Failed to execute cron cl-memcheck --strict");
 
@@ -356,7 +356,7 @@ fn test_cli_cl_memcheck_verification() {
 fn test_cli_cl_fuzz_resilience() {
     // 1. Run cl-fuzz with ASCII output
     let ascii_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-fuzz", "--iterations", "100", "--seed", "0x12345678"])
+        .args(["cl-fuzz", "--iterations", "100", "--seed", "0x12345678"])
         .output()
         .expect("Failed to execute cron cl-fuzz");
 
@@ -368,7 +368,7 @@ fn test_cli_cl_fuzz_resilience() {
 
     // 2. Run cl-fuzz with pure JSON output
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-fuzz", "--iterations", "50", "--json"])
+        .args(["cl-fuzz", "--iterations", "50", "--json"])
         .output()
         .expect("Failed to execute cron cl-fuzz --json");
 
@@ -386,7 +386,7 @@ fn test_cli_cl_bench_roofline() {
 
     // 1. Run cl-bench with ASCII Roofline graph
     let ascii_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-bench", kernel_cl.to_str().unwrap()])
+        .args(["cl-bench", kernel_cl.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-bench");
 
@@ -400,7 +400,7 @@ fn test_cli_cl_bench_roofline() {
 
     // 2. Run cl-bench with JSON telemetry
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-bench", kernel_cl.to_str().unwrap(), "--json"])
+        .args(["cl-bench", kernel_cl.to_str().unwrap(), "--json"])
         .output()
         .expect("Failed to execute cron cl-bench --json");
 
@@ -417,7 +417,7 @@ fn test_cli_cl_bench_roofline() {
 fn test_cli_cl_kernel_synthesis() {
     // 1. Test cl-kernel list catalog
     let list_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-kernel", "list"])
+        .args(["cl-kernel", "list"])
         .output()
         .expect("Failed to execute cron cl-kernel list");
 
@@ -436,7 +436,7 @@ fn test_cli_cl_kernel_synthesis() {
     let out_cl = temp_dir.join("test_synth_flash_attn.cl");
 
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-kernel", "flash-attn", "-o", out_cl.to_str().unwrap()])
+        .args(["cl-kernel", "flash-attn", "-o", out_cl.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-kernel flash-attn");
 
@@ -465,7 +465,7 @@ fn test_cli_cl_native_compilation() {
     let out_bin = temp_dir.join(if cfg!(windows) { "test_cli_native_attn.exe" } else { "test_cli_native_attn" });
 
     let native_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-native", kernel_cl.to_str().unwrap(), "-o", out_bin.to_str().unwrap(), "--run"])
+        .args(["cl-native", kernel_cl.to_str().unwrap(), "-o", out_bin.to_str().unwrap(), "--run"])
         .output()
         .expect("Failed to execute cron cl-native");
 
@@ -486,7 +486,7 @@ fn test_cli_cl_tile_gemm_and_conv() {
 
     // 1. Run cl-tile gemm
     let tile_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-tile",
             "gemm",
             "--m",
@@ -511,7 +511,7 @@ fn test_cli_cl_tile_gemm_and_conv() {
 
     // 2. Run cl-tile conv with --json
     let conv_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-tile",
             "conv",
             "--cin",
@@ -532,7 +532,7 @@ fn test_cli_cl_tile_gemm_and_conv() {
 
     // 3. Run cl-tile gemm with --systolic and --cr
     let sys_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-tile",
             "gemm",
             "--m",
@@ -558,7 +558,7 @@ fn test_cli_cl_tile_gemm_and_conv() {
 fn test_cli_cl_cluster_topology_and_collective() {
     // 1. Test cl-cluster topology
     let top_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-cluster", "topology", "--chips", "4"])
+        .args(["cl-cluster", "topology", "--chips", "4"])
         .output()
         .expect("Failed to execute cron cl-cluster topology");
 
@@ -572,7 +572,7 @@ fn test_cli_cl_cluster_topology_and_collective() {
     let col_cl = temp_dir.join("test_cli_allreduce.cl");
 
     let col_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-cluster",
             "collective",
             "allreduce",
@@ -602,7 +602,7 @@ fn test_cli_cl_sparse() {
 
     // 1. Synthesize 2:4 sparse kernel
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-sparse",
             "kernel",
             "--m",
@@ -624,7 +624,7 @@ fn test_cli_cl_sparse() {
 
     // 2. Test cl-sparse analyze
     let analyze_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-sparse", "analyze", "--json"])
+        .args(["cl-sparse", "analyze", "--json"])
         .output()
         .expect("Failed to execute cron cl-sparse analyze");
 
@@ -642,7 +642,7 @@ fn test_cli_cl_power() {
 
     // 1. Run cl-power ASCII report
     let power_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-power",
             kernel_cl.to_str().unwrap(),
             "--temp",
@@ -661,7 +661,7 @@ fn test_cli_cl_power() {
 
     // 2. Run cl-power JSON telemetry
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-power",
             kernel_cl.to_str().unwrap(),
             "--json",
@@ -682,7 +682,7 @@ fn test_cli_cl_autotune() {
 
     // 1. Run cl-autotune with file output
     let tune_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-autotune",
             "--m",
             "32",
@@ -708,7 +708,7 @@ fn test_cli_cl_autotune() {
 
     // 2. Run cl-autotune JSON mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-autotune",
             "--m",
             "16",
@@ -736,7 +736,7 @@ fn test_cli_cl_stream() {
 
     // 1. Run cl-stream vision
     let stream_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-stream",
             "vision",
             "--dim",
@@ -757,7 +757,7 @@ fn test_cli_cl_stream() {
 
     // 2. Run cl-stream audio JSON mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-stream",
             "audio",
             "--bands",
@@ -784,7 +784,7 @@ fn test_cli_cl_snn() {
 
     // 1. Run cl-snn synth
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-snn",
             "synth",
             "--neurons",
@@ -802,7 +802,7 @@ fn test_cli_cl_snn() {
 
     // 2. Run cl-snn sim (ASCII raster mode)
     let sim_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-snn",
             "sim",
             "--neurons",
@@ -820,7 +820,7 @@ fn test_cli_cl_snn() {
 
     // 3. Run cl-snn sim JSON mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-snn",
             "sim",
             "--neurons",
@@ -847,7 +847,7 @@ fn test_cli_cl_infer() {
 
     // 1. Run cl-infer synth
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-infer",
             "synth",
             "--dim",
@@ -867,7 +867,7 @@ fn test_cli_cl_infer() {
 
     // 2. Run cl-infer prompt (ASCII dashboard mode)
     let prompt_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-infer",
             "prompt",
             "CRON",
@@ -889,7 +889,7 @@ fn test_cli_cl_infer() {
 
     // 3. Run cl-infer prompt JSON mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-infer",
             "prompt",
             "AI",
@@ -915,7 +915,7 @@ fn test_cli_cl_infer() {
 #[test]
 fn test_cli_lsp_server_version() {
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["lsp", "--version"])
+        .args(["lsp", "--version"])
         .output()
         .expect("Failed to execute cron lsp --version");
 
@@ -932,7 +932,7 @@ fn test_cli_cl_cordic() {
 
     // 1. Test circular rotation
     let rot_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-cordic",
             "rot",
             "--angle",
@@ -951,7 +951,7 @@ fn test_cli_cl_cordic() {
 
     // 2. Test circular rotation JSON mode
     let rot_json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-cordic",
             "rot",
             "--angle",
@@ -970,7 +970,7 @@ fn test_cli_cl_cordic() {
 
     // 3. Test circular vectoring
     let vec_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-cordic",
             "vec",
             "--x",
@@ -990,7 +990,7 @@ fn test_cli_cl_cordic() {
 
     // 4. Test microcode synthesis to file
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-cordic",
             "synth",
             "--iters",
@@ -1008,7 +1008,7 @@ fn test_cli_cl_cordic() {
 
     // 5. Test Bloch sphere rendering
     let sphere_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-cordic",
             "sphere",
             "--theta",
@@ -1034,7 +1034,7 @@ fn test_cli_cl_vcd() {
 
     // 1. Run cl-vcd with ASCII timing diagram and VCD file emission
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-vcd",
             &cl_path,
             "-o",
@@ -1060,7 +1060,7 @@ fn test_cli_cl_vcd() {
 
     // 2. Run cl-vcd with JSON mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-vcd",
             &cl_path,
             "--json",
@@ -1083,7 +1083,7 @@ fn test_cli_cl_perf() {
 
     // 1. Profile single kernel
     let single_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-perf",
             &cl_path,
         ])
@@ -1099,7 +1099,7 @@ fn test_cli_cl_perf() {
 
     // 2. Profile entire golden suite
     let suite_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-perf",
             "--all",
         ])
@@ -1115,7 +1115,7 @@ fn test_cli_cl_perf() {
 
     // 3. Profile entire golden suite JSON mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-perf",
             "--all",
             "--json",
@@ -1134,7 +1134,7 @@ fn test_cli_cl_perf() {
 fn test_cli_cl_balance() {
     // 1. Default ASCII heatmap run
     let default_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-balance",
         ])
         .output()
@@ -1152,7 +1152,7 @@ fn test_cli_cl_balance() {
     let out_bundle = temp_dir.join("test_cli_balance_bundle.cl");
 
     let custom_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-balance",
             "--m", "1024",
             "--k", "2048",
@@ -1179,7 +1179,7 @@ fn test_cli_cl_balance() {
 
     // 3. JSON serialization mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-balance",
             "--json",
         ])
@@ -1200,7 +1200,7 @@ fn test_cli_cl_trace() {
 
     // 1. Default ASCII schedule run
     let default_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-trace",
             &cl_path,
         ])
@@ -1219,7 +1219,7 @@ fn test_cli_cl_trace() {
     let out_cl = temp_dir.join("test_cli_trace_opt.cl");
 
     let file_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-trace",
             &cl_path,
             "--cache-kb", "32",
@@ -1240,7 +1240,7 @@ fn test_cli_cl_trace() {
 
     // 3. JSON serialization mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-trace",
             &cl_path,
             "--json",
@@ -1259,7 +1259,7 @@ fn test_cli_cl_trace() {
 fn test_cli_cl_router() {
     // 1. Inspect command with HUD rendering
     let inspect_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-router",
             "inspect",
         ])
@@ -1277,7 +1277,7 @@ fn test_cli_cl_router() {
     let out_v = temp_dir.join("test_cli_noc_router.v");
 
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-router",
             "synth",
             "-o", out_v.to_str().unwrap(),
@@ -1298,7 +1298,7 @@ fn test_cli_cl_router() {
 
     // 3. JSON serialization mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-router",
             "inspect",
             "--json",
@@ -1317,7 +1317,7 @@ fn test_cli_cl_router() {
 fn test_cli_cl_esoteric() {
     // 1. Demo mode HUD
     let demo_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-esoteric", "demo"])
+        .args(["cl-esoteric", "demo"])
         .output()
         .expect("Failed to execute cron cl-esoteric demo");
 
@@ -1333,7 +1333,7 @@ fn test_cli_cl_esoteric() {
     let temp_dir = std::env::temp_dir();
     let out_v = temp_dir.join("test_cli_esoteric_coproc.v");
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-esoteric", "synth", "-o", out_v.to_str().unwrap()])
+        .args(["cl-esoteric", "synth", "-o", out_v.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-esoteric synth");
 
@@ -1350,7 +1350,7 @@ fn test_cli_cl_esoteric() {
 
     // 3. JSON serialization mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-esoteric", "demo", "--json"])
+        .args(["cl-esoteric", "demo", "--json"])
         .output()
         .expect("Failed to execute cron cl-esoteric demo --json");
 
@@ -1368,7 +1368,7 @@ fn test_cli_cl_optic() {
 
     // 1. ASCII HUD mode
     let hud_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-optic", kernel_cl.to_str().unwrap()])
+        .args(["cl-optic", kernel_cl.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-optic");
 
@@ -1380,7 +1380,7 @@ fn test_cli_cl_optic() {
 
     // 2. JSON Mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-optic", kernel_cl.to_str().unwrap(), "--json"])
+        .args(["cl-optic", kernel_cl.to_str().unwrap(), "--json"])
         .output()
         .expect("Failed to execute cron cl-optic --json");
 
@@ -1396,7 +1396,7 @@ fn test_cli_cl_optic() {
     let out_v = temp_dir.join("test_optical_controller.v");
 
     let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-optic", kernel_cl.to_str().unwrap(), "--synth-verilog", "-o", out_v.to_str().unwrap()])
+        .args(["cl-optic", kernel_cl.to_str().unwrap(), "--synth-verilog", "-o", out_v.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-optic --synth-verilog");
 
@@ -1419,7 +1419,7 @@ fn test_cli_cl_patch() {
 
     // 1. Create a patch package
     let create_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-patch", "create", kernel_cl.to_str().unwrap(),
             "--cycle", "1",
             "--bundle", "_OP01$28F> _NO00#000> _NO00#000> _NO00#000>",
@@ -1434,7 +1434,7 @@ fn test_cli_cl_patch() {
 
     // 2. Inspect the patch package
     let inspect_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-patch", "inspect", patch_file.to_str().unwrap()])
+        .args(["cl-patch", "inspect", patch_file.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-patch inspect");
 
@@ -1445,7 +1445,7 @@ fn test_cli_cl_patch() {
 
     // 3. Apply the patch package to .cl file
     let apply_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "cl-patch", "apply", kernel_cl.to_str().unwrap(),
             patch_file.to_str().unwrap(),
             "-o", patched_cl.to_str().unwrap()
@@ -1467,7 +1467,7 @@ fn test_cli_cl_patch() {
 fn test_cli_cl_compare() {
     // 1. Run cl-compare in text HUD mode
     let hud_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-compare", "all"])
+        .args(["cl-compare", "all"])
         .output()
         .expect("Failed to execute cron cl-compare all");
 
@@ -1480,7 +1480,7 @@ fn test_cli_cl_compare() {
 
     // 2. Run cl-compare with JSON mode
     let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-compare", "bitnet", "--json"])
+        .args(["cl-compare", "bitnet", "--json"])
         .output()
         .expect("Failed to execute cron cl-compare bitnet --json");
 
@@ -1496,7 +1496,7 @@ fn test_cli_cl_compare() {
     let whitepaper_path = temp_dir.join("cli_test_whitepaper.md");
 
     let wp_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["cl-compare", "all", "--whitepaper", "-o", whitepaper_path.to_str().unwrap()])
+        .args(["cl-compare", "all", "--whitepaper", "-o", whitepaper_path.to_str().unwrap()])
         .output()
         .expect("Failed to execute cron cl-compare --whitepaper");
 
@@ -1509,7 +1509,7 @@ fn test_cli_cl_compare() {
 
     // 4. Test alias `cron bench`
     let bench_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["bench", "gemm"])
+        .args(["bench", "gemm"])
         .output()
         .expect("Failed to execute cron bench gemm");
     assert!(bench_out.status.success(), "cron bench alias must succeed");
@@ -1521,7 +1521,7 @@ fn test_cli_cl_compare() {
 fn test_cli_swarm_256_and_cluster_4096() {
     // 1. Single-chip 256 core swarm
     let s256_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm", "--task", "Test 256-core consensus", "--json"])
+        .args(["swarm", "--task", "Test 256-core consensus", "--json"])
         .output()
         .expect("Failed to execute cron swarm --json");
     assert!(s256_out.status.success(), "cron swarm --json must exit 0");
@@ -1531,7 +1531,7 @@ fn test_cli_swarm_256_and_cluster_4096() {
 
     // 2. 16-chip 4,096 core multi-chip swarm cluster
     let s4096_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm", "--cluster", "--task", "Test 4096-core cluster consensus", "--json"])
+        .args(["swarm", "--cluster", "--task", "Test 4096-core cluster consensus", "--json"])
         .output()
         .expect("Failed to execute cron swarm --cluster --json");
     assert!(s4096_out.status.success(), "cron swarm --cluster --json must exit 0");
@@ -1545,7 +1545,7 @@ fn test_cli_swarm_256_and_cluster_4096() {
 #[test]
 fn test_cli_swarm_synthesize() {
     let out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "swarm-synthesize",
             "--prompt",
             "Synthesize FlashAttention-2 forward tile",
@@ -1565,7 +1565,7 @@ fn test_cli_swarm_synthesize() {
 fn test_cli_swarm_tui_modes() {
     // 1. Torus Plane mode snapshot
     let out_plane = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm-tui", "--snapshot", "--mode", "plane", "--no-color", "--ticks", "5"])
+        .args(["swarm-tui", "--snapshot", "--mode", "plane", "--no-color", "--ticks", "5"])
         .output()
         .expect("Failed to execute cron swarm-tui --mode plane");
     assert!(out_plane.status.success(), "cron swarm-tui --mode plane must exit 0");
@@ -1574,7 +1574,7 @@ fn test_cli_swarm_tui_modes() {
 
     // 2. Cluster Macro mode snapshot
     let out_cluster = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm-tui", "--snapshot", "--mode", "cluster", "--no-color", "--ticks", "3"])
+        .args(["swarm-tui", "--snapshot", "--mode", "cluster", "--no-color", "--ticks", "3"])
         .output()
         .expect("Failed to execute cron swarm-tui --mode cluster");
     assert!(out_cluster.status.success(), "cron swarm-tui --mode cluster must exit 0");
@@ -1583,7 +1583,7 @@ fn test_cli_swarm_tui_modes() {
 
     // 3. Router Heatmap mode snapshot
     let out_router = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm-tui", "--snapshot", "--mode", "router", "--no-color", "--ticks", "3"])
+        .args(["swarm-tui", "--snapshot", "--mode", "router", "--no-color", "--ticks", "3"])
         .output()
         .expect("Failed to execute cron swarm-tui --mode router");
     assert!(out_router.status.success(), "cron swarm-tui --mode router must exit 0");
@@ -1592,7 +1592,7 @@ fn test_cli_swarm_tui_modes() {
 
     // 4. Swarm Telemetry mode snapshot
     let out_telemetry = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm-tui", "--snapshot", "--mode", "telemetry", "--no-color", "--ticks", "3"])
+        .args(["swarm-tui", "--snapshot", "--mode", "telemetry", "--no-color", "--ticks", "3"])
         .output()
         .expect("Failed to execute cron swarm-tui --mode telemetry");
     assert!(out_telemetry.status.success(), "cron swarm-tui --mode telemetry must exit 0");
@@ -1604,7 +1604,7 @@ fn test_cli_swarm_tui_modes() {
 fn test_cli_monitor_alias_and_swarm_flag() {
     // Test 'cron monitor --snapshot' alias
     let out_mon = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["monitor", "--snapshot", "--no-color", "--ticks", "2"])
+        .args(["monitor", "--snapshot", "--no-color", "--ticks", "2"])
         .output()
         .expect("Failed to execute cron monitor --snapshot");
     assert!(out_mon.status.success(), "cron monitor must exit 0");
@@ -1613,7 +1613,7 @@ fn test_cli_monitor_alias_and_swarm_flag() {
 
     // Test 'cron swarm --tui --snapshot' flag
     let out_swarm_tui = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm", "--tui", "--snapshot", "--no-color", "--ticks", "2"])
+        .args(["swarm", "--tui", "--snapshot", "--no-color", "--ticks", "2"])
         .output()
         .expect("Failed to execute cron swarm --tui --snapshot");
     assert!(out_swarm_tui.status.success(), "cron swarm --tui must exit 0");
@@ -1624,7 +1624,7 @@ fn test_cli_monitor_alias_and_swarm_flag() {
 #[test]
 fn test_cli_swarm_tui_json() {
     let out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm-tui", "--json", "--ticks", "4"])
+        .args(["swarm-tui", "--json", "--ticks", "4"])
         .output()
         .expect("Failed to execute cron swarm-tui --json");
     assert!(out.status.success(), "cron swarm-tui --json must exit 0");
@@ -1638,7 +1638,7 @@ fn test_cli_swarm_tui_json() {
 fn test_cli_mcts_synthesize_hud_and_json() {
     // 1. Terminal HUD mode
     let out_hud = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["mcts-synthesize", "--prompt", "FlashAttention-2 forward tile", "--sims", "40", "--depth", "8"])
+        .args(["mcts-synthesize", "--prompt", "FlashAttention-2 forward tile", "--sims", "40", "--depth", "8"])
         .output()
         .expect("Failed to execute cron mcts-synthesize");
     assert!(out_hud.status.success(), "cron mcts-synthesize must exit 0");
@@ -1649,7 +1649,7 @@ fn test_cli_mcts_synthesize_hud_and_json() {
 
     // 2. JSON mode
     let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["mcts-synthesize", "--prompt", "BitNet Ternary GEMM", "--sims", "30", "--json"])
+        .args(["mcts-synthesize", "--prompt", "BitNet Ternary GEMM", "--sims", "30", "--json"])
         .output()
         .expect("Failed to execute cron mcts-synthesize --json");
     assert!(out_json.status.success(), "cron mcts-synthesize --json must exit 0");
@@ -1663,7 +1663,7 @@ fn test_cli_mcts_synthesize_hud_and_json() {
 fn test_cli_verify_proof_badge_and_json() {
     // 1. ASCII proof badge mode
     let out_badge = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["verify-proof", "--workload", "Attention-Head-0"])
+        .args(["verify-proof", "--workload", "Attention-Head-0"])
         .output()
         .expect("Failed to execute cron verify-proof");
     assert!(out_badge.status.success(), "cron verify-proof must exit 0");
@@ -1675,7 +1675,7 @@ fn test_cli_verify_proof_badge_and_json() {
 
     // 2. JSON certificate mode
     let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["verify-proof", "--workload", "Attention-Head-0", "--json"])
+        .args(["verify-proof", "--workload", "Attention-Head-0", "--json"])
         .output()
         .expect("Failed to execute cron verify-proof --json");
     assert!(out_json.status.success(), "cron verify-proof --json must exit 0");
@@ -1689,7 +1689,7 @@ fn test_cli_verify_proof_badge_and_json() {
 fn test_cli_quantum_sim_bell_hud_and_json() {
     // 1. ASCII HUD mode
     let out_hud = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["quantum-sim", "--qubits", "2", "--bell"])
+        .args(["quantum-sim", "--qubits", "2", "--bell"])
         .output()
         .expect("Failed to execute cron quantum-sim --bell");
     assert!(out_hud.status.success(), "cron quantum-sim --bell must exit 0");
@@ -1701,7 +1701,7 @@ fn test_cli_quantum_sim_bell_hud_and_json() {
 
     // 2. JSON mode
     let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["quantum-sim", "--qubits", "2", "--bell", "--json"])
+        .args(["quantum-sim", "--qubits", "2", "--bell", "--json"])
         .output()
         .expect("Failed to execute cron quantum-sim --json");
     assert!(out_json.status.success(), "cron quantum-sim --json must exit 0");
@@ -1715,7 +1715,7 @@ fn test_cli_quantum_sim_bell_hud_and_json() {
 fn test_cli_quantum_sim_ghz_and_qft() {
     // 1. GHZ 3-qubit state
     let out_ghz = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["quantum-sim", "--qubits", "3", "--ghz", "--json"])
+        .args(["quantum-sim", "--qubits", "3", "--ghz", "--json"])
         .output()
         .expect("Failed to execute cron quantum-sim --ghz");
     assert!(out_ghz.status.success(), "cron quantum-sim --ghz must exit 0");
@@ -1725,7 +1725,7 @@ fn test_cli_quantum_sim_ghz_and_qft() {
 
     // 2. QFT 3-qubit state
     let out_qft = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["quantum-sim", "--qubits", "3", "--qft", "--json"])
+        .args(["quantum-sim", "--qubits", "3", "--qft", "--json"])
         .output()
         .expect("Failed to execute cron quantum-sim --qft");
     assert!(out_qft.status.success(), "cron quantum-sim --qft must exit 0");
@@ -1738,7 +1738,7 @@ fn test_cli_quantum_sim_ghz_and_qft() {
 fn test_cli_wafer_sim() {
     // 1. ASCII HUD mode
     let out_hud = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["wafer-sim", "--task", "Distributed Wafer Attention Synthesis"])
+        .args(["wafer-sim", "--task", "Distributed Wafer Attention Synthesis"])
         .output()
         .expect("Failed to execute cron wafer-sim");
     assert!(out_hud.status.success(), "cron wafer-sim must exit 0");
@@ -1749,7 +1749,7 @@ fn test_cli_wafer_sim() {
 
     // 2. JSON mode
     let out_json = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["wafer-sim", "--task", "Wafer Model Partitioning", "--json"])
+        .args(["wafer-sim", "--task", "Wafer Model Partitioning", "--json"])
         .output()
         .expect("Failed to execute cron wafer-sim --json");
     assert!(out_json.status.success(), "cron wafer-sim --json must exit 0");
@@ -1763,7 +1763,7 @@ fn test_cli_wafer_sim() {
 #[test]
 fn test_cli_swarm_wafer_flag() {
     let out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&["swarm", "--wafer", "--task", "Pipeline Parallelism Swarm Test", "--json"])
+        .args(["swarm", "--wafer", "--task", "Pipeline Parallelism Swarm Test", "--json"])
         .output()
         .expect("Failed to execute cron swarm --wafer");
     assert!(out.status.success(), "cron swarm --wafer must exit 0");

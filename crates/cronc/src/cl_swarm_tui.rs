@@ -207,7 +207,7 @@ impl SwarmTuiModel {
         }
 
         // 2. Occasionally spawn background packet flits
-        if self.tick_count % 3 == 0 && self.packets.len() < 12 {
+        if self.tick_count.is_multiple_of(3) && self.packets.len() < 12 {
             let p_id = self.next_packet_id;
             self.next_packet_id += 1;
             let src_x = (self.tick_count * 3) % 4;
@@ -234,9 +234,9 @@ impl SwarmTuiModel {
         // 3. Modulate router buffer occupancy and crossbar switch
         for port in 0..9 {
             for vc in 0..4 {
-                let delta = if (self.tick_count + port + vc) % 5 == 0 {
+                let delta = if (self.tick_count + port + vc).is_multiple_of(5) {
                     1
-                } else if (self.tick_count + port + vc) % 7 == 0 {
+                } else if (self.tick_count + port + vc).is_multiple_of(7) {
                     if self.router_buffer_occupancy[port][vc] > 0 { 8 } else { 0 }
                 } else {
                     0
@@ -259,7 +259,7 @@ impl SwarmTuiModel {
 
         // 4. Update optical cluster bandwidth modulation
         for chip in 0..16 {
-            let wave = ((self.tick_count as f64 * 0.15 + chip as f64).sin() * 45.0) as f64;
+            let wave = (self.tick_count as f64 * 0.15 + chip as f64).sin() * 45.0;
             self.chip_traffic_gbps[chip] = (200.0 + wave).clamp(50.0, 360.0);
         }
 
@@ -391,11 +391,11 @@ impl SwarmTuiModel {
 
         // Header Banner
         out.push_str(&self.render_header_banner(term_w));
-        out.push_str("\n");
+        out.push('\n');
 
         // View Tabs Navigation
         out.push_str(&self.render_view_tabs(term_w));
-        out.push_str("\n");
+        out.push('\n');
 
         // Primary View Panel
         match self.config.active_view {
@@ -412,7 +412,7 @@ impl SwarmTuiModel {
                 out.push_str(&self.render_tab_swarm_telemetry(term_w));
             }
         }
-        out.push_str("\n");
+        out.push('\n');
 
         // Bottom Telemetry Ticker & Hotkeys Bar
         out.push_str(&self.render_bottom_status_bar(term_w));
@@ -437,14 +437,14 @@ impl SwarmTuiModel {
         let mut s = String::new();
         s.push_str(&self.c("36;1", "╔═"));
         s.push_str(&self.c("1;37", title));
-        s.push_str(" ");
+        s.push(' ');
         s.push_str(&state_badge);
         let used = 2 + title.len() + 1 + 10;
         let pad = if width > used { width - used } else { 2 };
         for _ in 0..pad.saturating_sub(metrics.len() + 3) {
-            s.push_str("═");
+            s.push('═');
         }
-        s.push_str(" ");
+        s.push(' ');
         s.push_str(&self.c("90", &metrics));
         s.push_str(&self.c("36;1", " ╗\n"));
         s
@@ -639,8 +639,8 @@ impl SwarmTuiModel {
             match cy {
                 0 => s.push_str(&format!("Tier-2 AllReduce Ring: Step {:02}/16 (Optical Collective)", self.tier2_allreduce_step)),
                 1 => s.push_str(&format!("Chip #00 Quorum: {:.1}% | Chip #15 Quorum: {:.1}%", self.chip_quorum_pct[0], self.chip_quorum_pct[15])),
-                2 => s.push_str(&format!("Total Active Silicon Cores: 4,096 / 4,096 (100% Health)")),
-                3 => s.push_str(&format!("Inter-Die Optical Latency: 42 ns across Echelle Grating")),
+                2 => s.push_str("Total Active Silicon Cores: 4,096 / 4,096 (100% Health)"),
+                3 => s.push_str("Inter-Die Optical Latency: 42 ns across Echelle Grating"),
                 _ => s.push_str(""),
             }
             s.push_str(&self.c("36;1", "  ║\n"));
@@ -756,7 +756,7 @@ impl SwarmTuiModel {
         let used = 2 + hotkeys.len() + 2;
         let pad = if width > used { width - used } else { 2 };
         for _ in 0..pad {
-            s.push_str("═");
+            s.push('═');
         }
         s.push_str(&self.c("36;1", "╝"));
         s

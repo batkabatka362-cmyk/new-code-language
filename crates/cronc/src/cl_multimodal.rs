@@ -113,8 +113,8 @@ impl VisionPatchProcessor {
                     // Deterministic ternary pseudo-weight: {-1, 0, +1}
                     let hash = ((o * 313 + i * 17 + patch_idx * 3) % 9) as i32;
                     let w = match hash {
-                        0 | 1 | 2 => 1i8,
-                        3 | 4 | 5 => -1i8,
+                        0..=2 => 1i8,
+                        3..=5 => -1i8,
                         _ => 0i8,
                     };
 

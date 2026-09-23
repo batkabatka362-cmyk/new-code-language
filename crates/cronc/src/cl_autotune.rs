@@ -171,7 +171,7 @@ fn generate_and_evaluate_candidates(config: &AutotuneConfig) -> Vec<AutotuneCand
 fn factorize_or_defaults(dim: usize, defaults: &[usize]) -> Vec<usize> {
     let mut factors = Vec::new();
     for &d in defaults {
-        if d <= dim && (dim % d == 0 || dim < d * 2) {
+        if d <= dim && (dim.is_multiple_of(d) || dim < d * 2) {
             factors.push(d);
         }
     }
@@ -182,6 +182,7 @@ fn factorize_or_defaults(dim: usize, defaults: &[usize]) -> Vec<usize> {
 }
 
 /// Evaluates a single hardware candidate using analytical physical silicon cost models.
+#[allow(clippy::too_many_arguments)]
 fn evaluate_candidate(
     id: usize,
     tm: usize,
@@ -518,7 +519,7 @@ impl AutotuneReport {
             if i + 1 < self.pareto_candidates.len() {
                 json.push_str(",\n");
             } else {
-                json.push_str("\n");
+                json.push('\n');
             }
         }
         json.push_str("  ]\n");

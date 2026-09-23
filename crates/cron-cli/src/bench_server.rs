@@ -101,14 +101,13 @@ pub fn run_server_benchmark(
                         let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
                         let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
 
-                        if stream.write_all(req_bytes).is_ok() {
-                            if stream.read(&mut response_buf).is_ok() {
+                        if stream.write_all(req_bytes).is_ok()
+                            && stream.read(&mut response_buf).is_ok() {
                                 let lat = req_start.elapsed().as_micros() as u64;
                                 local_latencies.push(lat);
                                 success.fetch_add(1, Ordering::Relaxed);
                                 continue;
                             }
-                        }
                         fail.fetch_add(1, Ordering::Relaxed);
                     }
                     Err(_) => {

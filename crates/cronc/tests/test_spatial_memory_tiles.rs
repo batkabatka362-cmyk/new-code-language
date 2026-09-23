@@ -138,7 +138,7 @@ fn test_systolic_tile_gcc_c23_native_execution() {
     std::fs::write(&c_path, &c_code).expect("Failed to write C file");
 
     let gcc_status = Command::new("gcc")
-        .args(&[
+        .args([
             "-std=c2x",
             "-O3",
             c_path.to_str().unwrap(),

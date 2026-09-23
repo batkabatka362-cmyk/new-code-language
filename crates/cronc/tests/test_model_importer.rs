@@ -159,7 +159,7 @@ fn test_fused_transformer_c23_execution() {
             fs::write(&c_file, &c23_code).expect("Write temp C file");
 
             let compile_status = std::process::Command::new("gcc")
-                .args(&[
+                .args([
                     c_file.to_str().unwrap(),
                     "-O2",
                     "-o",

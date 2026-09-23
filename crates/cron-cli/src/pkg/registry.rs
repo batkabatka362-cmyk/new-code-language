@@ -98,6 +98,30 @@ impl PackageRegistry {
                 checksum: sha256_hex(b"cron/crypto@0.9.0-landauer-reversible-hash"),
             },
         );
+
+        self.packages.insert(
+            "cron/math".to_string(),
+            RegistryPackageInfo {
+                name: "cron/math".to_string(),
+                latest_version: "1.0.0".to_string(),
+                description: "CORDIC iterative trigonometry, complex phasors, and fast fixed-point matrix arithmetic".to_string(),
+                hardware_target: "4d-torus-256-core".to_string(),
+                dependencies: vec![],
+                checksum: sha256_hex(b"cron/math@1.0.0-cordic-trig-phasor"),
+            },
+        );
+
+        self.packages.insert(
+            "cron/kv".to_string(),
+            RegistryPackageInfo {
+                name: "cron/kv".to_string(),
+                latest_version: "1.1.0".to_string(),
+                description: "Paged KV-Cache circular memory allocation & bank conflict-free attention buffers".to_string(),
+                hardware_target: "4d-torus-256-core".to_string(),
+                dependencies: vec!["cron/math".to_string()],
+                checksum: sha256_hex(b"cron/kv@1.1.0-paged-attention-kv"),
+            },
+        );
     }
 
     pub fn lookup(&self, name: &str) -> Option<&RegistryPackageInfo> {
@@ -106,6 +130,18 @@ impl PackageRegistry {
 
     pub fn list_all(&self) -> Vec<&RegistryPackageInfo> {
         self.packages.values().collect()
+    }
+
+    pub fn search_packages(&self, query: &str) -> Vec<&RegistryPackageInfo> {
+        let q = query.to_lowercase();
+        self.packages
+            .values()
+            .filter(|p| {
+                p.name.to_lowercase().contains(&q)
+                    || p.description.to_lowercase().contains(&q)
+                    || p.hardware_target.to_lowercase().contains(&q)
+            })
+            .collect()
     }
 
     /// Package and publish a local directory project into a `.crpkg` distribution archive.

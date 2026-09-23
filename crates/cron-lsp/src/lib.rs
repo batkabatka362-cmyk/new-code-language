@@ -318,7 +318,7 @@ pub fn get_cl_hover_documentation(word: &str) -> Option<String> {
 
     // Check register R0..R15
     if (upper.starts_with('R') || upper.starts_with("REG")) && upper.len() >= 2 {
-        let num_part = if upper.starts_with("REG") { &upper[3..] } else { &upper[1..] };
+        let num_part = upper.strip_prefix("REG").unwrap_or_else(|| &upper[1..]);
         if let Ok(reg_idx) = num_part.parse::<u32>() {
             if reg_idx <= 15 {
                 return Some(format!(

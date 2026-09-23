@@ -440,8 +440,8 @@ pub fn lower_gguf_model(
         let shape: Vec<usize> = tensor_info.dimensions.iter().map(|&d| d as usize).collect();
         let orig_bytes = num_elements * 4;
         let quant_bytes = match options.quantize_mode {
-            QuantizationMode::Ternary158b => (num_elements * 2 + 7) / 8,
-            QuantizationMode::Int4 => (num_elements * 4 + 7) / 8,
+            QuantizationMode::Ternary158b => (num_elements * 2).div_ceil(8),
+            QuantizationMode::Int4 => (num_elements * 4).div_ceil(8),
             QuantizationMode::None => orig_bytes,
         };
 

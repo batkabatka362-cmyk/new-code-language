@@ -24,7 +24,7 @@ pub enum SiliconTarget {
 }
 
 impl SiliconTarget {
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn parse_target(s: &str) -> Result<Self, String> {
         match s.to_lowercase().as_str() {
             "xilinx_u280" | "alveo_u280" | "u280" => Ok(SiliconTarget::XilinxAlveoU280),
             "zynq" | "zynq_ultrascale" | "zu19eg" => Ok(SiliconTarget::XilinxZynqUltraScale),
@@ -65,8 +65,10 @@ pub enum HostInterface {
     JtagAxi,
 }
 
-impl HostInterface {
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl std::str::FromStr for HostInterface {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "pcie" | "pcie_gen5" | "pcie5" => Ok(HostInterface::PcieGen5x16),
             "pcie4" | "pcie_gen4" => Ok(HostInterface::PcieGen4x8),
@@ -77,6 +79,12 @@ impl HostInterface {
                 other
             )),
         }
+    }
+}
+
+impl HostInterface {
+    pub fn parse_interface(s: &str) -> Result<Self, String> {
+        s.parse()
     }
 
     pub fn bandwidth_gbps(&self) -> f64 {

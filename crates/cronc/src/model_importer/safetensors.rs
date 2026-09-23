@@ -92,7 +92,7 @@ pub fn parse_safetensors(bytes: &[u8]) -> Result<SafeTensorsModel, String> {
 fn decode_tensor_buffer(bytes: &[u8], dtype: &SafeTensorDType) -> Result<Vec<f32>, String> {
     match dtype {
         SafeTensorDType::F32 => {
-            if bytes.len() % 4 != 0 {
+            if !bytes.len().is_multiple_of(4) {
                 return Err("F32 tensor byte size not multiple of 4".to_string());
             }
             let count = bytes.len() / 4;
@@ -104,7 +104,7 @@ fn decode_tensor_buffer(bytes: &[u8], dtype: &SafeTensorDType) -> Result<Vec<f32
             Ok(out)
         }
         SafeTensorDType::F16 => {
-            if bytes.len() % 2 != 0 {
+            if !bytes.len().is_multiple_of(2) {
                 return Err("F16 tensor byte size not multiple of 2".to_string());
             }
             let count = bytes.len() / 2;
@@ -117,7 +117,7 @@ fn decode_tensor_buffer(bytes: &[u8], dtype: &SafeTensorDType) -> Result<Vec<f32
             Ok(out)
         }
         SafeTensorDType::BF16 => {
-            if bytes.len() % 2 != 0 {
+            if !bytes.len().is_multiple_of(2) {
                 return Err("BF16 tensor byte size not multiple of 2".to_string());
             }
             let count = bytes.len() / 2;
@@ -138,7 +138,7 @@ fn decode_tensor_buffer(bytes: &[u8], dtype: &SafeTensorDType) -> Result<Vec<f32
             Ok(bytes.iter().map(|&b| b as f32).collect())
         }
         SafeTensorDType::I32 => {
-            if bytes.len() % 4 != 0 {
+            if !bytes.len().is_multiple_of(4) {
                 return Err("I32 tensor byte size not multiple of 4".to_string());
             }
             let count = bytes.len() / 4;
@@ -184,7 +184,7 @@ pub fn f16_to_f32(h: u16) -> f32 {
         f32::from_bits((sign << 31) | (f_exp << 23) | f_frac)
     } else {
         // Normalized
-        let f_exp = (exp + (127 - 15)) as u32;
+        let f_exp = exp + (127 - 15);
         let f_frac = frac << 13;
         f32::from_bits((sign << 31) | (f_exp << 23) | f_frac)
     }
@@ -270,7 +270,7 @@ fn read_json_string<I: Iterator<Item = (usize, char)>>(
 
     let mut s = String::new();
     let mut escaped = false;
-    while let Some((_, c)) = chars.next() {
+    for (_, c) in chars.by_ref() {
         if escaped {
             match c {
                 '"' => s.push('"'),
@@ -308,7 +308,7 @@ fn read_json_object_raw<I: Iterator<Item = (usize, char)>>(
     let mut in_str = false;
     let mut escaped = false;
 
-    while let Some((_, c)) = chars.next() {
+    for (_, c) in chars.by_ref() {
         out.push(c);
         if in_str {
             if escaped {

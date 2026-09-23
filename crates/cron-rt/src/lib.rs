@@ -564,7 +564,7 @@ pub unsafe extern "C" fn cron_ternary_dot_product(
         return 0.0;
     }
 
-    let packed_len = (count + 3) / 4;
+    let packed_len = count.div_ceil(4);
     let packed_slice = slice::from_raw_parts(packed_weights, packed_len);
     let act_slice = slice::from_raw_parts(activations, count);
 
@@ -1087,10 +1087,7 @@ pub unsafe extern "C" fn cron_proof_verify(
     let work_name = if workload_name.is_null() {
         "CRON-Kernel"
     } else {
-        match CStr::from_ptr(workload_name).to_str() {
-            Ok(s) => s,
-            Err(_) => "CRON-Kernel",
-        }
+        CStr::from_ptr(workload_name).to_str().unwrap_or("CRON-Kernel")
     };
 
     let verifier = cronc::cl_proof::ProofVerifier::new();

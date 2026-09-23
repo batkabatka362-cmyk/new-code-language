@@ -77,8 +77,10 @@ pub enum CollectiveType {
     Broadcast,
 }
 
-impl CollectiveType {
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl std::str::FromStr for CollectiveType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "allreduce" | "all-reduce" => Ok(Self::AllReduce),
             "allgather" | "all-gather" => Ok(Self::AllGather),
@@ -86,6 +88,12 @@ impl CollectiveType {
             "broadcast" | "bcast" => Ok(Self::Broadcast),
             other => Err(format!("Unknown collective type '{}'. Supported: allreduce, allgather, reducescatter, broadcast", other)),
         }
+    }
+}
+
+impl CollectiveType {
+    pub fn parse_collective(s: &str) -> Result<Self, String> {
+        s.parse()
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -120,8 +128,8 @@ pub fn synthesize_collective_schedule(
     let num_dies = num_dies.clamp(1, MAX_DIES_PER_POD);
     let total_cores = num_dies * CORES_PER_DIE;
 
-    let ring_steps = if num_dies <= 1 { 0 } else { num_dies - 1 };
-    let packets_per_die = (chunk_bytes + 31) / 32;
+    let ring_steps = num_dies.saturating_sub(1);
+    let packets_per_die = chunk_bytes.div_ceil(32);
     let total_optical_packets = ring_steps * packets_per_die * num_dies;
     let theoretical_latency_cycles = ring_steps * 12 + 8; // 12 cycles per inter-die SerDes hop
 

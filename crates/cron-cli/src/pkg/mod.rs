@@ -138,7 +138,7 @@ pub fn verify_project_integrity<P: AsRef<Path>>(project_root: P) -> Result<Strin
     let manifest = Manifest::load_from_file(&manifest_path)?;
     let lockfile = Lockfile::load_from_file(&lock_path)?;
 
-    for (name, _) in &manifest.dependencies {
+    for name in manifest.dependencies.keys() {
         if !lockfile.packages.contains_key(name) {
             return Err(format!(
                 "Integrity mismatch: dependency '{}' is in cron.toml but missing in cron.lock",

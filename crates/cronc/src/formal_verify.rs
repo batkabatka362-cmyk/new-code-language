@@ -425,19 +425,17 @@ impl FormalVerifier {
         let mut is_conflict_free = true;
 
         let mut check_stmt = |stmt: &Statement| {
-            if let Statement::Let { name, type_annot, .. } = stmt {
-                if let Some(t) = type_annot {
-                    if t.contains("@sram") && t.contains("bank=") {
-                        // Check bank index bounds
-                        if let Some(idx_str) = t.split("bank=").nth(1).and_then(|s| s.split(')').next()) {
-                            if let Ok(bank_id) = idx_str.trim().parse::<usize>() {
-                                if bank_id >= 16 {
-                                    violations.push(format!(
-                                        "PGAS Bank conflict: Variable '{}' requests invalid bank index {} (core has 16 banks: 0..15)",
-                                        name, bank_id
-                                    ));
-                                    is_conflict_free = false;
-                                }
+            if let Statement::Let { name, type_annot: Some(t), .. } = stmt {
+                if t.contains("@sram") && t.contains("bank=") {
+                    // Check bank index bounds
+                    if let Some(idx_str) = t.split("bank=").nth(1).and_then(|s| s.split(')').next()) {
+                        if let Ok(bank_id) = idx_str.trim().parse::<usize>() {
+                            if bank_id >= 16 {
+                                violations.push(format!(
+                                    "PGAS Bank conflict: Variable '{}' requests invalid bank index {} (core has 16 banks: 0..15)",
+                                    name, bank_id
+                                ));
+                                is_conflict_free = false;
                             }
                         }
                     }

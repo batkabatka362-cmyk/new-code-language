@@ -123,11 +123,11 @@ fn test_fused_kernels_native_gcc_execution() {
     c_code.push_str("#include <assert.h>\n\n");
 
     c_code.push_str(&emit_fused_rmsnorm_linear_c("fused_rmsnorm_linear", 1, 4, 4, 4, 1e-5));
-    c_code.push_str("\n");
+    c_code.push('\n');
     c_code.push_str(&emit_fused_swiglu_c("fused_swiglu", 1, 4, 4, 4));
-    c_code.push_str("\n");
+    c_code.push('\n');
     c_code.push_str(&emit_flash_attention_2_c("fused_flash_attn", 1, 1, 4, 4, 0.5f32));
-    c_code.push_str("\n");
+    c_code.push('\n');
 
     c_code.push_str(r#"
 int main(void) {

@@ -106,7 +106,7 @@ impl VibeLoopResult {
                 if i + 1 < self.heal_diff_log.len() {
                     json.push_str(",\n");
                 } else {
-                    json.push_str("\n");
+                    json.push('\n');
                 }
             }
             json.push_str("    ]\n");
@@ -129,7 +129,7 @@ impl VibeLoopResult {
             if i < 15 {
                 json.push_str(",\n");
             } else {
-                json.push_str("\n");
+                json.push('\n');
             }
         }
         json.push_str("    },\n");

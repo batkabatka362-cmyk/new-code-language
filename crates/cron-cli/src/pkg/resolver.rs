@@ -58,6 +58,7 @@ impl<'a> DependencyResolver<'a> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn resolve_node(
         &self,
         name: &str,

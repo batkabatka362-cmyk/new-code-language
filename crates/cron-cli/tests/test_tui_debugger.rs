@@ -236,7 +236,7 @@ fn test_debugger_cli_binary_batch_execution() {
     let cl_path = workspace_root.join("examples").join("fused_flash_attention.cl");
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "debug",
             cl_path.to_str().unwrap(),
             "--core",
@@ -264,7 +264,7 @@ fn test_debugger_cli_binary_cr_source_debugging() {
     let cr_path = workspace_root.join("examples").join("fused_flash_attention.cr");
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "debug",
             cr_path.to_str().unwrap(),
             "--core",

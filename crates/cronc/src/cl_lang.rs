@@ -352,11 +352,11 @@ pub fn parse_weights_directive(line: &str) -> Result<ClWeightBinding, String> {
     }
 
     // Extract bank= and offset= from key-value pairs
-    for token in rest.split(|c: char| c == ',' || c == ':' || c == ' ' || c == '\t') {
+    for token in rest.split([',', ':', ' ', '\t']) {
         let tok = token.trim();
         if let Some(val_str) = tok.strip_prefix("bank=") {
             let clean = val_str.trim_matches(|c: char| !c.is_ascii_hexdigit());
-            if let Ok(b) = usize::from_str_radix(clean, 10) {
+            if let Ok(b) = clean.parse::<usize>() {
                 bank = b;
             }
         } else if let Some(val_str) = tok.strip_prefix("offset=") {

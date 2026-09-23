@@ -139,6 +139,7 @@ impl FusionGraph {
         id
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_flash_attention(
         &mut self,
         q: usize,

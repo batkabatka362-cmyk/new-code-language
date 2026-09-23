@@ -99,7 +99,7 @@ impl Manifest {
             }
 
             if trimmed.starts_with('[') && trimmed.ends_with(']') {
-                current_section = &trimmed[1..trimmed.len() - 1].trim();
+                current_section = trimmed[1..trimmed.len() - 1].trim();
                 continue;
             }
 
@@ -217,7 +217,7 @@ fn parse_string_list(s: &str) -> Vec<String> {
     let inner = s.trim().trim_start_matches('[').trim_end_matches(']');
     inner
         .split(',')
-        .map(|item| clean_string(item))
+        .map(clean_string)
         .filter(|item| !item.is_empty())
         .collect()
 }

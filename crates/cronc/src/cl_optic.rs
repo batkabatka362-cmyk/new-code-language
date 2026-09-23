@@ -29,16 +29,13 @@ pub const MIN_PD_SENSITIVITY_DBM: f64 = -22.0;       // ~6.31 uW for 35 dB SNR (
 pub const OPTICAL_SAFETY_MARGIN_DB: f64 = 3.0;       // Engineering Safety Margin
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum MeshTopology {
+    #[default]
     Clemens, // Balanced Depth D = N
     Reck,    // Triangular Depth D = 2N - 3
 }
 
-impl Default for MeshTopology {
-    fn default() -> Self {
-        MeshTopology::Clemens
-    }
-}
 
 /// Configuration options for optical WDM and laser budget analysis
 #[derive(Debug, Clone)]

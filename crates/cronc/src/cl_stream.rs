@@ -97,7 +97,7 @@ pub fn synthesize_streaming_pipeline(config: &StreamPipelineConfig) -> StreamRep
     let (modality_name, tokens_per_frame, token_bytes) = match &config.modality {
         StreamModality::AudioSpectrogram { mel_bands, quant_bits, .. } => {
             let tokens = *mel_bands;
-            let bytes = (tokens * *quant_bits + 7) / 8;
+            let bytes = (tokens * *quant_bits).div_ceil(8);
             ("Audio STFT Spectrogram".to_string(), tokens, bytes)
         }
         StreamModality::VisionPatches { frame_width, frame_height, patch_size, channels, enable_2_4_sparsity } => {
@@ -206,8 +206,7 @@ fn emit_streaming_cl_microcode(stages: &[StreamStage], modality: &str) -> String
         let clean_name = stage.name
             .replace(' ', "_")
             .replace('&', "and")
-            .replace(':', "_")
-            .replace('-', "_")
+            .replace([':', '-'], "_")
             .to_lowercase();
         raw.push_str(&format!(
             ".core [{}, {}, {}, {}]:\n\
@@ -293,7 +292,7 @@ impl StreamReport {
                 arrow
             ));
         }
-        out.push_str("\n");
+        out.push('\n');
 
         out
     }
@@ -335,7 +334,7 @@ impl StreamReport {
             if i + 1 < self.stages.len() {
                 json.push_str(",\n");
             } else {
-                json.push_str("\n");
+                json.push('\n');
             }
         }
         json.push_str("  ]\n");

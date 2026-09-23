@@ -177,6 +177,7 @@ pub fn silu(x: f64) -> f64 {
 }
 
 /// SwiGLU Gated FeedForward Network Block.
+#[allow(clippy::too_many_arguments)]
 pub fn swiglu_forward(
     x: &[f64],
     w_gate: &[f64],
@@ -214,6 +215,7 @@ pub fn pseudo_weight_matrix(in_dim: usize, out_dim: usize, seed: usize) -> Vec<f
 
 /// Helper to project activations using either real ternary GEMV (if packed weights are available)
 /// or fallback to linear_project.
+#[allow(clippy::too_many_arguments)]
 fn project_or_ternary(
     x: &[f64],
     provider: Option<&dyn LayerWeightProvider>,
@@ -229,7 +231,7 @@ fn project_or_ternary(
         if let Some((packed, scales)) = prov.get_tensor(layer_idx, tensor_name) {
             let act_f32: Vec<f32> = x.iter().map(|&v| v as f32).collect();
             let mut out_f32 = vec![0.0f32; out_dim];
-            if scales.len() == out_dim && packed.len() >= out_dim * ((in_dim + 3) / 4) {
+            if scales.len() == out_dim && packed.len() >= out_dim * in_dim.div_ceil(4) {
                 ternary_gemv(&packed, &act_f32, &scales, &mut out_f32, in_dim, out_dim);
                 return out_f32.into_iter().map(|v| v as f64).collect();
             }

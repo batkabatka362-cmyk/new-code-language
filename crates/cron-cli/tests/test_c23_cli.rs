@@ -32,7 +32,7 @@ fn test_cli_c23_transpilation() {
 
     // Invoke cron c23
     let status = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "c23",
             sample_cr.to_str().unwrap(),
             "-o",

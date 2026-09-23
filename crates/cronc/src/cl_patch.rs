@@ -118,7 +118,7 @@ impl ClPatchPackage {
         if bytes.len() < 16 {
             return Err("Truncated .clpatch binary header".to_string());
         }
-        if &bytes[0..8] != &CL_PATCH_MAGIC {
+        if bytes[0..8] != CL_PATCH_MAGIC {
             return Err("Invalid .clpatch magic header".to_string());
         }
         let version = u16::from_le_bytes([bytes[8], bytes[9]]);

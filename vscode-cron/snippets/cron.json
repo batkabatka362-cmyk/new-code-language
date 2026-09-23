@@ -1,0 +1,124 @@
+{
+  "CRON Module": {
+    "prefix": "module",
+    "body": [
+      ".MODULE ${1:ModuleName}",
+      ".ENTRY ${2:_main}",
+      "",
+      "${2:_main}:",
+      "    ${0:// Code here}",
+      "",
+      ".END"
+    ],
+    "description": "Create a new CRON Module definition"
+  },
+  "CRON Function": {
+    "prefix": "def",
+    "body": [
+      "def ${1:function_name}(${2:arg}: ${3:i32}) -> ${4:i32} {",
+      "    ${0:return 0;}",
+      "}"
+    ],
+    "description": "Define a high-level CRON function"
+  },
+  "Linear Type Binding": {
+    "prefix": "lin",
+    "body": [
+      "let lin ${1:tensor_res}: ${2:tensor<f32, [4, 4]>} = ${0:init_tensor()}"
+    ],
+    "description": "Linear ownership variable (guaranteed 0 memory leaks)"
+  },
+  "Scoped Region Memory": {
+    "prefix": "region",
+    "body": [
+      "region {",
+      "    let lin ${1:arena_tensor}: ${2:tensor<f32, [16, 16]>} = ${3:alloc_in_arena()}",
+      "    ${0:// Zero-GC arena computation}",
+      "}"
+    ],
+    "description": "Zero-overhead scoped arena allocation region"
+  },
+  "Photonic MZI Optical GEMM": {
+    "prefix": "optical_gemm",
+    "body": [
+      "let lin ${1:out_wave}: wave_t = optical_gemm(",
+      "    wave=${2:input_wave},",
+      "    weights=${3:weight_matrix},",
+      "    phase_shift=${4:0.785398}",
+      ")"
+    ],
+    "description": "Brain 2: Photonic Latent Matrix Multiplication"
+  },
+  "Neuromorphic STDP Synapse": {
+    "prefix": "stdp",
+    "body": [
+      "let ${1:new_weight}: f32 = step_synaptic_plasticity(",
+      "    pre_spike=${2:pre_t},",
+      "    post_spike=${3:post_t},",
+      "    current_weight=${4:w_init},",
+      "    a_plus=0.01, a_minus=0.012",
+      ")"
+    ],
+    "description": "Brain 4: Spike-Timing-Dependent Plasticity Update"
+  },
+  "Reversible Fredkin Gate": {
+    "prefix": "reversible",
+    "body": [
+      "let lin (${1:out_a}, ${2:out_b}, ${3:out_c}) = reversible_fredkin(",
+      "    control=${4:c_sig},",
+      "    a=${5:in_a},",
+      "    b=${6:in_b}",
+      ")"
+    ],
+    "description": "Brain 3: Landauer Zero-Entropy Reversible Logic"
+  },
+  "Causal Symbolic Unification": {
+    "prefix": "unify",
+    "body": [
+      "let ${1:unified}: bool = ground_and_unify(",
+      "    hypothesis=${2:hypo_sym},",
+      "    premise=${3:premise_sym}",
+      ")"
+    ],
+    "description": "Brain 1: Symbolic Causal Logic Unification"
+  },
+  "Superposition Decision Collapse": {
+    "prefix": "superposition",
+    "body": [
+      "let ${1:best_trajectory} = quantum_collapse_eval(",
+      "    state_tensor=${2:latent_state},",
+      "    mcts_depth=${3:16}",
+      ")"
+    ],
+    "description": "Brain 5: Decision Tree Superposition Collapse"
+  },
+  "Exhaustive Match Expression": {
+    "prefix": "match",
+    "body": [
+      "match ${1:expression} {",
+      "    ${2:Pattern1} => ${3:result1},",
+      "    ${4:Pattern2} => ${5:result2},",
+      "    _ => ${0:default_result},",
+      "}"
+    ],
+    "description": "Exhaustive algebraic pattern matching"
+  },
+  "Struct Definition": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:StructName} {",
+      "    ${2:field}: ${3:i32},",
+      "}"
+    ],
+    "description": "Define a zero-overhead data struct"
+  },
+  "Trait Definition": {
+    "prefix": "trait",
+    "body": [
+      "trait ${1:TraitName} {",
+      "    def ${2:method}(self) -> ${3:i32};",
+      "}"
+    ],
+    "description": "Define a monomorphized trait interface"
+  }
+}

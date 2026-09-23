@@ -99,7 +99,7 @@ fn test_generic_4d_tensor_gcc_native_execution() {
     fs::write(&c_path, &c_code).expect("Write C source to temp");
 
     let gcc_status = Command::new("gcc")
-        .args(&["-O3", c_path.to_str().unwrap(), "-o", exe_path.to_str().unwrap(), "-lm"])
+        .args(["-O3", c_path.to_str().unwrap(), "-o", exe_path.to_str().unwrap(), "-lm"])
         .status();
 
     if let Ok(status) = gcc_status {

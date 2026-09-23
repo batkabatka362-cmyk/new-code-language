@@ -17,16 +17,11 @@ use crate::cl_heal::{heal_slot_crc, CANONICAL_NOP};
 use crate::cl_lang::{parse_slot, ClSlot};
 
 /// Super-optimization engine configuration levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ClOptLevel {
     Level1, // Greedy in-order hazard packer
+    #[default]
     Level2, // DAG critical-path list scheduler with peephole & silicon way placement
-}
-
-impl Default for ClOptLevel {
-    fn default() -> Self {
-        ClOptLevel::Level2
-    }
 }
 
 /// Detailed configuration for VLIW super-optimization

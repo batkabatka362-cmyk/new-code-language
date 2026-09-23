@@ -120,9 +120,9 @@ pub fn tile_gemm(m: usize, n: usize, k: usize, options: &TileOptions) -> Result<
     let sram_footprint = bytes_a + bytes_b + bytes_c;
     let sram_pct = (sram_footprint as f64 / CORE_SRAM_CAPACITY_BYTES as f64) * 100.0;
 
-    let num_tiles_m = (m + tm - 1) / tm;
-    let num_tiles_n = (n + tn - 1) / tn;
-    let num_tiles_k = (k + tk - 1) / tk;
+    let num_tiles_m = m.div_ceil(tm);
+    let num_tiles_n = n.div_ceil(tn);
+    let num_tiles_k = k.div_ceil(tk);
     let total_tiles = num_tiles_m * num_tiles_n * num_tiles_k;
 
     // Check bank conflict freedom: Stride of Tn words modulo 16

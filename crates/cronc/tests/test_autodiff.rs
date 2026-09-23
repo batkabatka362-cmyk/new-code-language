@@ -170,7 +170,7 @@ def main() -> i32 {
     std::fs::write(&temp_c, &c_code).expect("Write temp C file");
 
     let gcc_status = Command::new("gcc")
-        .args(&["-O3", temp_c.to_str().unwrap(), "-o", temp_exe.to_str().unwrap(), "-lm"])
+        .args(["-O3", temp_c.to_str().unwrap(), "-o", temp_exe.to_str().unwrap(), "-lm"])
         .status();
 
     if let Ok(status) = gcc_status {

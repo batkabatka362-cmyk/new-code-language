@@ -144,7 +144,7 @@ fn test_c23_end_to_end_gcc_execution() {
 
     // Attempt gcc compilation
     let gcc_status = Command::new("gcc")
-        .args(&["-O3", c_path.to_str().unwrap(), "-o", exe_path.to_str().unwrap(), "-lm"])
+        .args(["-O3", c_path.to_str().unwrap(), "-o", exe_path.to_str().unwrap(), "-lm"])
         .status();
 
     if let Ok(status) = gcc_status {

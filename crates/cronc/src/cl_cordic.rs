@@ -32,7 +32,15 @@ impl CordicMode {
         }
     }
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn parse_mode(s: &str) -> Result<Self, String> {
+        s.parse()
+    }
+}
+
+impl std::str::FromStr for CordicMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "rot" | "circular" | "circular_rot" | "sin_cos" => Ok(CordicMode::CircularRotation),
             "vec" | "vectoring" | "circular_vec" | "atan" => Ok(CordicMode::CircularVectoring),
@@ -463,7 +471,7 @@ pub fn render_ascii_bloch_sphere(theta: f64, phi: f64) -> String {
         out.push_str("       |     |     |\n");
     }
     out.push_str("      /  . - + - .  \\\n");
-    if z < 0.5 && z >= -0.5 {
+    if (-0.5..0.5).contains(&z) {
         out.push_str("  ◄---===----+====★--► Y (Equator, φ phase)\n");
     } else {
         out.push_str("  ◄---===----+=====---► Y (Equator, φ phase)\n");

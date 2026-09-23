@@ -71,6 +71,12 @@ pub struct ComptimeEnv {
     max_iterations: usize,
 }
 
+impl Default for ComptimeEnv {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ComptimeEnv {
     pub fn new() -> Self {
         Self {

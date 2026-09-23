@@ -21,7 +21,7 @@ pub const BOLTZMANN_CONSTANT: f64 = 1.380649e-23;
 /// Ambient temperature for thermodynamic evaluation (Kelvin)
 pub const ROOM_TEMP_KELVIN: f64 = 300.0;
 /// Theoretical Landauer minimum energy per erased/switched bit: E = k_B * T * ln(2) (Joules)
-pub const LANDAUER_LIMIT_PER_BIT_JOULES: f64 = BOLTZMANN_CONSTANT * ROOM_TEMP_KELVIN * 0.69314718056; // ~2.87e-21 J
+pub const LANDAUER_LIMIT_PER_BIT_JOULES: f64 = BOLTZMANN_CONSTANT * ROOM_TEMP_KELVIN * std::f64::consts::LN_2; // ~2.87e-21 J
 
 /// Evaluated AI & Hard Backend Workloads
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -587,7 +587,7 @@ pub fn comparison_to_json(report: &ComparisonSuiteReport) -> String {
         if idx + 1 < report.results.len() {
             j.push_str(",\n");
         } else {
-            j.push_str("\n");
+            j.push('\n');
         }
     }
 
@@ -621,11 +621,11 @@ pub fn generate_whitepaper_markdown(report: &ComparisonSuiteReport) -> String {
     md.push_str("## 2. Hardware Architecture & System Specifications\n\n");
     md.push_str("| Architectural Property | NVIDIA H100 SXM5 | Intel Xeon 8480+ (Mojo) | CRON 256-Core 4D-Torus |\n");
     md.push_str("| :--- | :--- | :--- | :--- |\n");
-    md.push_str(&format!("| **Compute Units** | 132 SMs (16,896 CUDA Cores) | 56 Cores (AVX-512 VNNI) | 256 VLIW Spatial Neuromorphic Cores |\n"));
+    md.push_str("| **Compute Units** | 132 SMs (16,896 CUDA Cores) | 56 Cores (AVX-512 VNNI) | 256 VLIW Spatial Neuromorphic Cores |\n");
     md.push_str(&format!("| **Nominal TDP** | {:.0} Watts | {:.0} Watts | **{:.0} Watts** |\n", report.h100_spec.tdp_watts, report.mojo_spec.tdp_watts, report.cron_spec.tdp_watts));
     md.push_str(&format!("| **Peak Memory BW** | {:.1} GB/s (HBM3) | {:.1} GB/s (DDR5) | **{:.1} GB/s (16-Bank PGAS SRAM)** |\n", report.h100_spec.peak_bandwidth_gbps, report.mojo_spec.peak_bandwidth_gbps, report.cron_spec.peak_bandwidth_gbps));
-    md.push_str(&format!("| **Arithmetic Units** | 4th Gen FP16/INT8 Tensor Cores | AVX-512 INT8 VNNI / AMX | **BitNet b1.58 Trit-MAC + Optical MZI Mesh** |\n"));
-    md.push_str(&format!("| **Interconnect** | NVLink 4 (900 GB/s) | UPI 2.0 Mesh | **4D-Torus (X,Y,Z,W) 9-Port VC Router** |\n\n"));
+    md.push_str("| **Arithmetic Units** | 4th Gen FP16/INT8 Tensor Cores | AVX-512 INT8 VNNI / AMX | **BitNet b1.58 Trit-MAC + Optical MZI Mesh** |\n");
+    md.push_str("| **Interconnect** | NVLink 4 (900 GB/s) | UPI 2.0 Mesh | **4D-Torus (X,Y,Z,W) 9-Port VC Router** |\n\n");
 
     md.push_str("## 3. Mathematical Foundations of CRON Superiority\n\n");
     md.push_str("### 3.1. Zero-Multiplier BitNet b1.58 Ternary Contraction\n");

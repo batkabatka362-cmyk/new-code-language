@@ -1,0 +1,58 @@
+{
+  "128-bit VLIW Slot Bundle": {
+    "prefix": "bundle",
+    "body": [
+      "B${1:0000}: ${2:_NO00#000>} ${3:_NO00#000>} ${4:_NO00#000>} ${5:_HL00#000!}"
+    ],
+    "description": "Standard 128-bit 4-Slot VLIW microcode bundle with parity termination"
+  },
+  "Photonic MZI Slot": {
+    "prefix": "_OP",
+    "body": [
+      "_OP${1:01}$${2:28F}>"
+    ],
+    "description": "Optical Photonic GEMM microcode instruction"
+  },
+  "Reversible Fredkin Slot": {
+    "prefix": "_BK",
+    "body": [
+      "_BK${1:00}#${2:001}>"
+    ],
+    "description": "Reversible ALU / Fredkin Landauer instruction"
+  },
+  "Neuromorphic STDP Slot": {
+    "prefix": "_ST",
+    "body": [
+      "_ST${1:02}@${2:010}>"
+    ],
+    "description": "Neuromorphic Synaptic Plasticity update instruction"
+  },
+  "Symbolic Unification Slot": {
+    "prefix": "_UN",
+    "body": [
+      "_UN${1:00}#${2:100}>"
+    ],
+    "description": "Symbolic Causal Unification instruction"
+  },
+  "NoC Torus Packet Slot": {
+    "prefix": "_PT",
+    "body": [
+      "_PT${1:01}@${2:004}>"
+    ],
+    "description": "4D-Torus Inter-Core Router Packet transfer"
+  },
+  "No-Operation Slot": {
+    "prefix": "_NO",
+    "body": [
+      "_NO00#000>"
+    ],
+    "description": "Low-power NOP instruction"
+  },
+  "Halt Instruction": {
+    "prefix": "_HL",
+    "body": [
+      "_HL00#000!"
+    ],
+    "description": "Program terminal halt and Landauer dissipation barrier"
+  }
+}

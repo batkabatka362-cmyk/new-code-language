@@ -10,6 +10,7 @@ use cronc::cl_compare::{
 };
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_thermodynamic_constants() {
     assert!(BOLTZMANN_CONSTANT > 1.38e-23 && BOLTZMANN_CONSTANT < 1.39e-23);
     assert!(LANDAUER_LIMIT_PER_BIT_JOULES > 2.8e-21 && LANDAUER_LIMIT_PER_BIT_JOULES < 2.9e-21);

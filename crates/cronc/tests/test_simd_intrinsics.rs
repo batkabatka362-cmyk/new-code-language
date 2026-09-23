@@ -62,7 +62,7 @@ fn test_simd_c23_native_gcc_execution() {
     std::fs::write(&c_path, &c_code).expect("Failed to write C file");
 
     let status = Command::new("gcc")
-        .args(&[
+        .args([
             "-std=c2x",
             "-O3",
             "-mavx2",

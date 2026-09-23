@@ -89,7 +89,7 @@ impl Default for FuzzOptions {
     fn default() -> Self {
         Self {
             iterations: 1000,
-            seed: 0x5EE12026_CAFE_BABE,
+            seed: 0x5EE1_2026_CAFE_BABE,
             seed_code: None,
             max_mutations_per_cycle: 3,
             test_jit_execution: true,
@@ -169,7 +169,7 @@ impl ClFuzzReport {
             for sample in self.crash_samples.iter().take(3) {
                 out.push_str("  --------------------------------------------------------------------\n");
                 out.push_str(sample);
-                out.push_str("\n");
+                out.push('\n');
             }
             out.push_str("========================================================================================\n");
         }

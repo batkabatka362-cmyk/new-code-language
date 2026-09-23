@@ -231,7 +231,7 @@ impl FiberScheduler {
         }
 
         let num_workers = self.config.num_workers;
-        let chunk_size = (count + num_workers - 1) / num_workers;
+        let chunk_size = count.div_ceil(num_workers);
 
         // Distribute directly across local worker queues for maximum cache affinity
         let mut iter = tasks.into_iter();

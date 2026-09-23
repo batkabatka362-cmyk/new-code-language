@@ -16,15 +16,28 @@ pub enum SpecFormat {
     All,
 }
 
-impl SpecFormat {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for SpecFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "ebnf" => Some(SpecFormat::Ebnf),
-            "json" | "schema" => Some(SpecFormat::Json),
-            "prompt" | "system-prompt" | "llm" => Some(SpecFormat::Prompt),
-            "all" => Some(SpecFormat::All),
-            _ => None,
+            "ebnf" => Ok(SpecFormat::Ebnf),
+            "json" | "schema" => Ok(SpecFormat::Json),
+            "prompt" | "system-prompt" | "llm" => Ok(SpecFormat::Prompt),
+            "all" => Ok(SpecFormat::All),
+            _ => Err(format!("Unknown spec format '{}'", s)),
         }
+    }
+}
+
+impl SpecFormat {
+    pub fn parse_format(s: &str) -> Option<Self> {
+        s.parse().ok()
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        Self::parse_format(s)
     }
 }
 

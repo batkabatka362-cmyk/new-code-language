@@ -25,7 +25,7 @@ fn test_cli_flash_hardware_package_generation() {
     fs::write(&sample_cr, cr_content).expect("Failed to write sample cr file");
 
     let status = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "flash",
             sample_cr.to_str().unwrap(),
             "--target",
@@ -83,7 +83,7 @@ fn test_cli_verify_formal_safety_pass() {
     fs::write(&sample_cr, cr_content).expect("Failed to write sample cr file");
 
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "verify",
             sample_cr.to_str().unwrap(),
             "--temp",
@@ -126,7 +126,7 @@ fn test_cli_verify_deadlock_detection_failure() {
     fs::write(&sample_cr, cr_content).expect("Failed to write sample cr file");
 
     let output = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(&[
+        .args([
             "verify",
             sample_cr.to_str().unwrap(),
         ])

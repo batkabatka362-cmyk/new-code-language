@@ -177,10 +177,10 @@ pub fn optimize_cl_trace(source: &str, source_name: &str, config: &TraceCacheCon
     let original_bundle_count = parsed_bundles.len();
 
     // 1. Scan active operations and compute ResMII (Resource Minimum Initiation Interval)
-    let mut total_active_ops = 0;
-    let mut alu_ops = 0;
-    let mut mem_ops = 0;
-    let mut noc_ops = 0;
+    let mut total_active_ops: usize = 0;
+    let mut alu_ops: usize = 0;
+    let mut mem_ops: usize = 0;
+    let mut noc_ops: usize = 0;
     let mut active_slots: Vec<(usize, usize, ClSlot)> = Vec::new(); // (cycle, slot_idx, slot)
 
     for (b_idx, b) in parsed_bundles.iter().enumerate() {
@@ -201,7 +201,7 @@ pub fn optimize_cl_trace(source: &str, source_name: &str, config: &TraceCacheCon
     // ALU0 + ALU1: 2 ops/cycle
     // MEM: 1 op/cycle
     // NOC: 1 op/cycle
-    let res_alu = (alu_ops + 1) / 2;
+    let res_alu = alu_ops.div_ceil(2);
     let res_mem = mem_ops;
     let res_noc = noc_ops;
     let res_mii = res_alu.max(res_mem).max(res_noc).max(1);
@@ -210,7 +210,7 @@ pub fn optimize_cl_trace(source: &str, source_name: &str, config: &TraceCacheCon
     let rec_mii = 1;
     let mii = res_mii.max(rec_mii).min(original_bundle_count);
 
-    let stage_count = (original_bundle_count + mii - 1) / mii;
+    let stage_count = original_bundle_count.div_ceil(mii);
 
     // 2. Modulo Scheduling Table: MII rows x 4 slots
     // Modulo slot assignment: slot at cycle c maps to kernel row: c % mii
@@ -315,7 +315,7 @@ pub fn optimize_cl_trace(source: &str, source_name: &str, config: &TraceCacheCon
     let total_fetches = trip_count * scheduled_kernel_cycles;
 
     // First iteration fetches all lines (cold misses):
-    let cold_misses = (scheduled_kernel_cycles + config.line_bundles - 1) / config.line_bundles;
+    let cold_misses = scheduled_kernel_cycles.div_ceil(config.line_bundles);
     let cache_misses = cold_misses;
     let cache_hits = total_fetches.saturating_sub(cache_misses);
     let hit_rate = (cache_hits as f64 / total_fetches as f64) * 100.0;
