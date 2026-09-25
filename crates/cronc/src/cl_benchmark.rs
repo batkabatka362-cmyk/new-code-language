@@ -114,6 +114,12 @@ pub fn run_libcl_benchmarks(workspace_root: &Path, iterations: usize) -> Result<
             ("Reversible Feistel".to_string(), core.reversible_ops_count * iterations)
         } else if k.name == "attention" {
             ("Softmax / SSM Scan".to_string(), core.ai_isa_ops_count * iterations)
+        } else if k.name == "dense_associative_memory" {
+            ("Hopfield Attractor".to_string(), bundles_per_run * iterations)
+        } else if k.name == "active_inference_agent" {
+            ("Free Energy Min".to_string(), bundles_per_run * iterations)
+        } else if k.name == "elastic_ssm_stream" {
+            ("O(1) SSM Token Scan".to_string(), bundles_per_run * iterations)
         } else {
             ("CORDIC Vector Ops".to_string(), bundles_per_run * iterations)
         };

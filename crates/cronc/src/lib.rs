@@ -124,6 +124,9 @@ pub mod cl_verify_math;
 pub mod cl_lint;
 pub mod cl_forge;
 pub mod cl_transpile;
+pub mod cl_hopfield;
+pub mod cl_active_inference;
+pub mod cl_elastic_ssm;
 pub mod docgen;
 
 pub use cl_compose::{
@@ -160,6 +163,9 @@ pub use cl_astrocytes::{GlialNetworkMesh, AstrocyteCell};
 pub use cl_structural_morph::{StructuralMorphEngine, CoreSpecialization};
 pub use cl_self_compiler::{SelfRewritingJitEngine, LiveSlotMutation};
 pub use cl_quantum_zeno::{QuantumOpticalQubit, QuantumHypothesisRegister};
+pub use cl_hopfield::{HopfieldMemoryBank, HopfieldPattern};
+pub use cl_active_inference::ActiveInferenceAgent;
+pub use cl_elastic_ssm::ElasticSsmEngine;
 pub use cl_reversible_thermo::{ReversibleState3, ReversiblePipelineVerifier};
 pub use cl_spatiotemporal::{SpatiotemporalStreamer, MultimodalPhaseEvent};
 

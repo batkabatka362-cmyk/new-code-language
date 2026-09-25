@@ -1,6 +1,6 @@
 [package]
 name = "libcl"
-version = "1.3.0"
+version = "1.4.0"
 description = "CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon"
 authors = ["CRON Language Architecture Team"]
 license = "MIT OR Apache-2.0"
@@ -24,3 +24,6 @@ tree_of_thought = "libcl/tree_of_thought.cl"
 dendritic_morphology = "libcl/dendritic_morphology.cl"
 epigenetic_myelin = "libcl/epigenetic_myelin.cl"
 sparse_attention_block = "libcl/sparse_attention_block.cl"
+dense_associative_memory = "libcl/dense_associative_memory.cl"
+active_inference_agent = "libcl/active_inference_agent.cl"
+elastic_ssm_stream = "libcl/elastic_ssm_stream.cl"

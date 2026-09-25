@@ -412,10 +412,58 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
     );
     fs::write(target_dir.join("sparse_attention_block.cl"), sparse_attn_code).map_err(|e| e.to_string())?;
 
+    // 19. dense_associative_memory.cl
+    let hopfield_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/dense_associative_memory.cl\n\
+         @kernel continuous_hopfield_attractor\n\
+         .target silicon.associative_hopfield\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#008"), build_valid_slot("_", "FA03M102"), build_valid_slot("_", "MD04M102")]),
+        format_bundle(1, &[build_valid_slot("_", "LD05M400"), build_valid_slot("_", "EX06M500"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "ML08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "CO09M800"), build_valid_slot("_", "TX0AM900"), build_valid_slot("~", "RM0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("dense_associative_memory.cl"), hopfield_code).map_err(|e| e.to_string())?;
+
+    // 20. active_inference_agent.cl
+    let active_inf_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/active_inference_agent.cl\n\
+         @kernel active_inference_minimizer\n\
+         .target silicon.active_inference\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("'", "==02#020"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "FA04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "SB05M304"), build_valid_slot("_", "ML06M500"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "EX08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "MD09M800"), build_valid_slot("_", "CO0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("active_inference_agent.cl"), active_inf_code).map_err(|e| e.to_string())?;
+
+    // 21. elastic_ssm_stream.cl
+    let elastic_ssm_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/elastic_ssm_stream.cl\n\
+         @kernel elastic_state_space_memory\n\
+         .target silicon.elastic_ssm\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#080"), build_valid_slot("'", "==02#020"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "ML04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "MD05M400"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "MA07M600"), build_valid_slot("_", "FA08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("elastic_ssm_stream.cl"), elastic_ssm_code).map_err(|e| e.to_string())?;
+
     // Update libcl.toml
     let manifest_toml = "[package]\n\
          name = \"libcl\"\n\
-         version = \"1.3.0\"\n\
+         version = \"1.4.0\"\n\
          description = \"CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon\"\n\
          authors = [\"CRON Language Architecture Team\"]\n\
          license = \"MIT OR Apache-2.0\"\n\
@@ -438,7 +486,10 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
          tree_of_thought = \"libcl/tree_of_thought.cl\"\n\
          dendritic_morphology = \"libcl/dendritic_morphology.cl\"\n\
          epigenetic_myelin = \"libcl/epigenetic_myelin.cl\"\n\
-         sparse_attention_block = \"libcl/sparse_attention_block.cl\"\n";
+         sparse_attention_block = \"libcl/sparse_attention_block.cl\"\n\
+         dense_associative_memory = \"libcl/dense_associative_memory.cl\"\n\
+         active_inference_agent = \"libcl/active_inference_agent.cl\"\n\
+         elastic_ssm_stream = \"libcl/elastic_ssm_stream.cl\"\n";
     fs::write(target_dir.join("libcl.toml"), manifest_toml).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -456,8 +507,8 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
     let libcl_dir = candidates.into_iter().find(|p| p.is_dir()).unwrap_or_else(|| workspace_root.join("libcl"));
     
     // Automatically populate official kernels if not present
-    let math_p = libcl_dir.join("math.cl");
-    if !math_p.exists() {
+    let ssm_p = libcl_dir.join("elastic_ssm_stream.cl");
+    if !ssm_p.exists() {
         let _ = generate_standard_libcl_files(&libcl_dir);
     }
 
@@ -482,6 +533,9 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("dendritic_morphology.cl", "Multi-Compartment Active Dendritic Branching & NMDA Coincidence", "silicon.dendritic_core", 4.0),
         ("epigenetic_myelin.cl", "Adaptive Axon Myelination Latency Tuner & 4D Conductance", "silicon.epigenetic_myelin", 4.0),
         ("sparse_attention_block.cl", "Block-Sparse 4D-Sliding Window Causal Self-Attention & KV Eviction", "silicon.sparse_attention", 4.0),
+        ("dense_associative_memory.cl", "Continuous Modern Hopfield Dense Associative Memory (O(1) Attractor Retrieval)", "silicon.associative_hopfield", 4.0),
+        ("active_inference_agent.cl", "Autonomous Active Inference & Free Energy Minimization (Perception-Action Loop)", "silicon.active_inference", 4.0),
+        ("elastic_ssm_stream.cl", "Elastic State-Space Continuous Memory (O(1) Constant Space Sequence Model)", "silicon.elastic_ssm", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
