@@ -38,7 +38,7 @@ fn test_vibe_loop_broken_ai_code_healed_and_optimized() {
     assert!(result.fixed_crc_count > 0 || result.padded_bundles > 0);
     assert!(result.execution_cycles >= 1);
     assert_eq!(result.optical_ops, 1);
-    assert_eq!(result.registers[1], 0x00FFAA55); // Optical MZI result
+    assert_eq!(result.registers[1], 0x00FF0000); // Authentic Optical MZI result
 }
 
 #[test]

@@ -6,8 +6,12 @@
     { "include": "#comments" },
     { "include": "#semantic_directives" },
     { "include": "#core_directive" },
+    { "include": "#kernel_declaration" },
     { "include": "#label_declaration" },
     { "include": "#bundle_header" },
+    { "include": "#clm_macro_keywords" },
+    { "include": "#registers" },
+    { "include": "#numbers" },
     { "include": "#cl2_slot" }
   ],
   "repository": {
@@ -15,14 +19,14 @@
       "patterns": [
         {
           "name": "comment.line.double-slash.cron-cl",
-          "match": "//.*$"
+          "match": "(//|#|;).*$"
         }
       ]
     },
     "semantic_directives": {
       "patterns": [
         {
-          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights))\\b",
+          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include))\\b",
           "captures": {
             "1": { "name": "keyword.control.directive.cron-cl" }
           }
@@ -32,10 +36,21 @@
     "core_directive": {
       "patterns": [
         {
-          "match": "^\\s*(\\.core)\\s+(\\[[0-9,\\s]+\\]):",
+          "match": "^\\s*(\\.core)\\s+(\\[[0-9,\\s]+\\]):?",
           "captures": {
             "1": { "name": "keyword.control.core.cron-cl" },
             "2": { "name": "entity.name.type.coordinates.cron-cl" }
+          }
+        }
+      ]
+    },
+    "kernel_declaration": {
+      "patterns": [
+        {
+          "match": "(@(kernel|entry|macro|branch|loop))\\s+([A-Za-z0-9_]+):?",
+          "captures": {
+            "1": { "name": "keyword.control.kernel.cron-cl" },
+            "3": { "name": "entity.name.function.kernel.cron-cl" }
           }
         }
       ]
@@ -44,7 +59,7 @@
       "patterns": [
         {
           "name": "entity.name.function.label.cron-cl",
-          "match": "@[A-Za-z0-9_]+:"
+          "match": "@[A-Za-z0-9_]+:?"
         }
       ]
     },
@@ -52,14 +67,42 @@
       "patterns": [
         {
           "name": "entity.name.section.bundle.cron-cl",
-          "match": "\\bB[0-9A-Fa-f]{4}:"
+          "match": "\\b[BCL][0-9A-Fa-f]{4}:"
+        }
+      ]
+    },
+    "clm_macro_keywords": {
+      "patterns": [
+        {
+          "match": "\\b(let|barrier|op_gemm|ternary_mac|stdp_learn|pack_trits|send_noc|recv_noc|return|halt|nop)\\b",
+          "name": "keyword.control.instruction.cl"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "match": "\\b(R[0-9A-Fa-f]|PC|SP|BP|RA|FLAGS)\\b",
+          "name": "variable.parameter.register.cl"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b0x[0-9A-Fa-f]+\\b",
+          "name": "constant.numeric.hex.cl"
+        },
+        {
+          "match": "\\b[0-9]+\\b",
+          "name": "constant.numeric.decimal.cl"
         }
       ]
     },
     "cl2_slot": {
       "patterns": [
         {
-          "match": "([_'~@%&^|$#\\\\()])([A-Za-z0-9=]{2})([0-9A-Fa-f]{2})([$#@+\\-*/&|^~%=<>?!.:\\[\\]{}()\\\\])([A-Za-z0-9xyzwdulrio]{1,3})([0-9A-Za-z!@#$%^&*()_+=\\-\\[\\]{}|;:,.<>?/~`\\\\])([0-9A-Za-z])([>!?;\\]})|])",
+          "match": "([_'~@%&^|$#\\\\=:])([A-Za-z0-9=_]{2})([0-9A-Fa-f]{2})([$#@+\\-*/&|^~%=<>?!.:\\[\\]{}()\\\\])([A-Za-z0-9xyzwdulrio]{1,3})([0-9A-Za-z!@#$%^&*()_+=\\-\\[\\]{}|;:,.<>?/~`\\\\])([0-9A-Za-z])([>!?;\\]})|])",
           "captures": {
             "1": { "name": "punctuation.definition.prefix.cron-cl" },
             "2": { "name": "keyword.operator.opcode.cron-cl" },

@@ -1,7 +1,8 @@
 {
   "files.associations": {
-    "*.cl": "cl",
-    "*.cr": "cr"
+    "*.cl": "cron-cl",
+    "*.clm": "cron-cl",
+    "*.cr": "cron"
   },
   "workbench.iconTheme": "vs-seti",
   "editor.semanticHighlighting.enabled": true,
@@ -9,48 +10,115 @@
     "textMateRules": [
       {
         "scope": [
-          "keyword.control.instruction.cl",
+          "entity.name.section.bundle.cron-cl",
+          "entity.name.section.cycle.cl"
+        ],
+        "settings": {
+          "foreground": "#00F0FF",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "keyword.control.kernel.cron-cl",
+          "keyword.control.core.cron-cl",
+          "keyword.control.directive.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#FF79C6",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "entity.name.function.kernel.cron-cl",
+          "entity.name.function.label.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#F1FA8C"
+        }
+      },
+      {
+        "scope": [
+          "keyword.operator.opcode.cron-cl",
+          "keyword.control.instruction.cl"
+        ],
+        "settings": {
+          "foreground": "#FFB86C",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "variable.other.register.dest.cron-cl",
+          "variable.parameter.register.cl"
+        ],
+        "settings": {
+          "foreground": "#50FA7B"
+        }
+      },
+      {
+        "scope": [
+          "variable.other.register.src.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#8BE9FD"
+        }
+      },
+      {
+        "scope": [
+          "constant.numeric.crc8.cron-cl",
+          "constant.numeric.imm.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#BD93F9"
+        }
+      },
+      {
+        "scope": [
+          "keyword.control.terminator.cron-cl",
+          "punctuation.definition.prefix.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#FF5555"
+        }
+      },
+      {
+        "scope": [
+          "punctuation.separator.mode.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#E0E0E0"
+        }
+      },
+      {
+        "scope": [
+          "entity.name.type.coordinates.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#00FF88",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "comment.line.double-slash.cron-cl",
+          "comment.line.semicolon.cr",
+          "comment.line.number-sign.cr",
+          "comment.line.semicolon.cl"
+        ],
+        "settings": {
+          "foreground": "#6272A4",
+          "fontStyle": "italic"
+        }
+      },
+      {
+        "scope": [
           "keyword.control.cr",
-          "keyword.control.directive.cr",
-          "keyword.control.lisp"
+          "keyword.control.directive.cr"
         ],
         "settings": {
           "foreground": "#569CD6"
-        }
-      },
-      {
-        "scope": [
-          "variable.parameter.register.cl",
-          "variable.parameter.named.cr",
-          "variable.other.cr",
-          "variable.other.lisp"
-        ],
-        "settings": {
-          "foreground": "#9CDCFE"
-        }
-      },
-      {
-        "scope": [
-          "constant.numeric.hex.cl",
-          "constant.numeric.cr",
-          "constant.numeric.hex.cr",
-          "constant.numeric.decimal.cr",
-          "constant.numeric.float.cr",
-          "constant.numeric.lisp"
-        ],
-        "settings": {
-          "foreground": "#B5CEA8"
-        }
-      },
-      {
-        "scope": [
-          "entity.name.section.cycle.cl",
-          "entity.name.section.label.cr",
-          "entity.name.function.cr",
-          "entity.name.function.lisp"
-        ],
-        "settings": {
-          "foreground": "#DCDCAA"
         }
       },
       {
@@ -61,25 +129,6 @@
         ],
         "settings": {
           "foreground": "#4EC9B0"
-        }
-      },
-      {
-        "scope": [
-          "punctuation.terminator.bundle.cl",
-          "punctuation.separator.cl"
-        ],
-        "settings": {
-          "foreground": "#808080"
-        }
-      },
-      {
-        "scope": [
-          "comment.line.semicolon.cr",
-          "comment.line.number-sign.cr",
-          "comment.line.semicolon.cl"
-        ],
-        "settings": {
-          "foreground": "#6A9955"
         }
       }
     ]

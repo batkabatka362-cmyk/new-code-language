@@ -129,6 +129,11 @@ impl SemanticChecker {
             "tensor_scale", "tensor_softmax_maxsub", "tensor_gelu", "tensor_bias",
             // Real-World Training & AGI Telemetry builtins
             "cron_telemetry_init", "cron_telemetry_log", "cron_telemetry_close", "cron_save_agi_state",
+            // Advanced .CL hardware intrinsics lowered from .CR
+            "send_noc", "recv_noc", "noc_barrier", "pack_trits", "pack_trit16", "unpack_trits",
+            "stdp_update", "stdp_learn", "ternary_mac", "bitnet_mac", "ternary_linear",
+            "clifford_rotor_sandwich", "clifford_wedge", "clifford_rotor",
+            "fma", "fms", "popcount", "saturating_add", "xnor", "nand", "nor",
         ] {
             known_functions.insert(f.to_string());
         }
@@ -1560,6 +1565,26 @@ impl SemanticChecker {
                         }
                     }
                 }
+            }
+            Expr::Closure { params, body, .. } => {
+                self.push_scope();
+                for p in params {
+                    self.insert_var(VarInfo {
+                        name: p.name.clone(),
+                        is_lin: p.is_lin,
+                        is_grad: p.is_grad,
+                        is_mut: false,
+                        is_consumed: false,
+                        is_tainted: false,
+                        is_capability: false,
+                        def_span: p.span,
+                        var_type: Some(p.param_type.clone()),
+                        in_region: self.in_region,
+                    });
+                }
+                self.check_expr(body)?;
+                self.verify_all_linear_consumed()?;
+                self.pop_scope();
             }
         }
         Ok(())

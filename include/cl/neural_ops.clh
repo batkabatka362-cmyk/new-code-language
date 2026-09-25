@@ -1,0 +1,4 @@
+// CRON Neural Acceleration Macro Definitions (.clh)
+#define MAC_OPTICAL_DOT(d, s1, s2) _OP##d##M##s1##0##s2
+#define MAC_SSM_SCAN(d, s)          _SS##d##M##s##00
+#define MAC_HDC_BIND(d, s1, s2)     _XO##d##M##s1##0##s2

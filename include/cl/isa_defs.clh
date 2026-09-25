@@ -1,0 +1,6 @@
+// CRON Low-Level ISA Header Definitions (.clh)
+#define CORE_COUNT 256
+#define TORUS_DIM 4
+#define HDC_VEC_DIM 10000
+#define VLIW_SLOT_WIDTH 10
+#define VLIW_BUNDLE_SLOTS 4

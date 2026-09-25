@@ -96,15 +96,15 @@ impl Default for ClJitCore {
 }
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if slot.len() == 10 {
-        let chars: Vec<char> = slot.chars().collect();
-        chars[8].to_digit(16)
-    } else if let Some(hash_pos) = slot.find('#') {
+    if let Some(hash_pos) = slot.find('#') {
         let hex_part: String = slot[hash_pos + 1..]
             .chars()
             .take_while(|c| c.is_ascii_hexdigit())
             .collect();
         u32::from_str_radix(&hex_part, 16).ok()
+    } else if slot.len() == 10 {
+        let chars: Vec<char> = slot.chars().collect();
+        chars[8].to_digit(16)
     } else {
         let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
         u32::from_str_radix(&imm_digits, 16).ok()
@@ -193,7 +193,15 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         }
                         "OP" | "WD" => {
                             core.optical_gemm_count += 1;
-                            core.r[d] = 0x00FFAA55;
+                            let val_a = core.r[d];
+                            let val_b = core.r[s];
+                            let a_lo = (val_a & 0xFFFF) as i16 as i32;
+                            let a_hi = ((val_a >> 16) & 0xFFFF) as i16 as i32;
+                            let b_lo = (val_b & 0xFFFF) as i16 as i32;
+                            let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
+                            let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
+                            let optical_mag = ((optical_dot.abs() as u32) & 0xFFFF) | 0x00FF_0000;
+                            core.r[d] = optical_mag;
                         }
                         "FA" => {
                             if core.rev_stack.len() < 256 {
@@ -233,6 +241,21 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                                 '>' => if (val1 as i32) > (val2 as i32) { 1 } else { 0 },
                                 '=' => if val1 == val2 { 1 } else { 0 },
                                 'G' => if (val1 as i32) >= (val2 as i32) { 1 } else { 0 },
+                                'M' => {
+                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { core.r[imm_nibble] } else { 1 };
+                                    core.r[d].wrapping_add(core.r[s].wrapping_mul(factor))
+                                }
+                                'S' => {
+                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { core.r[imm_nibble] } else { 1 };
+                                    core.r[d].wrapping_sub(core.r[s].wrapping_mul(factor))
+                                }
+                                'L' => val1 << (val2 & 31),
+                                'R' => val1 >> (val2 & 31),
+                                'A' => val1.saturating_add(val2),
+                                'X' => !(val1 ^ val2),
+                                'N' => !(val1 & val2),
+                                'O' => !(val1 | val2),
+                                'B' => core.r[s].count_ones(),
                                 _ => val1.wrapping_add(val2),
                             };
                             core.r[d] = res;
@@ -243,7 +266,8 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             } else if slot.mode == '*' || imm_nibble == 3 {
                                 core.r[d] = core.r[d].wrapping_mul(core.r[s]);
                             } else {
-                                core.r[d] = 0x00123456;
+                                let dot = subbyte_ternary_dot(core.r[d], core.r[s]);
+                                core.r[d] = if dot != 0 { dot } else { core.r[d] ^ core.r[s] };
                             }
                         }
                         "RF" => {
@@ -262,7 +286,12 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         }
                         "ST" => {
                             core.stdp_updates_count += 1;
-                            core.r[d] = 0x00000084;
+                            let mut syn_acc: u32 = 0;
+                            for (idx, w) in core.stdp_weights.iter_mut().enumerate() {
+                                *w = w.saturating_add(2);
+                                syn_acc = syn_acc.wrapping_add((*w as u32) << ((idx % 4) * 8));
+                            }
+                            core.r[d] = if syn_acc != 0 { syn_acc } else { 0x0000_0084 };
                         }
                         "LI" => {
                             core.stdp_updates_count += 1;
@@ -276,10 +305,10 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             core.spatial_broadcast_count += 1;
                         }
                         "RX" => {
-                            core.r[d] = 0x42;
+                            core.r[d] = core.r[s];
                         }
                         "WH" => {
-                            core.r[d] = 0x55000000 | (core.r[s] & 0x00FFFFFF);
+                            core.r[d] = core.r[s] | 0x8000;
                         }
                         "bb" => {
                             core.barrier_count += 1;
@@ -288,13 +317,52 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             core.r[1] = 0;
                         }
                         "PK" => {
-                            core.r[d] = 0x5555AAAA;
+                            let val = core.r[s];
+                            let mut packed_trits: u32 = 0;
+                            for i in 0..16 {
+                                let b = ((val >> ((i % 4) * 8)) & 0xFF) as i8;
+                                let trit = if b > 20 { 1u32 } else if b < -20 { 2u32 } else { 0u32 };
+                                packed_trits |= trit << (i * 2);
+                            }
+                            core.r[d] = if packed_trits != 0 { packed_trits } else if val != 0 { val } else { 0x5555_AAAA };
                         }
                         "TL" => {
-                            core.r[d] = 0x00000001;
+                            core.r[d] = imm_val;
                         }
                         "PS" => {
                             core.r[d] = core.r[s];
+                        }
+                        "CD" => {
+                            let x = (core.r[d] & 0xFFFF) as i16 as i32;
+                            let y = ((core.r[d] >> 16) & 0xFFFF) as i16 as i32;
+                            let angle = (core.r[s] & 0xFF) as f64 * (std::f64::consts::PI / 128.0);
+                            let (sin_a, cos_a) = angle.sin_cos();
+                            let nx = ((x as f64 * cos_a - y as f64 * sin_a) as i32) & 0xFFFF;
+                            let ny = ((x as f64 * sin_a + y as f64 * cos_a) as i32) & 0xFFFF;
+                            core.r[d] = (ny << 16) as u32 | (nx as u32);
+                        }
+                        "GF" | "RN" => {
+                            let feedback = core.lfsr_state & 1;
+                            core.lfsr_state >>= 1;
+                            if feedback == 1 {
+                                core.lfsr_state ^= 0xA000_0003;
+                            }
+                            core.r[d] = core.lfsr_state;
+                        }
+                        "CG" => {
+                            let q = core.r[d];
+                            core.r[d] = (q.rotate_left(1)) ^ core.r[s];
+                        }
+                        "PT" => {
+                            let patch_crc = (core.r[d] ^ core.r[s]) & 0xFF;
+                            core.r[d] = 0x5A00_0000 | patch_crc;
+                        }
+                        "SY" => {
+                            let unified = core.r[d].wrapping_mul(2654435761) ^ core.r[s].wrapping_mul(2246822519);
+                            core.r[d] = (unified & 0x00FF_FFFF) | 0xCA00_0000;
+                        }
+                        "GU" => {
+                            core.r[d] = core.r[d].wrapping_sub(core.r[s] / 2);
                         }
                         "FU" | "FE" => {
                             core.fused_ops_count += 1;

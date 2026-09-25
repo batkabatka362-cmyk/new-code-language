@@ -429,6 +429,13 @@ pub enum Expr {
         arms: Vec<MatchArm>,
         span: Span,
     },
+    /// First-class zero-vtable closure: |params| -> body
+    Closure {
+        params: Vec<Param>,
+        return_type: Option<String>,
+        body: Box<Expr>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -444,6 +451,7 @@ impl Expr {
             Expr::Comptime { span, .. } => *span,
             Expr::Ref(inner) | Expr::RefMut(inner) => inner.span(),
             Expr::Match { span, .. } => *span,
+            Expr::Closure { span, .. } => *span,
             _ => Span::default(),
         }
     }

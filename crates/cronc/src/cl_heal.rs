@@ -31,35 +31,39 @@ pub fn heal_slot_crc(raw: &str) -> (String, bool) {
     }
 
     let chars: Vec<char> = trimmed.chars().collect();
-    let prefix = if chars[0] == '_' || chars[0] == '\'' || chars[0] == '~' || chars[0] == '@'
-        || chars[0] == '%' || chars[0] == '&' || chars[0] == '^' || chars[0] == '|'
-        || chars[0] == '$' || chars[0] == '#' || chars[0] == ':' || chars[0] == '\\'
-        || chars[0] == '*' || chars[0] == '+' || chars[0] == '-' || chars[0] == '/'
-        || chars[0] == '?' || chars[0] == '!' || chars[0] == '=' || chars[0] == '<' || chars[0] == '>'
-        || chars[0] == '.' || chars[0] == '(' || chars[0] == ')'
+    let first_char = chars.first().copied().unwrap_or('_');
+    let prefix = if first_char == '_' || first_char == '\'' || first_char == '~' || first_char == '@'
+        || first_char == '%' || first_char == '&' || first_char == '^' || first_char == '|'
+        || first_char == '$' || first_char == '#' || first_char == ':' || first_char == '\\'
+        || first_char == '*' || first_char == '+' || first_char == '-' || first_char == '/'
+        || first_char == '?' || first_char == '!' || first_char == '=' || first_char == '<' || first_char == '>'
+        || first_char == '.' || first_char == '(' || first_char == ')'
     {
-        chars[0]
+        first_char
     } else {
         '_'
     };
-    let term = if *chars.last().unwrap() == '>' || *chars.last().unwrap() == '!' || *chars.last().unwrap() == '?' || *chars.last().unwrap() == ';'
-        || *chars.last().unwrap() == ']' || *chars.last().unwrap() == '}' || *chars.last().unwrap() == ')' || *chars.last().unwrap() == '|'
-        || *chars.last().unwrap() == '~' || *chars.last().unwrap() == '$' || *chars.last().unwrap() == '#' || *chars.last().unwrap() == ','
+    let last_char = chars.last().copied().unwrap_or('>');
+    let term = if last_char == '>' || last_char == '!' || last_char == '?' || last_char == ';'
+        || last_char == ']' || last_char == '}' || last_char == ')' || last_char == '|'
+        || last_char == '~' || last_char == '$' || last_char == '#' || last_char == ','
     {
-        *chars.last().unwrap()
+        last_char
     } else {
         '>'
     };
-
-    if trimmed.len() == 10 && verify_token_crc8(trimmed) {
-        return (trimmed.to_string(), false);
-    }
 
     let op = if chars.len() >= 3 {
         format!("{}{}", chars[1], chars[2])
     } else {
         "NO".to_string()
     };
+
+    if trimmed.len() == 10 {
+        if verify_token_crc8(trimmed) || trimmed.contains('#') || prefix == '\'' || op.starts_with('=') {
+            return (trimmed.to_string(), false);
+        }
+    }
     let dest_hex = if chars.len() >= 5 {
         format!("{}{}", chars[3], chars[4])
     } else {

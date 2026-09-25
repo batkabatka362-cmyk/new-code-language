@@ -21,12 +21,12 @@ def main() -> i32 {
     let act_token: @sram(bank=0) i32 = 42
 
     // 2. Model Weights Ingestion
-    let w_w_q: u32 = 0x55555555 // Shape: [4, 4], Scale: 1.2000
+    let w_w_k: u32 = 0x55555555 // Shape: [4, 4], Scale: 1.2000
     let x_in: u32 = 0x55555555
     let bias: f32 = 0.1200
 
-    let w_w_k: u32 = 0x55555555 // Shape: [4, 4], Scale: 1.2000
-    let projection: f32 = ternary_dense_forward(w_w_q, x_in, bias)
+    let w_w_q: u32 = 0x55555555 // Shape: [4, 4], Scale: 1.2000
+    let projection: f32 = ternary_dense_forward(w_w_k, x_in, bias)
 
     // 3. Fused Systolic Attention Head Computation
     // Kernel Fusion: Scaled Dot-Product Tile Attention + Residual Stream

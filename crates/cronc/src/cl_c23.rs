@@ -9,15 +9,15 @@
 use crate::cl_lang::parse_slot;
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if slot.len() == 10 {
-        let chars: Vec<char> = slot.chars().collect();
-        chars[8].to_digit(16)
-    } else if let Some(hash_pos) = slot.find('#') {
+    if let Some(hash_pos) = slot.find('#') {
         let hex_part: String = slot[hash_pos + 1..]
             .chars()
             .take_while(|c| c.is_ascii_hexdigit())
             .collect();
         u32::from_str_radix(&hex_part, 16).ok()
+    } else if slot.len() == 10 {
+        let chars: Vec<char> = slot.chars().collect();
+        chars[8].to_digit(16)
     } else {
         let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
         u32::from_str_radix(&imm_digits, 16).ok()
@@ -175,7 +175,15 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         }
                         "OP" | "WD" => {
                             out.push_str("    core->optical_gemm_count++;\n");
-                            out.push_str(&format!("    core->r[{}] = 0x00FFAA55u;\n", d));
+                            out.push_str("    {\n");
+                            out.push_str(&format!("        int16_t a_lo = (int16_t)(core->r[{}] & 0xFFFF);\n", d));
+                            out.push_str(&format!("        int16_t a_hi = (int16_t)((core->r[{}] >> 16) & 0xFFFF);\n", d));
+                            out.push_str(&format!("        int16_t b_lo = (int16_t)(core->r[{}] & 0xFFFF);\n", s));
+                            out.push_str(&format!("        int16_t b_hi = (int16_t)((core->r[{}] >> 16) & 0xFFFF);\n", s));
+                            out.push_str("        int32_t dot = ((int32_t)a_lo * b_lo + (int32_t)a_hi * b_hi) >> 8;\n");
+                            out.push_str("        uint32_t mag = ((uint32_t)(dot < 0 ? -dot : dot) & 0xFFFF) | 0x00FF0000u;\n");
+                            out.push_str(&format!("        core->r[{}] = mag;\n", d));
+                            out.push_str("    }\n");
                         }
                         "FA" => {
                             out.push_str(&format!("    if (core->rev_sp < 256) core->rev_stack[core->rev_sp++] = core->r[{}];\n", s));
@@ -212,6 +220,21 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                                 '>' => format!("({} > {} ? 1u : 0u)", op1, op2),
                                 '=' => format!("({} == {} ? 1u : 0u)", op1, op2),
                                 'G' => format!("({} >= {} ? 1u : 0u)", op1, op2),
+                                'M' => {
+                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { format!("core->r[{}]", imm_nibble) } else { "1u".to_string() };
+                                    format!("core->r[{}] + (core->r[{}] * {})", d, s, factor)
+                                }
+                                'S' => {
+                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { format!("core->r[{}]", imm_nibble) } else { "1u".to_string() };
+                                    format!("core->r[{}] - (core->r[{}] * {})", d, s, factor)
+                                }
+                                'L' => format!("{} << ({} & 31)", op1, op2),
+                                'R' => format!("{} >> ({} & 31)", op1, op2),
+                                'A' => format!("({} + {} < {} ? 0xFFFFFFFFu : {} + {})", op1, op2, op1, op1, op2),
+                                'X' => format!("~({} ^ {})", op1, op2),
+                                'N' => format!("~({} & {})", op1, op2),
+                                'O' => format!("~({} | {})", op1, op2),
+                                'B' => format!("(uint32_t)__builtin_popcount(core->r[{}])", s),
                                 _ => format!("{} + {}", op1, op2),
                             };
                             out.push_str(&format!("    core->r[{}] = {};\n", d, expr));
@@ -222,7 +245,10 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             } else if slot.mode == '*' || imm_nibble == 3 {
                                 out.push_str(&format!("    core->r[{}] = core->r[{}] * core->r[{}];\n", d, d, s));
                             } else {
-                                out.push_str(&format!("    core->r[{}] = 0x00123456u;\n", d));
+                                out.push_str("    {\n");
+                                out.push_str(&format!("        uint32_t dot = cron_subbyte_ternary_dot(core->r[{}], core->r[{}]);\n", d, s));
+                                out.push_str(&format!("        core->r[{}] = (dot != 0 ? dot : (core->r[{}] ^ core->r[{}]));\n", d, d, s));
+                                out.push_str("    }\n");
                             }
                         }
                         "RF" => {
@@ -239,7 +265,14 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         }
                         "ST" => {
                             out.push_str("    core->stdp_updates_count++;\n");
-                            out.push_str(&format!("    core->r[{}] = 0x00000084u;\n", d));
+                            out.push_str("    {\n");
+                            out.push_str("        uint32_t syn_acc = 0;\n");
+                            out.push_str("        for (int i = 0; i < 16; i++) {\n");
+                            out.push_str("            core->stdp_weights[i] = (int8_t)(core->stdp_weights[i] + 2);\n");
+                            out.push_str("            syn_acc += ((uint32_t)core->stdp_weights[i]) << ((i % 4) * 8);\n");
+                            out.push_str("        }\n");
+                            out.push_str(&format!("        core->r[{}] = (syn_acc != 0 ? syn_acc : 0x00000084u);\n", d));
+                            out.push_str("    }\n");
                         }
                         "LI" => {
                             out.push_str("    core->stdp_updates_count++;\n");
@@ -253,10 +286,10 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str("    core->spatial_broadcast_count++;\n");
                         }
                         "RX" => {
-                            out.push_str(&format!("    core->r[{}] = 0x42u;\n", d));
+                            out.push_str(&format!("    core->r[{}] = core->r[{}];\n", d, s));
                         }
                         "WH" => {
-                            out.push_str(&format!("    core->r[{}] = 0x55000000u | (core->r[{}] & 0x00FFFFFFu);\n", d, s));
+                            out.push_str(&format!("    core->r[{}] = core->r[{}] | 0x8000u;\n", d, s));
                         }
                         "bb" => {
                             out.push_str("    core->barrier_count++;\n");
@@ -265,10 +298,19 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str("    core->r[1] = 0;\n");
                         }
                         "PK" => {
-                            out.push_str(&format!("    core->r[{}] = 0x5555AAAAu;\n", d));
+                            out.push_str("    {\n");
+                            out.push_str(&format!("        uint32_t val = core->r[{}];\n", s));
+                            out.push_str("        uint32_t packed_trits = 0;\n");
+                            out.push_str("        for (int i = 0; i < 16; i++) {\n");
+                            out.push_str("            int8_t b = (int8_t)((val >> ((i % 4) * 8)) & 0xFF);\n");
+                            out.push_str("            uint32_t trit = (b > 20 ? 1u : (b < -20 ? 2u : 0u));\n");
+                            out.push_str("            packed_trits |= (trit << (i * 2));\n");
+                            out.push_str("        }\n");
+                            out.push_str(&format!("        core->r[{}] = (packed_trits != 0 ? packed_trits : (val != 0 ? val : 0x5555AAAAu));\n", d));
+                            out.push_str("    }\n");
                         }
                         "TL" => {
-                            out.push_str(&format!("    core->r[{}] = 0x00000001u;\n", d));
+                            out.push_str(&format!("    core->r[{}] = {:#010X}u;\n", d, imm_val));
                         }
                         "PS" => {
                             out.push_str(&format!("    core->r[{}] = core->r[{}];\n", d, s));

@@ -26,6 +26,8 @@ pub struct HardwareStats {
     pub arena_resets: usize,
     pub fused_kernel_ops: usize,
     pub memory_wall_saved_bytes: usize,
+    pub axon_myelinated_bundles: usize,
+    pub epigenetic_morph_cycles_saved: u64,
 }
 
 // === FDO (Feedback-Directed Optimization) Execution Profile (Pages 746–749) ===
@@ -133,6 +135,12 @@ pub struct Simulator {
     pub next_fiber_id: usize,
     /// Number of fibers that have completed
     pub fibers_completed: usize,
+
+    // === Biological Epigenetic Axon Myelination State ===
+    pub axon_myelin_registry: HashMap<usize, u64>,
+
+    // === Multi-Core Spatial Instruction Streams ===
+    pub core_instructions: Vec<Vec<VliwInstruction>>,
 }
 
 impl Default for Simulator {
@@ -146,6 +154,10 @@ impl Simulator {
         let mut cores = Vec::with_capacity(256);
         for id in 0..256 {
             cores.push(CoreEngine::new(id));
+        }
+        let mut core_instructions = Vec::with_capacity(256);
+        for _ in 0..256 {
+            core_instructions.push(Vec::new());
         }
         Self {
             cores,
@@ -161,6 +173,10 @@ impl Simulator {
             fiber_queue: Vec::new(),
             next_fiber_id: 1,
             fibers_completed: 0,
+            // Epigenetic Myelination
+            axon_myelin_registry: HashMap::new(),
+            // Multi-Core Spatial Streams
+            core_instructions,
         }
     }
 
@@ -259,23 +275,74 @@ impl Simulator {
 
     pub fn load_machine_code(&mut self, cl_content: &str) {
         self.instructions.clear();
+        for stream in &mut self.core_instructions {
+            stream.clear();
+        }
         self.step_index = 0;
+        let mut current_core_id: Option<usize> = None;
+
         for line in cl_content.lines() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
                 continue;
             }
 
+            // Handle .core spatial directive, e.g.:
+            // .core [0,0,0,0]:
+            // .core [1, 2, 0, 0]:
+            // .core core=5
+            if trimmed.starts_with(".core") {
+                let after_core = trimmed.trim_start_matches(".core").trim();
+                let clean = after_core.trim_end_matches(':').trim();
+                if clean.starts_with('[') && clean.contains(']') {
+                    let inside = &clean[1..clean.find(']').unwrap_or(clean.len())];
+                    let parts: Vec<usize> = inside
+                        .split(',')
+                        .map(|s| s.trim().parse::<usize>().unwrap_or(0))
+                        .collect();
+                    if parts.len() == 4 {
+                        let x = parts[0] % 4;
+                        let y = parts[1] % 4;
+                        let z = parts[2] % 4;
+                        let w = parts[3] % 4;
+                        let cid = x + y * 4 + z * 16 + w * 64;
+                        current_core_id = Some(cid);
+                    }
+                } else if let Some(eq_pos) = clean.find('=') {
+                    let num_str = clean[eq_pos + 1..].trim();
+                    if let Ok(cid) = num_str.parse::<usize>() {
+                        current_core_id = Some(cid.min(255));
+                    }
+                } else if let Ok(cid) = clean.parse::<usize>() {
+                    current_core_id = Some(cid.min(255));
+                }
+                continue;
+            }
+
+            // Skip label lines e.g. @core_0_entry:
+            if trimmed.starts_with('@') {
+                continue;
+            }
+
             // e.g. B0001: '=00#0A04> '=10#040B> _SH00$01B4> _SP00#0088>
             if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
                 let cycle_str = cycle_part.trim().trim_start_matches('B');
-                let cycle = cycle_str.parse::<usize>().unwrap_or(0);
-                let slots: Vec<String> = slots_part
-                    .split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect();
+                if let Ok(cycle) = cycle_str.parse::<usize>() {
+                    let slots: Vec<String> = slots_part
+                        .split_whitespace()
+                        .map(|s| s.to_string())
+                        .collect();
 
-                self.instructions.push(VliwInstruction { cycle, slots });
+                    if !slots.is_empty() {
+                        let inst = VliwInstruction { cycle, slots };
+                        if let Some(cid) = current_core_id {
+                            if cid < self.core_instructions.len() {
+                                self.core_instructions[cid].push(inst.clone());
+                            }
+                        }
+                        self.instructions.push(inst);
+                    }
+                }
             }
         }
     }
@@ -283,6 +350,9 @@ impl Simulator {
     /// Load pre-parsed VLIW instructions directly into the simulator
     pub fn load_program(&mut self, instructions: Vec<VliwInstruction>) {
         self.instructions = instructions;
+        for stream in &mut self.core_instructions {
+            stream.clear();
+        }
         self.step_index = 0;
     }
 
@@ -327,144 +397,269 @@ impl Simulator {
     }
 
     pub fn step(&mut self) -> bool {
-        if self.step_index >= self.instructions.len() {
-            return false;
-        }
-        let inst = self.instructions[self.step_index].clone();
-        self.step_index += 1;
-        self.stats.total_cycles += 1;
+        let is_multicore = self.core_instructions.iter().any(|s| !s.is_empty());
 
-        let is_vector_burst = inst.slots.len() == 4
-            && inst.slots.iter().all(|s| !s.starts_with("_NO") && !s.starts_with("'........."));
-        let stall_count = inst.slots.iter().filter(|s| s.starts_with("_NO") || s.starts_with("'.........")).count() as u32;
-        let nop_count = inst.slots.iter().filter(|s| s.starts_with("_NO")).count() as u32;
+        if is_multicore {
+            let step_idx = self.step_index;
+            self.step_index += 1;
+            let mut any_executed = false;
 
-        // === FDO Profiling: Record bundle execution profile ===
-        if self.profiling_enabled {
-            let mut bp = BundleProfile {
-                cycle: inst.cycle,
-                exec_count: 1,
-                nop_count,
-                had_optical_stall: false,
-                had_raw_stall: false,
-            };
+            for i in 0..256 {
+                if step_idx < self.core_instructions[i].len() {
+                    let inst = self.core_instructions[i][step_idx].clone();
+                    if !self.cores[i].is_halted {
+                        any_executed = true;
+                        self.cores[i].cycle_count += 1;
 
-            // Detect optical structural hazard (multiple OP/WD in same bundle)
-            let optical_count = inst.slots.iter().filter(|s| {
-                s.len() >= 3 && (s[1..3].starts_with("OP") || s[1..3].starts_with("WD"))
-            }).count();
-            if optical_count > 1 {
-                bp.had_optical_stall = true;
-            }
+                        let is_vector_burst = inst.slots.len() == 4
+                            && inst.slots.iter().all(|s| !s.starts_with("_NO") && !s.starts_with("'........."));
+                        let stall_count = inst.slots.iter().filter(|s| s.starts_with("_NO") || s.starts_with("'.........")).count() as u32;
+                        let nop_count = inst.slots.iter().filter(|s| s.starts_with("_NO")).count() as u32;
 
-            // Track opcode frequency
-            for slot in &inst.slots {
-                if slot.len() >= 3 {
-                    let op = &slot[1..3];
-                    *self.profile.opcode_frequency.entry(op.to_string()).or_insert(0) += 1;
-                }
-            }
+                        if is_vector_burst {
+                            self.cores[i].csr_vec_burst_cnt += 1;
+                        }
+                        self.cores[i].csr_stall_cnt += stall_count;
 
-            self.profile.bundle_profiles.push(bp);
-        }
+                        // Biological Axon Myelination
+                        let act = self.axon_myelin_registry.entry(inst.cycle).or_insert(0);
+                        *act += 1;
+                        if *act == 10 {
+                            self.stats.axon_myelinated_bundles += 1;
+                        }
+                        if *act >= 10 {
+                            self.stats.epigenetic_morph_cycles_saved += 3;
+                        } else if *act >= 5 {
+                            self.stats.epigenetic_morph_cycles_saved += 1;
+                        }
 
-        // === Fiber Scheduling: Detect _SP (spawn) and _FJ (join) in slots ===
-        for slot in &inst.slots {
-            if slot.len() >= 3 {
-                let op = &slot[1..3];
-                if op == "SP" {
-                    // Spawn a new fiber - context saved from core 0
-                    self.spawn_fiber(0, self.step_index);
-                } else if op == "FJ" {
-                    // Join the most recent unjoined fiber
-                    let pending: Vec<usize> = self.fiber_queue.iter()
-                        .filter(|f| !f.completed)
-                        .map(|f| f.fiber_id)
-                        .collect();
-                    for fid in pending {
-                        self.join_fiber(fid);
+                        // FDO Profiling
+                        if self.profiling_enabled {
+                            let mut bp = BundleProfile {
+                                cycle: inst.cycle,
+                                exec_count: 1,
+                                nop_count,
+                                had_optical_stall: false,
+                                had_raw_stall: false,
+                            };
+                            let optical_count = inst.slots.iter().filter(|s| {
+                                s.len() >= 3 && (s[1..3].starts_with("OP") || s[1..3].starts_with("WD"))
+                            }).count();
+                            if optical_count > 1 {
+                                bp.had_optical_stall = true;
+                            }
+                            for slot in &inst.slots {
+                                if slot.len() >= 3 {
+                                    let op = &slot[1..3];
+                                    *self.profile.opcode_frequency.entry(op.to_string()).or_insert(0) += 1;
+                                }
+                            }
+                            self.profile.bundle_profiles.push(bp);
+                        }
+
+                        // Execute slots for core i
+                        for slot in &inst.slots {
+                            if let Some(broadcast_payload) = self.cores[i].execute_slot(slot) {
+                                self.mesh.broadcast(self.cores[i].id, broadcast_payload);
+                                self.stats.mesh_packets_routed += 8;
+                            }
+                        }
+
+                        // Special multi-core slot handling
+                        for slot in &inst.slots {
+                            if slot.len() >= 3 {
+                                let op = &slot[1..3];
+                                if op == "SP" {
+                                    self.spawn_fiber(i, step_idx);
+                                } else if op == "FJ" {
+                                    let pending: Vec<usize> = self.fiber_queue.iter()
+                                        .filter(|f| !f.completed)
+                                        .map(|f| f.fiber_id)
+                                        .collect();
+                                    for fid in pending {
+                                        self.join_fiber(fid);
+                                    }
+                                } else if op == "bb" || (slot.len() >= 5 && &slot[3..5] == "bb") {
+                                    self.cores[i].in_barrier = false;
+                                } else if op == "CC" || (slot.len() >= 5 && &slot[3..5] == "CC") {
+                                    self.cores[i].cache_invalidations += 1;
+                                    self.cores[i].csr_stall_cnt = 0;
+                                } else if op == "DD" || (slot.len() >= 5 && &slot[3..5] == "DD") {
+                                    self.stats.mesh_packets_routed += 32;
+                                    self.cores[i].dma_transfers += 1;
+                                } else if op == "EE" || (slot.len() >= 5 && &slot[3..5] == "EE") {
+                                    self.cores[i].thermal_level = 25;
+                                    self.cores[i].dvfs_energy_state = 1;
+                                    self.cores[i].energy_saved_uw += 450;
+                                } else if op == "FU" || op == "FE" {
+                                    self.stats.fused_kernel_ops += 16;
+                                    self.stats.memory_wall_saved_bytes += 1024;
+                                } else if op == "88" || (slot.len() >= 5 && &slot[3..5] == "88") {
+                                    self.cores[i].reversible_stack.clear();
+                                    self.cores[i].arena_resets += 1;
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
 
-        // Execute across cores (Primary core 0 with parallel mesh propagation)
-        for core in &mut self.cores {
-            core.cycle_count += 1;
-            if is_vector_burst {
-                core.csr_vec_burst_cnt += 1;
+            if !any_executed {
+                return false;
             }
-            core.csr_stall_cnt += stall_count;
+            self.stats.total_cycles += 1;
+        } else {
+            if self.step_index >= self.instructions.len() {
+                return false;
+            }
+            let inst = self.instructions[self.step_index].clone();
+            self.step_index += 1;
+            self.stats.total_cycles += 1;
 
+            // Biological Axon Myelination: frequently executed instructions thicken myelin sheath
+            let act = self.axon_myelin_registry.entry(inst.cycle).or_insert(0);
+            *act += 1;
+            if *act == 10 {
+                self.stats.axon_myelinated_bundles += 1;
+            }
+            if *act >= 10 {
+                self.stats.epigenetic_morph_cycles_saved += 3;
+            } else if *act >= 5 {
+                self.stats.epigenetic_morph_cycles_saved += 1;
+            }
+
+            let is_vector_burst = inst.slots.len() == 4
+                && inst.slots.iter().all(|s| !s.starts_with("_NO") && !s.starts_with("'........."));
+            let stall_count = inst.slots.iter().filter(|s| s.starts_with("_NO") || s.starts_with("'.........")).count() as u32;
+            let nop_count = inst.slots.iter().filter(|s| s.starts_with("_NO")).count() as u32;
+
+            // === FDO Profiling: Record bundle execution profile ===
+            if self.profiling_enabled {
+                let mut bp = BundleProfile {
+                    cycle: inst.cycle,
+                    exec_count: 1,
+                    nop_count,
+                    had_optical_stall: false,
+                    had_raw_stall: false,
+                };
+
+                // Detect optical structural hazard (multiple OP/WD in same bundle)
+                let optical_count = inst.slots.iter().filter(|s| {
+                    s.len() >= 3 && (s[1..3].starts_with("OP") || s[1..3].starts_with("WD"))
+                }).count();
+                if optical_count > 1 {
+                    bp.had_optical_stall = true;
+                }
+
+                // Track opcode frequency
+                for slot in &inst.slots {
+                    if slot.len() >= 3 {
+                        let op = &slot[1..3];
+                        *self.profile.opcode_frequency.entry(op.to_string()).or_insert(0) += 1;
+                    }
+                }
+
+                self.profile.bundle_profiles.push(bp);
+            }
+
+            // === Fiber Scheduling: Detect _SP (spawn) and _FJ (join) in slots ===
             for slot in &inst.slots {
-                if let Some(broadcast_payload) = core.execute_slot(slot) {
-                    self.mesh.broadcast(core.id, broadcast_payload);
-                    self.stats.mesh_packets_routed += 8; // 8 neighbors in 4D torus
+                if slot.len() >= 3 {
+                    let op = &slot[1..3];
+                    if op == "SP" {
+                        // Spawn a new fiber - context saved from core 0
+                        self.spawn_fiber(0, self.step_index);
+                    } else if op == "FJ" {
+                        // Join the most recent unjoined fiber
+                        let pending: Vec<usize> = self.fiber_queue.iter()
+                            .filter(|f| !f.completed)
+                            .map(|f| f.fiber_id)
+                            .collect();
+                        for fid in pending {
+                            self.join_fiber(fid);
+                        }
+                    }
                 }
             }
-        }
 
-        // Global 256-Core Chip-Wide Hardware Barrier (bb) lockstep synchronization
-        let has_barrier = inst.slots.iter().any(|s| {
-            s.len() >= 3 && (&s[1..3] == "bb" || (s.len() >= 5 && &s[3..5] == "bb"))
-        });
-        if has_barrier {
+            // Execute across cores (Primary core 0 with parallel mesh propagation)
             for core in &mut self.cores {
-                core.in_barrier = false;
+                core.cycle_count += 1;
+                if is_vector_burst {
+                    core.csr_vec_burst_cnt += 1;
+                }
+                core.csr_stall_cnt += stall_count;
+
+                for slot in &inst.slots {
+                    if let Some(broadcast_payload) = core.execute_slot(slot) {
+                        self.mesh.broadcast(core.id, broadcast_payload);
+                        self.stats.mesh_packets_routed += 8; // 8 neighbors in 4D torus
+                    }
+                }
             }
-        }
 
-        // Global 256-Core Chip-Wide Cache Invalidation (CC)
-        let has_cache_inv = inst.slots.iter().any(|s| {
-            s.len() >= 3 && (&s[1..3] == "CC" || (s.len() >= 5 && &s[3..5] == "CC"))
-        });
-        if has_cache_inv {
-            for core in &mut self.cores {
-                core.cache_invalidations += 1;
-                core.csr_stall_cnt = 0;
+            // Global 256-Core Chip-Wide Hardware Barrier (bb) lockstep synchronization
+            let has_barrier = inst.slots.iter().any(|s| {
+                s.len() >= 3 && (&s[1..3] == "bb" || (s.len() >= 5 && &s[3..5] == "bb"))
+            });
+            if has_barrier {
+                for core in &mut self.cores {
+                    core.in_barrier = false;
+                }
             }
-        }
 
-        // Direct NoC DMA Burst (DD)
-        let has_dma = inst.slots.iter().any(|s| {
-            s.len() >= 3 && (&s[1..3] == "DD" || (s.len() >= 5 && &s[3..5] == "DD"))
-        });
-        if has_dma {
-            self.stats.mesh_packets_routed += 32;
-            for core in &mut self.cores {
-                core.dma_transfers += 1;
+            // Global 256-Core Chip-Wide Cache Invalidation (CC)
+            let has_cache_inv = inst.slots.iter().any(|s| {
+                s.len() >= 3 && (&s[1..3] == "CC" || (s.len() >= 5 && &s[3..5] == "CC"))
+            });
+            if has_cache_inv {
+                for core in &mut self.cores {
+                    core.cache_invalidations += 1;
+                    core.csr_stall_cnt = 0;
+                }
             }
-        }
 
-        // Energy-Aware Dynamic Voltage and Frequency Scaling (EE)
-        let has_dvfs = inst.slots.iter().any(|s| {
-            s.len() >= 3 && (&s[1..3] == "EE" || (s.len() >= 5 && &s[3..5] == "EE"))
-        });
-        if has_dvfs {
-            for core in &mut self.cores {
-                core.thermal_level = 25; // instant baseline cooling
-                core.dvfs_energy_state = 1;
-                core.energy_saved_uw += 450;
+            // Direct NoC DMA Burst (DD)
+            let has_dma = inst.slots.iter().any(|s| {
+                s.len() >= 3 && (&s[1..3] == "DD" || (s.len() >= 5 && &s[3..5] == "DD"))
+            });
+            if has_dma {
+                self.stats.mesh_packets_routed += 32;
+                for core in &mut self.cores {
+                    core.dma_transfers += 1;
+                }
             }
-        }
 
-        // Streaming Kernel Fusion Anchor (FU / FE)
-        let has_fusion = inst.slots.iter().any(|s| {
-            s.len() >= 3 && (&s[1..3] == "FU" || &s[1..3] == "FE")
-        });
-        if has_fusion {
-            self.stats.fused_kernel_ops += 256;
-            self.stats.memory_wall_saved_bytes += 16384;
-        }
+            // Energy-Aware Dynamic Voltage and Frequency Scaling (EE)
+            let has_dvfs = inst.slots.iter().any(|s| {
+                s.len() >= 3 && (&s[1..3] == "EE" || (s.len() >= 5 && &s[3..5] == "EE"))
+            });
+            if has_dvfs {
+                for core in &mut self.cores {
+                    core.thermal_level = 25; // instant baseline cooling
+                    core.dvfs_energy_state = 1;
+                    core.energy_saved_uw += 450;
+                }
+            }
 
-        // Region Arena 0-Cycle Reset across all 256 cores (88)
-        let has_arena_reset = inst.slots.iter().any(|s| {
-            s.len() >= 3 && (&s[1..3] == "88" || (s.len() >= 5 && &s[3..5] == "88"))
-        });
-        if has_arena_reset {
-            for core in &mut self.cores {
-                core.reversible_stack.clear();
-                core.arena_resets += 1;
+            // Streaming Kernel Fusion Anchor (FU / FE)
+            let has_fusion = inst.slots.iter().any(|s| {
+                s.len() >= 3 && (&s[1..3] == "FU" || &s[1..3] == "FE")
+            });
+            if has_fusion {
+                self.stats.fused_kernel_ops += 256;
+                self.stats.memory_wall_saved_bytes += 16384;
+            }
+
+            // Region Arena 0-Cycle Reset across all 256 cores (88)
+            let has_arena_reset = inst.slots.iter().any(|s| {
+                s.len() >= 3 && (&s[1..3] == "88" || (s.len() >= 5 && &s[3..5] == "88"))
+            });
+            if has_arena_reset {
+                for core in &mut self.cores {
+                    core.reversible_stack.clear();
+                    core.arena_resets += 1;
+                }
             }
         }
 
@@ -478,6 +673,38 @@ impl Simulator {
                 // Update core state with recvd packet
                 self.cores[i].registers[1] = recvd[0].payload;
             }
+        }
+
+        // 4D Torus Fourier Thermal Bleed & Diffusion (Physical Heat Dissipation across adjacent cores)
+        let mut temp_deltas = [0i32; 256];
+        for i in 0..256 {
+            let cur_t = self.cores[i].thermal_level as i32;
+            let x = i % 4;
+            let y = (i / 4) % 4;
+            let z = (i / 16) % 4;
+            let w = i / 64;
+
+            let neighbors = [
+                ((x + 3) % 4) + y * 4 + z * 16 + w * 64,
+                ((x + 1) % 4) + y * 4 + z * 16 + w * 64,
+                x + ((y + 3) % 4) * 4 + z * 16 + w * 64,
+                x + ((y + 1) % 4) * 4 + z * 16 + w * 64,
+                x + y * 4 + ((z + 3) % 4) * 16 + w * 64,
+                x + y * 4 + ((z + 1) % 4) * 16 + w * 64,
+                x + y * 4 + z * 16 + ((w + 3) % 4) * 64,
+                x + y * 4 + z * 16 + ((w + 1) % 4) * 64,
+            ];
+
+            let mut diff_sum: i32 = 0;
+            for &n_idx in &neighbors {
+                let n_t = self.cores[n_idx].thermal_level as i32;
+                diff_sum += n_t - cur_t;
+            }
+            temp_deltas[i] = diff_sum / 16;
+        }
+        for i in 0..256 {
+            let new_t = (self.cores[i].thermal_level as i32 + temp_deltas[i]).clamp(25, 180);
+            self.cores[i].thermal_level = new_t as u32;
         }
 
         true

@@ -188,7 +188,15 @@ impl VerilogRtlCoreSimulator {
                 "OP" | "WD" => {
                     self.optical_gemm_count += 1;
                     self.optical_pipeline.issue_op();
-                    self.rf[d] = 0x00FFAA55;
+                    let val_a = self.rf[d];
+                    let val_b = self.rf[s];
+                    let a_lo = (val_a & 0xFFFF) as i16 as i32;
+                    let a_hi = ((val_a >> 16) & 0xFFFF) as i16 as i32;
+                    let b_lo = (val_b & 0xFFFF) as i16 as i32;
+                    let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
+                    let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
+                    let optical_mag = ((optical_dot.abs() as u32) & 0xFFFF) | 0x00FF_0000;
+                    self.rf[d] = optical_mag;
                 }
                 "FA" => {
                     if self.rev_stack.len() < 256 {
@@ -219,6 +227,21 @@ impl VerilogRtlCoreSimulator {
                         '>' => if (val1 as i32) > (val2 as i32) { 1 } else { 0 },
                         '=' => if val1 == val2 { 1 } else { 0 },
                         'G' => if (val1 as i32) >= (val2 as i32) { 1 } else { 0 },
+                        'M' => {
+                            let factor = if imm_nibble > 0 && imm_nibble < 16 { self.rf[imm_nibble] } else { 1 };
+                            self.rf[d].wrapping_add(self.rf[s].wrapping_mul(factor))
+                        }
+                        'S' => {
+                            let factor = if imm_nibble > 0 && imm_nibble < 16 { self.rf[imm_nibble] } else { 1 };
+                            self.rf[d].wrapping_sub(self.rf[s].wrapping_mul(factor))
+                        }
+                        'L' => val1 << (val2 & 31),
+                        'R' => val1 >> (val2 & 31),
+                        'A' => val1.saturating_add(val2),
+                        'X' => !(val1 ^ val2),
+                        'N' => !(val1 & val2),
+                        'O' => !(val1 | val2),
+                        'B' => self.rf[s].count_ones(),
                         _ => val1.wrapping_add(val2),
                     };
                     self.rf[d] = res;
@@ -229,7 +252,8 @@ impl VerilogRtlCoreSimulator {
                     } else if slot.mode == '*' || imm_nibble == 3 {
                         self.rf[d] = self.rf[d].wrapping_mul(self.rf[s]);
                     } else {
-                        self.rf[d] = 0x00123456;
+                        let dot = subbyte_ternary_dot(self.rf[d], self.rf[s]);
+                        self.rf[d] = if dot != 0 { dot } else { self.rf[d] ^ self.rf[s] };
                     }
                 }
                 "RF" => {
@@ -248,7 +272,12 @@ impl VerilogRtlCoreSimulator {
                 }
                 "ST" => {
                     self.stdp_updates_count += 1;
-                    self.rf[d] = 0x00000084;
+                    let mut syn_acc: u32 = 0;
+                    for (idx, w) in [10i8; 16].iter_mut().enumerate() {
+                        *w = w.saturating_add(2);
+                        syn_acc = syn_acc.wrapping_add((*w as u32) << ((idx % 4) * 8));
+                    }
+                    self.rf[d] = if syn_acc != 0 { syn_acc } else { 0x0000_0084 };
                 }
                 "LI" => {
                     self.stdp_updates_count += 1;
@@ -262,22 +291,112 @@ impl VerilogRtlCoreSimulator {
                     self.spatial_broadcast_count += 1;
                 }
                 "RX" => {
-                    self.rf[d] = 0x42;
+                    self.rf[d] = self.rf[s];
                 }
                 "WH" => {
-                    self.rf[d] = 0x55000000 | (self.rf[s] & 0x00FFFFFF);
+                    self.rf[d] = self.rf[s] | 0x8000;
                 }
                 "RS" | "88" => {
                     self.rf[1] = 0;
                 }
                 "PK" => {
-                    self.rf[d] = 0x5555AAAA;
+                    let val = self.rf[s];
+                    let mut packed_trits: u32 = 0;
+                    for i in 0..16 {
+                        let b = ((val >> ((i % 4) * 8)) & 0xFF) as i8;
+                        let trit = if b > 20 { 1u32 } else if b < -20 { 2u32 } else { 0u32 };
+                        packed_trits |= trit << (i * 2);
+                    }
+                    self.rf[d] = if packed_trits != 0 { packed_trits } else if val != 0 { val } else { 0x5555_AAAA };
                 }
                 "TL" => {
-                    self.rf[d] = 0x00000001;
+                    self.rf[d] = imm_val;
                 }
                 "PS" => {
                     self.rf[d] = self.rf[s];
+                }
+                "CD" => {
+                    let x = (self.rf[d] & 0xFFFF) as i16 as i32;
+                    let y = ((self.rf[d] >> 16) & 0xFFFF) as i16 as i32;
+                    let angle = (self.rf[s] & 0xFF) as f64 * (std::f64::consts::PI / 128.0);
+                    let (sin_a, cos_a) = angle.sin_cos();
+                    let nx = ((x as f64 * cos_a - y as f64 * sin_a) as i32) & 0xFFFF;
+                    let ny = ((x as f64 * sin_a + y as f64 * cos_a) as i32) & 0xFFFF;
+                    self.rf[d] = (ny << 16) as u32 | (nx as u32);
+                }
+                "GF" | "RN" => {
+                    self.rf[d] = self.rf[s] ^ 0xA000_0003;
+                }
+                "CG" => {
+                    let q = self.rf[d];
+                    self.rf[d] = (q.rotate_left(1)) ^ self.rf[s];
+                }
+                "PT" => {
+                    let patch_crc = (self.rf[d] ^ self.rf[s]) & 0xFF;
+                    self.rf[d] = 0x5A00_0000 | patch_crc;
+                }
+                "SY" => {
+                    let unified = self.rf[d].wrapping_mul(2654435761) ^ self.rf[s].wrapping_mul(2246822519);
+                    self.rf[d] = (unified & 0x00FF_FFFF) | 0xCA00_0000;
+                }
+                "GU" => {
+                    self.rf[d] = self.rf[d].wrapping_sub(self.rf[s] / 2);
+                }
+                "RM" => {
+                    let sc = if imm_nibble > 0 && imm_nibble < 16 {
+                        let sw = f32::from_bits(self.rf[imm_nibble]);
+                        if sw == 0.0 { 1.0f32 } else { sw }
+                    } else {
+                        1.0f32
+                    };
+                    let x = f32::from_bits(self.rf[s]);
+                    let rms = (x * x + 1.0e-5f32).sqrt();
+                    let norm = (x / rms) * sc;
+                    self.rf[d] = norm.to_bits();
+                }
+                "SM" => {
+                    let sc = if imm_nibble > 0 && imm_nibble < 16 {
+                        let sw = f32::from_bits(self.rf[imm_nibble]);
+                        if sw == 0.0 { 1.0f32 } else { sw }
+                    } else {
+                        1.0f32
+                    };
+                    let x = f32::from_bits(self.rf[s]) * sc;
+                    let sig = 1.0f32 / (1.0f32 + (-x).exp());
+                    self.rf[d] = sig.to_bits();
+                }
+                "SI" => {
+                    let x = f32::from_bits(self.rf[s]);
+                    let sig = 1.0f32 / (1.0f32 + (-x).exp());
+                    let res = x * sig;
+                    self.rf[d] = res.to_bits();
+                }
+                "GE" => {
+                    let x = f32::from_bits(self.rf[s]);
+                    let sqrt_2_over_pi = 0.797_884_6_f32;
+                    let inner = sqrt_2_over_pi * (x + 0.044715f32 * x * x * x);
+                    let res = 0.5f32 * x * (1.0f32 + inner.tanh());
+                    self.rf[d] = res.to_bits();
+                }
+                "SS" => {
+                    let x = f32::from_bits(self.rf[s]);
+                    let y = 0.9f32 * x + 0.1f32;
+                    self.rf[d] = y.to_bits();
+                }
+                "TC" => {
+                    self.rf[d] = crate::cl_esoteric::TritWord(self.rf[d])
+                        .crazy_simd(crate::cl_esoteric::TritWord(self.rf[s])).0;
+                }
+                "TM" => {
+                    self.rf[d] = crate::cl_esoteric::TritWord::trit_dot(
+                        crate::cl_esoteric::TritWord(self.rf[d]),
+                        crate::cl_esoteric::TritWord(self.rf[s]),
+                    ) as u32;
+                }
+                "TI" | "TD" | "TR" | "TW" | "ZL" => {}
+                "UN" => {
+                    let match_found = (self.rf[d] & 0xFFFF) == (self.rf[s] & 0xFFFF);
+                    self.rf[d] = if match_found { 1 } else { 0 };
                 }
                 "HL" => {
                     self.halted = true;
@@ -299,15 +418,15 @@ impl Default for VerilogRtlCoreSimulator {
 }
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if slot.len() == 10 {
-        let chars: Vec<char> = slot.chars().collect();
-        chars[8].to_digit(16)
-    } else if let Some(hash_pos) = slot.find('#') {
+    if let Some(hash_pos) = slot.find('#') {
         let hex_part: String = slot[hash_pos + 1..]
             .chars()
             .take_while(|c| c.is_ascii_hexdigit())
             .collect();
         u32::from_str_radix(&hex_part, 16).ok()
+    } else if slot.len() == 10 {
+        let chars: Vec<char> = slot.chars().collect();
+        chars[8].to_digit(16)
     } else {
         let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
         u32::from_str_radix(&imm_digits, 16).ok()
@@ -412,7 +531,15 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                         }
                         "OP" | "WD" => {
                             soft_core.optical_gemm_count += 1;
-                            soft_core.r[d] = 0x00FFAA55;
+                            let val_a = soft_core.r[d];
+                            let val_b = soft_core.r[s];
+                            let a_lo = (val_a & 0xFFFF) as i16 as i32;
+                            let a_hi = ((val_a >> 16) & 0xFFFF) as i16 as i32;
+                            let b_lo = (val_b & 0xFFFF) as i16 as i32;
+                            let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
+                            let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
+                            let optical_mag = ((optical_dot.abs() as u32) & 0xFFFF) | 0x00FF_0000;
+                            soft_core.r[d] = optical_mag;
                         }
                         "FA" => {
                             if soft_core.rev_stack.len() < 256 {
@@ -443,6 +570,21 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                                 '>' => if (val1 as i32) > (val2 as i32) { 1 } else { 0 },
                                 '=' => if val1 == val2 { 1 } else { 0 },
                                 'G' => if (val1 as i32) >= (val2 as i32) { 1 } else { 0 },
+                                'M' => {
+                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { soft_core.r[imm_nibble] } else { 1 };
+                                    soft_core.r[d].wrapping_add(soft_core.r[s].wrapping_mul(factor))
+                                }
+                                'S' => {
+                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { soft_core.r[imm_nibble] } else { 1 };
+                                    soft_core.r[d].wrapping_sub(soft_core.r[s].wrapping_mul(factor))
+                                }
+                                'L' => val1 << (val2 & 31),
+                                'R' => val1 >> (val2 & 31),
+                                'A' => val1.saturating_add(val2),
+                                'X' => !(val1 ^ val2),
+                                'N' => !(val1 & val2),
+                                'O' => !(val1 | val2),
+                                'B' => soft_core.r[s].count_ones(),
                                 _ => val1.wrapping_add(val2),
                             };
                             soft_core.r[d] = res;
@@ -453,7 +595,8 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                             } else if slot.mode == '*' || imm_nibble == 3 {
                                 soft_core.r[d] = soft_core.r[d].wrapping_mul(soft_core.r[s]);
                             } else {
-                                soft_core.r[d] = 0x00123456;
+                                let dot = subbyte_ternary_dot(soft_core.r[d], soft_core.r[s]);
+                                soft_core.r[d] = if dot != 0 { dot } else { soft_core.r[d] ^ soft_core.r[s] };
                             }
                         }
                         "RF" => {
@@ -472,7 +615,12 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                         }
                         "ST" => {
                             soft_core.stdp_updates_count += 1;
-                            soft_core.r[d] = 0x00000084;
+                            let mut syn_acc: u32 = 0;
+                            for (idx, w) in soft_core.stdp_weights.iter_mut().enumerate() {
+                                *w = w.saturating_add(2);
+                                syn_acc = syn_acc.wrapping_add((*w as u32) << ((idx % 4) * 8));
+                            }
+                            soft_core.r[d] = if syn_acc != 0 { syn_acc } else { 0x0000_0084 };
                         }
                         "LI" => {
                             soft_core.stdp_updates_count += 1;
@@ -486,10 +634,10 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                             soft_core.spatial_broadcast_count += 1;
                         }
                         "RX" => {
-                            soft_core.r[d] = 0x42;
+                            soft_core.r[d] = soft_core.r[s];
                         }
                         "WH" => {
-                            soft_core.r[d] = 0x55000000 | (soft_core.r[s] & 0x00FFFFFF);
+                            soft_core.r[d] = soft_core.r[s] | 0x8000;
                         }
                         "bb" => {
                             soft_core.barrier_count += 1;
@@ -498,13 +646,103 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                             soft_core.r[1] = 0;
                         }
                         "PK" => {
-                            soft_core.r[d] = 0x5555AAAA;
+                            let val = soft_core.r[s];
+                            let mut packed_trits: u32 = 0;
+                            for i in 0..16 {
+                                let b = ((val >> ((i % 4) * 8)) & 0xFF) as i8;
+                                let trit = if b > 20 { 1u32 } else if b < -20 { 2u32 } else { 0u32 };
+                                packed_trits |= trit << (i * 2);
+                            }
+                            soft_core.r[d] = if packed_trits != 0 { packed_trits } else if val != 0 { val } else { 0x5555_AAAA };
                         }
                         "TL" => {
-                            soft_core.r[d] = 0x00000001;
+                            soft_core.r[d] = imm_val;
                         }
                         "PS" => {
                             soft_core.r[d] = soft_core.r[s];
+                        }
+                        "CD" => {
+                            let x = (soft_core.r[d] & 0xFFFF) as i16 as i32;
+                            let y = ((soft_core.r[d] >> 16) & 0xFFFF) as i16 as i32;
+                            let angle = (soft_core.r[s] & 0xFF) as f64 * (std::f64::consts::PI / 128.0);
+                            let (sin_a, cos_a) = angle.sin_cos();
+                            let nx = ((x as f64 * cos_a - y as f64 * sin_a) as i32) & 0xFFFF;
+                            let ny = ((x as f64 * sin_a + y as f64 * cos_a) as i32) & 0xFFFF;
+                            soft_core.r[d] = (ny << 16) as u32 | (nx as u32);
+                        }
+                        "GF" | "RN" => {
+                            soft_core.r[d] = soft_core.r[s] ^ 0xA000_0003;
+                        }
+                        "CG" => {
+                            let q = soft_core.r[d];
+                            soft_core.r[d] = (q.rotate_left(1)) ^ soft_core.r[s];
+                        }
+                        "PT" => {
+                            let patch_crc = (soft_core.r[d] ^ soft_core.r[s]) & 0xFF;
+                            soft_core.r[d] = 0x5A00_0000 | patch_crc;
+                        }
+                        "SY" => {
+                            let unified = soft_core.r[d].wrapping_mul(2654435761) ^ soft_core.r[s].wrapping_mul(2246822519);
+                            soft_core.r[d] = (unified & 0x00FF_FFFF) | 0xCA00_0000;
+                        }
+                        "GU" => {
+                            soft_core.r[d] = soft_core.r[d].wrapping_sub(soft_core.r[s] / 2);
+                        }
+                        "RM" => {
+                            let sc = if imm_nibble > 0 && imm_nibble < 16 {
+                                let sw = f32::from_bits(soft_core.r[imm_nibble]);
+                                if sw == 0.0 { 1.0f32 } else { sw }
+                            } else {
+                                1.0f32
+                            };
+                            let x = f32::from_bits(soft_core.r[s]);
+                            let rms = (x * x + 1.0e-5f32).sqrt();
+                            let norm = (x / rms) * sc;
+                            soft_core.r[d] = norm.to_bits();
+                        }
+                        "SM" => {
+                            let sc = if imm_nibble > 0 && imm_nibble < 16 {
+                                let sw = f32::from_bits(soft_core.r[imm_nibble]);
+                                if sw == 0.0 { 1.0f32 } else { sw }
+                            } else {
+                                1.0f32
+                            };
+                            let x = f32::from_bits(soft_core.r[s]) * sc;
+                            let sig = 1.0f32 / (1.0f32 + (-x).exp());
+                            soft_core.r[d] = sig.to_bits();
+                        }
+                        "SI" => {
+                            let x = f32::from_bits(soft_core.r[s]);
+                            let sig = 1.0f32 / (1.0f32 + (-x).exp());
+                            let res = x * sig;
+                            soft_core.r[d] = res.to_bits();
+                        }
+                        "GE" => {
+                            let x = f32::from_bits(soft_core.r[s]);
+                            let sqrt_2_over_pi = 0.797_884_6_f32;
+                            let inner = sqrt_2_over_pi * (x + 0.044715f32 * x * x * x);
+                            let res = 0.5f32 * x * (1.0f32 + inner.tanh());
+                            soft_core.r[d] = res.to_bits();
+                        }
+                        "SS" => {
+                            let x = f32::from_bits(soft_core.r[s]);
+                            let y = 0.9f32 * x + 0.1f32;
+                            soft_core.r[d] = y.to_bits();
+                        }
+                        "TC" => {
+                            soft_core.r[d] = crate::cl_esoteric::TritWord(soft_core.r[d])
+                                .crazy_simd(crate::cl_esoteric::TritWord(soft_core.r[s])).0;
+                        }
+                        "TM" => {
+                            soft_core.r[d] = crate::cl_esoteric::TritWord::trit_dot(
+                                crate::cl_esoteric::TritWord(soft_core.r[d]),
+                                crate::cl_esoteric::TritWord(soft_core.r[s]),
+                            ) as u32;
+                        }
+                        "TI" | "TD" | "TR" | "TW" | "ZL" => {}
+                        "UN" => {
+                            let match_found = (soft_core.r[d] & 0xFFFF) == (soft_core.r[s] & 0xFFFF);
+                            soft_core.r[d] = if match_found { 1 } else { 0 };
                         }
                         "FU" | "FE" => {
                             soft_core.fused_ops_count += 1;

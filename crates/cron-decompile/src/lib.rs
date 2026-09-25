@@ -37,8 +37,8 @@ pub fn parse_slot_str(slot: &str) -> Option<ParsedSlot> {
 
     if slot.starts_with("'=") || slot.starts_with("==") {
         // Immediate load slot: '= <dest_bank> <dest_reg> # <imm16> >
-        let op = if slot.len() >= 3 {
-            slot[1..3].to_string()
+        let op: String = if chars.len() >= 3 {
+            chars[1..3].iter().collect()
         } else {
             "==".to_string()
         };
@@ -81,7 +81,11 @@ pub fn parse_slot_str(slot: &str) -> Option<ParsedSlot> {
     }
 
     // Standard slot: [0]=prefix, [1..3]=op, [3]=dest_bank, [4]=dest_reg, [5]=mode, [6]=src, [7]=parity, [8]=imm, [9]=term
-    let op = slot[1..3].to_string();
+    let op: String = if chars.len() >= 3 {
+        chars[1..3].iter().collect()
+    } else {
+        "NO".to_string()
+    };
     let dest_bank = if chars.len() >= 4 {
         chars[3].to_digit(16).unwrap_or(0) as usize
     } else {

@@ -11,8 +11,8 @@ B0001: '==04#000> '==05#000> '==06#000> _NO00#000>
 
 @reversible_gate_ops:
 ; Cycle 2: Controlled-Controlled-NOT (Toffoli) and Fredkin Swap
-B0002: _TO01#000> _RF01$200> _FA04$1420> _NO00#000>
-B0003: _TO02#000> _RF02$100> _FA05$2420> _bb00#000>
+B0002: _TO01#000> _RF01$200> _FA04$142> _NO00#000>
+B0003: _TO02#000> _RF02$100> _FA05$242> _bb00#000>
 
 @unwind_phase:
 ; Cycle 4: Backward inverse pass to restore entropy

@@ -841,6 +841,56 @@ impl Codegen {
                         self.push_slot(make_slot('_', "CD", dest, '$', first_arg_reg, 0, '>'));
                         self.push_slot(make_slot('_', "PO", dest, '$', dest, 2, '>'));
                     }
+                    "optical_clifford_rotate" => {
+                        // SAGI Photonic Clifford Phase Rotor
+                        self.push_slot(make_slot('_', "CD", dest, '$', first_arg_reg, 0, '>'));
+                        self.push_slot(make_slot('_', "OP", dest, '$', dest, 0xE, '>'));
+                    }
+                    "step_bcm_weight" | "metaplastic_step" => {
+                        // SAGI BCM Sliding Threshold Metaplastic Synapse
+                        self.push_slot(make_slot('_', "ST", dest, '$', first_arg_reg, 4, '>'));
+                    }
+                    "evaluate_quench" | "thermodynamic_quench" => {
+                        // SAGI Landauer Zero-Dissipation Sentry Quench
+                        self.push_slot(make_slot('_', "SH", dest, '$', first_arg_reg, 4, '>'));
+                    }
+                    "torus_dor_broadcast" | "dispatch_sagi_directive" => {
+                        // SAGI 4D Torus DOR Wormhole Broadcast
+                        self.push_slot(make_slot('_', "WH", dest, '$', first_arg_reg, 3, '>'));
+                        self.push_slot(make_slot('_', "SB", 0, '$', dest, 5, '>'));
+                    }
+                    "trit_zero_mul_accumulate" | "ternary_accumulate" => {
+                        // SAGI 1.58-bit Ternary Zero-Multiplication SIMD
+                        self.push_slot(make_slot('_', "MD", dest, '$', first_arg_reg, 5, '>'));
+                    }
+                    "step_predictive_synapse" | "predictive_synapse_update" => {
+                        // SAGI Predictive Coding Local Synaptic Update (Zero-Backprop)
+                        self.push_slot(make_slot('_', "PO", dest, '$', first_arg_reg, 1, '>'));
+                        self.push_slot(make_slot('_', "ST", dest, '$', dest, 4, '>'));
+                    }
+                    "evaluate_local_error" => {
+                        // SAGI Dendritic Local Error Extraction
+                        self.push_slot(make_slot('_', "PO", dest, '$', first_arg_reg, 2, '>'));
+                    }
+                    "hot_patch_slot" | "live_self_rewrite" => {
+                        // SAGI Live I-Cache Self-Rewriting Hot-Patch (Opcode _SC)
+                        self.push_slot(make_slot('_', "SC", dest, '$', first_arg_reg, 2, '>'));
+                    }
+                    "execute_sleep_cycle" | "synaptic_sleep_consolidation" => {
+                        // SAGI SWS Replay & REM Synaptic Homeostasis
+                        self.push_slot(make_slot('_', "ST", dest, '$', first_arg_reg, 4, '>'));
+                        self.push_slot(make_slot('_', "RS", 0, '#', 0, 0xB, '>'));
+                    }
+                    "ingest_dvs_event" | "dvs_spatial_stream" => {
+                        // SAGI DVS Event Camera 4D Spatial Ingestion (Opcode _TL + _ee)
+                        self.push_slot(make_slot('_', "TL", dest, '$', first_arg_reg, 4, '>'));
+                        self.push_slot(make_slot('_', "ee", 0, '$', dest, 0, '>'));
+                    }
+                    "ingest_cochlea_spike" | "cochlea_audio_stream" => {
+                        // SAGI Tonotopic Bio-Cochlea Audio Ingestion (Opcode _TL + _LF)
+                        self.push_slot(make_slot('_', "TL", dest, '$', first_arg_reg, 1, '>'));
+                        self.push_slot(make_slot('_', "LF", dest, '$', dest, 5, '>'));
+                    }
                     "multi_head_dispatch" | "spatial_broadcast" => {
                         // Broadcast across 4D torus mesh
                         self.push_slot(make_slot('_', "SB", 0, '$', first_arg_reg, 5, '>'));
@@ -887,6 +937,70 @@ impl Codegen {
                         // Return from Hardware Trap Handler (Milestone #181)
                         self.push_slot(make_slot('_', "RT", 0, '$', 0, 0, '>'));
                     }
+                    "send_noc" => {
+                        let dest_core = if !args.is_empty() {
+                            self.compile_expr(&args[0].value, dest);
+                            dest
+                        } else { 0 };
+                        let data_reg = if args.len() >= 2 {
+                            let vr = (dest % 14) + 1;
+                            self.compile_expr(&args[1].value, vr);
+                            vr
+                        } else { first_arg_reg };
+                        self.push_slot(make_slot('_', "TX", dest_core, '$', data_reg, 0, '>'));
+                    }
+                    "recv_noc" => {
+                        self.push_slot(make_slot('_', "RX", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "noc_barrier" => {
+                        self.push_slot(make_slot('_', "SY", dest, '$', 0, 0, '>'));
+                    }
+                    "pack_trits" | "pack_trit16" => {
+                        self.push_slot(make_slot('_', "PK", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "stdp_update" | "stdp_learn" => {
+                        self.push_slot(make_slot('_', "ST", dest, '$', first_arg_reg, 4, '>'));
+                    }
+                    "ternary_mac" | "bitnet_mac" | "ternary_linear" => {
+                        let weights_reg = if args.len() >= 2 {
+                            let wr = (dest % 14) + 1;
+                            self.compile_expr(&args[1].value, wr);
+                            wr
+                        } else { (first_arg_reg % 14) + 1 };
+                        self.push_slot(make_slot('_', "MD", dest, '$', weights_reg, 5, '>'));
+                    }
+                    "clifford_rotor_sandwich" | "clifford_rotor" => {
+                        self.push_slot(make_slot('_', "MD", dest, '$', first_arg_reg, 3, '>'));
+                        self.push_slot(make_slot('_', "TT", dest, '$', first_arg_reg, 0, '>'));
+                        self.push_slot(make_slot('_', "PO", dest, '$', (first_arg_reg % 14) + 1, 1, '>'));
+                    }
+                    "fma" => {
+                        let r_reg = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "MM", dest, 'M', r_reg, 0, '>'));
+                    }
+                    "fms" => {
+                        let r_reg = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "MM", dest, 'S', r_reg, 0, '>'));
+                    }
+                    "popcount" => {
+                        self.push_slot(make_slot('_', "PO", dest, 'B', first_arg_reg, 0, '>'));
+                    }
+                    "saturating_add" => {
+                        let r_reg = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "PO", dest, 'A', r_reg, 0, '>'));
+                    }
+                    "xnor" => {
+                        let r_reg = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "PO", dest, 'X', r_reg, 0, '>'));
+                    }
+                    "nand" => {
+                        let r_reg = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "PO", dest, 'N', r_reg, 0, '>'));
+                    }
+                    "nor" => {
+                        let r_reg = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "PO", dest, 'O', r_reg, 0, '>'));
+                    }
                     "$trap" => {
                         self.push_slot(make_slot('_', "PO", dest, '$', 0, 0, '>'));
                     }
@@ -925,6 +1039,15 @@ impl Codegen {
                     }
                     self.push_slot(make_slot('?', "==", arm_dest, '#', dest, i.min(15), '>'));
                 }
+            }
+            Expr::Closure { params, body, .. } => {
+                let old_map = self.reg_map.clone();
+                for (idx, p) in params.iter().enumerate() {
+                    let reg = (dest + idx + 1) % 16;
+                    self.reg_map.insert(p.name.clone(), reg);
+                }
+                self.compile_expr(body, dest);
+                self.reg_map = old_map;
             }
         }
     }

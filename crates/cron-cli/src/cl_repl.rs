@@ -19,6 +19,9 @@ pub fn start_cl_repl() {
    :reset             Reset silicon core state to initial power-on
    :heal <bundle>     Auto-repair CRC-8 ATM and pad slots
    :opt <cl_code>     Run VLIW slot compaction super-optimizer
+   :lint <cl_code>    Run static hazard & thermal linter
+   :forge <prompt>    Synthesize golden VLIW microcode from prompt
+   :transpile <t> <c> Transpile .cl code to target (wgsl, ptx, c23)
    :help              Display this help menu
    :exit / :quit      Exit the interactive console
 
@@ -67,7 +70,39 @@ pub fn start_cl_repl() {
         }
 
         if trimmed == ":help" {
-            println!("Type raw VLIW bundles or commands (:regs, :state, :reset, :heal <bundle>, :opt <bundle>, :exit)");
+            println!("Commands: :regs, :state, :reset, :heal <bundle>, :opt <bundle>, :lint <code>, :forge <prompt>, :transpile <target> <code>, :exit");
+            continue;
+        }
+
+        if let Some(arg) = trimmed.strip_prefix(":lint ") {
+            let report = cronc::lint_cl_source(arg, "repl_snippet.cl");
+            println!("{}", report.render_ascii_hud());
+            continue;
+        }
+
+        if let Some(prompt) = trimmed.strip_prefix(":forge ") {
+            let cfg = cronc::ForgeConfig::default();
+            match cronc::forge_kernel(prompt, &cfg) {
+                Ok(rep) => {
+                    println!("{}", rep.ascii_hud);
+                    println!("Synthesized Kernel:\n{}", rep.cl_source);
+                }
+                Err(e) => eprintln!("[FORGE ERROR] {}", e),
+            }
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix(":transpile ") {
+            let parts: Vec<&str> = rest.splitn(2, ' ').collect();
+            if parts.len() < 2 {
+                println!("Usage: :transpile <wgsl|ptx|c23> <.cl code>");
+            } else {
+                let target = cronc::TranspileTarget::from_str(parts[0]).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
+                match cronc::transpile_cl(parts[1], target) {
+                    Ok(rep) => println!("{}", rep.generated_code),
+                    Err(e) => eprintln!("[TRANSPILE ERROR] {}", e),
+                }
+            }
             continue;
         }
 

@@ -2034,6 +2034,80 @@ impl Parser {
                 self.advance();
                 Ok(Expr::LiteralAxis(val))
             }
+            Token::PipePipe => {
+                let span = self.current_span();
+                self.advance(); // ||
+                let return_type = if self.match_token(&Token::Arrow) {
+                    Some(self.parse_type_str()?)
+                } else {
+                    None
+                };
+                let body = if self.check(&Token::OpenBrace) {
+                    self.advance(); // {
+                    let e = self.parse_block_expr()?;
+                    self.expect(&Token::CloseBrace)?;
+                    e
+                } else {
+                    self.parse_expr()?
+                };
+                Ok(Expr::Closure {
+                    params: Vec::new(),
+                    return_type,
+                    body: Box::new(body),
+                    span,
+                })
+            }
+            Token::Pipe => {
+                let span = self.current_span();
+                self.advance(); // |
+                let mut params = Vec::new();
+                if !self.check(&Token::Pipe) {
+                    loop {
+                        let param_span = self.current_span();
+                        let is_lin = self.match_token(&Token::Lin);
+                        let is_grad = self.match_token(&Token::Grad);
+                        let name = match self.advance() {
+                            Token::Ident(n) => n,
+                            other => return Err(format!("Expected parameter name in closure, got {:?}", other)),
+                        };
+                        let param_type = if self.match_token(&Token::Colon) {
+                            self.parse_type_str()?
+                        } else {
+                            "i32".to_string()
+                        };
+                        params.push(Param {
+                            is_lin,
+                            is_grad,
+                            name,
+                            param_type,
+                            span: param_span,
+                        });
+                        if !self.match_token(&Token::Comma) {
+                            break;
+                        }
+                    }
+                }
+                self.expect(&Token::Pipe)?;
+                let return_type = if self.match_token(&Token::Arrow) {
+                    Some(self.parse_type_str()?)
+                } else {
+                    None
+                };
+                let body = if self.check(&Token::OpenBrace) {
+                    self.advance(); // {
+                    let e = self.parse_block_expr()?;
+                    self.expect(&Token::CloseBrace)?;
+                    e
+                } else {
+                    self.parse_expr()?
+                };
+                Ok(Expr::Closure {
+                    params,
+                    return_type,
+                    body: Box::new(body),
+                    span,
+                })
+            }
             Token::Match => {
                 let span = self.current_span();
                 self.advance(); // match

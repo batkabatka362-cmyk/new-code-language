@@ -129,22 +129,26 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
     }
 
     let chars: Vec<char> = slot.chars().collect();
+    if chars.len() < 3 {
+        return 0; // NOP
+    }
+
     let prefix = chars.first().copied().unwrap_or('_');
     let prefix_bits = prefix_to_bits(prefix);
 
     // Check for 16-bit Immediate Load (e.g. '=00#0A04>, '=06#0064>, '==04#000A>)
     if prefix == '\'' && slot.contains('#') {
-        let is_double_eq = slot.len() >= 3 && &slot[1..3] == "==";
+        let is_double_eq = chars.len() >= 3 && chars.get(1) == Some(&'=') && chars.get(2) == Some(&'=');
         let op_id = if is_double_eq { opcode_to_id("==") } else { opcode_to_id("=0") };
 
         // Bank and Reg extraction
-        let (dest_bank, dest_reg) = if slot.len() >= 5 && slot.chars().nth(4) == Some('#') {
-            let h = slot[2..3].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0);
-            let l = slot[3..4].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0);
+        let (dest_bank, dest_reg) = if chars.len() >= 5 && chars.get(4) == Some(&'#') {
+            let h = chars.get(2).and_then(|c| c.to_digit(16)).unwrap_or(0);
+            let l = chars.get(3).and_then(|c| c.to_digit(16)).unwrap_or(0);
             (h, l)
-        } else if slot.len() >= 5 {
-            let h = slot[3..4].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0);
-            let l = slot[4..5].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0);
+        } else if chars.len() >= 5 {
+            let h = chars.get(3).and_then(|c| c.to_digit(16)).unwrap_or(0);
+            let l = chars.get(4).and_then(|c| c.to_digit(16)).unwrap_or(0);
             (h, l)
         } else {
             (0, 0)
@@ -169,16 +173,16 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
     }
 
     // Standard Slot Encoding
-    let op_str: String = if slot.len() >= 3 {
+    let op_str: String = if chars.len() >= 3 {
         chars[1..3].iter().collect()
     } else {
         "NO".to_string()
     };
     let op_id = opcode_to_id(&op_str);
 
-    let (dest_bank, dest_reg) = if slot.len() >= 5 {
-        let h = slot[3..4].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0);
-        let l = slot[4..5].chars().next().and_then(|c| c.to_digit(16)).unwrap_or(0);
+    let (dest_bank, dest_reg) = if chars.len() >= 5 {
+        let h = chars.get(3).and_then(|c| c.to_digit(16)).unwrap_or(0);
+        let l = chars.get(4).and_then(|c| c.to_digit(16)).unwrap_or(0);
         (h, l)
     } else {
         (0, 0)
@@ -187,14 +191,14 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
     let mode_char = chars.get(5).copied().unwrap_or('$');
     let mode_id = mode_to_id(mode_char);
 
-    let src_reg = if slot.len() >= 7 {
-        chars[6].to_digit(16).unwrap_or(0)
+    let src_reg = if chars.len() >= 7 {
+        chars.get(6).and_then(|c| c.to_digit(16)).unwrap_or(0)
     } else {
         0
     };
 
-    let imm_nibble = if slot.len() >= 9 {
-        chars[8].to_digit(16).unwrap_or(0)
+    let imm_nibble = if chars.len() >= 9 {
+        chars.get(8).and_then(|c| c.to_digit(16)).unwrap_or(0)
     } else {
         0
     };

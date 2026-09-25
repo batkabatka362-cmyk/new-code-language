@@ -1,0 +1,13 @@
+// SAGI Neocortical Macro Pipeline (.clm)
+// Automatically compiles into 10-character VLIW bundles with 0 CRC errors
+
+let R0 = 0x0100
+let R1 = 0x0200
+R2 = R0 + R1
+op_gemm R3, R0, R1
+ternary_mac R4, R0, R1
+stdp_learn R5, R0, R1
+pack_trits R6, R0
+send_noc 0x01, R2
+recv_noc R7
+barrier

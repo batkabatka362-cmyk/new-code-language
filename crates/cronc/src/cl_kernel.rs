@@ -92,6 +92,38 @@ pub fn list_available_kernels() -> Vec<KernelDescriptor> {
             typical_ipc: 4.0,
             operational_intensity: 9.5,
         },
+        KernelDescriptor {
+            name: "flash-attn-3",
+            display_name: "FlashAttention-3 Reversible Thermodynamic Tile",
+            description: "Asynchronous Photonic MZI GEMM + Reversible Autodiff Backprop (0 Memory Wall) + Online Log-Sum-Exp Softmax",
+            target_silicon_brain: "Brain 2 (Photonic) + Brain 3 (Reversible Landauer) + Brain 4 (Sub-Byte)",
+            typical_ipc: 4.0,
+            operational_intensity: 12.0,
+        },
+        KernelDescriptor {
+            name: "moe-router",
+            display_name: "Mixture-of-Experts (MoE) 4D Dynamic Router",
+            description: "Top-2 / Top-4 Softmax dynamic gating + 4D Torus Wormhole NoC packet dispatch across 256 cores",
+            target_silicon_brain: "Brain 5 (Gating ALU) + Brain 6 (4D Torus NoC Channels)",
+            typical_ipc: 3.6,
+            operational_intensity: 4.5,
+        },
+        KernelDescriptor {
+            name: "mla-latent-attn",
+            display_name: "Multi-Head Latent Attention (MLA / DeepSeek-V3)",
+            description: "Low-rank KV compression + Decoupled CORDIC RoPE Key projection (90% KV Cache Bandwidth Reduction)",
+            target_silicon_brain: "Brain 2 (Photonic) + Brain 5 (CORDIC Engine) + Brain 6 (Paged KV)",
+            typical_ipc: 3.8,
+            operational_intensity: 10.5,
+        },
+        KernelDescriptor {
+            name: "bitnet-swiglu-expert",
+            display_name: "BitNet 1.58b SwiGLU Fused Expert Block",
+            description: "Dual Gate-Up ternary projection + Fused hardware SiLU non-linear gating for MoE feed-forward networks",
+            target_silicon_brain: "Brain 2 (SIMD ALU) + Brain 4 (Ternary MAC Engine)",
+            typical_ipc: 4.0,
+            operational_intensity: 6.0,
+        },
     ]
 }
 
@@ -99,6 +131,7 @@ pub fn list_available_kernels() -> Vec<KernelDescriptor> {
 pub fn synthesize_kernel(name: &str, dim: usize, seq: usize) -> Result<String, String> {
     match name.to_lowercase().as_str() {
         "flash-attn" | "flash_attn" | "attention" => Ok(generate_flash_attention(seq, dim)),
+        "flash-attn-3" | "flash_attn_3" | "flash3" => Ok(generate_flash_attention_3(seq, dim)),
         "bitnet-gemm" | "bitnet" | "ternary" => Ok(generate_bitnet_gemm(dim, dim, dim)),
         "rmsnorm" | "rms" | "norm" => Ok(generate_rmsnorm(dim)),
         "swiglu" | "glu" | "silu" => Ok(generate_swiglu(dim)),
@@ -106,8 +139,11 @@ pub fn synthesize_kernel(name: &str, dim: usize, seq: usize) -> Result<String, S
         "kv-cache" | "kv" | "cache" => Ok(generate_kv_cache_stream(seq)),
         "clifford-rotate4d" | "clifford" | "clifford4d" | "rotor" => Ok(generate_clifford_rotate4d(dim)),
         "sagi-metaplastic-v99" | "sagi" | "metaplastic" | "superintelligence" => Ok(generate_sagi_metaplastic_v99(dim)),
+        "moe-router" | "moe" | "router" | "expert-router" => Ok(generate_moe_router(dim, 8)),
+        "mla-latent-attn" | "mla" | "latent-attn" | "deepseek-mla" => Ok(generate_mla_latent_attention(seq, dim)),
+        "bitnet-swiglu-expert" | "expert" | "ternary-expert" => Ok(generate_bitnet_swiglu_expert(dim, dim * 2)),
         other => Err(format!(
-            "Unknown kernel template '{}'. Available kernels: flash-attn, bitnet-gemm, rmsnorm, swiglu, rope, kv-cache, clifford-rotate4d, sagi-metaplastic-v99. Run 'cron cl-kernel list'.",
+            "Unknown kernel template '{}'. Available kernels: flash-attn, flash-attn-3, bitnet-gemm, rmsnorm, swiglu, rope, kv-cache, clifford-rotate4d, sagi-metaplastic-v99, moe-router, mla-latent-attn, bitnet-swiglu-expert. Run 'cron cl-kernel list'.",
             other
         )),
     }
@@ -408,6 +444,176 @@ B0011: _PO01+120> _ST04#030> _SB00#000> _HL00$008!
 "#,
         dim.max(16),
         dim.max(16)
+    );
+
+    canonicalize_kernel(&raw)
+}
+
+/// 9. FlashAttention-3 Reversible Thermodynamic Tile
+pub fn generate_flash_attention_3(seq_len: usize, head_dim: usize) -> String {
+    let raw = format!(
+        r#"; ============================================================================
+; CRON GOLDEN AI MICRO-KERNEL: FlashAttention-3 Reversible Thermodynamic Tile
+; Target: 256-Core 4D-Torus Photonic Silicon (Brain 2 MZI + Brain 3 Reversible Landauer)
+; Sequence Length: {} | Head Dim: {} | Asynchronous Optical Compute
+; ============================================================================
+
+.stage "flash_attention_3_tile", params="32", precision="f32", d_model={}, heads=4, kv_heads=4, intermediate=64, zero_overhead=true
+
+@flash3_init:
+; Cycle 0: Initialize Base Pointers for Q, K, V in 16 SRAM Banks
+B0000: '==01#004> '==02#008> '==03#00C> _NO00#000>
+B0001: '==04#010> '==05#020> '==06#001> _NO00#000>
+
+@flash3_photonic_gemm:
+; Cycle 2: Asynchronous Optical MZI Matrix Multiply Q x K^T into R4
+B0002: _OP04$120> _FA04$120> _TT05$200> _NO00#000>
+; Cycle 3: Tap into Reversible Thermodynamic Stack for Zero-Entropy Backprop
+B0003: _RF05$404> _TO06$404> _PO07+450> _bb00#000>
+
+@flash3_online_logsumexp:
+; Cycle 4: Online Log-Sum-Exp row max subtraction and scaling
+B0004: _PS08$700> _CD09$800> _PO0A/900> _NO00#000>
+; Cycle 5: Reversible Softmax Probability Normalization
+B0005: _PO01*A40> _PO02*A40> _PO03*A40> _bb00#000>
+
+@flash3_context_projection:
+; Cycle 6: Photonic MZI Dot Product with Value Vectors
+B0006: _OP0B$130> _MD0C*230> _PO0D+BC0> _SB00#000>
+; Cycle 7: Reversible Backward Adjoint Checkpoint & Halt
+B0007: _BK0E$401> _FU00#000> _FE00#000> _HL00$008!
+"#,
+        seq_len.max(16),
+        head_dim.max(64),
+        head_dim.max(64)
+    );
+
+    canonicalize_kernel(&raw)
+}
+
+/// 10. MoE (Mixture of Experts) 4D Dynamic Router
+pub fn generate_moe_router(dim: usize, num_experts: usize) -> String {
+    let raw = format!(
+        r#"; ============================================================================
+; CRON GOLDEN AI MICRO-KERNEL: MoE (Mixture of Experts) 4D Dynamic Router
+; Target: 256-Core 4D-Torus Processor (Brain 5 Gating + Brain 6 4D Torus NoC)
+; Dimension: {} | Total Experts: {} | Top-2 Dynamic Dispatch
+; ============================================================================
+
+.stage "moe_router_top2", params="16", precision="f32", d_model={}, heads=4, kv_heads=4, intermediate=64, zero_overhead=true
+
+@moe_ingest_token:
+; Cycle 0: Ingest token activation embedding into R1, R2, R3, R4
+B0000: '==01#004> '==02#008> '==03#00C> '==04#010>
+; Cycle 1: Load Expert Gate Weights Matrix into R5, R6, R7, R8
+B0001: '==05#014> '==06#018> '==07#01C> '==08#020>
+
+@moe_compute_gating_logits:
+; Cycle 2: Compute Gating Logits via Sub-byte Ternary MACs
+B0002: _MD09*150> _MD0A*260> _MD0B*370> _MD0C*480>
+; Cycle 3: Cross-Attention Softmax Normalization for Top-2 Selection
+B0003: _CA0D$9A0> _CA0E$BC0> _PO0F+DE0> _NO00#000>
+
+@moe_wormhole_dispatch:
+; Cycle 4: Construct 4D Torus Wormhole Target Headers for Top Experts
+B0004: _WH01$D00> _WH02$E00> _NO00#000> _NO00#000>
+; Cycle 5: Wormhole NoC Packet Injection to Distributed Expert Cores
+B0005: _TX01$100> _TX02$200> _SB00#000> _NO00#000>
+
+@moe_combine_results:
+; Cycle 6: Pop Processed Expert Results from Mailbox FIFO
+B0006: _RX03$000> _RX04$000> _NO00#000> _NO00#000>
+; Cycle 7: Weighted Recombination of Expert Activations & Halt
+B0007: _PO05*3D0> _PO06*4E0> _PO07+560> _HL00$008!
+"#,
+        dim.max(16),
+        num_experts.max(4),
+        dim.max(16)
+    );
+
+    canonicalize_kernel(&raw)
+}
+
+/// 11. Multi-Head Latent Attention (MLA / DeepSeek-V3)
+pub fn generate_mla_latent_attention(seq_len: usize, dim: usize) -> String {
+    let raw = format!(
+        r#"; ============================================================================
+; CRON GOLDEN AI MICRO-KERNEL: Multi-Head Latent Attention (MLA / DeepSeek-V3)
+; Target: 256-Core 4D-Torus Photonic Silicon (Brain 2 MZI + Brain 5 CORDIC + Brain 6 KV)
+; Sequence Length: {} | Dimension: {} | 90% KV Cache Bandwidth Reduction
+; ============================================================================
+
+.stage "mla_latent_attention", params="64", precision="f32", d_model={}, heads=8, kv_heads=1, intermediate=128, zero_overhead=true
+
+@mla_latent_compression:
+; Cycle 0: Load High-Dimensional Query Vector [R1..R4]
+B0000: '==01#004> '==02#008> '==03#00C> '==04#010>
+; Cycle 1: Down-project into Low-Rank Latent Key-Value Representation c_KV
+B0001: _MD05*120> _MD06*340> _PO07+560> _NO00#000>
+
+@mla_decoupled_rope_keys:
+; Cycle 2: Apply Decoupled Rotary Position Embedding via CORDIC Engine
+B0002: _CD08$700> _TT09$800> _PO0A+890> _NO00#000>
+; Cycle 3: Store Decoupled Keys into Paged Ring Buffer
+B0003: _ST0A#020> _PO0B*7A0> _NO00#000> _NO00#000>
+
+@mla_photonic_latent_gemm:
+; Cycle 4: Optical MZI Fast Latent Matrix Multiply on Compressed c_KV
+B0004: _OP0C$1B0> _FA0C$1B0> _NO00#000> _NO00#000>
+; Cycle 5: Up-project Latent Context directly in SRAM Cache Banks
+B0005: _TT0D$C00> _MD0E*D50> _PO0F+DE0> _bb00#000>
+
+@mla_writeback_and_halt:
+; Cycle 6: Broadcast Result across Local Halo and Halt
+B0006: _SB00#000> _PO01+F00> _HL00$008! _NO00#000>
+"#,
+        seq_len.max(16),
+        dim.max(64),
+        dim.max(64)
+    );
+
+    canonicalize_kernel(&raw)
+}
+
+/// 12. BitNet 1.58b SwiGLU Fused Expert Block
+pub fn generate_bitnet_swiglu_expert(dim: usize, hidden_dim: usize) -> String {
+    let raw = format!(
+        r#"; ============================================================================
+; CRON GOLDEN AI MICRO-KERNEL: BitNet 1.58b SwiGLU Fused Expert Block
+; Target: 256-Core 4D-Torus Processor (Brain 2 SIMD + Brain 4 Ternary Engine)
+; Dimension: {} | Hidden Dim: {} | Fused Non-Linear SiLU Activation
+; ============================================================================
+
+.stage "bitnet_swiglu_expert", params="16", precision="ternary_1.58b", d_model={}, heads=4, kv_heads=4, intermediate={}, zero_overhead=true
+
+@expert_init:
+; Cycle 0: Initialize Base Pointers for Input & Gate Projections in Banks 0..3
+B0000: '==01#000> '==02#004> '==03#008> '==04#00C>
+; Cycle 1: Initialize Base Pointers for Up & Down Projections in Banks 4..7
+B0001: '==05#010> '==06#014> '==07#018> '==08#01C>
+
+@expert_gate_up_projection:
+; Cycle 2: Dual Gate (R9, RA) and Up (RB, RC) Ternary Projections in Parallel (Banks 0..3)
+B0002: _MD09*100> _MD0A*200> _MD0B*300> _MD0C*400>
+
+@expert_fused_silu_gating:
+; Cycle 3: Compute Hardware Sigmoid on Gate Projections into RD, RE
+B0003: _SI0D$900> _SI0E$A00> _NO00#000> _NO00#000>
+; Cycle 4: Swish Gating = Gate * Sigmoid into RF, R1
+B0004: _PO0F*D90> _PO01*EA0> _NO00#000> _NO00#000>
+; Cycle 5: SwiGLU Gating = Swish * Up Projection into R2, R3
+B0005: _PO02*FB0> _PO03*1C0> _NO00#000> _NO00#000>
+
+@expert_down_projection:
+; Cycle 6: Sub-Byte Ternary Down Projection using R5, R6 (Banks 4, 5)
+B0006: _MD04*500> _MD00*600> _NO00#000> _NO00#000>
+; Cycle 7: Final Accumulation & Writeback and Halt
+B0007: _PO01+400> _SB00#000> _HL00$008! _NO00#000>
+"#,
+        dim.max(16),
+        hidden_dim.max(32),
+        dim.max(16),
+        hidden_dim.max(32)
     );
 
     canonicalize_kernel(&raw)

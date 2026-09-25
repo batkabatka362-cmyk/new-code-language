@@ -1,0 +1,12 @@
+[package]
+name = "my_cl_package"
+version = "0.1.0"
+description = "High-performance .cl microcode package: my_cl_package"
+authors = ["CRON Architect <dev@cron-lang.org>"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+libcl = "^1.0.0"
+
+[kernels]
+main_kernel = "src/kernel.cl"

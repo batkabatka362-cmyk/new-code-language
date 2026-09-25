@@ -5,7 +5,7 @@ use cronc::cl_jit::{execute_cl_on_core, ClJitCore};
 #[test]
 fn test_cl_kernel_list_catalog() {
     let catalog = list_available_kernels();
-    assert_eq!(catalog.len(), 8, "Must provide all 8 foundational AI operators");
+    assert_eq!(catalog.len(), 12, "Must provide all 12 foundational AI operators");
 
     let names: Vec<&str> = catalog.iter().map(|k| k.name).collect();
     assert!(names.contains(&"flash-attn"));
@@ -16,11 +16,19 @@ fn test_cl_kernel_list_catalog() {
     assert!(names.contains(&"kv-cache"));
     assert!(names.contains(&"clifford-rotate4d"));
     assert!(names.contains(&"sagi-metaplastic-v99"));
+    assert!(names.contains(&"flash-attn-3"));
+    assert!(names.contains(&"moe-router"));
+    assert!(names.contains(&"mla-latent-attn"));
+    assert!(names.contains(&"bitnet-swiglu-expert"));
 }
 
 #[test]
 fn test_cl_kernel_synthesis_and_validation() {
-    let kernel_names = ["flash-attn", "bitnet-gemm", "rmsnorm", "swiglu", "rope", "kv-cache", "clifford-rotate4d", "sagi-metaplastic-v99"];
+    let kernel_names = [
+        "flash-attn", "bitnet-gemm", "rmsnorm", "swiglu", "rope", "kv-cache",
+        "clifford-rotate4d", "sagi-metaplastic-v99", "flash-attn-3", "moe-router",
+        "mla-latent-attn", "bitnet-swiglu-expert",
+    ];
 
     for &name in &kernel_names {
         let kernel_code = synthesize_kernel(name, 64, 16)
@@ -34,7 +42,11 @@ fn test_cl_kernel_synthesis_and_validation() {
 
 #[test]
 fn test_cl_kernel_memcheck_conflict_freedom() {
-    let kernel_names = ["flash-attn", "bitnet-gemm", "rmsnorm", "swiglu", "rope", "kv-cache", "clifford-rotate4d", "sagi-metaplastic-v99"];
+    let kernel_names = [
+        "flash-attn", "bitnet-gemm", "rmsnorm", "swiglu", "rope", "kv-cache",
+        "clifford-rotate4d", "sagi-metaplastic-v99", "flash-attn-3", "moe-router",
+        "mla-latent-attn", "bitnet-swiglu-expert",
+    ];
     let mem_opts = MemcheckOptions {
         enable_swizzling: true,
         strict_mode: true,

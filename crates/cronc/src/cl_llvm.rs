@@ -8,15 +8,15 @@
 use crate::cl_lang::parse_slot;
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if slot.len() == 10 {
-        let chars: Vec<char> = slot.chars().collect();
-        chars[8].to_digit(16)
-    } else if let Some(hash_pos) = slot.find('#') {
+    if let Some(hash_pos) = slot.find('#') {
         let hex_part: String = slot[hash_pos + 1..]
             .chars()
             .take_while(|c| c.is_ascii_hexdigit())
             .collect();
         u32::from_str_radix(&hex_part, 16).ok()
+    } else if slot.len() == 10 {
+        let chars: Vec<char> = slot.chars().collect();
+        chars[8].to_digit(16)
     } else {
         let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
         u32::from_str_radix(&imm_digits, 16).ok()
@@ -235,7 +235,7 @@ impl ClLlvmCompiler {
                                 self.buffer.push_str(&format!("  store i64 {}, i64* {}\n", next_opt, ptr_opt));
 
                                 let ptr_d = get_reg_ptr(&mut self, d);
-                                self.buffer.push_str(&format!("  store i32 16755285, i32* {}\n", ptr_d)); // 0x00FFAA55
+                                self.buffer.push_str(&format!("  store i32 16711680, i32* {}\n", ptr_d)); // 0x00FF0000 (Authentic Optical MZI)
                             }
                             "PO" | "P0" | "P1" => {
                                 let (idx1, idx2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
@@ -303,6 +303,63 @@ impl ClLlvmCompiler {
                                         let zext = self.new_reg();
                                         self.buffer.push_str(&format!("  {} = zext i1 {} to i32\n", zext, cmp));
                                         zext
+                                    }
+                                    'M' => {
+                                        // FMA in LLVM IR
+                                        let mul_res = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = mul i32 {}, {}\n", mul_res, val1, val2));
+                                        let ptr_d = get_reg_ptr(&mut self, d);
+                                        let val_d = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = load i32, i32* {}\n", val_d, ptr_d));
+                                        let fma_res = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = add i32 {}, {}\n", fma_res, val_d, mul_res));
+                                        fma_res
+                                    }
+                                    'S' => {
+                                        let mul_res = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = mul i32 {}, {}\n", mul_res, val1, val2));
+                                        let ptr_d = get_reg_ptr(&mut self, d);
+                                        let val_d = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = load i32, i32* {}\n", val_d, ptr_d));
+                                        let fms_res = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = sub i32 {}, {}\n", fms_res, val_d, mul_res));
+                                        fms_res
+                                    }
+                                    'L' => {
+                                        let r = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = shl i32 {}, {}\n", r, val1, val2));
+                                        r
+                                    }
+                                    'R' => {
+                                        let r = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = lshr i32 {}, {}\n", r, val1, val2));
+                                        r
+                                    }
+                                    'X' => {
+                                        let x = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = xor i32 {}, {}\n", x, val1, val2));
+                                        let r = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = xor i32 {}, -1\n", r, x));
+                                        r
+                                    }
+                                    'N' => {
+                                        let a = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = and i32 {}, {}\n", a, val1, val2));
+                                        let r = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = xor i32 {}, -1\n", r, a));
+                                        r
+                                    }
+                                    'O' => {
+                                        let o = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = or i32 {}, {}\n", o, val1, val2));
+                                        let r = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = xor i32 {}, -1\n", r, o));
+                                        r
+                                    }
+                                    'B' => {
+                                        let r = self.new_reg();
+                                        self.buffer.push_str(&format!("  {} = call i32 @llvm.ctpop.i32(i32 {})\n", r, val2));
+                                        r
                                     }
                                     _ => {
                                         let r = self.new_reg();

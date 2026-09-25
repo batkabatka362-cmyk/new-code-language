@@ -86,6 +86,14 @@ pub enum ClDirective {
     Core {
         coords: [usize; 4],
     },
+    Circuit {
+        core_id: usize,
+        layer: String,
+        excitatory: usize,
+        inhibitory: usize,
+        tau_us: usize,
+        dopamine: f32,
+    },
     Custom {
         name: String,
         content: String,
@@ -102,6 +110,7 @@ pub struct ClReport {
     pub hazards: Vec<String>,
     pub labels_found: usize,
     pub cores_partitioned: usize,
+    pub circuits_configured: usize,
     pub weights_bound: usize,
     pub total_weight_bytes: usize,
     pub directives_found: usize,
@@ -187,6 +196,35 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "SI", // SiLU Activation (SwiGLU)
     "GE", // GELU Activation
     "SS", // Selective Scan SSM Step (Mamba)
+    // Extended Arithmetic, Logical & Neuromorphic Opcodes
+    "AD", // Add
+    "ML", // Multiply
+    "DV", // Divide
+    "EX", // Exponential
+    "SQ", // Square Root
+    "FX", // Fixed-Point Convert
+    "CP", // Copy / Register Checkpoint
+    "XO", // Bitwise XOR
+    "RO", // Rotate Bits
+    "MA", // Bitmask Filter
+    "CO", // Compare Equal/Predicate
+    "DA", // Dopamine Neuromodulator Tap
+    "SE", // Serotonin Neuromodulator Tap
+    "NE", // Norepinephrine Neuromodulator Tap
+    "RV", // Reversible Vector Transform
+    "LD", // Local PGAS Bank Load
+    "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7",
+    "M8", "M9", "MB", "MC", "ME", "MF", // Matrix Macro Opcodes
+    // Accumulator & Activation Bank Macro Opcodes
+    "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7",
+    "A8", "A9", "AA", "AB", "AC", "AD", "AE", "AF",
+    // Barrier & Brain-Bridge Macro Opcodes
+    "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7",
+    "B8", "B9", "BA", "BB", "BC", "BD", "BE", "BF",
+    // Sensory & State Macro Opcodes
+    "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7",
+    "S8", "S9", "SA", "SB", "SC", "SD", "SE", "SF",
+    "_N", // NOP Alias
     // Extended Homopolymer Macro Opcodes
     "CC", // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation
     "DD", // Zero-Overhead Direct 4D-Torus NoC DMA Transfer
@@ -199,6 +237,7 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "99", // Global Hardware Sentry Watchdog Trip
     "aa", // All-to-all NoC Hypercube Scatter
     "cc", // Core-to-Core Cache Coherence Handshake
+    "co", // Core Outward Coherence Route
     "dd", // Deterministic Deflection Clear
     "ee", // Event-Driven Neuromorphic Spike Broadcast
     "ff", // Fast-Fourier / Wavelength Multiplex Trigger
@@ -303,11 +342,12 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
         return Err(format!("Invalid slot prefix '{}' in '{}'", prefix, raw));
     }
 
-    let opcode: String = chars[1..3].iter().collect();
+    let mut opcode: String = chars[1..3].iter().collect();
+    if opcode == "_N" || raw.starts_with("__NOP") {
+        opcode = "NO".to_string();
+    }
     let terminator = chars[9];
-    let is_valid_terminator = terminator == '>' || terminator == '!' || terminator == '?' || terminator == ';'
-        || terminator == ']' || terminator == '}' || terminator == ')' || terminator == '|'
-        || terminator == '~' || terminator == '$' || terminator == '#' || terminator == ',';
+    let is_valid_terminator = terminator.is_ascii_graphic();
     if !is_valid_terminator {
         return Err(format!(
             "Invalid slot terminator '{}' in '{}' (expected valid CL terminator)",
@@ -615,6 +655,40 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::Core { coords });
     }
 
+    if trimmed.starts_with(".circuit") {
+        let rest = trimmed[".circuit".len()..].trim();
+        let mut core_id = 0;
+        let mut layer = "L23".to_string();
+        let mut excitatory = 80;
+        let mut inhibitory = 20;
+        let mut tau_us = 15000;
+        let mut dopamine = 0.5f32;
+
+        for part in rest.split_whitespace() {
+            if let Some(val) = part.strip_prefix("core=") {
+                if let Ok(c) = val.parse::<usize>() { core_id = c; }
+            } else if let Some(val) = part.strip_prefix("layer=") {
+                layer = val.to_string();
+            } else if let Some(val) = part.strip_prefix("exc=") {
+                if let Ok(e) = val.parse::<usize>() { excitatory = e; }
+            } else if let Some(val) = part.strip_prefix("inh=") {
+                if let Ok(i) = val.parse::<usize>() { inhibitory = i; }
+            } else if let Some(val) = part.strip_prefix("tau=") {
+                if let Ok(t) = val.parse::<usize>() { tau_us = t; }
+            } else if let Some(val) = part.strip_prefix("da=") {
+                if let Ok(d) = val.parse::<f32>() { dopamine = d; }
+            }
+        }
+        return Ok(ClDirective::Circuit {
+            core_id,
+            layer,
+            excitatory,
+            inhibitory,
+            tau_us,
+            dopamine,
+        });
+    }
+
     let name = trimmed.split_whitespace().next().unwrap_or(trimmed).to_string();
     Ok(ClDirective::Custom { name, content: trimmed.to_string() })
 }
@@ -626,12 +700,12 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
     for line in content.lines() {
         line_num += 1;
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed.starts_with('#') {
             continue;
         }
 
-        // Check for Label definitions (e.g. @label: or L00:)
-        if (trimmed.starts_with('@') && trimmed.ends_with(':'))
+        // Check for Label or Kernel definitions (e.g. @kernel foo or @label: or L00:)
+        if trimmed.starts_with('@')
             || (trimmed.starts_with('L') && trimmed.ends_with(':') && trimmed.len() <= 20)
         {
             report.labels_found += 1;
@@ -640,13 +714,14 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
 
         // Check for Semantic Directives
         if trimmed.starts_with('.') {
-            if trimmed.starts_with(".data") || trimmed.starts_with(".section") {
-                continue;
-            }
             if let Ok(directive) = parse_directive(trimmed) {
                 match &directive {
                     ClDirective::Core { .. } => {
                         report.cores_partitioned += 1;
+                    }
+                    ClDirective::Circuit { .. } => {
+                        report.circuits_configured += 1;
+                        report.directives_found += 1;
                     }
                     ClDirective::Weights(binding) => {
                         report.weights_bound += 1;
@@ -658,36 +733,40 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
                     }
                 }
                 report.directives_parsed.push(directive);
-                continue;
             }
-        }
-
-        let parts: Vec<&str> = trimmed.split_whitespace().collect();
-        if parts.is_empty() {
             continue;
         }
 
-        // Must start with cycle identifier B<num>:
-        let cycle_part = parts[0];
-        if !cycle_part.starts_with('B') || !cycle_part.ends_with(':') {
+        let (cycle_part, slots_str) = match trimmed.split_once(':') {
+            Some((c, s)) => (c.trim(), s.trim()),
+            None => {
+                return Err(format!(
+                    "Syntax Error at line {}: Missing bundle cycle header (expected 'B<cycle>:', got '{}')",
+                    line_num, trimmed
+                ));
+            }
+        };
+
+        if !cycle_part.starts_with('B') && !cycle_part.starts_with('b') {
             return Err(format!(
                 "Syntax Error at line {}: Missing bundle cycle header (expected 'B<cycle>:', got '{}')",
                 line_num, cycle_part
             ));
         }
 
-        if parts.len() < 2 || parts.len() > 5 {
+        let slot_tokens: Vec<&str> = slots_str.split_whitespace().collect();
+        if slot_tokens.is_empty() || slot_tokens.len() > 4 {
             return Err(format!(
                 "Bundle Error at line {}: Each .cl VLIW bundle must contain between 1 and 4 slots, found {}",
                 line_num,
-                parts.len() - 1
+                slot_tokens.len()
             ));
         }
 
         let mut dest_regs_in_bundle: HashSet<usize> = HashSet::new();
         let mut optical_count_in_bundle = 0;
 
-        for slot_str in &parts[1..] {
+        for slot_str in slot_tokens {
             let slot = parse_slot(slot_str)
                 .map_err(|e| format!("Line {}: {}", line_num, e))?;
 

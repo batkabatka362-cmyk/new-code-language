@@ -96,35 +96,35 @@ pub fn analyze_cl_power(cl_code: &str, options: &ClPowerOptions) -> Result<ClPow
                 if let Ok(slot) = parse_slot(s_str) {
                     total_slots += 1;
                     match slot.opcode.as_str() {
-                        // 1. Reversible Fredkin/Toffoli logic: Delta S = 0, 0 bits erased
-                        "FA" | "88" => {
+                        // 1. Reversible Fredkin/Toffoli/Clifford logic: Delta S = 0, 0 bits erased
+                        "FA" | "88" | "RF" | "TO" | "BK" | "CG" => {
                             reversible_ops += 1;
                         }
                         // 2. Optical MZI Phase Shifting: Passive photonic propagation, 0 bits erased
                         "OP" | "WD" => {
                             photonic_ops += 1;
                         }
-                        // 3. Neuromorphic Sub-Byte INT2 MACs: 16-bit register update
-                        "MD" => {
+                        // 3. Neuromorphic Sub-Byte INT2 MACs & Trit math: 16-bit register update
+                        "MD" | "TM" | "TC" => {
                             subbyte_ops += 1;
                             bits_erased += 16;
                         }
-                        // 4. Local PGAS SRAM writes: Overwrite 32 bits
-                        "ST" => {
+                        // 4. Local PGAS SRAM writes / Tape writes: Overwrite 32 bits
+                        "ST" | "TW" => {
                             sram_ops += 1;
                             bits_erased += 32;
                         }
-                        // 5. Local PGAS SRAM reads/packs
-                        "TT" | "PK" => {
+                        // 5. Local PGAS SRAM reads/packs / Tape reads
+                        "TT" | "PK" | "TR" => {
                             sram_ops += 1;
                         }
-                        // 6. NoC mesh packet transmission
-                        "TX" | "SB" => {
+                        // 6. NoC mesh packet transmission & Systolic wave hops
+                        "TX" | "SB" | "DW" | "DD" | "DE" | "DN" | "DS" => {
                             noc_packets += 1;
                         }
-                        // 7. Idle NOP: Zero switching activity
-                        "NO" => {}
-                        // 8. Standard Irreversible CMOS operations: Overwrites destination 32-bit register
+                        // 7. Idle NOP & Zero-overhead loop counter
+                        "NO" | "ZL" | "TI" | "TD" => {}
+                        // 8. Dedicated AI ISA Accelerators & Standard Irreversible CMOS operations
                         _ => {
                             irreversible_ops += 1;
                             if slot.dest_reg.is_some() {

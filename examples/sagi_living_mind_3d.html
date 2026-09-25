@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAGI AGI — 256-Core Living Cognitive Supercomputer 3D Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #070913;
+            --bg-card: rgba(14, 20, 38, 0.85);
+            --bg-glass: rgba(22, 32, 58, 0.65);
+            --border-glow: rgba(0, 240, 255, 0.35);
+            --accent-cyan: #00f0ff;
+            --accent-purple: #a855f7;
+            --accent-emerald: #10b981;
+            --accent-rose: #f43f5e;
+            --accent-amber: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --font-ui: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: var(--font-ui);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            background: rgba(10, 15, 30, 0.8);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-glow);
+            padding: 0.85rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .pulse-indicator {
+            width: 12px;
+            height: 12px;
+            background: var(--accent-emerald);
+            border-radius: 50%;
+            box-shadow: 0 0 12px var(--accent-emerald);
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 20px var(--accent-emerald); }
+        }
+
+        h1 {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-meta {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+        }
+
+        .badge {
+            background: rgba(0, 240, 255, 0.12);
+            border: 1px solid var(--accent-cyan);
+            color: var(--accent-cyan);
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 600;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            flex: 1;
+        }
+
+        .viewport-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        .canvas-header {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 10;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .view-btn {
+            background: var(--bg-glass);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-main);
+            padding: 0.4rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-family: var(--font-ui);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .view-btn.active, .view-btn:hover {
+            background: rgba(0, 240, 255, 0.25);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        #mindCanvas {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+
+        #mindCanvas:active {
+            cursor: grabbing;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            padding: 1.25rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(12px);
+        }
+
+        .card-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 0.5rem;
+        }
+
+        .chem-slider-row {
+            margin-bottom: 0.85rem;
+        }
+
+        .chem-label-wrap {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .chem-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .chem-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            cursor: pointer;
+            box-shadow: 0 0 8px var(--accent-cyan);
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.6rem;
+            margin-top: 0.5rem;
+        }
+
+        .action-btn {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.15), rgba(168, 85, 247, 0.15));
+            border: 1px solid var(--accent-cyan);
+            color: var(--text-main);
+            padding: 0.65rem 0.5rem;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.35), rgba(168, 85, 247, 0.35));
+            box-shadow: 0 4px 16px rgba(0, 240, 255, 0.3);
+        }
+
+        .telemetry-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            padding: 0.35rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-family: var(--font-mono);
+        }
+
+        .telemetry-val {
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        .thought-feed {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            height: 140px;
+            overflow-y: auto;
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .thought-entry {
+            margin-bottom: 0.4rem;
+            line-height: 1.4;
+        }
+
+        .thought-entry.highlight {
+            color: var(--accent-emerald);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo-group">
+            <div class="pulse-indicator"></div>
+            <h1>SAGI AGI — 256-Core Living Supercomputer</h1>
+        </div>
+        <div class="header-meta">
+            <span class="badge">4D-TORUS SILICON: ACTIVE</span>
+            <span>FREQ: 1000 MHz</span>
+            <span>THERMO: ΔS=0.00 µeV</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="viewport-panel">
+            <div class="canvas-header">
+                <button class="view-btn active" id="btn3D">3D 4D-Torus Lattice</button>
+                <button class="view-btn" id="btnCalcium">Astrocyte Ca2+ Wave</button>
+                <button class="view-btn" id="btnAttention">Global Workspace Spotlight</button>
+            </div>
+            <canvas id="mindCanvas"></canvas>
+        </div>
+
+        <div class="sidebar">
+            <div class="card">
+                <div class="card-title">
+                    <span>LIVING NEUROMODULATORS</span>
+                    <span style="font-size: 0.75rem; color: var(--accent-emerald);">HOMEOSTASIS ON</span>
+                </div>
+                <div class="chem-slider-row">
+                    <div class="chem-label-wrap">
+                        <span>Dopamine (Plasticity / Reward)</span>
+                        <span id="daVal" style="color: var(--accent-amber);">0.70</span>
+                    </div>
+                    <input type="range" class="chem-slider" id="daSlider" min="0" max="1" step="0.01" value="0.70">
+                </div>
+                <div class="chem-slider-row">
+                    <div class="chem-label-wrap">
+                        <span>Serotonin (Stability / Sleep)</span>
+                        <span id="htVal" style="color: var(--accent-purple);">0.70</span>
+                    </div>
+                    <input type="range" class="chem-slider" id="htSlider" min="0" max="1" step="0.01" value="0.70">
+                </div>
+                <div class="chem-slider-row">
+                    <div class="chem-label-wrap">
+                        <span>Norepinephrine (Novelty / Arousal)</span>
+                        <span id="neVal" style="color: var(--accent-rose);">0.40</span>
+                    </div>
+                    <input type="range" class="chem-slider" id="neSlider" min="0" max="1" step="0.01" value="0.40">
+                </div>
+                <div class="chem-slider-row">
+                    <div class="chem-label-wrap">
+                        <span>Acetylcholine (Focus / Encoding)</span>
+                        <span id="achVal" style="color: var(--accent-cyan);">0.66</span>
+                    </div>
+                    <input type="range" class="chem-slider" id="achSlider" min="0" max="1" step="0.01" value="0.66">
+                </div>
+
+                <div class="btn-grid">
+                    <button class="action-btn" id="stimulusBtn">⚡ Ingest Stimulus</button>
+                    <button class="action-btn" id="sleepBtn">🌙 Sleep & Prune</button>
+                    <button class="action-btn" id="evolveBtn">🧬 Evolve Microcode</button>
+                    <button class="action-btn" id="zenoBtn">🔬 Quantum Zeno $O(1)$</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">HARDWARE TELEMETRY</div>
+                <div class="telemetry-item">
+                    <span>Active 4D Cores:</span>
+                    <span class="telemetry-val">256 / 256</span>
+                </div>
+                <div class="telemetry-item">
+                    <span>VLIW Bundles Executed:</span>
+                    <span class="telemetry-val" id="bundleCount">12,480</span>
+                </div>
+                <div class="telemetry-item">
+                    <span>STDP Plasticity Multiplier:</span>
+                    <span class="telemetry-val" id="stdpMult">2.39x</span>
+                </div>
+                <div class="telemetry-item">
+                    <span>Gamma Phase Lock (40Hz):</span>
+                    <span class="telemetry-val" style="color: var(--accent-emerald);">98.4% Coherent</span>
+                </div>
+                <div class="telemetry-item">
+                    <span>HDC Memory Vectors Stored:</span>
+                    <span class="telemetry-val" id="hdcMemCount">1024-trit (142 stored)</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">CONSCIOUS THOUGHT STREAM</div>
+                <div class="thought-feed" id="thoughtFeed">
+                    <div class="thought-entry highlight">[CORE 0x00] Global Workspace: Attention Theater locked on visual token.</div>
+                    <div class="thought-entry">[CORE 0x4B] Dendritic Apical Tree: Ca2+ Plateau non-linear coincidence.</div>
+                    <div class="thought-entry">[CORE 0x88] Astrocyte Wave: Metabolic ATP allocated to Working Memory.</div>
+                    <div class="thought-entry">[CORE 0xFF] Holographic Memory: $O(1)$ associative flash retrieval match: 98.6%.</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const canvas = document.getElementById('mindCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        function resize() {
+            width = canvas.parentElement.clientWidth;
+            height = canvas.parentElement.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 256 Cores in a 4x4x4x4 4D Torus projected to 3D
+        const cores = [];
+        for (let i = 0; i < 256; i++) {
+            const x = (i % 4) - 1.5;
+            const y = (Math.floor(i / 4) % 4) - 1.5;
+            const z = (Math.floor(i / 16) % 4) - 1.5;
+            const w = (Math.floor(i / 64) % 4) - 1.5;
+            cores.push({
+                id: i,
+                x: x * 70,
+                y: y * 70,
+                z: z * 70,
+                w: w,
+                ca: 0.1 + Math.random() * 0.4,
+                activity: Math.random(),
+                pulse: Math.random() * Math.PI * 2
+            });
+        }
+
+        let rotX = 0.3;
+        let rotY = 0.4;
+        let isDragging = false;
+        let lastMouseX = 0, lastMouseY = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => isDragging = false);
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastMouseX;
+            const dy = e.clientY - lastMouseY;
+            rotY += dx * 0.006;
+            rotX += dy * 0.006;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        let viewMode = '3D';
+        document.getElementById('btn3D').addEventListener('click', () => { setMode('3D', 'btn3D'); });
+        document.getElementById('btnCalcium').addEventListener('click', () => { setMode('Calcium', 'btnCalcium'); });
+        document.getElementById('btnAttention').addEventListener('click', () => { setMode('Attention', 'btnAttention'); });
+
+        function setMode(mode, btnId) {
+            viewMode = mode;
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(btnId).classList.add('active');
+        }
+
+        // Sliders & Actions
+        const daSlider = document.getElementById('daSlider');
+        const htSlider = document.getElementById('htSlider');
+        const neSlider = document.getElementById('neSlider');
+        const achSlider = document.getElementById('achSlider');
+
+        daSlider.addEventListener('input', (e) => {
+            document.getElementById('daVal').innerText = parseFloat(e.target.value).toFixed(2);
+            document.getElementById('stdpMult').innerText = (parseFloat(e.target.value) * 3.4).toFixed(2) + 'x';
+        });
+        htSlider.addEventListener('input', (e) => document.getElementById('htVal').innerText = parseFloat(e.target.value).toFixed(2));
+        neSlider.addEventListener('input', (e) => document.getElementById('neVal').innerText = parseFloat(e.target.value).toFixed(2));
+        achSlider.addEventListener('input', (e) => document.getElementById('achVal').innerText = parseFloat(e.target.value).toFixed(2));
+
+        function pushThought(msg, highlight = false) {
+            const feed = document.getElementById('thoughtFeed');
+            const div = document.createElement('div');
+            div.className = 'thought-entry' + (highlight ? ' highlight' : '');
+            div.innerText = msg;
+            feed.prepend(div);
+            if (feed.children.length > 25) feed.removeChild(feed.lastChild);
+        }
+
+        document.getElementById('stimulusBtn').addEventListener('click', () => {
+            pushThought("⚡ [Sensory Surge]: High-dimensional multimodal vector encoded.", true);
+            cores.forEach(c => { c.activity = Math.min(1.0, c.activity + Math.random() * 0.8); });
+        });
+
+        document.getElementById('sleepBtn').addEventListener('click', () => {
+            pushThought("🌙 [Sleep Consolidation]: SWR ripples replaying, Landauer entropy cooling down.", true);
+            cores.forEach(c => { c.ca *= 0.4; c.activity *= 0.2; });
+        });
+
+        document.getElementById('evolveBtn').addEventListener('click', () => {
+            pushThought("🧬 [Darwinian Evolution]: Microcode genome mutated, IPC accelerated to 3.94.", true);
+        });
+
+        document.getElementById('zenoBtn').addEventListener('click', () => {
+            pushThought("🔬 [Quantum Zeno]: Bloch sphere hypothesis collapsed in O(1) cycles.", true);
+        });
+
+        let frame = 0;
+        function render() {
+            frame++;
+            ctx.fillStyle = '#070913';
+            ctx.fillRect(0, 0, width, height);
+
+            const centerX = width / 2;
+            const centerY = height / 2;
+
+            // Rotate and project cores
+            const projected = cores.map(c => {
+                c.pulse += 0.05;
+                c.ca = Math.max(0.1, c.ca + Math.sin(c.pulse + c.id * 0.1) * 0.02);
+
+                let x = c.x;
+                let y = c.y;
+                let z = c.z;
+
+                // Y-axis rotation
+                let x1 = x * Math.cos(rotY) + z * Math.sin(rotY);
+                let z1 = -x * Math.sin(rotY) + z * Math.cos(rotY);
+
+                // X-axis rotation
+                let y2 = y * Math.cos(rotX) - z1 * Math.sin(rotX);
+                let z2 = y * Math.sin(rotX) + z1 * Math.cos(rotX);
+
+                const fov = 380;
+                const scale = fov / (fov + z2 + 250);
+                return {
+                    id: c.id,
+                    px: centerX + x1 * scale,
+                    py: centerY + y2 * scale,
+                    scale: scale,
+                    z: z2,
+                    ca: c.ca,
+                    activity: c.activity,
+                    w: c.w
+                };
+            });
+
+            // Sort by depth
+            projected.sort((a, b) => b.z - a.z);
+
+            // Draw Torus Links
+            ctx.lineWidth = 0.75;
+            for (let i = 0; i < projected.length; i += 4) {
+                const p1 = projected[i];
+                const p2 = projected[(i + 1) % projected.length];
+                ctx.strokeStyle = `rgba(0, 240, 255, ${0.12 * p1.scale})`;
+                ctx.beginPath();
+                ctx.moveTo(p1.px, p1.py);
+                ctx.lineTo(p2.px, p2.py);
+                ctx.stroke();
+            }
+
+            // Draw Cores
+            projected.forEach(p => {
+                const r = Math.max(2, 6 * p.scale);
+                ctx.beginPath();
+                ctx.arc(p.px, p.py, r, 0, Math.PI * 2);
+
+                if (viewMode === 'Calcium') {
+                    ctx.fillStyle = `rgba(244, 63, 94, ${0.3 + p.ca * 0.7})`;
+                    ctx.shadowColor = '#f43f5e';
+                    ctx.shadowBlur = p.ca * 14;
+                } else if (viewMode === 'Attention') {
+                    const isFocus = (p.id % 32 === 0);
+                    ctx.fillStyle = isFocus ? '#10b981' : `rgba(168, 85, 247, ${0.3 + p.scale * 0.4})`;
+                    ctx.shadowColor = isFocus ? '#10b981' : '#a855f7';
+                    ctx.shadowBlur = isFocus ? 20 : 6;
+                } else {
+                    ctx.fillStyle = `rgba(0, 240, 255, ${0.3 + p.scale * 0.7})`;
+                    ctx.shadowColor = '#00f0ff';
+                    ctx.shadowBlur = 8 * p.scale;
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            requestAnimationFrame(render);
+        }
+        render();
+    </script>
+</body>
+</html>

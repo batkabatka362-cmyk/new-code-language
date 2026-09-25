@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAGI AGI — 256-Core 4D-Torus Living Supercomputer Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg-base: #060913;
+            --panel-bg: rgba(13, 20, 36, 0.85);
+            --panel-glass: rgba(18, 28, 52, 0.65);
+            --accent-cyan: #00f0ff;
+            --accent-purple: #9d4edd;
+            --accent-emerald: #00ff88;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --text-main: #f0f4fc;
+            --text-muted: #8a9bb8;
+            --border-glow: 1px solid rgba(0, 240, 255, 0.25);
+            --font-ui: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: var(--font-ui);
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+        header {
+            background: rgba(10, 16, 32, 0.9);
+            backdrop-filter: blur(16px);
+            border-bottom: var(--border-glow);
+            padding: 0.85rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 50;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .logo-badge {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 1.3rem;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+        }
+        h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #ffffff, var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status-strip {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        .badge {
+            background: rgba(0, 255, 136, 0.12);
+            color: var(--accent-emerald);
+            padding: 0.35rem 0.85rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid var(--accent-emerald);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-emerald);
+            box-shadow: 0 0 10px var(--accent-emerald);
+            animation: pulse 1.8s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.4; }
+        }
+        main {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 1.25rem;
+            padding: 1.25rem 2rem;
+            flex: 1;
+            position: relative;
+        }
+        .viewport-panel {
+            background: var(--panel-bg);
+            border-radius: 14px;
+            border: var(--border-glow);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
+        }
+        .viewport-hud {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 10;
+            display: flex;
+            gap: 0.5rem;
+        }
+        .hud-btn {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: var(--text-main);
+            padding: 0.4rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            transition: all 0.2s;
+        }
+        .hud-btn:hover, .hud-btn.active {
+            background: var(--accent-cyan);
+            color: #000;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+        }
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            min-height: 640px;
+            position: relative;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .side-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        .side-panel::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        .card {
+            background: var(--panel-bg);
+            border-radius: 12px;
+            border: var(--border-glow);
+            padding: 1.1rem;
+            backdrop-filter: blur(12px);
+        }
+        .card h2 {
+            font-size: 0.95rem;
+            color: var(--accent-cyan);
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 0.4rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.6rem;
+        }
+        .stat-box {
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 0.6rem;
+            border-radius: 8px;
+        }
+        .stat-label {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-bottom: 0.2rem;
+            text-transform: uppercase;
+        }
+        .stat-val {
+            font-family: var(--font-mono);
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .reg-table {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.35rem;
+            margin-top: 0.6rem;
+        }
+        .reg-cell {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0.35rem 0.2rem;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        .reg-cell:hover {
+            border-color: var(--accent-cyan);
+        }
+        .reg-cell span {
+            color: var(--accent-purple);
+            display: block;
+            font-size: 0.62rem;
+            font-weight: bold;
+        }
+        .gauge-group {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            text-align: center;
+        }
+        .gauge-item {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 0.5rem 0.2rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .gauge-circle {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 0.3rem auto;
+            position: relative;
+        }
+        .gauge-circle svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        .gauge-circle circle {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+        }
+        .gauge-bg { stroke: rgba(255, 255, 255, 0.1); }
+        .gauge-fill {
+            stroke-dasharray: 126;
+            stroke-dashoffset: 30;
+            transition: stroke-dashoffset 0.8s ease;
+        }
+        .gauge-val-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            font-weight: bold;
+        }
+        .gauge-name {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        .banks-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+        }
+        .bank-cell {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.25);
+            border-radius: 4px;
+            padding: 0.35rem 0;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+        }
+        .bank-cell.active {
+            background: rgba(0, 240, 255, 0.35);
+            border-color: var(--accent-cyan);
+            color: #fff;
+            box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+        }
+        .tooltip {
+            position: absolute;
+            background: rgba(10, 16, 32, 0.95);
+            border: 1px solid var(--accent-cyan);
+            padding: 0.5rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <div class="logo-badge">C</div>
+            <div>
+                <h1>SAGI AGI Neocortical Foundation Engine</h1>
+                <p style="font-size: 0.78rem; color: var(--text-muted);">256-Core 4D-Torus (4×4×4×4) Silicon Wavefront Live Dashboard — Kernel: <strong style="color: var(--accent-cyan);">examples/sagi_neocortical_foundation_model.cl</strong></p>
+            </div>
+        </div>
+        <div class="status-strip">
+            <div class="badge">
+                <div class="pulse-dot"></div>
+                100% BIT-EXACT RTL LOCKSTEP
+            </div>
+            <div class="badge" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">
+                PGAS CONFLICT-FREE
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="viewport-panel">
+            <div class="viewport-hud">
+                <button class="hud-btn active" id="btn3DTorus" onclick="setViewMode('3d')">3D 4D-Torus Projection</button>
+                <button class="hud-btn" id="btn2DGrid" onclick="setViewMode('2d')">2D Cortical Flattening</button>
+                <button class="hud-btn" id="btnRotate" onclick="toggleRotate()">Auto-Rotate: ON</button>
+            </div>
+            <div class="canvas-container" id="canvasContainer">
+                <div class="tooltip" id="hudTooltip"></div>
+            </div>
+        </div>
+
+        <div class="side-panel">
+            <!-- Hardware Metrics -->
+            <div class="card">
+                <h2>Silicon Telemetry <span style="font-size: 0.7rem; color: var(--accent-emerald);">LIVE</span></h2>
+                <div class="stat-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Total Cycles</div>
+                        <div class="stat-val">7936</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Active Cores</div>
+                        <div class="stat-val" style="color: var(--accent-emerald);">256 / 256</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Throughput</div>
+                        <div class="stat-val" style="color: var(--accent-cyan);">20.48 TFLOPs</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Silicon Power</div>
+                        <div class="stat-val">3.07 W</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Junction Temp</div>
+                        <div class="stat-val">25.8 °C</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">NoC Packets</div>
+                        <div class="stat-val">1470</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Neuromodulatory Dynamics -->
+            <div class="card">
+                <h2>Neuromodulatory Gauges</h2>
+                <div class="gauge-group">
+                    <div class="gauge-item">
+                        <div class="gauge-circle">
+                            <svg viewBox="0 0 48 48">
+                                <circle class="gauge-bg" cx="24" cy="24" r="20"></circle>
+                                <circle class="gauge-fill" cx="24" cy="24" r="20" stroke="var(--accent-cyan)" stroke-dashoffset="35"></circle>
+                            </svg>
+                            <span class="gauge-val-text" style="color: var(--accent-cyan);">0.78</span>
+                        </div>
+                        <div class="gauge-name">DA (Reward)</div>
+                    </div>
+                    <div class="gauge-item">
+                        <div class="gauge-circle">
+                            <svg viewBox="0 0 48 48">
+                                <circle class="gauge-bg" cx="24" cy="24" r="20"></circle>
+                                <circle class="gauge-fill" cx="24" cy="24" r="20" stroke="var(--accent-purple)" stroke-dashoffset="22"></circle>
+                            </svg>
+                            <span class="gauge-val-text" style="color: var(--accent-purple);">0.85</span>
+                        </div>
+                        <div class="gauge-name">5-HT (Mood)</div>
+                    </div>
+                    <div class="gauge-item">
+                        <div class="gauge-circle">
+                            <svg viewBox="0 0 48 48">
+                                <circle class="gauge-bg" cx="24" cy="24" r="20"></circle>
+                                <circle class="gauge-fill" cx="24" cy="24" r="20" stroke="var(--accent-rose)" stroke-dashoffset="75"></circle>
+                            </svg>
+                            <span class="gauge-val-text" style="color: var(--accent-rose);">0.42</span>
+                        </div>
+                        <div class="gauge-name">NE (Arousal)</div>
+                    </div>
+                    <div class="gauge-item">
+                        <div class="gauge-circle">
+                            <svg viewBox="0 0 48 48">
+                                <circle class="gauge-bg" cx="24" cy="24" r="20"></circle>
+                                <circle class="gauge-fill" cx="24" cy="24" r="20" stroke="var(--accent-emerald)" stroke-dashoffset="15"></circle>
+                            </svg>
+                            <span class="gauge-val-text" style="color: var(--accent-emerald);">0.90</span>
+                        </div>
+                        <div class="gauge-name">ACh (Learn)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Core Register Inspector -->
+            <div class="card">
+                <h2>Core Inspector (<span id="selectedCoreLabel" style="color: var(--accent-cyan);">Core 0</span>)</h2>
+                <div style="font-size: 0.85rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">4D Coordinate:</span>
+                    <span style="font-family: var(--font-mono); font-weight: bold;" id="coordVal">(0, 0, 0, 0)</span>
+                </div>
+                <div style="font-size: 0.85rem; margin-bottom: 0.6rem; display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Cortical Function:</span>
+                    <span style="color: var(--accent-cyan); font-weight: 600;" id="regionVal">Frontal Executive</span>
+                </div>
+                <div class="reg-table" id="regContainer"></div>
+            </div>
+
+            <!-- 16-Bank PGAS SRAM Memory Matrix -->
+            <div class="card">
+                <h2>16-Bank PGAS SRAM Heatmap</h2>
+                <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.4rem;">
+                    GF(2^4) Galois Swizzled — Zero Stall Conflicts Certified
+                </p>
+                <div class="banks-grid" id="banksGrid"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const CORES = [
+  { id: 0, x: 0, y: 0, z: 0, w: 0, regs: ["0x0000", "0xCA000000", "0x0000", "0x0000", "0x5555AAAA", "0x0000", "0x0000", "0x0000", "0x0000", "0x0000", "0x0000", "0x0000", "0x0000", "0x0000", "0x0000", "0x0000"] },
+  { id: 1, x: 1, y: 0, z: 0, w: 0, regs: ["0x0100", "0xCA000100", "0x0100", "0x0100", "0x5555ABAA", "0x0100", "0x0100", "0x0100", "0x0100", "0x0100", "0x0100", "0x0100", "0x0100", "0x0100", "0x0100", "0x0100"] },
+  { id: 2, x: 2, y: 0, z: 0, w: 0, regs: ["0x0200", "0xCA000200", "0x0200", "0x0200", "0x5555A8AA", "0x0200", "0x0200", "0x0200", "0x0200", "0x0200", "0x0200", "0x0200", "0x0200", "0x0200", "0x0200", "0x0200"] },
+  { id: 3, x: 3, y: 0, z: 0, w: 0, regs: ["0x0300", "0xCA000300", "0x0300", "0x0300", "0x5555A9AA", "0x0300", "0x0300", "0x0300", "0x0300", "0x0300", "0x0300", "0x0300", "0x0300", "0x0300", "0x0300", "0x0300"] },
+  { id: 4, x: 0, y: 1, z: 0, w: 0, regs: ["0x0400", "0xCA000400", "0x0400", "0x0400", "0x5555AEAA", "0x0400", "0x0400", "0x0400", "0x0400", "0x0400", "0x0400", "0x0400", "0x0400", "0x0400", "0x0400", "0x0400"] },
+  { id: 5, x: 1, y: 1, z: 0, w: 0, regs: ["0x0500", "0xCA000500", "0x0500", "0x0500", "0x5555AFAA", "0x0500", "0x0500", "0x0500", "0x0500", "0x0500", "0x0500", "0x0500", "0x0500", "0x0500", "0x0500", "0x0500"] },
+  { id: 6, x: 2, y: 1, z: 0, w: 0, regs: ["0x0600", "0xCA000600", "0x0600", "0x0600", "0x5555ACAA", "0x0600", "0x0600", "0x0600", "0x0600", "0x0600", "0x0600", "0x0600", "0x0600", "0x0600", "0x0600", "0x0600"] },
+  { id: 7, x: 3, y: 1, z: 0, w: 0, regs: ["0x0700", "0xCA000700", "0x0700", "0x0700", "0x5555ADAA", "0x0700", "0x0700", "0x0700", "0x0700", "0x0700", "0x0700", "0x0700", "0x0700", "0x0700", "0x0700", "0x0700"] },
+  { id: 8, x: 0, y: 2, z: 0, w: 0, regs: ["0x0800", "0xCA000800", "0x0800", "0x0800", "0x5555A2AA", "0x0800", "0x0800", "0x0800", "0x0800", "0x0800", "0x0800", "0x0800", "0x0800", "0x0800", "0x0800", "0x0800"] },
+  { id: 9, x: 1, y: 2, z: 0, w: 0, regs: ["0x0900", "0xCA000900", "0x0900", "0x0900", "0x5555A3AA", "0x0900", "0x0900", "0x0900", "0x0900", "0x0900", "0x0900", "0x0900", "0x0900", "0x0900", "0x0900", "0x0900"] },
+  { id: 10, x: 2, y: 2, z: 0, w: 0, regs: ["0x0A00", "0xCA000A00", "0x0A00", "0x0A00", "0x5555A0AA", "0x0A00", "0x0A00", "0x0A00", "0x0A00", "0x0A00", "0x0A00", "0x0A00", "0x0A00", "0x0A00", "0x0A00", "0x0A00"] },
+  { id: 11, x: 3, y: 2, z: 0, w: 0, regs: ["0x0B00", "0xCA000B00", "0x0B00", "0x0B00", "0x5555A1AA", "0x0B00", "0x0B00", "0x0B00", "0x0B00", "0x0B00", "0x0B00", "0x0B00", "0x0B00", "0x0B00", "0x0B00", "0x0B00"] },
+  { id: 12, x: 0, y: 3, z: 0, w: 0, regs: ["0x0C00", "0xCA000C00", "0x0C00", "0x0C00", "0x5555A6AA", "0x0C00", "0x0C00", "0x0C00", "0x0C00", "0x0C00", "0x0C00", "0x0C00", "0x0C00", "0x0C00", "0x0C00", "0x0C00"] },
+  { id: 13, x: 1, y: 3, z: 0, w: 0, regs: ["0x0D00", "0xCA000D00", "0x0D00", "0x0D00", "0x5555A7AA", "0x0D00", "0x0D00", "0x0D00", "0x0D00", "0x0D00", "0x0D00", "0x0D00", "0x0D00", "0x0D00", "0x0D00", "0x0D00"] },
+  { id: 14, x: 2, y: 3, z: 0, w: 0, regs: ["0x0E00", "0xCA000E00", "0x0E00", "0x0E00", "0x5555A4AA", "0x0E00", "0x0E00", "0x0E00", "0x0E00", "0x0E00", "0x0E00", "0x0E00", "0x0E00", "0x0E00", "0x0E00", "0x0E00"] },
+  { id: 15, x: 3, y: 3, z: 0, w: 0, regs: ["0x0F00", "0xCA000F00", "0x0F00", "0x0F00", "0x5555A5AA", "0x0F00", "0x0F00", "0x0F00", "0x0F00", "0x0F00", "0x0F00", "0x0F00", "0x0F00", "0x0F00", "0x0F00", "0x0F00"] },
+  { id: 16, x: 0, y: 0, z: 1, w: 0, regs: ["0x1000", "0xCA001000", "0x1000", "0x1000", "0x5555BAAA", "0x1000", "0x1000", "0x1000", "0x1000", "0x1000", "0x1000", "0x1000", "0x1000", "0x1000", "0x1000", "0x1000"] },
+  { id: 17, x: 1, y: 0, z: 1, w: 0, regs: ["0x1100", "0xCA001100", "0x1100", "0x1100", "0x5555BBAA", "0x1100", "0x1100", "0x1100", "0x1100", "0x1100", "0x1100", "0x1100", "0x1100", "0x1100", "0x1100", "0x1100"] },
+  { id: 18, x: 2, y: 0, z: 1, w: 0, regs: ["0x1200", "0xCA001200", "0x1200", "0x1200", "0x5555B8AA", "0x1200", "0x1200", "0x1200", "0x1200", "0x1200", "0x1200", "0x1200", "0x1200", "0x1200", "0x1200", "0x1200"] },
+  { id: 19, x: 3, y: 0, z: 1, w: 0, regs: ["0x1300", "0xCA001300", "0x1300", "0x1300", "0x5555B9AA", "0x1300", "0x1300", "0x1300", "0x1300", "0x1300", "0x1300", "0x1300", "0x1300", "0x1300", "0x1300", "0x1300"] },
+  { id: 20, x: 0, y: 1, z: 1, w: 0, regs: ["0x1400", "0xCA001400", "0x1400", "0x1400", "0x5555BEAA", "0x1400", "0x1400", "0x1400", "0x1400", "0x1400", "0x1400", "0x1400", "0x1400", "0x1400", "0x1400", "0x1400"] },
+  { id: 21, x: 1, y: 1, z: 1, w: 0, regs: ["0x1500", "0xCA001500", "0x1500", "0x1500", "0x5555BFAA", "0x1500", "0x1500", "0x1500", "0x1500", "0x1500", "0x1500", "0x1500", "0x1500", "0x1500", "0x1500", "0x1500"] },
+  { id: 22, x: 2, y: 1, z: 1, w: 0, regs: ["0x1600", "0xCA001600", "0x1600", "0x1600", "0x5555BCAA", "0x1600", "0x1600", "0x1600", "0x1600", "0x1600", "0x1600", "0x1600", "0x1600", "0x1600", "0x1600", "0x1600"] },
+  { id: 23, x: 3, y: 1, z: 1, w: 0, regs: ["0x1700", "0xCA001700", "0x1700", "0x1700", "0x5555BDAA", "0x1700", "0x1700", "0x1700", "0x1700", "0x1700", "0x1700", "0x1700", "0x1700", "0x1700", "0x1700", "0x1700"] },
+  { id: 24, x: 0, y: 2, z: 1, w: 0, regs: ["0x1800", "0xCA001800", "0x1800", "0x1800", "0x5555B2AA", "0x1800", "0x1800", "0x1800", "0x1800", "0x1800", "0x1800", "0x1800", "0x1800", "0x1800", "0x1800", "0x1800"] },
+  { id: 25, x: 1, y: 2, z: 1, w: 0, regs: ["0x1900", "0xCA001900", "0x1900", "0x1900", "0x5555B3AA", "0x1900", "0x1900", "0x1900", "0x1900", "0x1900", "0x1900", "0x1900", "0x1900", "0x1900", "0x1900", "0x1900"] },
+  { id: 26, x: 2, y: 2, z: 1, w: 0, regs: ["0x1A00", "0xCA001A00", "0x1A00", "0x1A00", "0x5555B0AA", "0x1A00", "0x1A00", "0x1A00", "0x1A00", "0x1A00", "0x1A00", "0x1A00", "0x1A00", "0x1A00", "0x1A00", "0x1A00"] },
+  { id: 27, x: 3, y: 2, z: 1, w: 0, regs: ["0x1B00", "0xCA001B00", "0x1B00", "0x1B00", "0x5555B1AA", "0x1B00", "0x1B00", "0x1B00", "0x1B00", "0x1B00", "0x1B00", "0x1B00", "0x1B00", "0x1B00", "0x1B00", "0x1B00"] },
+  { id: 28, x: 0, y: 3, z: 1, w: 0, regs: ["0x1C00", "0xCA001C00", "0x1C00", "0x1C00", "0x5555B6AA", "0x1C00", "0x1C00", "0x1C00", "0x1C00", "0x1C00", "0x1C00", "0x1C00", "0x1C00", "0x1C00", "0x1C00", "0x1C00"] },
+  { id: 29, x: 1, y: 3, z: 1, w: 0, regs: ["0x1D00", "0xCA001D00", "0x1D00", "0x1D00", "0x5555B7AA", "0x1D00", "0x1D00", "0x1D00", "0x1D00", "0x1D00", "0x1D00", "0x1D00", "0x1D00", "0x1D00", "0x1D00", "0x1D00"] },
+  { id: 30, x: 2, y: 3, z: 1, w: 0, regs: ["0x1E00", "0xCA001E00", "0x1E00", "0x1E00", "0x5555B4AA", "0x1E00", "0x1E00", "0x1E00", "0x1E00", "0x1E00", "0x1E00", "0x1E00", "0x1E00", "0x1E00", "0x1E00", "0x1E00"] },
+  { id: 31, x: 3, y: 3, z: 1, w: 0, regs: ["0x1F00", "0xCA001F00", "0x1F00", "0x1F00", "0x5555B5AA", "0x1F00", "0x1F00", "0x1F00", "0x1F00", "0x1F00", "0x1F00", "0x1F00", "0x1F00", "0x1F00", "0x1F00", "0x1F00"] },
+  { id: 32, x: 0, y: 0, z: 2, w: 0, regs: ["0x2000", "0xCA002000", "0x2000", "0x2000", "0x55558AAA", "0x2000", "0x2000", "0x2000", "0x2000", "0x2000", "0x2000", "0x2000", "0x2000", "0x2000", "0x2000", "0x2000"] },
+  { id: 33, x: 1, y: 0, z: 2, w: 0, regs: ["0x2100", "0xCA002100", "0x2100", "0x2100", "0x55558BAA", "0x2100", "0x2100", "0x2100", "0x2100", "0x2100", "0x2100", "0x2100", "0x2100", "0x2100", "0x2100", "0x2100"] },
+  { id: 34, x: 2, y: 0, z: 2, w: 0, regs: ["0x2200", "0xCA002200", "0x2200", "0x2200", "0x555588AA", "0x2200", "0x2200", "0x2200", "0x2200", "0x2200", "0x2200", "0x2200", "0x2200", "0x2200", "0x2200", "0x2200"] },
+  { id: 35, x: 3, y: 0, z: 2, w: 0, regs: ["0x2300", "0xCA002300", "0x2300", "0x2300", "0x555589AA", "0x2300", "0x2300", "0x2300", "0x2300", "0x2300", "0x2300", "0x2300", "0x2300", "0x2300", "0x2300", "0x2300"] },
+  { id: 36, x: 0, y: 1, z: 2, w: 0, regs: ["0x2400", "0xCA002400", "0x2400", "0x2400", "0x55558EAA", "0x2400", "0x2400", "0x2400", "0x2400", "0x2400", "0x2400", "0x2400", "0x2400", "0x2400", "0x2400", "0x2400"] },
+  { id: 37, x: 1, y: 1, z: 2, w: 0, regs: ["0x2500", "0xCA002500", "0x2500", "0x2500", "0x55558FAA", "0x2500", "0x2500", "0x2500", "0x2500", "0x2500", "0x2500", "0x2500", "0x2500", "0x2500", "0x2500", "0x2500"] },
+  { id: 38, x: 2, y: 1, z: 2, w: 0, regs: ["0x2600", "0xCA002600", "0x2600", "0x2600", "0x55558CAA", "0x2600", "0x2600", "0x2600", "0x2600", "0x2600", "0x2600", "0x2600", "0x2600", "0x2600", "0x2600", "0x2600"] },
+  { id: 39, x: 3, y: 1, z: 2, w: 0, regs: ["0x2700", "0xCA002700", "0x2700", "0x2700", "0x55558DAA", "0x2700", "0x2700", "0x2700", "0x2700", "0x2700", "0x2700", "0x2700", "0x2700", "0x2700", "0x2700", "0x2700"] },
+  { id: 40, x: 0, y: 2, z: 2, w: 0, regs: ["0x2800", "0xCA002800", "0x2800", "0x2800", "0x555582AA", "0x2800", "0x2800", "0x2800", "0x2800", "0x2800", "0x2800", "0x2800", "0x2800", "0x2800", "0x2800", "0x2800"] },
+  { id: 41, x: 1, y: 2, z: 2, w: 0, regs: ["0x2900", "0xCA002900", "0x2900", "0x2900", "0x555583AA", "0x2900", "0x2900", "0x2900", "0x2900", "0x2900", "0x2900", "0x2900", "0x2900", "0x2900", "0x2900", "0x2900"] },
+  { id: 42, x: 2, y: 2, z: 2, w: 0, regs: ["0x2A00", "0xCA002A00", "0x2A00", "0x2A00", "0x555580AA", "0x2A00", "0x2A00", "0x2A00", "0x2A00", "0x2A00", "0x2A00", "0x2A00", "0x2A00", "0x2A00", "0x2A00", "0x2A00"] },
+  { id: 43, x: 3, y: 2, z: 2, w: 0, regs: ["0x2B00", "0xCA002B00", "0x2B00", "0x2B00", "0x555581AA", "0x2B00", "0x2B00", "0x2B00", "0x2B00", "0x2B00", "0x2B00", "0x2B00", "0x2B00", "0x2B00", "0x2B00", "0x2B00"] },
+  { id: 44, x: 0, y: 3, z: 2, w: 0, regs: ["0x2C00", "0xCA002C00", "0x2C00", "0x2C00", "0x555586AA", "0x2C00", "0x2C00", "0x2C00", "0x2C00", "0x2C00", "0x2C00", "0x2C00", "0x2C00", "0x2C00", "0x2C00", "0x2C00"] },
+  { id: 45, x: 1, y: 3, z: 2, w: 0, regs: ["0x2D00", "0xCA002D00", "0x2D00", "0x2D00", "0x555587AA", "0x2D00", "0x2D00", "0x2D00", "0x2D00", "0x2D00", "0x2D00", "0x2D00", "0x2D00", "0x2D00", "0x2D00", "0x2D00"] },
+  { id: 46, x: 2, y: 3, z: 2, w: 0, regs: ["0x2E00", "0xCA002E00", "0x2E00", "0x2E00", "0x555584AA", "0x2E00", "0x2E00", "0x2E00", "0x2E00", "0x2E00", "0x2E00", "0x2E00", "0x2E00", "0x2E00", "0x2E00", "0x2E00"] },
+  { id: 47, x: 3, y: 3, z: 2, w: 0, regs: ["0x2F00", "0xCA002F00", "0x2F00", "0x2F00", "0x555585AA", "0x2F00", "0x2F00", "0x2F00", "0x2F00", "0x2F00", "0x2F00", "0x2F00", "0x2F00", "0x2F00", "0x2F00", "0x2F00"] },
+  { id: 48, x: 0, y: 0, z: 3, w: 0, regs: ["0x3000", "0xCA003000", "0x3000", "0x3000", "0x55559AAA", "0x3000", "0x3000", "0x3000", "0x3000", "0x3000", "0x3000", "0x3000", "0x3000", "0x3000", "0x3000", "0x3000"] },
+  { id: 49, x: 1, y: 0, z: 3, w: 0, regs: ["0x3100", "0xCA003100", "0x3100", "0x3100", "0x55559BAA", "0x3100", "0x3100", "0x3100", "0x3100", "0x3100", "0x3100", "0x3100", "0x3100", "0x3100", "0x3100", "0x3100"] },
+  { id: 50, x: 2, y: 0, z: 3, w: 0, regs: ["0x3200", "0xCA003200", "0x3200", "0x3200", "0x555598AA", "0x3200", "0x3200", "0x3200", "0x3200", "0x3200", "0x3200", "0x3200", "0x3200", "0x3200", "0x3200", "0x3200"] },
+  { id: 51, x: 3, y: 0, z: 3, w: 0, regs: ["0x3300", "0xCA003300", "0x3300", "0x3300", "0x555599AA", "0x3300", "0x3300", "0x3300", "0x3300", "0x3300", "0x3300", "0x3300", "0x3300", "0x3300", "0x3300", "0x3300"] },
+  { id: 52, x: 0, y: 1, z: 3, w: 0, regs: ["0x3400", "0xCA003400", "0x3400", "0x3400", "0x55559EAA", "0x3400", "0x3400", "0x3400", "0x3400", "0x3400", "0x3400", "0x3400", "0x3400", "0x3400", "0x3400", "0x3400"] },
+  { id: 53, x: 1, y: 1, z: 3, w: 0, regs: ["0x3500", "0xCA003500", "0x3500", "0x3500", "0x55559FAA", "0x3500", "0x3500", "0x3500", "0x3500", "0x3500", "0x3500", "0x3500", "0x3500", "0x3500", "0x3500", "0x3500"] },
+  { id: 54, x: 2, y: 1, z: 3, w: 0, regs: ["0x3600", "0xCA003600", "0x3600", "0x3600", "0x55559CAA", "0x3600", "0x3600", "0x3600", "0x3600", "0x3600", "0x3600", "0x3600", "0x3600", "0x3600", "0x3600", "0x3600"] },
+  { id: 55, x: 3, y: 1, z: 3, w: 0, regs: ["0x3700", "0xCA003700", "0x3700", "0x3700", "0x55559DAA", "0x3700", "0x3700", "0x3700", "0x3700", "0x3700", "0x3700", "0x3700", "0x3700", "0x3700", "0x3700", "0x3700"] },
+  { id: 56, x: 0, y: 2, z: 3, w: 0, regs: ["0x3800", "0xCA003800", "0x3800", "0x3800", "0x555592AA", "0x3800", "0x3800", "0x3800", "0x3800", "0x3800", "0x3800", "0x3800", "0x3800", "0x3800", "0x3800", "0x3800"] },
+  { id: 57, x: 1, y: 2, z: 3, w: 0, regs: ["0x3900", "0xCA003900", "0x3900", "0x3900", "0x555593AA", "0x3900", "0x3900", "0x3900", "0x3900", "0x3900", "0x3900", "0x3900", "0x3900", "0x3900", "0x3900", "0x3900"] },
+  { id: 58, x: 2, y: 2, z: 3, w: 0, regs: ["0x3A00", "0xCA003A00", "0x3A00", "0x3A00", "0x555590AA", "0x3A00", "0x3A00", "0x3A00", "0x3A00", "0x3A00", "0x3A00", "0x3A00", "0x3A00", "0x3A00", "0x3A00", "0x3A00"] },
+  { id: 59, x: 3, y: 2, z: 3, w: 0, regs: ["0x3B00", "0xCA003B00", "0x3B00", "0x3B00", "0x555591AA", "0x3B00", "0x3B00", "0x3B00", "0x3B00", "0x3B00", "0x3B00", "0x3B00", "0x3B00", "0x3B00", "0x3B00", "0x3B00"] },
+  { id: 60, x: 0, y: 3, z: 3, w: 0, regs: ["0x3C00", "0xCA003C00", "0x3C00", "0x3C00", "0x555596AA", "0x3C00", "0x3C00", "0x3C00", "0x3C00", "0x3C00", "0x3C00", "0x3C00", "0x3C00", "0x3C00", "0x3C00", "0x3C00"] },
+  { id: 61, x: 1, y: 3, z: 3, w: 0, regs: ["0x3D00", "0xCA003D00", "0x3D00", "0x3D00", "0x555597AA", "0x3D00", "0x3D00", "0x3D00", "0x3D00", "0x3D00", "0x3D00", "0x3D00", "0x3D00", "0x3D00", "0x3D00", "0x3D00"] },
+  { id: 62, x: 2, y: 3, z: 3, w: 0, regs: ["0x3E00", "0xCA003E00", "0x3E00", "0x3E00", "0x555594AA", "0x3E00", "0x3E00", "0x3E00", "0x3E00", "0x3E00", "0x3E00", "0x3E00", "0x3E00", "0x3E00", "0x3E00", "0x3E00"] },
+  { id: 63, x: 3, y: 3, z: 3, w: 0, regs: ["0x3F00", "0xCA003F00", "0x3F00", "0x3F00", "0x555595AA", "0x3F00", "0x3F00", "0x3F00", "0x3F00", "0x3F00", "0x3F00", "0x3F00", "0x3F00", "0x3F00", "0x3F00", "0x3F00"] },
+  { id: 64, x: 0, y: 0, z: 0, w: 1, regs: ["0x4000", "0xCA004000", "0x4000", "0x4000", "0x5555EAAA", "0x4000", "0x4000", "0x4000", "0x4000", "0x4000", "0x4000", "0x4000", "0x4000", "0x4000", "0x4000", "0x4000"] },
+  { id: 65, x: 1, y: 0, z: 0, w: 1, regs: ["0x4100", "0xCA004100", "0x4100", "0x4100", "0x5555EBAA", "0x4100", "0x4100", "0x4100", "0x4100", "0x4100", "0x4100", "0x4100", "0x4100", "0x4100", "0x4100", "0x4100"] },
+  { id: 66, x: 2, y: 0, z: 0, w: 1, regs: ["0x4200", "0xCA004200", "0x4200", "0x4200", "0x5555E8AA", "0x4200", "0x4200", "0x4200", "0x4200", "0x4200", "0x4200", "0x4200", "0x4200", "0x4200", "0x4200", "0x4200"] },
+  { id: 67, x: 3, y: 0, z: 0, w: 1, regs: ["0x4300", "0xCA004300", "0x4300", "0x4300", "0x5555E9AA", "0x4300", "0x4300", "0x4300", "0x4300", "0x4300", "0x4300", "0x4300", "0x4300", "0x4300", "0x4300", "0x4300"] },
+  { id: 68, x: 0, y: 1, z: 0, w: 1, regs: ["0x4400", "0xCA004400", "0x4400", "0x4400", "0x5555EEAA", "0x4400", "0x4400", "0x4400", "0x4400", "0x4400", "0x4400", "0x4400", "0x4400", "0x4400", "0x4400", "0x4400"] },
+  { id: 69, x: 1, y: 1, z: 0, w: 1, regs: ["0x4500", "0xCA004500", "0x4500", "0x4500", "0x5555EFAA", "0x4500", "0x4500", "0x4500", "0x4500", "0x4500", "0x4500", "0x4500", "0x4500", "0x4500", "0x4500", "0x4500"] },
+  { id: 70, x: 2, y: 1, z: 0, w: 1, regs: ["0x4600", "0xCA004600", "0x4600", "0x4600", "0x5555ECAA", "0x4600", "0x4600", "0x4600", "0x4600", "0x4600", "0x4600", "0x4600", "0x4600", "0x4600", "0x4600", "0x4600"] },
+  { id: 71, x: 3, y: 1, z: 0, w: 1, regs: ["0x4700", "0xCA004700", "0x4700", "0x4700", "0x5555EDAA", "0x4700", "0x4700", "0x4700", "0x4700", "0x4700", "0x4700", "0x4700", "0x4700", "0x4700", "0x4700", "0x4700"] },
+  { id: 72, x: 0, y: 2, z: 0, w: 1, regs: ["0x4800", "0xCA004800", "0x4800", "0x4800", "0x5555E2AA", "0x4800", "0x4800", "0x4800", "0x4800", "0x4800", "0x4800", "0x4800", "0x4800", "0x4800", "0x4800", "0x4800"] },
+  { id: 73, x: 1, y: 2, z: 0, w: 1, regs: ["0x4900", "0xCA004900", "0x4900", "0x4900", "0x5555E3AA", "0x4900", "0x4900", "0x4900", "0x4900", "0x4900", "0x4900", "0x4900", "0x4900", "0x4900", "0x4900", "0x4900"] },
+  { id: 74, x: 2, y: 2, z: 0, w: 1, regs: ["0x4A00", "0xCA004A00", "0x4A00", "0x4A00", "0x5555E0AA", "0x4A00", "0x4A00", "0x4A00", "0x4A00", "0x4A00", "0x4A00", "0x4A00", "0x4A00", "0x4A00", "0x4A00", "0x4A00"] },
+  { id: 75, x: 3, y: 2, z: 0, w: 1, regs: ["0x4B00", "0xCA004B00", "0x4B00", "0x4B00", "0x5555E1AA", "0x4B00", "0x4B00", "0x4B00", "0x4B00", "0x4B00", "0x4B00", "0x4B00", "0x4B00", "0x4B00", "0x4B00", "0x4B00"] },
+  { id: 76, x: 0, y: 3, z: 0, w: 1, regs: ["0x4C00", "0xCA004C00", "0x4C00", "0x4C00", "0x5555E6AA", "0x4C00", "0x4C00", "0x4C00", "0x4C00", "0x4C00", "0x4C00", "0x4C00", "0x4C00", "0x4C00", "0x4C00", "0x4C00"] },
+  { id: 77, x: 1, y: 3, z: 0, w: 1, regs: ["0x4D00", "0xCA004D00", "0x4D00", "0x4D00", "0x5555E7AA", "0x4D00", "0x4D00", "0x4D00", "0x4D00", "0x4D00", "0x4D00", "0x4D00", "0x4D00", "0x4D00", "0x4D00", "0x4D00"] },
+  { id: 78, x: 2, y: 3, z: 0, w: 1, regs: ["0x4E00", "0xCA004E00", "0x4E00", "0x4E00", "0x5555E4AA", "0x4E00", "0x4E00", "0x4E00", "0x4E00", "0x4E00", "0x4E00", "0x4E00", "0x4E00", "0x4E00", "0x4E00", "0x4E00"] },
+  { id: 79, x: 3, y: 3, z: 0, w: 1, regs: ["0x4F00", "0xCA004F00", "0x4F00", "0x4F00", "0x5555E5AA", "0x4F00", "0x4F00", "0x4F00", "0x4F00", "0x4F00", "0x4F00", "0x4F00", "0x4F00", "0x4F00", "0x4F00", "0x4F00"] },
+  { id: 80, x: 0, y: 0, z: 1, w: 1, regs: ["0x5000", "0xCA005000", "0x5000", "0x5000", "0x5555FAAA", "0x5000", "0x5000", "0x5000", "0x5000", "0x5000", "0x5000", "0x5000", "0x5000", "0x5000", "0x5000", "0x5000"] },
+  { id: 81, x: 1, y: 0, z: 1, w: 1, regs: ["0x5100", "0xCA005100", "0x5100", "0x5100", "0x5555FBAA", "0x5100", "0x5100", "0x5100", "0x5100", "0x5100", "0x5100", "0x5100", "0x5100", "0x5100", "0x5100", "0x5100"] },
+  { id: 82, x: 2, y: 0, z: 1, w: 1, regs: ["0x5200", "0xCA005200", "0x5200", "0x5200", "0x5555F8AA", "0x5200", "0x5200", "0x5200", "0x5200", "0x5200", "0x5200", "0x5200", "0x5200", "0x5200", "0x5200", "0x5200"] },
+  { id: 83, x: 3, y: 0, z: 1, w: 1, regs: ["0x5300", "0xCA005300", "0x5300", "0x5300", "0x5555F9AA", "0x5300", "0x5300", "0x5300", "0x5300", "0x5300", "0x5300", "0x5300", "0x5300", "0x5300", "0x5300", "0x5300"] },
+  { id: 84, x: 0, y: 1, z: 1, w: 1, regs: ["0x5400", "0xCA005400", "0x5400", "0x5400", "0x5555FEAA", "0x5400", "0x5400", "0x5400", "0x5400", "0x5400", "0x5400", "0x5400", "0x5400", "0x5400", "0x5400", "0x5400"] },
+  { id: 85, x: 1, y: 1, z: 1, w: 1, regs: ["0x5500", "0xCA005500", "0x5500", "0x5500", "0x5555FFAA", "0x5500", "0x5500", "0x5500", "0x5500", "0x5500", "0x5500", "0x5500", "0x5500", "0x5500", "0x5500", "0x5500"] },
+  { id: 86, x: 2, y: 1, z: 1, w: 1, regs: ["0x5600", "0xCA005600", "0x5600", "0x5600", "0x5555FCAA", "0x5600", "0x5600", "0x5600", "0x5600", "0x5600", "0x5600", "0x5600", "0x5600", "0x5600", "0x5600", "0x5600"] },
+  { id: 87, x: 3, y: 1, z: 1, w: 1, regs: ["0x5700", "0xCA005700", "0x5700", "0x5700", "0x5555FDAA", "0x5700", "0x5700", "0x5700", "0x5700", "0x5700", "0x5700", "0x5700", "0x5700", "0x5700", "0x5700", "0x5700"] },
+  { id: 88, x: 0, y: 2, z: 1, w: 1, regs: ["0x5800", "0xCA005800", "0x5800", "0x5800", "0x5555F2AA", "0x5800", "0x5800", "0x5800", "0x5800", "0x5800", "0x5800", "0x5800", "0x5800", "0x5800", "0x5800", "0x5800"] },
+  { id: 89, x: 1, y: 2, z: 1, w: 1, regs: ["0x5900", "0xCA005900", "0x5900", "0x5900", "0x5555F3AA", "0x5900", "0x5900", "0x5900", "0x5900", "0x5900", "0x5900", "0x5900", "0x5900", "0x5900", "0x5900", "0x5900"] },
+  { id: 90, x: 2, y: 2, z: 1, w: 1, regs: ["0x5A00", "0xCA005A00", "0x5A00", "0x5A00", "0x5555F0AA", "0x5A00", "0x5A00", "0x5A00", "0x5A00", "0x5A00", "0x5A00", "0x5A00", "0x5A00", "0x5A00", "0x5A00", "0x5A00"] },
+  { id: 91, x: 3, y: 2, z: 1, w: 1, regs: ["0x5B00", "0xCA005B00", "0x5B00", "0x5B00", "0x5555F1AA", "0x5B00", "0x5B00", "0x5B00", "0x5B00", "0x5B00", "0x5B00", "0x5B00", "0x5B00", "0x5B00", "0x5B00", "0x5B00"] },
+  { id: 92, x: 0, y: 3, z: 1, w: 1, regs: ["0x5C00", "0xCA005C00", "0x5C00", "0x5C00", "0x5555F6AA", "0x5C00", "0x5C00", "0x5C00", "0x5C00", "0x5C00", "0x5C00", "0x5C00", "0x5C00", "0x5C00", "0x5C00", "0x5C00"] },
+  { id: 93, x: 1, y: 3, z: 1, w: 1, regs: ["0x5D00", "0xCA005D00", "0x5D00", "0x5D00", "0x5555F7AA", "0x5D00", "0x5D00", "0x5D00", "0x5D00", "0x5D00", "0x5D00", "0x5D00", "0x5D00", "0x5D00", "0x5D00", "0x5D00"] },
+  { id: 94, x: 2, y: 3, z: 1, w: 1, regs: ["0x5E00", "0xCA005E00", "0x5E00", "0x5E00", "0x5555F4AA", "0x5E00", "0x5E00", "0x5E00", "0x5E00", "0x5E00", "0x5E00", "0x5E00", "0x5E00", "0x5E00", "0x5E00", "0x5E00"] },
+  { id: 95, x: 3, y: 3, z: 1, w: 1, regs: ["0x5F00", "0xCA005F00", "0x5F00", "0x5F00", "0x5555F5AA", "0x5F00", "0x5F00", "0x5F00", "0x5F00", "0x5F00", "0x5F00", "0x5F00", "0x5F00", "0x5F00", "0x5F00", "0x5F00"] },
+  { id: 96, x: 0, y: 0, z: 2, w: 1, regs: ["0x6000", "0xCA006000", "0x6000", "0x6000", "0x5555CAAA", "0x6000", "0x6000", "0x6000", "0x6000", "0x6000", "0x6000", "0x6000", "0x6000", "0x6000", "0x6000", "0x6000"] },
+  { id: 97, x: 1, y: 0, z: 2, w: 1, regs: ["0x6100", "0xCA006100", "0x6100", "0x6100", "0x5555CBAA", "0x6100", "0x6100", "0x6100", "0x6100", "0x6100", "0x6100", "0x6100", "0x6100", "0x6100", "0x6100", "0x6100"] },
+  { id: 98, x: 2, y: 0, z: 2, w: 1, regs: ["0x6200", "0xCA006200", "0x6200", "0x6200", "0x5555C8AA", "0x6200", "0x6200", "0x6200", "0x6200", "0x6200", "0x6200", "0x6200", "0x6200", "0x6200", "0x6200", "0x6200"] },
+  { id: 99, x: 3, y: 0, z: 2, w: 1, regs: ["0x6300", "0xCA006300", "0x6300", "0x6300", "0x5555C9AA", "0x6300", "0x6300", "0x6300", "0x6300", "0x6300", "0x6300", "0x6300", "0x6300", "0x6300", "0x6300", "0x6300"] },
+  { id: 100, x: 0, y: 1, z: 2, w: 1, regs: ["0x6400", "0xCA006400", "0x6400", "0x6400", "0x5555CEAA", "0x6400", "0x6400", "0x6400", "0x6400", "0x6400", "0x6400", "0x6400", "0x6400", "0x6400", "0x6400", "0x6400"] },
+  { id: 101, x: 1, y: 1, z: 2, w: 1, regs: ["0x6500", "0xCA006500", "0x6500", "0x6500", "0x5555CFAA", "0x6500", "0x6500", "0x6500", "0x6500", "0x6500", "0x6500", "0x6500", "0x6500", "0x6500", "0x6500", "0x6500"] },
+  { id: 102, x: 2, y: 1, z: 2, w: 1, regs: ["0x6600", "0xCA006600", "0x6600", "0x6600", "0x5555CCAA", "0x6600", "0x6600", "0x6600", "0x6600", "0x6600", "0x6600", "0x6600", "0x6600", "0x6600", "0x6600", "0x6600"] },
+  { id: 103, x: 3, y: 1, z: 2, w: 1, regs: ["0x6700", "0xCA006700", "0x6700", "0x6700", "0x5555CDAA", "0x6700", "0x6700", "0x6700", "0x6700", "0x6700", "0x6700", "0x6700", "0x6700", "0x6700", "0x6700", "0x6700"] },
+  { id: 104, x: 0, y: 2, z: 2, w: 1, regs: ["0x6800", "0xCA006800", "0x6800", "0x6800", "0x5555C2AA", "0x6800", "0x6800", "0x6800", "0x6800", "0x6800", "0x6800", "0x6800", "0x6800", "0x6800", "0x6800", "0x6800"] },
+  { id: 105, x: 1, y: 2, z: 2, w: 1, regs: ["0x6900", "0xCA006900", "0x6900", "0x6900", "0x5555C3AA", "0x6900", "0x6900", "0x6900", "0x6900", "0x6900", "0x6900", "0x6900", "0x6900", "0x6900", "0x6900", "0x6900"] },
+  { id: 106, x: 2, y: 2, z: 2, w: 1, regs: ["0x6A00", "0xCA006A00", "0x6A00", "0x6A00", "0x5555C0AA", "0x6A00", "0x6A00", "0x6A00", "0x6A00", "0x6A00", "0x6A00", "0x6A00", "0x6A00", "0x6A00", "0x6A00", "0x6A00"] },
+  { id: 107, x: 3, y: 2, z: 2, w: 1, regs: ["0x6B00", "0xCA006B00", "0x6B00", "0x6B00", "0x5555C1AA", "0x6B00", "0x6B00", "0x6B00", "0x6B00", "0x6B00", "0x6B00", "0x6B00", "0x6B00", "0x6B00", "0x6B00", "0x6B00"] },
+  { id: 108, x: 0, y: 3, z: 2, w: 1, regs: ["0x6C00", "0xCA006C00", "0x6C00", "0x6C00", "0x5555C6AA", "0x6C00", "0x6C00", "0x6C00", "0x6C00", "0x6C00", "0x6C00", "0x6C00", "0x6C00", "0x6C00", "0x6C00", "0x6C00"] },
+  { id: 109, x: 1, y: 3, z: 2, w: 1, regs: ["0x6D00", "0xCA006D00", "0x6D00", "0x6D00", "0x5555C7AA", "0x6D00", "0x6D00", "0x6D00", "0x6D00", "0x6D00", "0x6D00", "0x6D00", "0x6D00", "0x6D00", "0x6D00", "0x6D00"] },
+  { id: 110, x: 2, y: 3, z: 2, w: 1, regs: ["0x6E00", "0xCA006E00", "0x6E00", "0x6E00", "0x5555C4AA", "0x6E00", "0x6E00", "0x6E00", "0x6E00", "0x6E00", "0x6E00", "0x6E00", "0x6E00", "0x6E00", "0x6E00", "0x6E00"] },
+  { id: 111, x: 3, y: 3, z: 2, w: 1, regs: ["0x6F00", "0xCA006F00", "0x6F00", "0x6F00", "0x5555C5AA", "0x6F00", "0x6F00", "0x6F00", "0x6F00", "0x6F00", "0x6F00", "0x6F00", "0x6F00", "0x6F00", "0x6F00", "0x6F00"] },
+  { id: 112, x: 0, y: 0, z: 3, w: 1, regs: ["0x7000", "0xCA007000", "0x7000", "0x7000", "0x5555DAAA", "0x7000", "0x7000", "0x7000", "0x7000", "0x7000", "0x7000", "0x7000", "0x7000", "0x7000", "0x7000", "0x7000"] },
+  { id: 113, x: 1, y: 0, z: 3, w: 1, regs: ["0x7100", "0xCA007100", "0x7100", "0x7100", "0x5555DBAA", "0x7100", "0x7100", "0x7100", "0x7100", "0x7100", "0x7100", "0x7100", "0x7100", "0x7100", "0x7100", "0x7100"] },
+  { id: 114, x: 2, y: 0, z: 3, w: 1, regs: ["0x7200", "0xCA007200", "0x7200", "0x7200", "0x5555D8AA", "0x7200", "0x7200", "0x7200", "0x7200", "0x7200", "0x7200", "0x7200", "0x7200", "0x7200", "0x7200", "0x7200"] },
+  { id: 115, x: 3, y: 0, z: 3, w: 1, regs: ["0x7300", "0xCA007300", "0x7300", "0x7300", "0x5555D9AA", "0x7300", "0x7300", "0x7300", "0x7300", "0x7300", "0x7300", "0x7300", "0x7300", "0x7300", "0x7300", "0x7300"] },
+  { id: 116, x: 0, y: 1, z: 3, w: 1, regs: ["0x7400", "0xCA007400", "0x7400", "0x7400", "0x5555DEAA", "0x7400", "0x7400", "0x7400", "0x7400", "0x7400", "0x7400", "0x7400", "0x7400", "0x7400", "0x7400", "0x7400"] },
+  { id: 117, x: 1, y: 1, z: 3, w: 1, regs: ["0x7500", "0xCA007500", "0x7500", "0x7500", "0x5555DFAA", "0x7500", "0x7500", "0x7500", "0x7500", "0x7500", "0x7500", "0x7500", "0x7500", "0x7500", "0x7500", "0x7500"] },
+  { id: 118, x: 2, y: 1, z: 3, w: 1, regs: ["0x7600", "0xCA007600", "0x7600", "0x7600", "0x5555DCAA", "0x7600", "0x7600", "0x7600", "0x7600", "0x7600", "0x7600", "0x7600", "0x7600", "0x7600", "0x7600", "0x7600"] },
+  { id: 119, x: 3, y: 1, z: 3, w: 1, regs: ["0x7700", "0xCA007700", "0x7700", "0x7700", "0x5555DDAA", "0x7700", "0x7700", "0x7700", "0x7700", "0x7700", "0x7700", "0x7700", "0x7700", "0x7700", "0x7700", "0x7700"] },
+  { id: 120, x: 0, y: 2, z: 3, w: 1, regs: ["0x7800", "0xCA007800", "0x7800", "0x7800", "0x5555D2AA", "0x7800", "0x7800", "0x7800", "0x7800", "0x7800", "0x7800", "0x7800", "0x7800", "0x7800", "0x7800", "0x7800"] },
+  { id: 121, x: 1, y: 2, z: 3, w: 1, regs: ["0x7900", "0xCA007900", "0x7900", "0x7900", "0x5555D3AA", "0x7900", "0x7900", "0x7900", "0x7900", "0x7900", "0x7900", "0x7900", "0x7900", "0x7900", "0x7900", "0x7900"] },
+  { id: 122, x: 2, y: 2, z: 3, w: 1, regs: ["0x7A00", "0xCA007A00", "0x7A00", "0x7A00", "0x5555D0AA", "0x7A00", "0x7A00", "0x7A00", "0x7A00", "0x7A00", "0x7A00", "0x7A00", "0x7A00", "0x7A00", "0x7A00", "0x7A00"] },
+  { id: 123, x: 3, y: 2, z: 3, w: 1, regs: ["0x7B00", "0xCA007B00", "0x7B00", "0x7B00", "0x5555D1AA", "0x7B00", "0x7B00", "0x7B00", "0x7B00", "0x7B00", "0x7B00", "0x7B00", "0x7B00", "0x7B00", "0x7B00", "0x7B00"] },
+  { id: 124, x: 0, y: 3, z: 3, w: 1, regs: ["0x7C00", "0xCA007C00", "0x7C00", "0x7C00", "0x5555D6AA", "0x7C00", "0x7C00", "0x7C00", "0x7C00", "0x7C00", "0x7C00", "0x7C00", "0x7C00", "0x7C00", "0x7C00", "0x7C00"] },
+  { id: 125, x: 1, y: 3, z: 3, w: 1, regs: ["0x7D00", "0xCA007D00", "0x7D00", "0x7D00", "0x5555D7AA", "0x7D00", "0x7D00", "0x7D00", "0x7D00", "0x7D00", "0x7D00", "0x7D00", "0x7D00", "0x7D00", "0x7D00", "0x7D00"] },
+  { id: 126, x: 2, y: 3, z: 3, w: 1, regs: ["0x7E00", "0xCA007E00", "0x7E00", "0x7E00", "0x5555D4AA", "0x7E00", "0x7E00", "0x7E00", "0x7E00", "0x7E00", "0x7E00", "0x7E00", "0x7E00", "0x7E00", "0x7E00", "0x7E00"] },
+  { id: 127, x: 3, y: 3, z: 3, w: 1, regs: ["0x7F00", "0xCA007F00", "0x7F00", "0x7F00", "0x5555D5AA", "0x7F00", "0x7F00", "0x7F00", "0x7F00", "0x7F00", "0x7F00", "0x7F00", "0x7F00", "0x7F00", "0x7F00", "0x7F00"] },
+  { id: 128, x: 0, y: 0, z: 0, w: 2, regs: ["0x8000", "0xCA008000", "0x8000", "0x8000", "0x55552AAA", "0x8000", "0x8000", "0x8000", "0x8000", "0x8000", "0x8000", "0x8000", "0x8000", "0x8000", "0x8000", "0x8000"] },
+  { id: 129, x: 1, y: 0, z: 0, w: 2, regs: ["0x8100", "0xCA008100", "0x8100", "0x8100", "0x55552BAA", "0x8100", "0x8100", "0x8100", "0x8100", "0x8100", "0x8100", "0x8100", "0x8100", "0x8100", "0x8100", "0x8100"] },
+  { id: 130, x: 2, y: 0, z: 0, w: 2, regs: ["0x8200", "0xCA008200", "0x8200", "0x8200", "0x555528AA", "0x8200", "0x8200", "0x8200", "0x8200", "0x8200", "0x8200", "0x8200", "0x8200", "0x8200", "0x8200", "0x8200"] },
+  { id: 131, x: 3, y: 0, z: 0, w: 2, regs: ["0x8300", "0xCA008300", "0x8300", "0x8300", "0x555529AA", "0x8300", "0x8300", "0x8300", "0x8300", "0x8300", "0x8300", "0x8300", "0x8300", "0x8300", "0x8300", "0x8300"] },
+  { id: 132, x: 0, y: 1, z: 0, w: 2, regs: ["0x8400", "0xCA008400", "0x8400", "0x8400", "0x55552EAA", "0x8400", "0x8400", "0x8400", "0x8400", "0x8400", "0x8400", "0x8400", "0x8400", "0x8400", "0x8400", "0x8400"] },
+  { id: 133, x: 1, y: 1, z: 0, w: 2, regs: ["0x8500", "0xCA008500", "0x8500", "0x8500", "0x55552FAA", "0x8500", "0x8500", "0x8500", "0x8500", "0x8500", "0x8500", "0x8500", "0x8500", "0x8500", "0x8500", "0x8500"] },
+  { id: 134, x: 2, y: 1, z: 0, w: 2, regs: ["0x8600", "0xCA008600", "0x8600", "0x8600", "0x55552CAA", "0x8600", "0x8600", "0x8600", "0x8600", "0x8600", "0x8600", "0x8600", "0x8600", "0x8600", "0x8600", "0x8600"] },
+  { id: 135, x: 3, y: 1, z: 0, w: 2, regs: ["0x8700", "0xCA008700", "0x8700", "0x8700", "0x55552DAA", "0x8700", "0x8700", "0x8700", "0x8700", "0x8700", "0x8700", "0x8700", "0x8700", "0x8700", "0x8700", "0x8700"] },
+  { id: 136, x: 0, y: 2, z: 0, w: 2, regs: ["0x8800", "0xCA008800", "0x8800", "0x8800", "0x555522AA", "0x8800", "0x8800", "0x8800", "0x8800", "0x8800", "0x8800", "0x8800", "0x8800", "0x8800", "0x8800", "0x8800"] },
+  { id: 137, x: 1, y: 2, z: 0, w: 2, regs: ["0x8900", "0xCA008900", "0x8900", "0x8900", "0x555523AA", "0x8900", "0x8900", "0x8900", "0x8900", "0x8900", "0x8900", "0x8900", "0x8900", "0x8900", "0x8900", "0x8900"] },
+  { id: 138, x: 2, y: 2, z: 0, w: 2, regs: ["0x8A00", "0xCA008A00", "0x8A00", "0x8A00", "0x555520AA", "0x8A00", "0x8A00", "0x8A00", "0x8A00", "0x8A00", "0x8A00", "0x8A00", "0x8A00", "0x8A00", "0x8A00", "0x8A00"] },
+  { id: 139, x: 3, y: 2, z: 0, w: 2, regs: ["0x8B00", "0xCA008B00", "0x8B00", "0x8B00", "0x555521AA", "0x8B00", "0x8B00", "0x8B00", "0x8B00", "0x8B00", "0x8B00", "0x8B00", "0x8B00", "0x8B00", "0x8B00", "0x8B00"] },
+  { id: 140, x: 0, y: 3, z: 0, w: 2, regs: ["0x8C00", "0xCA008C00", "0x8C00", "0x8C00", "0x555526AA", "0x8C00", "0x8C00", "0x8C00", "0x8C00", "0x8C00", "0x8C00", "0x8C00", "0x8C00", "0x8C00", "0x8C00", "0x8C00"] },
+  { id: 141, x: 1, y: 3, z: 0, w: 2, regs: ["0x8D00", "0xCA008D00", "0x8D00", "0x8D00", "0x555527AA", "0x8D00", "0x8D00", "0x8D00", "0x8D00", "0x8D00", "0x8D00", "0x8D00", "0x8D00", "0x8D00", "0x8D00", "0x8D00"] },
+  { id: 142, x: 2, y: 3, z: 0, w: 2, regs: ["0x8E00", "0xCA008E00", "0x8E00", "0x8E00", "0x555524AA", "0x8E00", "0x8E00", "0x8E00", "0x8E00", "0x8E00", "0x8E00", "0x8E00", "0x8E00", "0x8E00", "0x8E00", "0x8E00"] },
+  { id: 143, x: 3, y: 3, z: 0, w: 2, regs: ["0x8F00", "0xCA008F00", "0x8F00", "0x8F00", "0x555525AA", "0x8F00", "0x8F00", "0x8F00", "0x8F00", "0x8F00", "0x8F00", "0x8F00", "0x8F00", "0x8F00", "0x8F00", "0x8F00"] },
+  { id: 144, x: 0, y: 0, z: 1, w: 2, regs: ["0x9000", "0xCA009000", "0x9000", "0x9000", "0x55553AAA", "0x9000", "0x9000", "0x9000", "0x9000", "0x9000", "0x9000", "0x9000", "0x9000", "0x9000", "0x9000", "0x9000"] },
+  { id: 145, x: 1, y: 0, z: 1, w: 2, regs: ["0x9100", "0xCA009100", "0x9100", "0x9100", "0x55553BAA", "0x9100", "0x9100", "0x9100", "0x9100", "0x9100", "0x9100", "0x9100", "0x9100", "0x9100", "0x9100", "0x9100"] },
+  { id: 146, x: 2, y: 0, z: 1, w: 2, regs: ["0x9200", "0xCA009200", "0x9200", "0x9200", "0x555538AA", "0x9200", "0x9200", "0x9200", "0x9200", "0x9200", "0x9200", "0x9200", "0x9200", "0x9200", "0x9200", "0x9200"] },
+  { id: 147, x: 3, y: 0, z: 1, w: 2, regs: ["0x9300", "0xCA009300", "0x9300", "0x9300", "0x555539AA", "0x9300", "0x9300", "0x9300", "0x9300", "0x9300", "0x9300", "0x9300", "0x9300", "0x9300", "0x9300", "0x9300"] },
+  { id: 148, x: 0, y: 1, z: 1, w: 2, regs: ["0x9400", "0xCA009400", "0x9400", "0x9400", "0x55553EAA", "0x9400", "0x9400", "0x9400", "0x9400", "0x9400", "0x9400", "0x9400", "0x9400", "0x9400", "0x9400", "0x9400"] },
+  { id: 149, x: 1, y: 1, z: 1, w: 2, regs: ["0x9500", "0xCA009500", "0x9500", "0x9500", "0x55553FAA", "0x9500", "0x9500", "0x9500", "0x9500", "0x9500", "0x9500", "0x9500", "0x9500", "0x9500", "0x9500", "0x9500"] },
+  { id: 150, x: 2, y: 1, z: 1, w: 2, regs: ["0x9600", "0xCA009600", "0x9600", "0x9600", "0x55553CAA", "0x9600", "0x9600", "0x9600", "0x9600", "0x9600", "0x9600", "0x9600", "0x9600", "0x9600", "0x9600", "0x9600"] },
+  { id: 151, x: 3, y: 1, z: 1, w: 2, regs: ["0x9700", "0xCA009700", "0x9700", "0x9700", "0x55553DAA", "0x9700", "0x9700", "0x9700", "0x9700", "0x9700", "0x9700", "0x9700", "0x9700", "0x9700", "0x9700", "0x9700"] },
+  { id: 152, x: 0, y: 2, z: 1, w: 2, regs: ["0x9800", "0xCA009800", "0x9800", "0x9800", "0x555532AA", "0x9800", "0x9800", "0x9800", "0x9800", "0x9800", "0x9800", "0x9800", "0x9800", "0x9800", "0x9800", "0x9800"] },
+  { id: 153, x: 1, y: 2, z: 1, w: 2, regs: ["0x9900", "0xCA009900", "0x9900", "0x9900", "0x555533AA", "0x9900", "0x9900", "0x9900", "0x9900", "0x9900", "0x9900", "0x9900", "0x9900", "0x9900", "0x9900", "0x9900"] },
+  { id: 154, x: 2, y: 2, z: 1, w: 2, regs: ["0x9A00", "0xCA009A00", "0x9A00", "0x9A00", "0x555530AA", "0x9A00", "0x9A00", "0x9A00", "0x9A00", "0x9A00", "0x9A00", "0x9A00", "0x9A00", "0x9A00", "0x9A00", "0x9A00"] },
+  { id: 155, x: 3, y: 2, z: 1, w: 2, regs: ["0x9B00", "0xCA009B00", "0x9B00", "0x9B00", "0x555531AA", "0x9B00", "0x9B00", "0x9B00", "0x9B00", "0x9B00", "0x9B00", "0x9B00", "0x9B00", "0x9B00", "0x9B00", "0x9B00"] },
+  { id: 156, x: 0, y: 3, z: 1, w: 2, regs: ["0x9C00", "0xCA009C00", "0x9C00", "0x9C00", "0x555536AA", "0x9C00", "0x9C00", "0x9C00", "0x9C00", "0x9C00", "0x9C00", "0x9C00", "0x9C00", "0x9C00", "0x9C00", "0x9C00"] },
+  { id: 157, x: 1, y: 3, z: 1, w: 2, regs: ["0x9D00", "0xCA009D00", "0x9D00", "0x9D00", "0x555537AA", "0x9D00", "0x9D00", "0x9D00", "0x9D00", "0x9D00", "0x9D00", "0x9D00", "0x9D00", "0x9D00", "0x9D00", "0x9D00"] },
+  { id: 158, x: 2, y: 3, z: 1, w: 2, regs: ["0x9E00", "0xCA009E00", "0x9E00", "0x9E00", "0x555534AA", "0x9E00", "0x9E00", "0x9E00", "0x9E00", "0x9E00", "0x9E00", "0x9E00", "0x9E00", "0x9E00", "0x9E00", "0x9E00"] },
+  { id: 159, x: 3, y: 3, z: 1, w: 2, regs: ["0x9F00", "0xCA009F00", "0x9F00", "0x9F00", "0x555535AA", "0x9F00", "0x9F00", "0x9F00", "0x9F00", "0x9F00", "0x9F00", "0x9F00", "0x9F00", "0x9F00", "0x9F00", "0x9F00"] },
+  { id: 160, x: 0, y: 0, z: 2, w: 2, regs: ["0xA000", "0xCA00A000", "0xA000", "0xA000", "0x55550AAA", "0xA000", "0xA000", "0xA000", "0xA000", "0xA000", "0xA000", "0xA000", "0xA000", "0xA000", "0xA000", "0xA000"] },
+  { id: 161, x: 1, y: 0, z: 2, w: 2, regs: ["0xA100", "0xCA00A100", "0xA100", "0xA100", "0x55550BAA", "0xA100", "0xA100", "0xA100", "0xA100", "0xA100", "0xA100", "0xA100", "0xA100", "0xA100", "0xA100", "0xA100"] },
+  { id: 162, x: 2, y: 0, z: 2, w: 2, regs: ["0xA200", "0xCA00A200", "0xA200", "0xA200", "0x555508AA", "0xA200", "0xA200", "0xA200", "0xA200", "0xA200", "0xA200", "0xA200", "0xA200", "0xA200", "0xA200", "0xA200"] },
+  { id: 163, x: 3, y: 0, z: 2, w: 2, regs: ["0xA300", "0xCA00A300", "0xA300", "0xA300", "0x555509AA", "0xA300", "0xA300", "0xA300", "0xA300", "0xA300", "0xA300", "0xA300", "0xA300", "0xA300", "0xA300", "0xA300"] },
+  { id: 164, x: 0, y: 1, z: 2, w: 2, regs: ["0xA400", "0xCA00A400", "0xA400", "0xA400", "0x55550EAA", "0xA400", "0xA400", "0xA400", "0xA400", "0xA400", "0xA400", "0xA400", "0xA400", "0xA400", "0xA400", "0xA400"] },
+  { id: 165, x: 1, y: 1, z: 2, w: 2, regs: ["0xA500", "0xCA00A500", "0xA500", "0xA500", "0x55550FAA", "0xA500", "0xA500", "0xA500", "0xA500", "0xA500", "0xA500", "0xA500", "0xA500", "0xA500", "0xA500", "0xA500"] },
+  { id: 166, x: 2, y: 1, z: 2, w: 2, regs: ["0xA600", "0xCA00A600", "0xA600", "0xA600", "0x55550CAA", "0xA600", "0xA600", "0xA600", "0xA600", "0xA600", "0xA600", "0xA600", "0xA600", "0xA600", "0xA600", "0xA600"] },
+  { id: 167, x: 3, y: 1, z: 2, w: 2, regs: ["0xA700", "0xCA00A700", "0xA700", "0xA700", "0x55550DAA", "0xA700", "0xA700", "0xA700", "0xA700", "0xA700", "0xA700", "0xA700", "0xA700", "0xA700", "0xA700", "0xA700"] },
+  { id: 168, x: 0, y: 2, z: 2, w: 2, regs: ["0xA800", "0xCA00A800", "0xA800", "0xA800", "0x555502AA", "0xA800", "0xA800", "0xA800", "0xA800", "0xA800", "0xA800", "0xA800", "0xA800", "0xA800", "0xA800", "0xA800"] },
+  { id: 169, x: 1, y: 2, z: 2, w: 2, regs: ["0xA900", "0xCA00A900", "0xA900", "0xA900", "0x555503AA", "0xA900", "0xA900", "0xA900", "0xA900", "0xA900", "0xA900", "0xA900", "0xA900", "0xA900", "0xA900", "0xA900"] },
+  { id: 170, x: 2, y: 2, z: 2, w: 2, regs: ["0xAA00", "0xCA00AA00", "0xAA00", "0xAA00", "0x555500AA", "0xAA00", "0xAA00", "0xAA00", "0xAA00", "0xAA00", "0xAA00", "0xAA00", "0xAA00", "0xAA00", "0xAA00", "0xAA00"] },
+  { id: 171, x: 3, y: 2, z: 2, w: 2, regs: ["0xAB00", "0xCA00AB00", "0xAB00", "0xAB00", "0x555501AA", "0xAB00", "0xAB00", "0xAB00", "0xAB00", "0xAB00", "0xAB00", "0xAB00", "0xAB00", "0xAB00", "0xAB00", "0xAB00"] },
+  { id: 172, x: 0, y: 3, z: 2, w: 2, regs: ["0xAC00", "0xCA00AC00", "0xAC00", "0xAC00", "0x555506AA", "0xAC00", "0xAC00", "0xAC00", "0xAC00", "0xAC00", "0xAC00", "0xAC00", "0xAC00", "0xAC00", "0xAC00", "0xAC00"] },
+  { id: 173, x: 1, y: 3, z: 2, w: 2, regs: ["0xAD00", "0xCA00AD00", "0xAD00", "0xAD00", "0x555507AA", "0xAD00", "0xAD00", "0xAD00", "0xAD00", "0xAD00", "0xAD00", "0xAD00", "0xAD00", "0xAD00", "0xAD00", "0xAD00"] },
+  { id: 174, x: 2, y: 3, z: 2, w: 2, regs: ["0xAE00", "0xCA00AE00", "0xAE00", "0xAE00", "0x555504AA", "0xAE00", "0xAE00", "0xAE00", "0xAE00", "0xAE00", "0xAE00", "0xAE00", "0xAE00", "0xAE00", "0xAE00", "0xAE00"] },
+  { id: 175, x: 3, y: 3, z: 2, w: 2, regs: ["0xAF00", "0xCA00AF00", "0xAF00", "0xAF00", "0x555505AA", "0xAF00", "0xAF00", "0xAF00", "0xAF00", "0xAF00", "0xAF00", "0xAF00", "0xAF00", "0xAF00", "0xAF00", "0xAF00"] },
+  { id: 176, x: 0, y: 0, z: 3, w: 2, regs: ["0xB000", "0xCA00B000", "0xB000", "0xB000", "0x55551AAA", "0xB000", "0xB000", "0xB000", "0xB000", "0xB000", "0xB000", "0xB000", "0xB000", "0xB000", "0xB000", "0xB000"] },
+  { id: 177, x: 1, y: 0, z: 3, w: 2, regs: ["0xB100", "0xCA00B100", "0xB100", "0xB100", "0x55551BAA", "0xB100", "0xB100", "0xB100", "0xB100", "0xB100", "0xB100", "0xB100", "0xB100", "0xB100", "0xB100", "0xB100"] },
+  { id: 178, x: 2, y: 0, z: 3, w: 2, regs: ["0xB200", "0xCA00B200", "0xB200", "0xB200", "0x555518AA", "0xB200", "0xB200", "0xB200", "0xB200", "0xB200", "0xB200", "0xB200", "0xB200", "0xB200", "0xB200", "0xB200"] },
+  { id: 179, x: 3, y: 0, z: 3, w: 2, regs: ["0xB300", "0xCA00B300", "0xB300", "0xB300", "0x555519AA", "0xB300", "0xB300", "0xB300", "0xB300", "0xB300", "0xB300", "0xB300", "0xB300", "0xB300", "0xB300", "0xB300"] },
+  { id: 180, x: 0, y: 1, z: 3, w: 2, regs: ["0xB400", "0xCA00B400", "0xB400", "0xB400", "0x55551EAA", "0xB400", "0xB400", "0xB400", "0xB400", "0xB400", "0xB400", "0xB400", "0xB400", "0xB400", "0xB400", "0xB400"] },
+  { id: 181, x: 1, y: 1, z: 3, w: 2, regs: ["0xB500", "0xCA00B500", "0xB500", "0xB500", "0x55551FAA", "0xB500", "0xB500", "0xB500", "0xB500", "0xB500", "0xB500", "0xB500", "0xB500", "0xB500", "0xB500", "0xB500"] },
+  { id: 182, x: 2, y: 1, z: 3, w: 2, regs: ["0xB600", "0xCA00B600", "0xB600", "0xB600", "0x55551CAA", "0xB600", "0xB600", "0xB600", "0xB600", "0xB600", "0xB600", "0xB600", "0xB600", "0xB600", "0xB600", "0xB600"] },
+  { id: 183, x: 3, y: 1, z: 3, w: 2, regs: ["0xB700", "0xCA00B700", "0xB700", "0xB700", "0x55551DAA", "0xB700", "0xB700", "0xB700", "0xB700", "0xB700", "0xB700", "0xB700", "0xB700", "0xB700", "0xB700", "0xB700"] },
+  { id: 184, x: 0, y: 2, z: 3, w: 2, regs: ["0xB800", "0xCA00B800", "0xB800", "0xB800", "0x555512AA", "0xB800", "0xB800", "0xB800", "0xB800", "0xB800", "0xB800", "0xB800", "0xB800", "0xB800", "0xB800", "0xB800"] },
+  { id: 185, x: 1, y: 2, z: 3, w: 2, regs: ["0xB900", "0xCA00B900", "0xB900", "0xB900", "0x555513AA", "0xB900", "0xB900", "0xB900", "0xB900", "0xB900", "0xB900", "0xB900", "0xB900", "0xB900", "0xB900", "0xB900"] },
+  { id: 186, x: 2, y: 2, z: 3, w: 2, regs: ["0xBA00", "0xCA00BA00", "0xBA00", "0xBA00", "0x555510AA", "0xBA00", "0xBA00", "0xBA00", "0xBA00", "0xBA00", "0xBA00", "0xBA00", "0xBA00", "0xBA00", "0xBA00", "0xBA00"] },
+  { id: 187, x: 3, y: 2, z: 3, w: 2, regs: ["0xBB00", "0xCA00BB00", "0xBB00", "0xBB00", "0x555511AA", "0xBB00", "0xBB00", "0xBB00", "0xBB00", "0xBB00", "0xBB00", "0xBB00", "0xBB00", "0xBB00", "0xBB00", "0xBB00"] },
+  { id: 188, x: 0, y: 3, z: 3, w: 2, regs: ["0xBC00", "0xCA00BC00", "0xBC00", "0xBC00", "0x555516AA", "0xBC00", "0xBC00", "0xBC00", "0xBC00", "0xBC00", "0xBC00", "0xBC00", "0xBC00", "0xBC00", "0xBC00", "0xBC00"] },
+  { id: 189, x: 1, y: 3, z: 3, w: 2, regs: ["0xBD00", "0xCA00BD00", "0xBD00", "0xBD00", "0x555517AA", "0xBD00", "0xBD00", "0xBD00", "0xBD00", "0xBD00", "0xBD00", "0xBD00", "0xBD00", "0xBD00", "0xBD00", "0xBD00"] },
+  { id: 190, x: 2, y: 3, z: 3, w: 2, regs: ["0xBE00", "0xCA00BE00", "0xBE00", "0xBE00", "0x555514AA", "0xBE00", "0xBE00", "0xBE00", "0xBE00", "0xBE00", "0xBE00", "0xBE00", "0xBE00", "0xBE00", "0xBE00", "0xBE00"] },
+  { id: 191, x: 3, y: 3, z: 3, w: 2, regs: ["0xBF00", "0xCA00BF00", "0xBF00", "0xBF00", "0x555515AA", "0xBF00", "0xBF00", "0xBF00", "0xBF00", "0xBF00", "0xBF00", "0xBF00", "0xBF00", "0xBF00", "0xBF00", "0xBF00"] },
+  { id: 192, x: 0, y: 0, z: 0, w: 3, regs: ["0xC000", "0xCA00C000", "0xC000", "0xC000", "0x55556AAA", "0xC000", "0xC000", "0xC000", "0xC000", "0xC000", "0xC000", "0xC000", "0xC000", "0xC000", "0xC000", "0xC000"] },
+  { id: 193, x: 1, y: 0, z: 0, w: 3, regs: ["0xC100", "0xCA00C100", "0xC100", "0xC100", "0x55556BAA", "0xC100", "0xC100", "0xC100", "0xC100", "0xC100", "0xC100", "0xC100", "0xC100", "0xC100", "0xC100", "0xC100"] },
+  { id: 194, x: 2, y: 0, z: 0, w: 3, regs: ["0xC200", "0xCA00C200", "0xC200", "0xC200", "0x555568AA", "0xC200", "0xC200", "0xC200", "0xC200", "0xC200", "0xC200", "0xC200", "0xC200", "0xC200", "0xC200", "0xC200"] },
+  { id: 195, x: 3, y: 0, z: 0, w: 3, regs: ["0xC300", "0xCA00C300", "0xC300", "0xC300", "0x555569AA", "0xC300", "0xC300", "0xC300", "0xC300", "0xC300", "0xC300", "0xC300", "0xC300", "0xC300", "0xC300", "0xC300"] },
+  { id: 196, x: 0, y: 1, z: 0, w: 3, regs: ["0xC400", "0xCA00C400", "0xC400", "0xC400", "0x55556EAA", "0xC400", "0xC400", "0xC400", "0xC400", "0xC400", "0xC400", "0xC400", "0xC400", "0xC400", "0xC400", "0xC400"] },
+  { id: 197, x: 1, y: 1, z: 0, w: 3, regs: ["0xC500", "0xCA00C500", "0xC500", "0xC500", "0x55556FAA", "0xC500", "0xC500", "0xC500", "0xC500", "0xC500", "0xC500", "0xC500", "0xC500", "0xC500", "0xC500", "0xC500"] },
+  { id: 198, x: 2, y: 1, z: 0, w: 3, regs: ["0xC600", "0xCA00C600", "0xC600", "0xC600", "0x55556CAA", "0xC600", "0xC600", "0xC600", "0xC600", "0xC600", "0xC600", "0xC600", "0xC600", "0xC600", "0xC600", "0xC600"] },
+  { id: 199, x: 3, y: 1, z: 0, w: 3, regs: ["0xC700", "0xCA00C700", "0xC700", "0xC700", "0x55556DAA", "0xC700", "0xC700", "0xC700", "0xC700", "0xC700", "0xC700", "0xC700", "0xC700", "0xC700", "0xC700", "0xC700"] },
+  { id: 200, x: 0, y: 2, z: 0, w: 3, regs: ["0xC800", "0xCA00C800", "0xC800", "0xC800", "0x555562AA", "0xC800", "0xC800", "0xC800", "0xC800", "0xC800", "0xC800", "0xC800", "0xC800", "0xC800", "0xC800", "0xC800"] },
+  { id: 201, x: 1, y: 2, z: 0, w: 3, regs: ["0xC900", "0xCA00C900", "0xC900", "0xC900", "0x555563AA", "0xC900", "0xC900", "0xC900", "0xC900", "0xC900", "0xC900", "0xC900", "0xC900", "0xC900", "0xC900", "0xC900"] },
+  { id: 202, x: 2, y: 2, z: 0, w: 3, regs: ["0xCA00", "0xCA00CA00", "0xCA00", "0xCA00", "0x555560AA", "0xCA00", "0xCA00", "0xCA00", "0xCA00", "0xCA00", "0xCA00", "0xCA00", "0xCA00", "0xCA00", "0xCA00", "0xCA00"] },
+  { id: 203, x: 3, y: 2, z: 0, w: 3, regs: ["0xCB00", "0xCA00CB00", "0xCB00", "0xCB00", "0x555561AA", "0xCB00", "0xCB00", "0xCB00", "0xCB00", "0xCB00", "0xCB00", "0xCB00", "0xCB00", "0xCB00", "0xCB00", "0xCB00"] },
+  { id: 204, x: 0, y: 3, z: 0, w: 3, regs: ["0xCC00", "0xCA00CC00", "0xCC00", "0xCC00", "0x555566AA", "0xCC00", "0xCC00", "0xCC00", "0xCC00", "0xCC00", "0xCC00", "0xCC00", "0xCC00", "0xCC00", "0xCC00", "0xCC00"] },
+  { id: 205, x: 1, y: 3, z: 0, w: 3, regs: ["0xCD00", "0xCA00CD00", "0xCD00", "0xCD00", "0x555567AA", "0xCD00", "0xCD00", "0xCD00", "0xCD00", "0xCD00", "0xCD00", "0xCD00", "0xCD00", "0xCD00", "0xCD00", "0xCD00"] },
+  { id: 206, x: 2, y: 3, z: 0, w: 3, regs: ["0xCE00", "0xCA00CE00", "0xCE00", "0xCE00", "0x555564AA", "0xCE00", "0xCE00", "0xCE00", "0xCE00", "0xCE00", "0xCE00", "0xCE00", "0xCE00", "0xCE00", "0xCE00", "0xCE00"] },
+  { id: 207, x: 3, y: 3, z: 0, w: 3, regs: ["0xCF00", "0xCA00CF00", "0xCF00", "0xCF00", "0x555565AA", "0xCF00", "0xCF00", "0xCF00", "0xCF00", "0xCF00", "0xCF00", "0xCF00", "0xCF00", "0xCF00", "0xCF00", "0xCF00"] },
+  { id: 208, x: 0, y: 0, z: 1, w: 3, regs: ["0xD000", "0xCA00D000", "0xD000", "0xD000", "0x55557AAA", "0xD000", "0xD000", "0xD000", "0xD000", "0xD000", "0xD000", "0xD000", "0xD000", "0xD000", "0xD000", "0xD000"] },
+  { id: 209, x: 1, y: 0, z: 1, w: 3, regs: ["0xD100", "0xCA00D100", "0xD100", "0xD100", "0x55557BAA", "0xD100", "0xD100", "0xD100", "0xD100", "0xD100", "0xD100", "0xD100", "0xD100", "0xD100", "0xD100", "0xD100"] },
+  { id: 210, x: 2, y: 0, z: 1, w: 3, regs: ["0xD200", "0xCA00D200", "0xD200", "0xD200", "0x555578AA", "0xD200", "0xD200", "0xD200", "0xD200", "0xD200", "0xD200", "0xD200", "0xD200", "0xD200", "0xD200", "0xD200"] },
+  { id: 211, x: 3, y: 0, z: 1, w: 3, regs: ["0xD300", "0xCA00D300", "0xD300", "0xD300", "0x555579AA", "0xD300", "0xD300", "0xD300", "0xD300", "0xD300", "0xD300", "0xD300", "0xD300", "0xD300", "0xD300", "0xD300"] },
+  { id: 212, x: 0, y: 1, z: 1, w: 3, regs: ["0xD400", "0xCA00D400", "0xD400", "0xD400", "0x55557EAA", "0xD400", "0xD400", "0xD400", "0xD400", "0xD400", "0xD400", "0xD400", "0xD400", "0xD400", "0xD400", "0xD400"] },
+  { id: 213, x: 1, y: 1, z: 1, w: 3, regs: ["0xD500", "0xCA00D500", "0xD500", "0xD500", "0x55557FAA", "0xD500", "0xD500", "0xD500", "0xD500", "0xD500", "0xD500", "0xD500", "0xD500", "0xD500", "0xD500", "0xD500"] },
+  { id: 214, x: 2, y: 1, z: 1, w: 3, regs: ["0xD600", "0xCA00D600", "0xD600", "0xD600", "0x55557CAA", "0xD600", "0xD600", "0xD600", "0xD600", "0xD600", "0xD600", "0xD600", "0xD600", "0xD600", "0xD600", "0xD600"] },
+  { id: 215, x: 3, y: 1, z: 1, w: 3, regs: ["0xD700", "0xCA00D700", "0xD700", "0xD700", "0x55557DAA", "0xD700", "0xD700", "0xD700", "0xD700", "0xD700", "0xD700", "0xD700", "0xD700", "0xD700", "0xD700", "0xD700"] },
+  { id: 216, x: 0, y: 2, z: 1, w: 3, regs: ["0xD800", "0xCA00D800", "0xD800", "0xD800", "0x555572AA", "0xD800", "0xD800", "0xD800", "0xD800", "0xD800", "0xD800", "0xD800", "0xD800", "0xD800", "0xD800", "0xD800"] },
+  { id: 217, x: 1, y: 2, z: 1, w: 3, regs: ["0xD900", "0xCA00D900", "0xD900", "0xD900", "0x555573AA", "0xD900", "0xD900", "0xD900", "0xD900", "0xD900", "0xD900", "0xD900", "0xD900", "0xD900", "0xD900", "0xD900"] },
+  { id: 218, x: 2, y: 2, z: 1, w: 3, regs: ["0xDA00", "0xCA00DA00", "0xDA00", "0xDA00", "0x555570AA", "0xDA00", "0xDA00", "0xDA00", "0xDA00", "0xDA00", "0xDA00", "0xDA00", "0xDA00", "0xDA00", "0xDA00", "0xDA00"] },
+  { id: 219, x: 3, y: 2, z: 1, w: 3, regs: ["0xDB00", "0xCA00DB00", "0xDB00", "0xDB00", "0x555571AA", "0xDB00", "0xDB00", "0xDB00", "0xDB00", "0xDB00", "0xDB00", "0xDB00", "0xDB00", "0xDB00", "0xDB00", "0xDB00"] },
+  { id: 220, x: 0, y: 3, z: 1, w: 3, regs: ["0xDC00", "0xCA00DC00", "0xDC00", "0xDC00", "0x555576AA", "0xDC00", "0xDC00", "0xDC00", "0xDC00", "0xDC00", "0xDC00", "0xDC00", "0xDC00", "0xDC00", "0xDC00", "0xDC00"] },
+  { id: 221, x: 1, y: 3, z: 1, w: 3, regs: ["0xDD00", "0xCA00DD00", "0xDD00", "0xDD00", "0x555577AA", "0xDD00", "0xDD00", "0xDD00", "0xDD00", "0xDD00", "0xDD00", "0xDD00", "0xDD00", "0xDD00", "0xDD00", "0xDD00"] },
+  { id: 222, x: 2, y: 3, z: 1, w: 3, regs: ["0xDE00", "0xCA00DE00", "0xDE00", "0xDE00", "0x555574AA", "0xDE00", "0xDE00", "0xDE00", "0xDE00", "0xDE00", "0xDE00", "0xDE00", "0xDE00", "0xDE00", "0xDE00", "0xDE00"] },
+  { id: 223, x: 3, y: 3, z: 1, w: 3, regs: ["0xDF00", "0xCA00DF00", "0xDF00", "0xDF00", "0x555575AA", "0xDF00", "0xDF00", "0xDF00", "0xDF00", "0xDF00", "0xDF00", "0xDF00", "0xDF00", "0xDF00", "0xDF00", "0xDF00"] },
+  { id: 224, x: 0, y: 0, z: 2, w: 3, regs: ["0xE000", "0xCA00E000", "0xE000", "0xE000", "0x55554AAA", "0xE000", "0xE000", "0xE000", "0xE000", "0xE000", "0xE000", "0xE000", "0xE000", "0xE000", "0xE000", "0xE000"] },
+  { id: 225, x: 1, y: 0, z: 2, w: 3, regs: ["0xE100", "0xCA00E100", "0xE100", "0xE100", "0x55554BAA", "0xE100", "0xE100", "0xE100", "0xE100", "0xE100", "0xE100", "0xE100", "0xE100", "0xE100", "0xE100", "0xE100"] },
+  { id: 226, x: 2, y: 0, z: 2, w: 3, regs: ["0xE200", "0xCA00E200", "0xE200", "0xE200", "0x555548AA", "0xE200", "0xE200", "0xE200", "0xE200", "0xE200", "0xE200", "0xE200", "0xE200", "0xE200", "0xE200", "0xE200"] },
+  { id: 227, x: 3, y: 0, z: 2, w: 3, regs: ["0xE300", "0xCA00E300", "0xE300", "0xE300", "0x555549AA", "0xE300", "0xE300", "0xE300", "0xE300", "0xE300", "0xE300", "0xE300", "0xE300", "0xE300", "0xE300", "0xE300"] },
+  { id: 228, x: 0, y: 1, z: 2, w: 3, regs: ["0xE400", "0xCA00E400", "0xE400", "0xE400", "0x55554EAA", "0xE400", "0xE400", "0xE400", "0xE400", "0xE400", "0xE400", "0xE400", "0xE400", "0xE400", "0xE400", "0xE400"] },
+  { id: 229, x: 1, y: 1, z: 2, w: 3, regs: ["0xE500", "0xCA00E500", "0xE500", "0xE500", "0x55554FAA", "0xE500", "0xE500", "0xE500", "0xE500", "0xE500", "0xE500", "0xE500", "0xE500", "0xE500", "0xE500", "0xE500"] },
+  { id: 230, x: 2, y: 1, z: 2, w: 3, regs: ["0xE600", "0xCA00E600", "0xE600", "0xE600", "0x55554CAA", "0xE600", "0xE600", "0xE600", "0xE600", "0xE600", "0xE600", "0xE600", "0xE600", "0xE600", "0xE600", "0xE600"] },
+  { id: 231, x: 3, y: 1, z: 2, w: 3, regs: ["0xE700", "0xCA00E700", "0xE700", "0xE700", "0x55554DAA", "0xE700", "0xE700", "0xE700", "0xE700", "0xE700", "0xE700", "0xE700", "0xE700", "0xE700", "0xE700", "0xE700"] },
+  { id: 232, x: 0, y: 2, z: 2, w: 3, regs: ["0xE800", "0xCA00E800", "0xE800", "0xE800", "0x555542AA", "0xE800", "0xE800", "0xE800", "0xE800", "0xE800", "0xE800", "0xE800", "0xE800", "0xE800", "0xE800", "0xE800"] },
+  { id: 233, x: 1, y: 2, z: 2, w: 3, regs: ["0xE900", "0xCA00E900", "0xE900", "0xE900", "0x555543AA", "0xE900", "0xE900", "0xE900", "0xE900", "0xE900", "0xE900", "0xE900", "0xE900", "0xE900", "0xE900", "0xE900"] },
+  { id: 234, x: 2, y: 2, z: 2, w: 3, regs: ["0xEA00", "0xCA00EA00", "0xEA00", "0xEA00", "0x555540AA", "0xEA00", "0xEA00", "0xEA00", "0xEA00", "0xEA00", "0xEA00", "0xEA00", "0xEA00", "0xEA00", "0xEA00", "0xEA00"] },
+  { id: 235, x: 3, y: 2, z: 2, w: 3, regs: ["0xEB00", "0xCA00EB00", "0xEB00", "0xEB00", "0x555541AA", "0xEB00", "0xEB00", "0xEB00", "0xEB00", "0xEB00", "0xEB00", "0xEB00", "0xEB00", "0xEB00", "0xEB00", "0xEB00"] },
+  { id: 236, x: 0, y: 3, z: 2, w: 3, regs: ["0xEC00", "0xCA00EC00", "0xEC00", "0xEC00", "0x555546AA", "0xEC00", "0xEC00", "0xEC00", "0xEC00", "0xEC00", "0xEC00", "0xEC00", "0xEC00", "0xEC00", "0xEC00", "0xEC00"] },
+  { id: 237, x: 1, y: 3, z: 2, w: 3, regs: ["0xED00", "0xCA00ED00", "0xED00", "0xED00", "0x555547AA", "0xED00", "0xED00", "0xED00", "0xED00", "0xED00", "0xED00", "0xED00", "0xED00", "0xED00", "0xED00", "0xED00"] },
+  { id: 238, x: 2, y: 3, z: 2, w: 3, regs: ["0xEE00", "0xCA00EE00", "0xEE00", "0xEE00", "0x555544AA", "0xEE00", "0xEE00", "0xEE00", "0xEE00", "0xEE00", "0xEE00", "0xEE00", "0xEE00", "0xEE00", "0xEE00", "0xEE00"] },
+  { id: 239, x: 3, y: 3, z: 2, w: 3, regs: ["0xEF00", "0xCA00EF00", "0xEF00", "0xEF00", "0x555545AA", "0xEF00", "0xEF00", "0xEF00", "0xEF00", "0xEF00", "0xEF00", "0xEF00", "0xEF00", "0xEF00", "0xEF00", "0xEF00"] },
+  { id: 240, x: 0, y: 0, z: 3, w: 3, regs: ["0xF000", "0xCA00F000", "0xF000", "0xF000", "0x55555AAA", "0xF000", "0xF000", "0xF000", "0xF000", "0xF000", "0xF000", "0xF000", "0xF000", "0xF000", "0xF000", "0xF000"] },
+  { id: 241, x: 1, y: 0, z: 3, w: 3, regs: ["0xF100", "0xCA00F100", "0xF100", "0xF100", "0x55555BAA", "0xF100", "0xF100", "0xF100", "0xF100", "0xF100", "0xF100", "0xF100", "0xF100", "0xF100", "0xF100", "0xF100"] },
+  { id: 242, x: 2, y: 0, z: 3, w: 3, regs: ["0xF200", "0xCA00F200", "0xF200", "0xF200", "0x555558AA", "0xF200", "0xF200", "0xF200", "0xF200", "0xF200", "0xF200", "0xF200", "0xF200", "0xF200", "0xF200", "0xF200"] },
+  { id: 243, x: 3, y: 0, z: 3, w: 3, regs: ["0xF300", "0xCA00F300", "0xF300", "0xF300", "0x555559AA", "0xF300", "0xF300", "0xF300", "0xF300", "0xF300", "0xF300", "0xF300", "0xF300", "0xF300", "0xF300", "0xF300"] },
+  { id: 244, x: 0, y: 1, z: 3, w: 3, regs: ["0xF400", "0xCA00F400", "0xF400", "0xF400", "0x55555EAA", "0xF400", "0xF400", "0xF400", "0xF400", "0xF400", "0xF400", "0xF400", "0xF400", "0xF400", "0xF400", "0xF400"] },
+  { id: 245, x: 1, y: 1, z: 3, w: 3, regs: ["0xF500", "0xCA00F500", "0xF500", "0xF500", "0x55555FAA", "0xF500", "0xF500", "0xF500", "0xF500", "0xF500", "0xF500", "0xF500", "0xF500", "0xF500", "0xF500", "0xF500"] },
+  { id: 246, x: 2, y: 1, z: 3, w: 3, regs: ["0xF600", "0xCA00F600", "0xF600", "0xF600", "0x55555CAA", "0xF600", "0xF600", "0xF600", "0xF600", "0xF600", "0xF600", "0xF600", "0xF600", "0xF600", "0xF600", "0xF600"] },
+  { id: 247, x: 3, y: 1, z: 3, w: 3, regs: ["0xF700", "0xCA00F700", "0xF700", "0xF700", "0x55555DAA", "0xF700", "0xF700", "0xF700", "0xF700", "0xF700", "0xF700", "0xF700", "0xF700", "0xF700", "0xF700", "0xF700"] },
+  { id: 248, x: 0, y: 2, z: 3, w: 3, regs: ["0xF800", "0xCA00F800", "0xF800", "0xF800", "0x555552AA", "0xF800", "0xF800", "0xF800", "0xF800", "0xF800", "0xF800", "0xF800", "0xF800", "0xF800", "0xF800", "0xF800"] },
+  { id: 249, x: 1, y: 2, z: 3, w: 3, regs: ["0xF900", "0xCA00F900", "0xF900", "0xF900", "0x555553AA", "0xF900", "0xF900", "0xF900", "0xF900", "0xF900", "0xF900", "0xF900", "0xF900", "0xF900", "0xF900", "0xF900"] },
+  { id: 250, x: 2, y: 2, z: 3, w: 3, regs: ["0xFA00", "0xCA00FA00", "0xFA00", "0xFA00", "0x555550AA", "0xFA00", "0xFA00", "0xFA00", "0xFA00", "0xFA00", "0xFA00", "0xFA00", "0xFA00", "0xFA00", "0xFA00", "0xFA00"] },
+  { id: 251, x: 3, y: 2, z: 3, w: 3, regs: ["0xFB00", "0xCA00FB00", "0xFB00", "0xFB00", "0x555551AA", "0xFB00", "0xFB00", "0xFB00", "0xFB00", "0xFB00", "0xFB00", "0xFB00", "0xFB00", "0xFB00", "0xFB00", "0xFB00"] },
+  { id: 252, x: 0, y: 3, z: 3, w: 3, regs: ["0xFC00", "0xCA00FC00", "0xFC00", "0xFC00", "0x555556AA", "0xFC00", "0xFC00", "0xFC00", "0xFC00", "0xFC00", "0xFC00", "0xFC00", "0xFC00", "0xFC00", "0xFC00", "0xFC00"] },
+  { id: 253, x: 1, y: 3, z: 3, w: 3, regs: ["0xFD00", "0xCA00FD00", "0xFD00", "0xFD00", "0x555557AA", "0xFD00", "0xFD00", "0xFD00", "0xFD00", "0xFD00", "0xFD00", "0xFD00", "0xFD00", "0xFD00", "0xFD00", "0xFD00"] },
+  { id: 254, x: 2, y: 3, z: 3, w: 3, regs: ["0xFE00", "0xCA00FE00", "0xFE00", "0xFE00", "0x555554AA", "0xFE00", "0xFE00", "0xFE00", "0xFE00", "0xFE00", "0xFE00", "0xFE00", "0xFE00", "0xFE00", "0xFE00", "0xFE00"] },
+  { id: 255, x: 3, y: 3, z: 3, w: 3, regs: ["0xFF00", "0xCA00FF00", "0xFF00", "0xFF00", "0x555555AA", "0xFF00", "0xFF00", "0xFF00", "0xFF00", "0xFF00", "0xFF00", "0xFF00", "0xFF00", "0xFF00", "0xFF00", "0xFF00"] },
+];
+        let selectedCore = 0;
+        let viewMode = '3d';
+        let autoRotate = true;
+
+        const REGION_MAP = [
+            { limit: 48, name: "Frontal Executive & Planning", color: 0x00f0ff },
+            { limit: 96, name: "Visual Cortex (V1-V4 Spatial)", color: 0x9d4edd },
+            { limit: 144, name: "Auditory & Language Wernicke", color: 0x00ff88 },
+            { limit: 192, name: "Hippocampus Episodic Memory", color: 0xf59e0b },
+            { limit: 240, name: "Motor Cortex & Premotor", color: 0xf43f5e },
+            { limit: 256, name: "Thalamic Global Workspace", color: 0xffd700 }
+        ];
+
+        function getRegion(id) {
+            for (const r of REGION_MAP) {
+                if (id < r.limit) return r;
+            }
+            return REGION_MAP[0];
+        }
+
+        function updateInspector(id) {
+            selectedCore = id;
+            const core = CORES[id] || { x: 0, y: 0, z: 0, w: 0, regs: Array(16).fill("0x0000") };
+            const reg = getRegion(id);
+
+            document.getElementById('selectedCoreLabel').innerText = `Core ${id}`;
+            document.getElementById('coordVal').innerText = `(${core.x}, ${core.y}, ${core.z}, ${core.w})`;
+            document.getElementById('regionVal').innerText = reg.name;
+            document.getElementById('regionVal').style.color = '#' + reg.color.toString(16).padStart(6, '0');
+
+            const regContainer = document.getElementById('regContainer');
+            regContainer.innerHTML = '';
+            core.regs.forEach((val, idx) => {
+                const cell = document.createElement('div');
+                cell.className = 'reg-cell';
+                cell.innerHTML = `<span>R${idx.toString(16).toUpperCase()}</span>${val}`;
+                regContainer.appendChild(cell);
+            });
+
+            updateBankHeatmap(id);
+        }
+
+        function updateBankHeatmap(coreId) {
+            const grid = document.getElementById('banksGrid');
+            grid.innerHTML = '';
+            for (let b = 0; b < 16; b++) {
+                const cell = document.createElement('div');
+                const isHit = (b === (coreId % 16) || b === ((coreId * 3) % 16));
+                cell.className = 'bank-cell' + (isHit ? ' active' : '');
+                cell.innerText = `B${b.toString(16).toUpperCase()}`;
+                grid.appendChild(cell);
+            }
+        }
+
+        // 3D Scene Initialization
+        const container = document.getElementById('canvasContainer');
+        const tooltip = document.getElementById('hudTooltip');
+        let scene, camera, renderer, nodesGroup, linksGroup, packetsGroup;
+        let isMouseDown = false, prevMouseX = 0, prevMouseY = 0;
+        let rotX = 0.3, rotY = -0.5, camDistance = 240;
+
+        function init3D() {
+            if (typeof THREE === 'undefined') {
+                init2DFallback();
+                return;
+            }
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 2000);
+            camera.position.set(0, 0, camDistance);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio || 1);
+            container.appendChild(renderer.domElement);
+
+            nodesGroup = new THREE.Group();
+            linksGroup = new THREE.Group();
+            packetsGroup = new THREE.Group();
+            scene.add(linksGroup);
+            scene.add(nodesGroup);
+            scene.add(packetsGroup);
+
+            // Create 256 Core Nodes in 4D-Torus Projected Space
+            const sphereGeo = new THREE.SphereGeometry(2.4, 16, 16);
+            CORES.forEach((c) => {
+                const reg = getRegion(c.id);
+                const mat = new THREE.MeshBasicMaterial({ color: reg.color });
+                const mesh = new THREE.Mesh(sphereGeo, mat);
+
+                // 4D -> 3D projection
+                const px = (c.x - 1.5) * 22 + (c.w - 1.5) * 65;
+                const py = (c.y - 1.5) * 22;
+                const pz = (c.z - 1.5) * 22;
+                mesh.position.set(px, py, pz);
+                mesh.userData = { id: c.id, core: c };
+                nodesGroup.add(mesh);
+            });
+
+            // Connect neighboring cores along 4D torus dimensions
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.12 });
+            for (let i = 0; i < CORES.length; i++) {
+                const c1 = CORES[i];
+                // Connect X neighbor
+                if (c1.x < 3) {
+                    const c2 = CORES[i + 1];
+                    addLine(c1, c2, lineMat);
+                }
+                // Connect Y neighbor
+                if (c1.y < 3) {
+                    const c2 = CORES[i + 4];
+                    addLine(c1, c2, lineMat);
+                }
+                // Connect Z neighbor
+                if (c1.z < 3) {
+                    const c2 = CORES[i + 16];
+                    addLine(c1, c2, lineMat);
+                }
+            }
+
+            // Add dynamic light pulses
+            createPackets();
+
+            // Event Listeners
+            container.addEventListener('mousedown', onMouseDown);
+            window.addEventListener('mouseup', onMouseUp);
+            window.addEventListener('mousemove', onMouseMove);
+            container.addEventListener('wheel', onWheel);
+            window.addEventListener('resize', onResize);
+
+            animate();
+        }
+
+        function addLine(c1, c2, mat) {
+            const p1 = new THREE.Vector3((c1.x - 1.5) * 22 + (c1.w - 1.5) * 65, (c1.y - 1.5) * 22, (c1.z - 1.5) * 22);
+            const p2 = new THREE.Vector3((c2.x - 1.5) * 22 + (c2.w - 1.5) * 65, (c2.y - 1.5) * 22, (c2.z - 1.5) * 22);
+            const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+            const line = new THREE.Line(geo, mat);
+            linksGroup.add(line);
+        }
+
+        const packets = [];
+        function createPackets() {
+            const pGeo = new THREE.SphereGeometry(1.2, 8, 8);
+            const pMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (let i = 0; i < 24; i++) {
+                const p = new THREE.Mesh(pGeo, pMat);
+                const srcId = Math.floor(Math.random() * 256);
+                const dstId = (srcId + 1) % 256;
+                packets.push({
+                    mesh: p,
+                    src: CORES[srcId],
+                    dst: CORES[dstId],
+                    progress: Math.random()
+                });
+                packetsGroup.add(p);
+            }
+        }
+
+        function onMouseDown(e) {
+            isMouseDown = true;
+            prevMouseX = e.clientX;
+            prevMouseY = e.clientY;
+        }
+        function onMouseUp() { isMouseDown = false; }
+        function onMouseMove(e) {
+            if (isMouseDown) {
+                const dx = e.clientX - prevMouseX;
+                const dy = e.clientY - prevMouseY;
+                rotY += dx * 0.008;
+                rotX += dy * 0.008;
+                rotX = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, rotX));
+                prevMouseX = e.clientX;
+                prevMouseY = e.clientY;
+            } else {
+                // Raycast to check core hover
+                checkRaycast(e);
+            }
+        }
+        function onWheel(e) {
+            camDistance += e.deltaY * 0.15;
+            camDistance = Math.max(80, Math.min(450, camDistance));
+            e.preventDefault();
+        }
+        function onResize() {
+            if (!camera || !renderer) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        const raycaster = (typeof THREE !== 'undefined') ? new THREE.Raycaster() : null;
+        const mouse = (typeof THREE !== 'undefined') ? new THREE.Vector2() : null;
+
+        function checkRaycast(e) {
+            if (!raycaster || !camera || !nodesGroup) return;
+            const rect = container.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(nodesGroup.children);
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                const id = hit.userData.id;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
+                tooltip.innerHTML = `<strong>Core ${id}</strong> — ${getRegion(id).name}<br>R0: ${hit.userData.core.regs[0]}`;
+                container.style.cursor = 'pointer';
+            } else {
+                tooltip.style.display = 'none';
+                container.style.cursor = 'default';
+            }
+        }
+
+        container.addEventListener('click', (e) => {
+            if (!raycaster || !camera || !nodesGroup) return;
+            const rect = container.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(nodesGroup.children);
+            if (intersects.length > 0) {
+                const id = intersects[0].object.userData.id;
+                updateInspector(id);
+            }
+        });
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('btn3DTorus').classList.toggle('active', mode === '3d');
+            document.getElementById('btn2DGrid').classList.toggle('active', mode === '2d');
+
+            if (!nodesGroup) return;
+            nodesGroup.children.forEach((mesh) => {
+                const c = mesh.userData.core;
+                if (mode === '2d') {
+                    const gx = (c.id % 16 - 7.5) * 14;
+                    const gy = (Math.floor(c.id / 16) - 7.5) * 14;
+                    mesh.position.set(gx, gy, 0);
+                } else {
+                    const px = (c.x - 1.5) * 22 + (c.w - 1.5) * 65;
+                    const py = (c.y - 1.5) * 22;
+                    const pz = (c.z - 1.5) * 22;
+                    mesh.position.set(px, py, pz);
+                }
+            });
+        }
+
+        function toggleRotate() {
+            autoRotate = !autoRotate;
+            document.getElementById('btnRotate').innerText = `Auto-Rotate: ${autoRotate ? 'ON' : 'OFF'}`;
+            document.getElementById('btnRotate').classList.toggle('active', autoRotate);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (autoRotate && !isMouseDown) {
+                rotY += 0.003;
+            }
+
+            camera.position.x = camDistance * Math.sin(rotY) * Math.cos(rotX);
+            camera.position.y = camDistance * Math.sin(rotX);
+            camera.position.z = camDistance * Math.cos(rotY) * Math.cos(rotX);
+            camera.lookAt(0, 0, 0);
+
+            // Animate flying packets
+            packets.forEach((p) => {
+                p.progress += 0.015;
+                if (p.progress > 1.0) {
+                    p.progress = 0;
+                    const srcId = Math.floor(Math.random() * 256);
+                    p.src = CORES[srcId];
+                    p.dst = CORES[(srcId + 1) % 256];
+                }
+                const p1 = new THREE.Vector3((p.src.x - 1.5) * 22 + (p.src.w - 1.5) * 65, (p.src.y - 1.5) * 22, (p.src.z - 1.5) * 22);
+                const p2 = new THREE.Vector3((p.dst.x - 1.5) * 22 + (p.dst.w - 1.5) * 65, (p.dst.y - 1.5) * 22, (p.dst.z - 1.5) * 22);
+                p.mesh.position.lerpVectors(p1, p2, p.progress);
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // Fallback Canvas 2D if Three.js is blocked
+        function init2DFallback() {
+            const canvas = document.createElement('canvas');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            container.appendChild(canvas);
+            const ctx = canvas.getContext('2d');
+
+            function draw2D() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const cols = 16, rows = 16;
+                const cellW = (canvas.width - 40) / cols;
+                const cellH = (canvas.height - 40) / rows;
+
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const id = r * cols + c;
+                        const x = 20 + c * cellW;
+                        const y = 20 + r * cellH;
+                        const reg = getRegion(id);
+
+                        ctx.fillStyle = '#' + reg.color.toString(16).padStart(6, '0');
+                        ctx.fillRect(x + 2, y + 2, cellW - 4, cellH - 4);
+
+                        if (id === selectedCore) {
+                            ctx.strokeStyle = '#ffffff';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
+                        }
+                    }
+                }
+            }
+            draw2D();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            updateInspector(0);
+            init3D();
+        });
+    </script>
+</body>
+</html>

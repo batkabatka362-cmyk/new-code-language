@@ -600,7 +600,7 @@ fn sanitize_identifier(s: &str) -> String {
             clean.push('_');
         }
     }
-    if clean.is_empty() || clean.chars().next().unwrap().is_ascii_digit() {
+    if clean.is_empty() || clean.starts_with(|c: char| c.is_ascii_digit()) {
         format!("model_{}", clean)
     } else {
         clean

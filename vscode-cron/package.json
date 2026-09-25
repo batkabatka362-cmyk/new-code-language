@@ -28,7 +28,7 @@
       {
         "id": "cron-cl",
         "aliases": ["CRON Low-Level Machine Code", "cron-cl"],
-        "extensions": [".cl"],
+        "extensions": [".cl", ".clm"],
         "configuration": "./language-configuration-cl.json"
       }
     ],

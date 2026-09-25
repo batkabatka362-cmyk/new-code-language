@@ -330,18 +330,21 @@ pub fn transformer_forward_step_paged(
         // FlashAttention-2 Multi-Head Attention Scoring
         let mut attn_out = vec![0.0; config.hidden_dim];
         let scale = 1.0 / (config.head_dim as f64).sqrt();
+        let safe_limit = pos.min(config.max_seq_len.saturating_sub(1));
 
         for h in 0..config.num_heads {
             let h_offset = h * config.head_dim;
             let q_head = &q[h_offset..h_offset + config.head_dim];
 
             // Compute attention scores against all previous cached keys
-            let mut scores = Vec::with_capacity(pos + 1);
-            for t in 0..=pos {
+            let mut scores = Vec::with_capacity(safe_limit + 1);
+            for t in 0..=safe_limit {
                 let past_offset = t * config.hidden_dim + h_offset;
                 let mut dot = 0.0;
                 for d in 0..config.head_dim {
-                    dot += q_head[d] * kv_cache.k[l][past_offset + d];
+                    if past_offset + d < kv_cache.k[l].len() {
+                        dot += q_head[d] * kv_cache.k[l][past_offset + d];
+                    }
                 }
                 scores.push(dot * scale);
             }
@@ -355,11 +358,13 @@ pub fn transformer_forward_step_paged(
             }
 
             // Weighted aggregation of cached values
-            for t in 0..=pos {
+            for t in 0..=safe_limit {
                 let past_offset = t * config.hidden_dim + h_offset;
                 let w = exp_scores[t];
                 for d in 0..config.head_dim {
-                    attn_out[h_offset + d] += w * kv_cache.v[l][past_offset + d];
+                    if past_offset + d < kv_cache.v[l].len() {
+                        attn_out[h_offset + d] += w * kv_cache.v[l][past_offset + d];
+                    }
                 }
             }
         }
@@ -489,6 +494,12 @@ where
         .collect();
     if token_ids.is_empty() {
         token_ids.push((tokenizer.bos_token_id() as usize) % config.vocab_size);
+    }
+
+    if token_ids.len() > config.max_seq_len.saturating_sub(max_new_tokens.max(1)) {
+        let keep = config.max_seq_len.saturating_sub(max_new_tokens.max(1)).max(1);
+        let start = token_ids.len().saturating_sub(keep);
+        token_ids = token_ids[start..].to_vec();
     }
 
     let prompt_tokens_len = token_ids.len();

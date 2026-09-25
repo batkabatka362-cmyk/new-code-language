@@ -1625,6 +1625,12 @@ impl CBackend {
                 out.push_str("    return 0;\n})()");
                 out
             }
+            Expr::Closure { params, body, .. } => {
+                let param_strs: Vec<String> = params.iter().map(|p| {
+                    format!("auto {}", p.name)
+                }).collect();
+                format!("([=]({}) {{ return {}; }})", param_strs.join(", "), self.transpile_expr(body))
+            }
             _ => "0".to_string(),
         }
     }

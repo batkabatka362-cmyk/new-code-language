@@ -13,7 +13,10 @@ use std::time::Duration;
 
 #[test]
 fn test_live_ai_streaming_server_and_benchmark() {
-    let port = 18892;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+
     let (shutdown_tx, shutdown_rx) = channel();
 
     let config = HttpServerConfig {

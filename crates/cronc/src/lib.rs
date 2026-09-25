@@ -78,11 +78,90 @@ pub mod clifford;
 pub mod cl_debug;
 pub mod cl_fmt;
 pub mod cl_metaplasticity;
+pub mod cl_chat;
+pub mod cl_aot;
+pub mod cl_wafer_scale;
+pub mod cl_plasticity;
 pub mod cl_thermodynamics;
 pub mod cl_clifford_optics;
 pub mod cl_sagi_bridge;
 pub mod cl_torus_coherence;
 pub mod cl_metacognitive;
+pub mod cl_ternary_simd;
+pub mod cl_predictive_coding;
+pub mod cl_self_rewriter;
+pub mod cl_sleep_consolidation;
+pub mod cl_sensory_hal;
+pub mod cl_bootloader;
+pub mod cl_reversible_entanglement;
+pub mod cl_epigenetic_morph;
+pub mod cl_macro;
+pub mod cl_importer;
+pub mod cl_lsp;
+pub mod cl_visualizer;
+pub mod cl_clifford;
+pub mod cl_hyperdimensional;
+pub mod cl_neuromodulation;
+pub mod cl_sleep_engine;
+pub mod cl_global_workspace;
+pub mod cl_agi_orchestrator;
+pub mod cl_dendritic;
+pub mod cl_curiosity;
+pub mod cl_astrocytes;
+pub mod cl_structural_morph;
+pub mod cl_self_compiler;
+pub mod cl_quantum_zeno;
+pub mod cl_reversible_thermo;
+pub mod cl_spatiotemporal;
+pub mod cl_evolution;
+pub mod cl_python_bridge;
+pub mod cl_pkg;
+pub mod cl_benchmark;
+pub mod cl_docgen;
+pub mod cl_playground;
+pub mod cl_compose;
+pub mod cl_verify_math;
+pub mod cl_lint;
+pub mod cl_forge;
+pub mod cl_transpile;
+pub mod docgen;
+
+pub use cl_compose::{
+    compose_pipeline, render_composition_ascii_hud, CompositionStage,
+    PipelineCompositionConfig, PipelineCompositionReport,
+};
+pub use cl_verify_math::{
+    run_mathematical_verifications, MathVerificationReport,
+};
+pub use cl_lint::{
+    lint_cl_source, ClLintIssue, ClLintReport, LintSeverity,
+};
+pub use cl_forge::{
+    forge_kernel, ForgeConfig, ForgeDomain, ForgeReport,
+};
+pub use cl_transpile::{
+    transpile_cl, transpile_cl_to_c23_simd, transpile_cl_to_ptx,
+    transpile_cl_to_wgsl, TranspileReport, TranspileTarget,
+};
+
+pub use cl_macro::{MacroCompiler, MacroStmt, parse_clm, compute_slot_crc, build_valid_slot};
+pub use cl_importer::{NeuralLayer, TernaryVal};
+pub use cl_lsp::{analyze_cl_source, format_diagnostics_report, ClDiagnostic, DiagnosticSeverity};
+pub use cl_visualizer::export_html5_dashboard;
+pub use cl_clifford::Multivector4D as Multivector4DClifford;
+pub use cl_hyperdimensional::{HyperVector, HolographicMemoryBank, HDC_DIM};
+pub use cl_neuromodulation::{NeuromodulationEngine, NeuromodulatorState as LivingNeuromodulatorState, DynamicCoreTuning};
+pub use cl_sleep_engine::{SleepReplayEngine, SleepConsolidationReport as LivingSleepConsolidationReport};
+pub use cl_global_workspace::{GlobalWorkspaceEngine, WorkspaceFocusResult};
+pub use cl_agi_orchestrator::{LivingAgiMind, LivingAgiTurnResult};
+pub use cl_dendritic::MultiCompartmentNeuron;
+pub use cl_curiosity::{IntrinsicCuriosityEngine, CuriosityGoal};
+pub use cl_astrocytes::{GlialNetworkMesh, AstrocyteCell};
+pub use cl_structural_morph::{StructuralMorphEngine, CoreSpecialization};
+pub use cl_self_compiler::{SelfRewritingJitEngine, LiveSlotMutation};
+pub use cl_quantum_zeno::{QuantumOpticalQubit, QuantumHypothesisRegister};
+pub use cl_reversible_thermo::{ReversibleState3, ReversiblePipelineVerifier};
+pub use cl_spatiotemporal::{SpatiotemporalStreamer, MultimodalPhaseEvent};
 
 pub use cl_metaplasticity::{BcmConfig, MetaplasticEngine, MetaplasticSynapse};
 pub use cl_thermodynamics::{ThermodynamicOptimizer, TileThermodynamicState};
@@ -90,6 +169,15 @@ pub use cl_clifford_optics::{Multivector16, MziPhaseRotor};
 pub use cl_sagi_bridge::{NeuromodulatorState, SagiBrainBridge, SagiBrainKind, SagiBridgeMailbox};
 pub use cl_torus_coherence::{Torus4DCoord, Torus4DMesh, TorusMicroPacket};
 pub use cl_metacognitive::{CognitiveAnomaly, MetacognitiveEngine, SoundnessInvariant};
+pub use cl_ternary_simd::{TernaryTrit, TritSimdEngine, TritWord128};
+pub use cl_predictive_coding::{DendriticNeuron, HierarchicalPredictiveNetwork, PredictiveCodingLayer};
+pub use cl_self_rewriter::{LiveSlotPatch, PatchStatus, SelfRewritingEngine, ShadowCheckpoint};
+pub use cl_sleep_consolidation::{EpisodicTrace, SleepConsolidationEngine, SleepConsolidationReport};
+pub use cl_sensory_hal::{CochleaSpike, DvsEvent, TimeSurfaceAccumulator};
+pub use cl_bootloader::{BistDiagnosticReport, CognitiveBootloader, CoreBootControlBlock, CoreBootState, PgasMemoryMap, TrapHandler, TrapVector};
+pub use cl_reversible_entanglement::{EntangledRegisterPair, ReversibleEntanglementEngine, ThermodynamicEntropyState};
+pub use cl_epigenetic_morph::{AxonMyelinationState, EpigeneticMorphEngine};
+pub use docgen::{extract_program_doc, BrainDoc, FunctionDoc, ModuleDoc, StructDoc};
 
 pub use cl_debug::{BundleDebugMeta, ClDebugInfo, RegisterSymbol, SourceLocation};
 pub use cl_fmt::{format_cl_program, ClFmtOptions};
@@ -249,9 +337,10 @@ pub use cl_memcheck::{verify_cl_memory_access, ClMemcheckReport, MemcheckOptions
 pub use cl_fuzz::{run_cl_fuzz, ClFuzzReport, FuzzOptions, MutationStrategy};
 pub use cl_bench::{analyze_cl_roofline, ClBenchReport, RooflineRegime, PEAK_CORE_COMPUTE_GFLOPS, PEAK_CORE_SRAM_BW_GBPS, ROOFLINE_KNEE_OI};
 pub use cl_kernel::{
-    generate_flash_attention, generate_bitnet_gemm, generate_rmsnorm,
+    generate_flash_attention, generate_flash_attention_3, generate_bitnet_gemm, generate_rmsnorm,
     generate_swiglu, generate_rope, generate_kv_cache_stream,
-    generate_clifford_rotate4d,
+    generate_clifford_rotate4d, generate_sagi_metaplastic_v99,
+    generate_moe_router, generate_mla_latent_attention, generate_bitnet_swiglu_expert,
     list_available_kernels, synthesize_kernel, KernelDescriptor,
 };
 pub use cl_llvm::{compile_cl_to_llvm, ClLlvmCompiler};

@@ -43,9 +43,9 @@ fn test_cl_cosim_photonic_reversible_lockstep_parity() {
     assert!(report.is_100pct_parity);
     assert_eq!(report.divergence_count, 0);
 
-    // R3 is result of OP (0x00FFAA55)
-    assert_eq!(report.final_soft_regs[3], 0x00FFAA55);
-    assert_eq!(report.final_rtl_regs[3], 0x00FFAA55);
+    // R3 is result of authentic optical MZI GEMM
+    assert_eq!(report.final_soft_regs[3], 0x00FF0000);
+    assert_eq!(report.final_rtl_regs[3], 0x00FF0000);
 
     // R4 received R1 (0x0A) via FA
     assert_eq!(report.final_soft_regs[4], 0x0A);

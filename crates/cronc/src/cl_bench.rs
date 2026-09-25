@@ -153,26 +153,26 @@ pub fn analyze_cl_roofline(cl_source: &str) -> Result<ClBenchReport, String> {
 
                     match slot.opcode.as_str() {
                         // Photonic Brain 2: 4x4 complex MZI GEMM = 16 dot ops = 32 FLOPs
-                        "OP" => optical_gemm_ops += 1,
+                        "OP" | "WD" => optical_gemm_ops += 1,
                         // Brain 4 Sub-byte Ternary MAC = 16 sub-byte ops
-                        "MD" => {
+                        "MD" | "TM" | "TC" => {
                             subbyte_mac_ops += 1;
                             sram_access_count += 1; // Stream weight from SRAM
                         }
-                        // Brain 2 In-register 4x4 Transpose / Tile load
-                        "TT" => {
+                        // Brain 2 In-register 4x4 Transpose / Tile load / Tape / Pack
+                        "TT" | "PK" | "TR" | "TW" => {
                             sram_access_count += 1;
                         }
-                        // SIMD ALU
-                        "PO" | "P0" | "P1" | "FA" => {
+                        // SIMD ALU & Dedicated AI ISA Extensions (RMSNorm, Softmax, Mamba, CORDIC)
+                        "PO" | "P0" | "P1" | "FA" | "RM" | "SM" | "SS" | "SI" | "GE" | "CD" | "GF" | "RN" | "CG" | "SY" | "GU" | "UN" => {
                             simd_alu_ops += 1;
                         }
-                        // Memory Store
-                        "ST" | "PK" => {
+                        // Memory Store / Synapse update
+                        "ST" => {
                             sram_access_count += 1;
                         }
-                        // NoC Communication
-                        "TX" | "RX" | "SB" | "DW" | "DD" => {
+                        // NoC Communication & Systolic hops
+                        "TX" | "RX" | "SB" | "DW" | "DD" | "DE" | "DN" | "DS" => {
                             noc_packet_transfers += 1;
                         }
                         _ => {}

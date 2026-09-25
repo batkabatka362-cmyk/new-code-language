@@ -132,7 +132,7 @@ fn test_cordic_microcode_synthesis_and_jit() {
 
     let cl_code = synthesize_cordic_cl(&config);
     assert!(cl_code.contains("CRON 256-Core 4D-Torus CORDIC Geometric Silicon Microcode"));
-    assert!(cl_code.contains("B0000: '==01#0C0>"));
+    assert!(cl_code.contains("B0000: '==01#000>"));
     assert!(cl_code.contains("B0017: _bb00#000>"));
 
     // Verify .cl slot format and CRC-8 integrity

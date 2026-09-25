@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "CRON Programming Language Compiler for 4D-Torus Neuromorphic Hardware"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 
 [dev-dependencies]
