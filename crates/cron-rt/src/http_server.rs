@@ -213,6 +213,7 @@ impl LiveHttpServer {
                                         }
                                         let _ = stream.write_all(b"data: [DONE]\n\n");
                                         let _ = stream.flush();
+                                        let _ = stream.shutdown(std::net::Shutdown::Write);
                                         scratch.reset();
                                         continue;
                                     }
@@ -235,6 +236,7 @@ impl LiveHttpServer {
                             full_response.extend_from_slice(body);
                             let _ = stream.write_all(&full_response);
                             let _ = stream.flush();
+                            let _ = stream.shutdown(std::net::Shutdown::Write);
 
                             // 0-Cycle Instant Deallocation
                             scratch.reset();
