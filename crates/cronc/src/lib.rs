@@ -132,6 +132,9 @@ pub mod cl_stigmergy;
 pub mod cl_living_homeostasis;
 pub mod cl_hdc;
 pub mod cl_liquid_nn;
+pub mod cl_causal;
+pub mod cl_htm;
+pub mod cl_self_evolve;
 pub mod docgen;
 
 pub use cl_compose::{

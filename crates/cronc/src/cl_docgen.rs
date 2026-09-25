@@ -26,6 +26,8 @@ pub struct ClKernelDoc {
     pub spiking_attn_ops: usize,
     pub swarm_ops: usize,
     pub homeostasis_ops: usize,
+    pub causal_ops: usize,
+    pub htm_sdr_ops: usize,
     pub landauer_joules: f64,
     pub raw_source: String,
 }
@@ -56,7 +58,9 @@ impl ClKernelDoc {
         md.push_str(&format!("| ⚡ Dedicated AI Silicon ISA | `{}` | Softmax / SSM Mamba linear scans |\n", self.ai_isa_ops));
         md.push_str(&format!("| ⏱️ Temporal Spiking Attention | `{}` | Coincidence gating & pulse synchronization |\n", self.spiking_attn_ops));
         md.push_str(&format!("| 🐜 Stigmergy Swarm & NoC | `{}` | Pheromone diffusion & 4D-Torus spatial routing |\n", self.swarm_ops));
-        md.push_str(&format!("| 🌿 Living Homeostasis | `{}` | Neuromodulation & metabolic energy balance |\n\n", self.homeostasis_ops));
+        md.push_str(&format!("| 🌿 Living Homeostasis | `{}` | Neuromodulation & metabolic energy balance |\n", self.homeostasis_ops));
+        md.push_str(&format!("| 🎯 Causal Do-Calculus & Counterfactuals | `{}` | SCM graph mutilation & counterfactual abduction |\n", self.causal_ops));
+        md.push_str(&format!("| 🧠 HTM Cortical Columns & 2048-bit SDR | `{}` | Sparse distributed representations & anomaly spikes |\n\n", self.htm_sdr_ops));
 
         md.push_str("## 💾 Register Footprint\n\n");
         let write_str: Vec<String> = self.written_regs.iter().map(|r| format!("`R{}`", r)).collect();
@@ -88,6 +92,8 @@ pub fn analyze_cl_file(file_name: &str, content: &str) -> ClKernelDoc {
     let mut spiking_attn_ops = 0;
     let mut swarm_ops = 0;
     let mut homeostasis_ops = 0;
+    let mut causal_ops = 0;
+    let mut htm_sdr_ops = 0;
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -124,6 +130,8 @@ pub fn analyze_cl_file(file_name: &str, content: &str) -> ClKernelDoc {
                             "LF" | "LI" | "CP" => spiking_attn_ops += 1,
                             "SB" | "DF" | "TX" | "RX" => swarm_ops += 1,
                             "DA" | "SE" | "NE" | "EE" => homeostasis_ops += 1,
+                            "CI" | "CF" => causal_ops += 1,
+                            "SP" | "PO" | "TM" | "XO" => htm_sdr_ops += 1,
                             _ => {}
                         }
                     }
@@ -155,6 +163,8 @@ pub fn analyze_cl_file(file_name: &str, content: &str) -> ClKernelDoc {
         spiking_attn_ops,
         swarm_ops,
         homeostasis_ops,
+        causal_ops,
+        htm_sdr_ops,
         landauer_joules,
         raw_source: content.to_string(),
     }

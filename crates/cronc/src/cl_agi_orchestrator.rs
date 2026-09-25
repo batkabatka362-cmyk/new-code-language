@@ -23,6 +23,9 @@ use crate::cl_temporal_spiking_attention::{SpikeEvent, TemporalSpikingAttention}
 use crate::cl_hdc::HdcItemMemory;
 use crate::cl_liquid_nn::LiquidNeuralNetwork;
 use crate::cl_metaplasticity::{MetaplasticEngine, BcmConfig};
+use crate::cl_causal::StructuralCausalModel;
+use crate::cl_htm::{HierarchicalTemporalMemory, Sdr2048, SDR_BITS};
+use crate::cl_self_evolve::SelfEvolveOptimizer;
 
 /// Full Living AGI Turn Result
 #[derive(Debug, Clone)]
@@ -43,6 +46,10 @@ pub struct LivingAgiTurnResult {
     pub liquid_eff_tau: f64,
     pub hdc_symbols_count: usize,
     pub metaplasticity_events: u64,
+    pub causal_counterfactual_val: f64,
+    pub htm_anomaly_score: f64,
+    pub self_evolve_generation: usize,
+    pub self_evolve_fitness: f64,
 }
 
 /// Unified Living AGI Cognitive Mind
@@ -61,6 +68,9 @@ pub struct LivingAgiMind {
     pub hdc: HdcItemMemory,
     pub liquid: LiquidNeuralNetwork,
     pub metaplasticity: MetaplasticEngine,
+    pub scm: StructuralCausalModel,
+    pub htm: HierarchicalTemporalMemory,
+    pub self_evolve: SelfEvolveOptimizer,
     pub current_cycle: u64,
 }
 
@@ -145,6 +155,30 @@ impl LivingAgiMind {
         metaplasticity.add_synapse(1, 2, 250);
         metaplasticity.add_synapse(2, 3, 350);
 
+        // Structural Causal Model (SCM) & Judea Pearl's Do-Calculus Counterfactual Engine
+        let mut scm = StructuralCausalModel::new();
+        scm.add_node("Perception", 0.2);
+        scm.add_node("Goal", 0.5);
+        scm.add_node("Action", -0.5);
+        scm.add_node("Outcome", -1.0);
+        scm.add_causal_edge("Perception", "Action", 1.2);
+        scm.add_causal_edge("Goal", "Action", 1.8);
+        scm.add_causal_edge("Action", "Outcome", 2.5);
+
+        // Hierarchical Temporal Memory (HTM) with 2048-bit Sparse Distributed Representations
+        let htm = HierarchicalTemporalMemory::new(42);
+
+        // Autonomous In-Silicon Self-Compiling Genetic Optimizer
+        let seed_bundles = vec![
+            format!("{} {} {} {}", 
+                crate::cl_macro::build_valid_slot("_AD", "0100#01"),
+                crate::cl_macro::build_valid_slot("_AD", "0200#02"),
+                crate::cl_macro::build_valid_slot("__NOP", "0000"),
+                crate::cl_macro::build_valid_slot("!HL", "000000")
+            )
+        ];
+        let self_evolve = SelfEvolveOptimizer::new(seed_bundles, 10, 0.30, 1337);
+
         Self {
             memory,
             hopfield,
@@ -159,6 +193,9 @@ impl LivingAgiMind {
             hdc,
             liquid,
             metaplasticity,
+            scm,
+            htm,
+            self_evolve,
             current_cycle: 0,
         }
     }
@@ -198,6 +235,14 @@ impl LivingAgiMind {
         let pre_acts = vec![(token_16[0].abs() * 500.0) as i32, 200];
         let post_acts = vec![200, (token_16[1].abs() * 500.0) as i32];
         self.metaplasticity.execute_plasticity_cycle(self.current_cycle, &pre_acts, &post_acts);
+
+        // 2e. Hierarchical Temporal Memory (HTM) 2048-bit SDR Processing
+        let mut sdr_in = Sdr2048::new();
+        for (i, b) in input.as_bytes().iter().enumerate().take(40) {
+            let bit_idx = ((i * 37) + (*b as usize) * 5) % SDR_BITS;
+            sdr_in.set_bit(bit_idx, true);
+        }
+        let (_sdr_out, htm_anomaly) = self.htm.step(&sdr_in, true);
 
         // 3. Sub-pJ Event-Driven Spiking Temporal Coincidence Attention
         let mut queries = Vec::with_capacity(16);
@@ -245,12 +290,33 @@ impl LivingAgiMind {
         let free_energy = self.active_inference.infer_states(&obs_one_hot);
         let (selected_action, _expected_fe) = self.active_inference.select_action();
 
+        // 6b. Causal Counterfactual Evaluation: What WOULD Outcome be if Action was intervened?
+        let mut factual_obs = self.scm.values;
+        if let Some(&p_id) = self.scm.name_to_id.get("Perception") {
+            factual_obs[p_id] = 0.8;
+        }
+        if let Some(&a_id) = self.scm.name_to_id.get("Action") {
+            factual_obs[a_id] = (selected_action as f64 / 4.0).clamp(0.1, 0.9);
+        }
+        let causal_counterfactual_val = self.scm.counterfactual_query(&factual_obs, "Action", 0.95, "Outcome");
+
+        // 6c. In-Silicon Self-Compiling Genetic Microcode Evolution Step
+        let (self_evolve_fitness, _) = self.self_evolve.step_generation();
+        let self_evolve_generation = self.self_evolve.generation;
+
         // 7. Submit hypothesis candidates to Global Workspace Attention Theater
         self.workspace.submit_thought(
             "Frontal Executive",
             input,
             0.85,
             &format!("Analyze goal of: '{}' (Action Policy #{})", input, selected_action),
+        );
+
+        self.workspace.submit_thought(
+            "Causal Reasoner",
+            &format!("Counterfactual P(Outcome|do(Action=0.95))={:.2}", causal_counterfactual_val),
+            0.96,
+            "Judea Pearl Do-Calculus Abduction",
         );
 
         if let Some(ref rec) = recalled_holo {
@@ -350,6 +416,10 @@ impl LivingAgiMind {
             liquid_eff_tau,
             hdc_symbols_count: self.hdc.items.len(),
             metaplasticity_events: self.metaplasticity.total_plasticity_events,
+            causal_counterfactual_val,
+            htm_anomaly_score: htm_anomaly,
+            self_evolve_generation,
+            self_evolve_fitness,
         }
     }
 
@@ -357,8 +427,8 @@ impl LivingAgiMind {
     ///
     /// Core Allocation across 4D-Torus [4x4x4x4]:
     /// - Cores 0..63: Sensory HAL, SSM Elastic Streaming & Liquid Continuous-Time Dynamics
-    /// - Cores 64..127: Modern Hopfield & HDC Hyperdimensional Vector Symbolic Memory
-    /// - Cores 128..191: 4D-Torus Stigmergy Swarm & 3-Factor Neuromodulated Metaplasticity
+    /// - Cores 64..127: Modern Hopfield, HDC Vector Memory & Pearl's Causal Do-Calculus
+    /// - Cores 128..191: 4D-Torus Stigmergy Swarm, HTM Cortical Columns & Metaplasticity
     /// - Cores 192..255: Active Inference, Biological Homeostasis & Dream Replay Consolidation
     pub fn compile_living_mind_to_cl(&self) -> String {
         let mut full_cl = String::with_capacity(65536);
@@ -379,12 +449,20 @@ impl LivingAgiMind {
         full_cl.push_str(&self.liquid.compile_to_cl(16));
         full_cl.push_str("\n");
 
+        // Core 32 [0,0,2,0]: Hierarchical Temporal Memory & 2048-bit SDR Cortical Columns
+        full_cl.push_str(&self.htm.temporal_memory.compile_to_cl(32));
+        full_cl.push_str("\n");
+
         // Core 64 [0,0,0,1]: Dense Continuous Modern Hopfield Memory
         full_cl.push_str(&self.hopfield.compile_to_cl(64));
         full_cl.push_str("\n");
 
         // Core 80 [0,0,1,1]: Hyperdimensional Computing (HDC) & Vector Symbolic Memory
         full_cl.push_str(&self.hdc.compile_to_cl(80));
+        full_cl.push_str("\n");
+
+        // Core 96 [0,0,2,1]: Structural Causal Model & Pearl's Do-Calculus Counterfactual Engine
+        full_cl.push_str(&self.scm.compile_to_cl(96));
         full_cl.push_str("\n");
 
         // Core 128 [0,0,0,2]: 4D-Torus Collective Cognitive Stigmergy Swarm Mesh

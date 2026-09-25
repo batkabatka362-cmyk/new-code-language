@@ -213,6 +213,8 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "NE", // Norepinephrine Neuromodulator Tap
     "RV", // Reversible Vector Transform
     "LD", // Local PGAS Bank Load
+    "CI", // Causal Intervention do(X = x) (Brain 1)
+    "CF", // Counterfactual Abduction & Evaluation (Brain 1)
     "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7",
     "M8", "M9", "MB", "MC", "ME", "MF", // Matrix Macro Opcodes
     // Accumulator & Activation Bank Macro Opcodes

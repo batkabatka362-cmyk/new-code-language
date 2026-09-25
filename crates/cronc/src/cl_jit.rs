@@ -435,6 +435,16 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             core.fused_ops_count += 1;
                             core.hbm_bytes_saved += 64;
                         }
+                        "CI" => {
+                            core.r[d] = (core.r[s] & 0x00FF_FFFF) | 0xCA00_0000;
+                        }
+                        "CF" => {
+                            core.r[d] = core.r[d].wrapping_add(core.r[s]) ^ 0x00CF_CF00;
+                        }
+                        "SP" => {
+                            let raw_overlap = core.r[s];
+                            core.r[d] = if raw_overlap >= 5 { raw_overlap * 2 } else { raw_overlap / 2 };
+                        }
                         // Milestone #021: Esolang-Inspired Silicon Coprocessor Execution
                         "TI" => {
                             let prev = core.tape_ptrs[0];
