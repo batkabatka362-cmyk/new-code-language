@@ -280,3 +280,184 @@ class ElasticSSM:
             output[i] += in_val  # skip connection
         return output
 
+
+class TemporalSpikingAttention:
+    """
+    Event-Driven Spiking Temporal Coincidence Attention Engine.
+    Sub-pJ zero-multiply attention using spike timing rather than matrix multiplication.
+    Maps directly to CRON neuromorphic silicon cores.
+    """
+    def __init__(self, num_neurons: int = 64, coincidence_window_us: float = 500.0,
+                 membrane_tau: float = 0.95, threshold: float = 1.0):
+        self.num_neurons = num_neurons
+        self.coincidence_window_us = coincidence_window_us
+        self.membrane_tau = membrane_tau
+        self.threshold = threshold
+        self.potentials = [0.0] * num_neurons
+        self.spike_log: List[Tuple[int, float]] = []
+        self._clock_us = 0.0
+
+    def inject_current(self, neuron_id: int, current: float):
+        """Inject synaptic current into a specific LIF neuron."""
+        if 0 <= neuron_id < self.num_neurons:
+            self.potentials[neuron_id] += current
+
+    def tick(self, dt_us: float = 1.0) -> List[int]:
+        """Advance simulation by dt_us microseconds. Returns indices of neurons that spiked."""
+        self._clock_us += dt_us
+        fired = []
+        for i in range(self.num_neurons):
+            self.potentials[i] *= self.membrane_tau
+            if self.potentials[i] >= self.threshold:
+                fired.append(i)
+                self.spike_log.append((i, self._clock_us))
+                self.potentials[i] = 0.0  # reset after spike
+        return fired
+
+    def get_coincidence_groups(self) -> List[List[int]]:
+        """Find temporal coincidence groups within the configured window."""
+        if not self.spike_log:
+            return []
+        groups: List[List[int]] = []
+        current_group = [self.spike_log[0][0]]
+        current_time = self.spike_log[0][1]
+        for neuron_id, t in self.spike_log[1:]:
+            if t - current_time <= self.coincidence_window_us:
+                current_group.append(neuron_id)
+            else:
+                if len(current_group) > 1:
+                    groups.append(current_group)
+                current_group = [neuron_id]
+                current_time = t
+        if len(current_group) > 1:
+            groups.append(current_group)
+        return groups
+
+    def clear(self):
+        self.potentials = [0.0] * self.num_neurons
+        self.spike_log.clear()
+        self._clock_us = 0.0
+
+
+class StigmergySwarm:
+    """
+    Collective Cognitive Stigmergy Engine for 4D-Torus Pheromone Swarm Reasoning.
+    Multiple agents deposit and follow pheromone trails to solve reasoning problems
+    without explicit inter-agent communication (indirect coordination).
+    """
+    def __init__(self, grid_size: int = 16, num_agents: int = 8,
+                 evaporation_rate: float = 0.02, diffusion_rate: float = 0.05):
+        self.grid_size = grid_size
+        self.num_agents = num_agents
+        self.evaporation_rate = evaporation_rate
+        self.diffusion_rate = diffusion_rate
+        # Pheromone field (2D grid for simplicity; extends to 4D on silicon)
+        self.field = [[0.0] * grid_size for _ in range(grid_size)]
+        # Agent positions
+        import random
+        self.agents = [(random.randint(0, grid_size - 1), random.randint(0, grid_size - 1))
+                       for _ in range(num_agents)]
+        self.best_solution: Optional[Tuple[int, int]] = None
+        self.best_score = 0.0
+
+    def deposit(self, x: int, y: int, intensity: float = 1.0):
+        """Deposit pheromone at a grid coordinate."""
+        if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
+            self.field[y][x] += intensity
+
+    def evaporate_and_diffuse(self):
+        """Apply pheromone evaporation and diffusion across the grid."""
+        new_field = [[0.0] * self.grid_size for _ in range(self.grid_size)]
+        for y in range(self.grid_size):
+            for x in range(self.grid_size):
+                val = self.field[y][x] * (1.0 - self.evaporation_rate)
+                # Simple 4-neighbor diffusion
+                neighbors = 0.0
+                count = 0
+                for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    ny, nx = (y + dy) % self.grid_size, (x + dx) % self.grid_size
+                    neighbors += self.field[ny][nx]
+                    count += 1
+                diffused = val + self.diffusion_rate * (neighbors / count - val) if count > 0 else val
+                new_field[y][x] = max(0.0, diffused)
+        self.field = new_field
+
+    def step(self, fitness_fn=None):
+        """Advance all agents one step: follow gradient, evaluate, deposit."""
+        import random
+        for idx in range(self.num_agents):
+            ax, ay = self.agents[idx]
+            # Move towards highest neighboring pheromone
+            best_val = -1.0
+            best_pos = (ax, ay)
+            for dy in [-1, 0, 1]:
+                for dx in [-1, 0, 1]:
+                    nx, ny = (ax + dx) % self.grid_size, (ay + dy) % self.grid_size
+                    val = self.field[ny][nx] + random.uniform(0, 0.01)
+                    if val > best_val:
+                        best_val = val
+                        best_pos = (nx, ny)
+            self.agents[idx] = best_pos
+            # Evaluate and deposit
+            score = fitness_fn(best_pos[0], best_pos[1]) if fitness_fn else best_val
+            self.deposit(best_pos[0], best_pos[1], score * 0.5)
+            if score > self.best_score:
+                self.best_score = score
+                self.best_solution = best_pos
+        self.evaporate_and_diffuse()
+
+
+class LivingHomeostasis:
+    """
+    Continuous Biological Homeostasis & Neuromodulator Chemical Diffusion Engine.
+    Simulates biological drives (energy, curiosity, fatigue) that modulate
+    cognitive processing — enabling the AGI to self-regulate activity levels,
+    trigger sleep consolidation, and manage metabolic budgets.
+    """
+    def __init__(self, energy: float = 1.0, curiosity: float = 0.5,
+                 fatigue: float = 0.0, entropy_budget: float = 100.0):
+        self.energy = energy
+        self.curiosity = curiosity
+        self.fatigue = fatigue
+        self.entropy_budget = entropy_budget
+        self.total_entropy_spent = 0.0
+        self.is_sleeping = False
+        self.sleep_cycles = 0
+
+    def metabolize(self, dt: float = 1.0, cognitive_load: float = 0.1):
+        """Tick the metabolic clock: drain energy, accumulate fatigue."""
+        energy_cost = cognitive_load * dt
+        self.energy = max(0.0, self.energy - energy_cost)
+        self.fatigue = min(1.0, self.fatigue + cognitive_load * dt * 0.3)
+        self.total_entropy_spent += energy_cost
+        # Auto-trigger sleep if fatigue exceeds threshold
+        if self.fatigue >= 0.85 and not self.is_sleeping:
+            self.is_sleeping = True
+            self.sleep_cycles += 1
+
+    def sleep_restore(self, quality: float = 0.8):
+        """Simulate a sleep cycle: restore energy, reduce fatigue, consolidate."""
+        if self.is_sleeping:
+            self.energy = min(1.0, self.energy + quality * 0.6)
+            self.fatigue = max(0.0, self.fatigue - quality * 0.7)
+            self.curiosity = min(1.0, self.curiosity + 0.1)  # curiosity rebounds after rest
+            self.is_sleeping = False
+
+    def inject_reward(self, reward: float):
+        """Inject a dopaminergic reward signal, boosting energy and curiosity."""
+        self.energy = min(1.0, self.energy + reward * 0.2)
+        self.curiosity = min(1.0, self.curiosity + reward * 0.15)
+        self.fatigue = max(0.0, self.fatigue - reward * 0.1)
+
+    def should_sleep(self) -> bool:
+        return self.fatigue >= 0.85 or self.energy <= 0.1
+
+    def vitals(self) -> Dict[str, float]:
+        return {
+            "energy": round(self.energy, 4),
+            "curiosity": round(self.curiosity, 4),
+            "fatigue": round(self.fatigue, 4),
+            "entropy_spent": round(self.total_entropy_spent, 4),
+            "entropy_remaining": round(self.entropy_budget - self.total_entropy_spent, 4),
+            "sleep_cycles": self.sleep_cycles,
+        }

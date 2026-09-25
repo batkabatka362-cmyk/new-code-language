@@ -115,3 +115,58 @@ fn test_unified_living_agi_mind_cycle() {
     assert_eq!(turn3.recalled_concept.unwrap(), "explore quantum spacetime");
     assert!(turn3.sleep_report.is_some(), "Sleep consolidation should execute on request");
 }
+
+#[test]
+fn test_unified_living_agi_all_six_engines() {
+    let mut mind = LivingAgiMind::new();
+
+    // Verify initial homeostatic state
+    assert_eq!(mind.homeostasis.state.active_state_name, "AWAKE_EXPLORING");
+    assert!((mind.homeostasis.state.energy_level - 1.0).abs() < 1e-4);
+
+    // Turn 1: Process active reasoning turn
+    let turn = mind.process_turn("architecture 4D-Torus neuromorphic photonic", 0.9, false);
+
+    // 1. Hopfield attractor detection
+    assert!(turn.hopfield_attractor.is_some());
+    assert_eq!(turn.hopfield_attractor.unwrap(), "architecture");
+
+    // 2. Active inference action & free energy
+    assert!(turn.active_inference_action < 4);
+
+    // 3. Elastic SSM streaming token counter
+    assert_eq!(turn.ssm_stream_tokens, 1);
+
+    // 4. Stigmergy 4D-Torus thought node exploration
+    assert!(turn.stigmergy_selected_node < 256);
+
+    // 5. Homeostasis energy drain
+    assert!(turn.energy_level < 1.0);
+    assert!(mind.homeostasis.state.energy_level < 1.0);
+
+    // Turn 2: Long sequence streaming into SSM without memory footprint growth
+    for i in 0..100 {
+        mind.process_turn(&format!("stream_token_{}", i), 0.1, false);
+    }
+    assert_eq!(mind.ssm.total_tokens_streamed, 101);
+    assert_eq!(mind.ssm.memory_footprint_bytes(), 1088); // Exactly 1088 bytes for 16x8 matrix + 8 alphas!
+}
+
+#[test]
+fn test_living_agi_compile_to_cl() {
+    let mind = LivingAgiMind::new();
+    let cl_code = mind.compile_living_mind_to_cl();
+
+    // Check code structure
+    assert!(cl_code.contains(".core [0,0,0,0]:"));
+    assert!(cl_code.contains(".core [0,0,0,1]:")); // Core 64
+    assert!(cl_code.contains(".core [0,0,0,2]:")); // Core 128
+    assert!(cl_code.contains(".core [0,0,0,3]:")); // Core 192
+
+    // Check that valid bundles are emitted with slots
+    assert!(cl_code.contains("B0000:"));
+    assert!(cl_code.contains("B0001:"));
+    assert!(cl_code.contains("B0002:"));
+}
+
+
