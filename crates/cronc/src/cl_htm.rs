@@ -511,6 +511,16 @@ impl TemporalMemory {
     pub fn compile_to_cl_default(&self) -> String {
         self.compile_to_cl(0)
     }
+
+    /// Convenience 0-argument compilation alias (defaults to Core 0)
+    pub fn compile(&self) -> String {
+        self.compile_to_cl(0)
+    }
+
+    /// Compiles HTM microcode targeting a specific core in the 256-core 4D-Torus
+    pub fn compile_for_core(&self, core_id: u8) -> String {
+        self.compile_to_cl(core_id)
+    }
 }
 
 /// Unified Cortical Column Engine combining Spatial Pooler & Temporal Memory
@@ -523,12 +533,18 @@ pub struct HierarchicalTemporalMemory {
 
 impl Default for HierarchicalTemporalMemory {
     fn default() -> Self {
-        Self::new(42)
+        Self::new()
     }
 }
 
 impl HierarchicalTemporalMemory {
-    pub fn new(seed: u64) -> Self {
+    /// Create a new HTM with default PRNG seed (42) - takes 0 arguments!
+    pub fn new() -> Self {
+        Self::with_seed(42)
+    }
+
+    /// Create a new HTM with a specific PRNG seed - takes 1 argument
+    pub fn with_seed(seed: u64) -> Self {
         // 2048 columns, 40 active, 40 synapses per column
         let sp = SpatialPooler::new(SDR_BITS, TARGET_ACTIVE_BITS, 40, seed);
         // 2048 columns, 2 cells per column = 4096 cells, threshold 5
@@ -540,6 +556,11 @@ impl HierarchicalTemporalMemory {
         }
     }
 
+    /// Alias for with_seed
+    pub fn new_with_seed(seed: u64) -> Self {
+        Self::with_seed(seed)
+    }
+
     /// Process raw sensory SDR: perform spatial pooling followed by temporal sequence prediction
     pub fn step(&mut self, sensory_input: &Sdr2048, learn: bool) -> (Sdr2048, f64) {
         self.total_cycles += 1;
@@ -548,14 +569,24 @@ impl HierarchicalTemporalMemory {
         (active_cols, anomaly)
     }
 
-    /// Compiles HTM cortical microcode targeting a specific core ID (0..255)
-    pub fn compile_to_cl(&self, core_id: u8) -> String {
-        self.temporal_memory.compile_to_cl(core_id)
+    /// Compiles HTM cortical microcode targeting default Core 0 (takes 0 arguments)
+    pub fn compile(&self) -> String {
+        self.temporal_memory.compile_to_cl(0)
     }
 
     /// Compiles HTM cortical microcode targeting default Core 0 (takes 0 arguments)
     pub fn compile_to_cl_default(&self) -> String {
         self.temporal_memory.compile_to_cl(0)
+    }
+
+    /// Compiles HTM cortical microcode targeting a specific core ID (0..255)
+    pub fn compile_to_cl(&self, core_id: u8) -> String {
+        self.temporal_memory.compile_to_cl(core_id)
+    }
+
+    /// Compiles HTM cortical microcode targeting a specific core ID (0..255)
+    pub fn compile_for_core(&self, core_id: u8) -> String {
+        self.temporal_memory.compile_to_cl(core_id)
     }
 }
 
@@ -661,8 +692,11 @@ mod tests {
         let def_code = tm.compile_to_cl_default();
         assert!(def_code.contains(".core [0,0,0,0]:"));
 
-        let htm = HierarchicalTemporalMemory::new(42);
-        let htm_code = htm.compile_to_cl_default();
+        let htm = HierarchicalTemporalMemory::new();
+        let htm_code = htm.compile();
         assert!(htm_code.contains("@htm_cortical_entry:"));
+
+        let htm_seeded = HierarchicalTemporalMemory::with_seed(42);
+        assert!(htm_seeded.compile().contains("@htm_cortical_entry:"));
     }
 }

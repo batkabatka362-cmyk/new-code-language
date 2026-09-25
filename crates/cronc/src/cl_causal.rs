@@ -276,6 +276,21 @@ impl StructuralCausalModel {
         cl_code.push_str(&compiler.finish());
         cl_code
     }
+
+    /// Compiles Causal Model microcode targeting default Core 0 (takes 0 arguments)
+    pub fn compile(&self) -> String {
+        self.compile_to_cl(0)
+    }
+
+    /// Compiles Causal Model microcode targeting default Core 0 (takes 0 arguments)
+    pub fn compile_to_cl_default(&self) -> String {
+        self.compile_to_cl(0)
+    }
+
+    /// Compiles Causal Model microcode targeting a specific core in the 256-core 4D-Torus
+    pub fn compile_for_core(&self, core_id: u8) -> String {
+        self.compile_to_cl(core_id)
+    }
 }
 
 #[cfg(test)]
@@ -359,5 +374,9 @@ mod tests {
         assert!(cl_code.contains("B0001:"));
         assert!(cl_code.contains("B0002:"));
         assert!(cl_code.contains("B0003:"));
+
+        // Test 0-argument default compile
+        let def_code = scm.compile();
+        assert!(def_code.contains(".core [0,0,0,0]:"));
     }
 }

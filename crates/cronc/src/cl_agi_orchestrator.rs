@@ -166,7 +166,7 @@ impl LivingAgiMind {
         scm.add_causal_edge("Action", "Outcome", 2.5);
 
         // Hierarchical Temporal Memory (HTM) with 2048-bit Sparse Distributed Representations
-        let htm = HierarchicalTemporalMemory::new(42);
+        let htm = HierarchicalTemporalMemory::with_seed(42);
 
         // Autonomous In-Silicon Self-Compiling Genetic Optimizer
         let seed_bundles = vec![
@@ -482,5 +482,15 @@ impl LivingAgiMind {
         full_cl.push_str("\n");
 
         full_cl
+    }
+
+    /// Compiles 256-core living mind state to `.cl` microcode (takes 0 arguments)
+    pub fn compile_to_cl(&self) -> String {
+        self.compile_living_mind_to_cl()
+    }
+
+    /// Convenience 0-argument compilation alias for the entire living mind
+    pub fn compile(&self) -> String {
+        self.compile_living_mind_to_cl()
     }
 }
