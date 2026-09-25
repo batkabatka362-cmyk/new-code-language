@@ -454,7 +454,7 @@ impl TemporalMemory {
         (next_active_cells, next_predictive_cells, self.last_anomaly_score)
     }
 
-    /// Compile HTM SDR overlap and anomaly detection to bit-exact `.cl` VLIW microcode bundles
+    /// Compile HTM SDR overlap and anomaly detection to bit-exact `.cl` VLIW microcode bundles targeting a specific core ID
     pub fn compile_to_cl(&self, core_id: u8) -> String {
         let mut compiler = MacroCompiler::new(core_id);
 
@@ -506,6 +506,11 @@ impl TemporalMemory {
         cl_code.push_str(&compiler.finish());
         cl_code
     }
+
+    /// Compile HTM microcode targeting the default core (Core 0, takes 0 arguments)
+    pub fn compile_to_cl_default(&self) -> String {
+        self.compile_to_cl(0)
+    }
 }
 
 /// Unified Cortical Column Engine combining Spatial Pooler & Temporal Memory
@@ -541,6 +546,16 @@ impl HierarchicalTemporalMemory {
         let active_cols = self.spatial_pooler.compute(sensory_input, learn);
         let (_, _, anomaly) = self.temporal_memory.compute(&active_cols, learn);
         (active_cols, anomaly)
+    }
+
+    /// Compiles HTM cortical microcode targeting a specific core ID (0..255)
+    pub fn compile_to_cl(&self, core_id: u8) -> String {
+        self.temporal_memory.compile_to_cl(core_id)
+    }
+
+    /// Compiles HTM cortical microcode targeting default Core 0 (takes 0 arguments)
+    pub fn compile_to_cl_default(&self) -> String {
+        self.temporal_memory.compile_to_cl(0)
     }
 }
 
@@ -641,5 +656,13 @@ mod tests {
                 }
             }
         }
+
+        // Test 0-argument default compile
+        let def_code = tm.compile_to_cl_default();
+        assert!(def_code.contains(".core [0,0,0,0]:"));
+
+        let htm = HierarchicalTemporalMemory::new(42);
+        let htm_code = htm.compile_to_cl_default();
+        assert!(htm_code.contains("@htm_cortical_entry:"));
     }
 }
