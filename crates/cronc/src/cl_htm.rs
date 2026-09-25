@@ -297,36 +297,18 @@ impl SpatialPooler {
 }
 
 /// A distal dendritic segment on a cell, predicting future activation
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DistalSegment {
     /// Synapses from other cells: (presynaptic_cell_id, permanence)
     pub synapses: Vec<(usize, f32)>,
 }
 
-impl Default for DistalSegment {
-    fn default() -> Self {
-        Self {
-            synapses: Vec::new(),
-        }
-    }
-}
-
 /// A minicolumn cell for Temporal Memory
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct HtmCell {
     pub cell_id: usize,
     pub column_id: usize,
     pub segments: Vec<DistalSegment>,
-}
-
-impl Default for HtmCell {
-    fn default() -> Self {
-        Self {
-            cell_id: 0,
-            column_id: 0,
-            segments: Vec::new(),
-        }
-    }
 }
 
 /// Temporal Memory: Learns sequential temporal transitions and outputs predictions & anomaly scores

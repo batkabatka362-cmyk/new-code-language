@@ -1,3 +1,5 @@
+#![allow(clippy::approx_constant)]
+
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -6976,7 +6978,7 @@ fn handle_cl_visualize_command(args: &[String]) {
 }
 
 fn handle_cl_clifford_command(args: &[String]) {
-    let mut angle = 0.785398f32; // pi/4
+    let mut angle = std::f32::consts::FRAC_PI_4;
     let mut out_path = "clifford_rotor.cl".to_string();
 
     let mut i = 0;
