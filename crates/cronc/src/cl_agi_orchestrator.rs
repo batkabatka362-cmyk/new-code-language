@@ -20,6 +20,9 @@ use crate::cl_neuromodulation::NeuromodulationEngine;
 use crate::cl_sleep_engine::{SleepConsolidationReport, SleepReplayEngine};
 use crate::cl_stigmergy::StigmergyEngine;
 use crate::cl_temporal_spiking_attention::{SpikeEvent, TemporalSpikingAttention};
+use crate::cl_hdc::HdcItemMemory;
+use crate::cl_liquid_nn::LiquidNeuralNetwork;
+use crate::cl_metaplasticity::{MetaplasticEngine, BcmConfig};
 
 /// Full Living AGI Turn Result
 #[derive(Debug, Clone)]
@@ -37,6 +40,9 @@ pub struct LivingAgiTurnResult {
     pub free_energy: f64,
     pub ssm_stream_tokens: usize,
     pub stigmergy_selected_node: usize,
+    pub liquid_eff_tau: f64,
+    pub hdc_symbols_count: usize,
+    pub metaplasticity_events: u64,
 }
 
 /// Unified Living AGI Cognitive Mind
@@ -52,6 +58,9 @@ pub struct LivingAgiMind {
     pub neuro: NeuromodulationEngine,
     pub workspace: GlobalWorkspaceEngine,
     pub sleep: SleepReplayEngine,
+    pub hdc: HdcItemMemory,
+    pub liquid: LiquidNeuralNetwork,
+    pub metaplasticity: MetaplasticEngine,
     pub current_cycle: u64,
 }
 
@@ -121,6 +130,21 @@ impl LivingAgiMind {
         // Biological Homeostatic Drive Engine
         let homeostasis = LivingHomeostasisEngine::new();
 
+        // Hyperdimensional Vector Symbolic Associative Item Memory
+        let mut hdc = HdcItemMemory::new();
+        hdc.get_or_create("SELF");
+        hdc.get_or_create("REASON");
+        hdc.get_or_create("EXPLORE");
+
+        // Liquid Continuous-Time Dynamic Neural Network (8 neurons, 4 inputs, dt=0.02s)
+        let liquid = LiquidNeuralNetwork::new(8, 4, 0.02);
+
+        // 3-Factor Neuromodulated Metaplasticity Synaptic Matrix (16 synapses)
+        let mut metaplasticity = MetaplasticEngine::new(16, BcmConfig::default());
+        metaplasticity.add_synapse(0, 1, 150);
+        metaplasticity.add_synapse(1, 2, 250);
+        metaplasticity.add_synapse(2, 3, 350);
+
         Self {
             memory,
             hopfield,
@@ -132,6 +156,9 @@ impl LivingAgiMind {
             neuro: NeuromodulationEngine::new(),
             workspace: GlobalWorkspaceEngine::new(),
             sleep: SleepReplayEngine::new(),
+            hdc,
+            liquid,
+            metaplasticity,
             current_cycle: 0,
         }
     }
@@ -153,6 +180,24 @@ impl LivingAgiMind {
         // 2. Elastic SSM Continuous Memory Streaming (O(1) memory footprint over infinite context)
         let token_16 = embed_to_16(input);
         let _ssm_out = self.ssm.step(&token_16);
+
+        // 2b. Liquid Continuous-Time Dynamic Reflex & Time Constant Dilation
+        let liquid_inputs = [token_16[0], token_16[1], token_16[2], token_16[3]];
+        let _liquid_state = self.liquid.step(&liquid_inputs);
+        let eff_taus = self.liquid.effective_time_constants(&liquid_inputs);
+        let liquid_eff_tau = eff_taus.first().copied().unwrap_or(0.05);
+
+        // 2c. Hyperdimensional Vector Symbolic Encoding
+        if let Some(first_word) = input.split_whitespace().next() {
+            self.hdc.get_or_create(first_word);
+        }
+
+        // 2d. 3-Factor Neuromodulated Metaplasticity Sweep
+        let da_q10 = (self.neuro.current_state.dopamine * 1024.0) as i32;
+        self.metaplasticity.set_neuromodulators(da_q10, 512, 512, 512);
+        let pre_acts = vec![(token_16[0].abs() * 500.0) as i32, 200];
+        let post_acts = vec![200, (token_16[1].abs() * 500.0) as i32];
+        self.metaplasticity.execute_plasticity_cycle(self.current_cycle, &pre_acts, &post_acts);
 
         // 3. Sub-pJ Event-Driven Spiking Temporal Coincidence Attention
         let mut queries = Vec::with_capacity(16);
@@ -302,18 +347,21 @@ impl LivingAgiMind {
             free_energy,
             ssm_stream_tokens: self.ssm.total_tokens_streamed,
             stigmergy_selected_node: selected_thought_node,
+            liquid_eff_tau,
+            hdc_symbols_count: self.hdc.items.len(),
+            metaplasticity_events: self.metaplasticity.total_plasticity_events,
         }
     }
 
     /// Compiles the full 256-core Living Mind state down into `.cl` VLIW microcode bundles.
     ///
     /// Core Allocation across 4D-Torus [4x4x4x4]:
-    /// - Cores 0..63: Sensory HAL, SSM Elastic Streaming & Spiking Temporal Attention
-    /// - Cores 64..127: Modern Hopfield & Holographic Dense Associative Memory Banks
-    /// - Cores 128..191: 4D-Torus Collective Stigmergy Pheromone Swarm Reasoning Mesh
-    /// - Cores 192..255: Active Inference Free Energy Minimizer & Biological Homeostasis Engine
+    /// - Cores 0..63: Sensory HAL, SSM Elastic Streaming & Liquid Continuous-Time Dynamics
+    /// - Cores 64..127: Modern Hopfield & HDC Hyperdimensional Vector Symbolic Memory
+    /// - Cores 128..191: 4D-Torus Stigmergy Swarm & 3-Factor Neuromodulated Metaplasticity
+    /// - Cores 192..255: Active Inference, Biological Homeostasis & Dream Replay Consolidation
     pub fn compile_living_mind_to_cl(&self) -> String {
-        let mut full_cl = String::with_capacity(32768);
+        let mut full_cl = String::with_capacity(65536);
         full_cl.push_str("; ============================================================================\n");
         full_cl.push_str("; CRON LIVING AGI COGNITIVE MIND: 256-CORE 4D-TORUS COMPILATION\n");
         full_cl.push_str("; Target Silicon: 256-Core Neuromorphic/Photonic VLIW Supercomputer\n");
@@ -323,20 +371,36 @@ impl LivingAgiMind {
             self.homeostasis.state.curiosity_drive));
         full_cl.push_str("; ============================================================================\n\n");
 
-        // Core 0: SSM & Spiking Attention
+        // Core 0 [0,0,0,0]: SSM Elastic Streaming Memory & Spiking Attention
         full_cl.push_str(&self.ssm.compile_to_cl(0));
         full_cl.push_str("\n");
 
-        // Core 64: Hopfield Dense Associative Memory
+        // Core 16 [0,0,1,0]: Liquid Continuous-Time Neural Network Dynamic Engine
+        full_cl.push_str(&self.liquid.compile_to_cl(16));
+        full_cl.push_str("\n");
+
+        // Core 64 [0,0,0,1]: Dense Continuous Modern Hopfield Memory
         full_cl.push_str(&self.hopfield.compile_to_cl(64));
         full_cl.push_str("\n");
 
-        // Core 128: 4D-Torus Collective Stigmergy Mesh
+        // Core 80 [0,0,1,1]: Hyperdimensional Computing (HDC) & Vector Symbolic Memory
+        full_cl.push_str(&self.hdc.compile_to_cl(80));
+        full_cl.push_str("\n");
+
+        // Core 128 [0,0,0,2]: 4D-Torus Collective Cognitive Stigmergy Swarm Mesh
         full_cl.push_str(&self.stigmergy.compile_to_cl(128));
         full_cl.push_str("\n");
 
-        // Core 192: Active Inference & Biological Homeostasis
+        // Core 144 [0,0,1,2]: 3-Factor Neuromodulated Metaplasticity Core
+        full_cl.push_str(&self.metaplasticity.compile_to_cl(144));
+        full_cl.push_str("\n");
+
+        // Core 192 [0,0,0,3]: Active Inference & Biological Homeostasis Engine
         full_cl.push_str(&self.homeostasis.compile_to_cl(192));
+        full_cl.push_str("\n");
+
+        // Core 208 [0,0,1,3]: Autonomous Episodic Dream Replay & Memory Consolidation
+        full_cl.push_str(&self.sleep.compile_to_cl(208));
         full_cl.push_str("\n");
 
         full_cl

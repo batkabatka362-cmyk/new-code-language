@@ -130,6 +130,8 @@ pub mod cl_elastic_ssm;
 pub mod cl_temporal_spiking_attention;
 pub mod cl_stigmergy;
 pub mod cl_living_homeostasis;
+pub mod cl_hdc;
+pub mod cl_liquid_nn;
 pub mod docgen;
 
 pub use cl_compose::{

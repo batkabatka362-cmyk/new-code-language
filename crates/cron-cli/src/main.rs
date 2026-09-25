@@ -7054,10 +7054,10 @@ fn handle_cl_agi_command(args: &[String]) {
             eprintln!("[ERROR] Failed to export compiled .cl mind: {}", e);
         } else {
             println!("✅ Successfully compiled 256-core Living Mind state to: {}", path);
-            println!("   Cores [0..63]   : Sensory HAL, SSM Elastic Streaming & Spiking Attention");
-            println!("   Cores [64..127] : Modern Hopfield & Holographic Associative Memory");
-            println!("   Cores [128..191]: 4D-Torus Collective Stigmergy Pheromone Swarm");
-            println!("   Cores [192..255]: Active Inference Free Energy & Biological Homeostasis");
+            println!("   Cores [0..63]   : Sensory HAL, SSM Elastic Streaming & Liquid Continuous-Time NN");
+            println!("   Cores [64..127] : Modern Hopfield & Hyperdimensional Vector Symbolic Memory (HDC)");
+            println!("   Cores [128..191]: 4D-Torus Stigmergy Swarm & 3-Factor Neuromodulated Metaplasticity");
+            println!("   Cores [192..255]: Active Inference, Biological Homeostasis & Dream Replay Consolidation");
         }
         if !interactive {
             return;
@@ -7093,6 +7093,9 @@ fn handle_cl_agi_command(args: &[String]) {
                 println!("🔍 Curiosity Drive  : {:.2}%", mind.homeostasis.state.curiosity_drive * 100.0);
                 println!("💤 Fatigue Level    : {:.2}%", mind.homeostasis.state.fatigue * 100.0);
                 println!("🌊 SSM Tokens Stream: {}", mind.ssm.total_tokens_streamed);
+                println!("💧 Liquid Eff Tau   : {:.4}s (Adaptive Reflex)", mind.liquid.effective_time_constants(&[0.5, 0.5, 0.5, 0.5])[0]);
+                println!("🌌 HDC Symbols Bound: {}", mind.hdc.items.len());
+                println!("🧬 Metaplasticity Ev: {}", mind.metaplasticity.total_plasticity_events);
                 println!("🌙 Sleep Cycles     : {}", mind.homeostasis.sleep_cycles_triggered);
                 println!("{}", mind.neuro.render_ascii_hud());
                 continue;
@@ -7112,9 +7115,12 @@ fn handle_cl_agi_command(args: &[String]) {
             println!("{}", result.neuromodulators_hud);
             println!("{}", result.focus.ascii_theater_hud);
             println!("💡 MIND SYNTHESIS OUTPUT:\n{}", result.response_text);
-            println!("   [Homeostasis: {} | Energy: {:.1}% | Action #{}: Free Energy F: {:.3} | Swarm Node #{}]\n",
+            println!("   [Homeo: {} | Energy: {:.1}% | Liquid τ: {:.4}s | HDC: {} syms | Plasticity: {} ev | Action #{}: FE F={:.3} | Swarm Node #{}]\n",
                 result.homeostatic_state,
                 result.energy_level * 100.0,
+                result.liquid_eff_tau,
+                result.hdc_symbols_count,
+                result.metaplasticity_events,
                 result.active_inference_action,
                 result.free_energy,
                 result.stigmergy_selected_node
@@ -7133,6 +7139,9 @@ fn handle_cl_agi_command(args: &[String]) {
         println!("\n📊 [LIVING COGNITIVE TELEMETRY]");
         println!(" • Homeostatic State     : {}", result.homeostatic_state);
         println!(" • Metabolic Energy      : {:.1}%", result.energy_level * 100.0);
+        println!(" • Liquid Dynamic Tau    : {:.4}s (Continuous Adaptive Reflex)", result.liquid_eff_tau);
+        println!(" • HDC Symbols Bound     : {} symbols (Zero-Backprop 1-Shot)", result.hdc_symbols_count);
+        println!(" • Metaplasticity Events : {} 3-factor synaptic consolidations", result.metaplasticity_events);
         println!(" • Active Inference Act  : Policy #{} (Variational Free Energy F: {:.4})", result.active_inference_action, result.free_energy);
         println!(" • Elastic SSM Tokens    : {} tokens streamed (Constant 1088 bytes SRAM)", result.ssm_stream_tokens);
         println!(" • 4D Stigmergy Thought  : Consensus Node #{}", result.stigmergy_selected_node);

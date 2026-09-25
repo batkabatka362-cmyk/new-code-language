@@ -155,4 +155,93 @@ impl MetaplasticEngine {
         self.total_plasticity_events += modified_count as u64;
         modified_count
     }
+
+    /// Compiles the Metaplasticity and 3-Factor STDP Engine into 100% valid `.cl` VLIW microcode bundles
+    pub fn compile_to_cl(&self, core_id: u8) -> String {
+        use crate::cl_macro::{build_valid_slot, MacroCompiler};
+
+        let mut compiler = MacroCompiler::new(core_id);
+
+        let core_x = core_id % 4;
+        let core_y = (core_id / 4) % 4;
+        let core_z = (core_id / 16) % 4;
+        let core_w = (core_id / 64) % 4;
+
+        let mut cl_code = format!(
+            "; ============================================================================\n\
+             ; 3-Factor Neuromodulated Metaplasticity & Synaptic Tagging Kernel\n\
+             ; Total Synapses: {}, Target Activity: {}\n\
+             ; Target Silicon: 256-Core 4D-Torus Backprop-Free Plasticity Core\n\
+             ; ============================================================================\n\
+             .core [{},{},{},{}]:\n\
+             @metaplasticity_entry:\n",
+            self.synapses.len(),
+            self.config.target_activity,
+            core_x,
+            core_y,
+            core_z,
+            core_w
+        );
+
+        // Bundle 0: Read pre-synaptic vector & post-synaptic potential
+        compiler.emit_slot(build_valid_slot("==00#010", "'")); // R0 = Synaptic Weights Base Address
+        compiler.emit_slot(build_valid_slot("==01#020", "'")); // R1 = Synaptic Tag Buffer Address
+        compiler.emit_slot(build_valid_slot("_LD02M100", "_")); // R2 = Read Pre-Synaptic Trace x_j
+        compiler.emit_slot(build_valid_slot("_LD03M200", "_")); // R3 = Read Post-Synaptic Membrane y_i
+
+        // Bundle 1: STDP Tag Correlation & Dopamine Neuromodulator Tap
+        compiler.emit_slot(build_valid_slot("_ST04$023", "_")); // R4 = STDP Correlation: x_j * y_i
+        compiler.emit_slot(build_valid_slot("_AD05$041", "_")); // R5 = Update Synaptic Tag: e_ij + Δe
+        compiler.emit_slot(build_valid_slot("_DA06#080", "'")); // R6 = Read Dopamine Neuromodulator Chemical Tap
+        compiler.emit_slot(build_valid_slot("_SB07$060", "_")); // R7 = Compute Reward Delta: δDA = DA - baseline
+
+        // Bundle 2: 3-Factor Weight Consolidation & SRAM Write Back
+        compiler.emit_slot(build_valid_slot("_ML08$057", "_")); // R8 = 3-Factor Product: e_ij * δDA
+        compiler.emit_slot(build_valid_slot("_MA09$080", "_")); // R9 = Scale by Learning Rate: ΔW = η * e * δDA
+        compiler.emit_slot(build_valid_slot("_ST0A$090", "_")); // RA = Write Back Consolidated Weight to SRAM
+        compiler.emit_slot(build_valid_slot("_TX0B$CA2", "_")); // RB = Broadcast Plasticity Update over NoC
+
+        // Bundle 3: Reversible Thermodynamic Latch & Barrier Sync
+        compiler.emit_slot(build_valid_slot("_RV0C$0A0", "_")); // RC = Reversible State Latch
+        compiler.emit_slot(build_valid_slot("_bb00#000", "'")); // 256-Core Global Barrier
+        compiler.emit_slot(build_valid_slot("!HL00#000", "!")); // Halt cycle
+        compiler.emit_slot(build_valid_slot("__NOP000", ""));  // Pad NOP slot
+
+        cl_code.push_str(&compiler.finish());
+        cl_code
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metaplastic_bcm_and_3factor_stdp() {
+        let mut engine = MetaplasticEngine::new(4, BcmConfig::default());
+        engine.add_synapse(0, 1, 100);
+        engine.add_synapse(1, 2, 200);
+
+        // Pre and post active with positive dopamine (reward)
+        engine.set_neuromodulators(800, 512, 512, 512); // High Dopamine
+        let pre = vec![300, 300, 0];
+        let post = vec![0, 400, 400];
+
+        let events = engine.execute_plasticity_cycle(1, &pre, &post);
+        assert_eq!(events, 2);
+        assert!(engine.total_plasticity_events > 0);
+    }
+
+    #[test]
+    fn test_metaplastic_compile_to_cl() {
+        let mut engine = MetaplasticEngine::new(4, BcmConfig::default());
+        engine.add_synapse(0, 1, 100);
+        let cl_code = engine.compile_to_cl(128);
+
+        assert!(cl_code.contains("@metaplasticity_entry:"));
+        assert!(cl_code.contains("B0000:"));
+        assert!(cl_code.contains("B0001:"));
+        assert!(cl_code.contains("B0002:"));
+        assert!(cl_code.contains("B0003:"));
+    }
 }

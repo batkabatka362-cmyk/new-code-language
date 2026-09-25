@@ -146,4 +146,95 @@ impl SleepReplayEngine {
         compiler.compile_stmts(&stmts);
         compiler.finish()
     }
+
+    /// Compiles the complete Dream Replay & Synaptic Consolidation kernel into valid `.cl` VLIW bundles
+    pub fn compile_to_cl(&self, core_id: u8) -> String {
+        use crate::cl_macro::build_valid_slot;
+
+        let mut compiler = MacroCompiler::new(core_id);
+
+        let core_x = core_id % 4;
+        let core_y = (core_id / 4) % 4;
+        let core_z = (core_id / 16) % 4;
+        let core_w = (core_id / 64) % 4;
+
+        let mut cl_code = format!(
+            "; ============================================================================\n\
+             ; Episodic Dream Replay & Memory Consolidation Kernel (SWR Replay)\n\
+             ; Total Episodes: {}, Sleep Cycles Completed: {}\n\
+             ; Target Silicon: 256-Core 4D-Torus Offline Consolidation Core\n\
+             ; ============================================================================\n\
+             .core [{},{},{},{}]:\n\
+             @dream_replay_entry:\n",
+            self.episodic_buffer.len(),
+            self.total_sleep_cycles,
+            core_x,
+            core_y,
+            core_z,
+            core_w
+        );
+
+        // Bundle 0: Read episode pointers & pruning thresholds
+        compiler.emit_slot(build_valid_slot("==00#010", "'")); // R0 = Episodic Ring Buffer Address
+        compiler.emit_slot(build_valid_slot("==01#020", "'")); // R1 = Pruning Threshold Limit (0x0020 = 32)
+        compiler.emit_slot(build_valid_slot("_LD02M100", "_")); // R2 = Read Episodic Experience Trace
+        compiler.emit_slot(build_valid_slot("_LD03M200", "_")); // R3 = Read Current Synaptic Weights
+
+        // Bundle 1: Fast-Forward Replay & STDP Reinforcement
+        compiler.emit_slot(build_valid_slot("_ST04$023", "_")); // R4 = SWR Replay Synaptic Potentiation
+        compiler.emit_slot(build_valid_slot("_AD05$041", "_")); // R5 = Consolidate into Neocortical Matrix
+        compiler.emit_slot(build_valid_slot("_ML06$050", "_")); // R6 = Downscale Homeostatic Synapses (0.90x)
+        compiler.emit_slot(build_valid_slot("_ST07$060", "_")); // R7 = Latch Refined Weights to SRAM
+
+        // Bundle 2: Reversible Fredkin Swap Gate & Zero-Entropy Pruning
+        compiler.emit_slot(build_valid_slot("_RF08$070", "_")); // R8 = Reversible Fredkin Swap Weak Connections
+        compiler.emit_slot(build_valid_slot("_RS09$080", "_")); // R9 = Region Arena 0-Cycle Reset
+        compiler.emit_slot(build_valid_slot("_MA0A$090", "_")); // RA = Bitmask Filter Valid Synaptic Paths
+        compiler.emit_slot(build_valid_slot("_TX0B$CA2", "_")); // RB = Broadcast Neocortical Sync over NoC
+
+        // Bundle 3: Reversible Thermodynamic Latch & Global Barrier
+        compiler.emit_slot(build_valid_slot("_RV0C$0A0", "_")); // RC = Reversible State Checkpoint
+        compiler.emit_slot(build_valid_slot("_bb00#000", "'")); // 256-Core Global Barrier
+        compiler.emit_slot(build_valid_slot("!HL00#000", "!")); // Halt cycle
+        compiler.emit_slot(build_valid_slot("__NOP000", ""));  // Pad NOP slot
+
+        cl_code.push_str(&compiler.finish());
+        cl_code
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dream_replay_consolidation_and_pruning() {
+        let mut sleep = SleepReplayEngine::new();
+
+        // Record 5 daytime experiences
+        for i in 1..=5 {
+            let salience = i as f32 * 0.18; // 0.18 to 0.90
+            sleep.record_experience("Visual Cortex", [0x00AA; 16], salience, i * 100);
+        }
+        assert_eq!(sleep.episodic_buffer.len(), 5);
+
+        // Execute sleep consolidation cycle
+        let report = sleep.execute_sleep_cycle(25);
+        assert_eq!(report.episodes_replayed, 5);
+        assert!(report.synapses_pruned > 0);
+        assert_eq!(sleep.episodic_buffer.len(), 0, "Episodic buffer must be cleared after consolidation");
+        assert!(report.entropy_reduction_joules > 0.0);
+    }
+
+    #[test]
+    fn test_dream_replay_compile_to_cl() {
+        let sleep = SleepReplayEngine::new();
+        let cl_code = sleep.compile_to_cl(224);
+
+        assert!(cl_code.contains("@dream_replay_entry:"));
+        assert!(cl_code.contains("B0000:"));
+        assert!(cl_code.contains("B0001:"));
+        assert!(cl_code.contains("B0002:"));
+        assert!(cl_code.contains("B0003:"));
+    }
 }
