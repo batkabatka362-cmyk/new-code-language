@@ -167,21 +167,17 @@ impl MetaplasticEngine {
         let core_z = (core_id / 16) % 4;
         let core_w = (core_id / 64) % 4;
 
-        let mut cl_code = format!(
-            "; ============================================================================\n\
-             ; 3-Factor Neuromodulated Metaplasticity & Synaptic Tagging Kernel\n\
-             ; Total Synapses: {}, Target Activity: {}\n\
-             ; Target Silicon: 256-Core 4D-Torus Backprop-Free Plasticity Core\n\
-             ; ============================================================================\n\
-             .core [{},{},{},{}]:\n\
-             @metaplasticity_entry:\n",
-            self.synapses.len(),
-            self.config.target_activity,
-            core_x,
-            core_y,
-            core_z,
-            core_w
-        );
+        let header = [
+            "; ============================================================================",
+            "; 3-Factor Neuromodulated Metaplasticity & Synaptic Tagging Kernel",
+            &format!("; Total Synapses: {}, Target Activity: {}", self.synapses.len(), self.config.target_activity),
+            "; Target Silicon: 256-Core 4D-Torus Backprop-Free Plasticity Core",
+            "; ============================================================================",
+            &format!(".core [{},{},{},{}]:", core_x, core_y, core_z, core_w),
+            "@metaplasticity_entry:",
+            "",
+        ].join("\n");
+        let mut cl_code = header;
 
         // Bundle 0: Read pre-synaptic vector & post-synaptic potential
         compiler.emit_slot(build_valid_slot("==00#010", "'")); // R0 = Synaptic Weights Base Address

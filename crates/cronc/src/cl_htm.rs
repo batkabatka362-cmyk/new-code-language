@@ -198,7 +198,12 @@ impl Default for SpatialPooler {
 
 impl SpatialPooler {
     /// Create a new Spatial Pooler with `num_columns` (default 2048) and `target_active` (default 40)
-    pub fn new(num_columns: usize, target_active: usize, synapses_per_col: usize, seed: u64) -> Self {
+    pub fn new(
+        num_columns: usize,
+        target_active: usize,
+        synapses_per_col: usize,
+        seed: u64,
+    ) -> Self {
         let mut columns = Vec::with_capacity(num_columns);
         let mut rng = seed;
 
@@ -297,18 +302,36 @@ impl SpatialPooler {
 }
 
 /// A distal dendritic segment on a cell, predicting future activation
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DistalSegment {
     /// Synapses from other cells: (presynaptic_cell_id, permanence)
     pub synapses: Vec<(usize, f32)>,
 }
 
+impl Default for DistalSegment {
+    fn default() -> Self {
+        Self {
+            synapses: Vec::new(),
+        }
+    }
+}
+
 /// A minicolumn cell for Temporal Memory
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HtmCell {
     pub cell_id: usize,
     pub column_id: usize,
     pub segments: Vec<DistalSegment>,
+}
+
+impl Default for HtmCell {
+    fn default() -> Self {
+        Self {
+            cell_id: 0,
+            column_id: 0,
+            segments: Vec::new(),
+        }
+    }
 }
 
 /// Temporal Memory: Learns sequential temporal transitions and outputs predictions & anomaly scores
@@ -359,7 +382,11 @@ impl TemporalMemory {
 
     /// Process a new active column SDR from the Spatial Pooler
     /// Returns: (active_cells, predictive_cells, anomaly_score)
-    pub fn compute(&mut self, active_columns_sdr: &Sdr2048, learn: bool) -> (Vec<usize>, Vec<usize>, f64) {
+    pub fn compute(
+        &mut self,
+        active_columns_sdr: &Sdr2048,
+        learn: bool,
+    ) -> (Vec<usize>, Vec<usize>, f64) {
         let active_cols = active_columns_sdr.active_indices();
         let mut next_active_cells = Vec::new();
         let mut unpredicted_columns = 0;
@@ -395,7 +422,9 @@ impl TemporalMemory {
                     for &prev_active in self.active_cells.iter().take(20) {
                         syns.push((prev_active, 0.60f32)); // Initial connected permanence
                     }
-                    self.cells[target_cell].segments.push(DistalSegment { synapses: syns });
+                    self.cells[target_cell]
+                        .segments
+                        .push(DistalSegment { synapses: syns });
                 }
             }
         }
@@ -433,7 +462,11 @@ impl TemporalMemory {
         self.active_cells = next_active_cells.clone();
         self.predictive_cells = next_predictive_cells.clone();
 
-        (next_active_cells, next_predictive_cells, self.last_anomaly_score)
+        (
+            next_active_cells,
+            next_predictive_cells,
+            self.last_anomaly_score,
+        )
     }
 
     /// Compile HTM SDR overlap and anomaly detection to bit-exact `.cl` VLIW microcode bundles targeting a specific core ID
@@ -453,12 +486,7 @@ impl TemporalMemory {
              ; ============================================================================\n\
              .core [{},{},{},{}]:\n\
              @htm_cortical_entry:\n",
-            self.num_columns,
-            self.cells_per_column,
-            core_x,
-            core_y,
-            core_z,
-            core_w
+            self.num_columns, self.cells_per_column, core_x, core_y, core_z, core_w
         );
 
         // Bundle 0: Read SDR sensory vector and segment permanence weights
@@ -483,7 +511,7 @@ impl TemporalMemory {
         compiler.emit_slot(build_valid_slot("_RV0C$0A0", "_")); // RC = Reversible State Checkpoint
         compiler.emit_slot(build_valid_slot("_bb00#000", "'")); // 256-Core Global Barrier
         compiler.emit_slot(build_valid_slot("!HL00#000", "!")); // Halt cycle
-        compiler.emit_slot(build_valid_slot("__NOP000", ""));  // Pad NOP slot
+        compiler.emit_slot(build_valid_slot("__NOP000", "")); // Pad NOP slot
 
         cl_code.push_str(&compiler.finish());
         cl_code
@@ -599,7 +627,10 @@ mod tests {
 
         // Test noise injection
         let noisy = sdr1.inject_noise(0.20, 12345);
-        assert!(sdr1.overlap(&noisy) >= 28, "Noisy SDR should retain high overlap");
+        assert!(
+            sdr1.overlap(&noisy) >= 28,
+            "Noisy SDR should retain high overlap"
+        );
     }
 
     #[test]
@@ -614,7 +645,11 @@ mod tests {
         // Train for 5 iterations
         for _ in 0..5 {
             let out = sp.compute(&input, true);
-            assert_eq!(out.popcount(), 20, "Output must strictly adhere to target sparsity");
+            assert_eq!(
+                out.popcount(),
+                20,
+                "Output must strictly adhere to target sparsity"
+            );
         }
 
         let canonical_out = sp.compute(&input, false);
@@ -624,7 +659,11 @@ mod tests {
         let noisy_out = sp.compute(&noisy_input, false);
 
         let overlap = canonical_out.overlap(&noisy_out);
-        assert!(overlap >= 12, "Spatial pooler should be noise robust: overlap was {}", overlap);
+        assert!(
+            overlap >= 12,
+            "Spatial pooler should be noise robust: overlap was {}",
+            overlap
+        );
     }
 
     #[test]
@@ -632,10 +671,14 @@ mod tests {
         let mut tm = TemporalMemory::new(64, 2, 2);
 
         let mut pat_a = Sdr2048::new();
-        for i in 0..5 { pat_a.set_bit(i, true); }
+        for i in 0..5 {
+            pat_a.set_bit(i, true);
+        }
 
         let mut pat_b = Sdr2048::new();
-        for i in 5..10 { pat_b.set_bit(i, true); }
+        for i in 5..10 {
+            pat_b.set_bit(i, true);
+        }
 
         // Present sequence A -> B multiple times
         for _ in 0..4 {
@@ -646,13 +689,22 @@ mod tests {
         // Now evaluate sequence A -> B without learning
         tm.compute(&pat_a, false);
         let (_, _, anomaly_b) = tm.compute(&pat_b, false);
-        assert!(anomaly_b < 0.5, "Anomaly for predicted pattern B should be low, got {}", anomaly_b);
+        assert!(
+            anomaly_b < 0.5,
+            "Anomaly for predicted pattern B should be low, got {}",
+            anomaly_b
+        );
 
         // Now present unexpected pattern C
         let mut pat_c = Sdr2048::new();
-        for i in 20..25 { pat_c.set_bit(i, true); }
+        for i in 20..25 {
+            pat_c.set_bit(i, true);
+        }
         let (_, _, anomaly_c) = tm.compute(&pat_c, false);
-        assert_eq!(anomaly_c, 1.0, "Anomaly for unexpected pattern C must be 1.0 (bursting)");
+        assert_eq!(
+            anomaly_c, 1.0,
+            "Anomaly for unexpected pattern C must be 1.0 (bursting)"
+        );
     }
 
     #[test]
