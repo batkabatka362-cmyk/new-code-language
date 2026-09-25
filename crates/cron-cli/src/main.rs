@@ -7013,6 +7013,8 @@ fn handle_cl_agi_command(args: &[String]) {
     let mut prompt = "What is your identity and architectural purpose?".to_string();
     let mut reward = 0.5f32;
     let mut sleep = false;
+    let mut interactive = false;
+    let mut compile_out: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -7025,6 +7027,12 @@ fn handle_cl_agi_command(args: &[String]) {
         } else if args[i] == "--sleep" {
             sleep = true;
             i += 1;
+        } else if args[i] == "--interactive" || args[i] == "-i" {
+            interactive = true;
+            i += 1;
+        } else if (args[i] == "--compile" || args[i] == "-c") && i + 1 < args.len() {
+            compile_out = Some(args[i + 1].clone());
+            i += 2;
         } else if !args[i].starts_with('-') {
             prompt = args[i].clone();
             i += 1;
@@ -7035,17 +7043,106 @@ fn handle_cl_agi_command(args: &[String]) {
 
     println!("================================================================================");
     println!(" SAGI LIVING AGI COGNITIVE MIND (256-CORE HOLOGRAPHIC & METAPLASTIC ENGINE)");
+    println!(" 4D-Torus Neuromorphic Cores [4x4x4x4] | Continuous Homeostasis & Active Inference");
     println!("================================================================================");
 
     let mut mind = cronc::cl_agi_orchestrator::LivingAgiMind::new();
-    let result = mind.process_turn(&prompt, reward, sleep);
 
-    println!("{}", result.neuromodulators_hud);
-    println!("{}", result.focus.ascii_theater_hud);
-    println!("MIND SYNTHESIS OUTPUT:\n{}", result.response_text);
+    if let Some(ref path) = compile_out {
+        let cl_code = mind.compile_living_mind_to_cl();
+        if let Err(e) = std::fs::write(path, &cl_code) {
+            eprintln!("[ERROR] Failed to export compiled .cl mind: {}", e);
+        } else {
+            println!("✅ Successfully compiled 256-core Living Mind state to: {}", path);
+            println!("   Cores [0..63]   : Sensory HAL, SSM Elastic Streaming & Spiking Attention");
+            println!("   Cores [64..127] : Modern Hopfield & Holographic Associative Memory");
+            println!("   Cores [128..191]: 4D-Torus Collective Stigmergy Pheromone Swarm");
+            println!("   Cores [192..255]: Active Inference Free Energy & Biological Homeostasis");
+        }
+        if !interactive {
+            return;
+        }
+    }
 
-    if let Some(ref sr) = result.sleep_report {
-        println!("\n{}", sr.ascii_sleep_hud);
+    if interactive {
+        use std::io::{self, BufRead, Write};
+        println!("\n🧠 [SAGI LIVING MIND INTERACTIVE CONSOLE]");
+        println!("Type your message or query below. Special commands: /sleep, /status, /compile <file.cl>, /exit\n");
+
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+
+        loop {
+            print!("SAGI-MIND> ");
+            let _ = io::stdout().flush();
+            let mut line = String::new();
+            if handle.read_line(&mut line).unwrap_or(0) == 0 {
+                break;
+            }
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if trimmed.eq_ignore_ascii_case("/exit") || trimmed.eq_ignore_ascii_case("/quit") {
+                println!("🧠 Living mind persisting state into synaptic weights. Goodbye.");
+                break;
+            }
+            if trimmed.eq_ignore_ascii_case("/status") {
+                println!("📊 Homeostatic State : {}", mind.homeostasis.state.active_state_name);
+                println!("⚡ Energy Level     : {:.2}%", mind.homeostasis.state.energy_level * 100.0);
+                println!("🔍 Curiosity Drive  : {:.2}%", mind.homeostasis.state.curiosity_drive * 100.0);
+                println!("💤 Fatigue Level    : {:.2}%", mind.homeostasis.state.fatigue * 100.0);
+                println!("🌊 SSM Tokens Stream: {}", mind.ssm.total_tokens_streamed);
+                println!("🌙 Sleep Cycles     : {}", mind.homeostasis.sleep_cycles_triggered);
+                println!("{}", mind.neuro.render_ascii_hud());
+                continue;
+            }
+            if trimmed.starts_with("/compile") {
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                let out_file = if parts.len() > 1 { parts[1] } else { "mind_live_256core.cl" };
+                let cl = mind.compile_living_mind_to_cl();
+                let _ = std::fs::write(out_file, cl);
+                println!("✅ Compiled 256-core living mind state written to: {}", out_file);
+                continue;
+            }
+
+            let is_sleep = trimmed.eq_ignore_ascii_case("/sleep");
+            let result = mind.process_turn(trimmed, 0.6, is_sleep);
+
+            println!("{}", result.neuromodulators_hud);
+            println!("{}", result.focus.ascii_theater_hud);
+            println!("💡 MIND SYNTHESIS OUTPUT:\n{}", result.response_text);
+            println!("   [Homeostasis: {} | Energy: {:.1}% | Action #{}: Free Energy F: {:.3} | Swarm Node #{}]\n",
+                result.homeostatic_state,
+                result.energy_level * 100.0,
+                result.active_inference_action,
+                result.free_energy,
+                result.stigmergy_selected_node
+            );
+
+            if let Some(ref sr) = result.sleep_report {
+                println!("{}", sr.ascii_sleep_hud);
+            }
+        }
+    } else {
+        let result = mind.process_turn(&prompt, reward, sleep);
+
+        println!("{}", result.neuromodulators_hud);
+        println!("{}", result.focus.ascii_theater_hud);
+        println!("MIND SYNTHESIS OUTPUT:\n{}", result.response_text);
+        println!("\n📊 [LIVING COGNITIVE TELEMETRY]");
+        println!(" • Homeostatic State     : {}", result.homeostatic_state);
+        println!(" • Metabolic Energy      : {:.1}%", result.energy_level * 100.0);
+        println!(" • Active Inference Act  : Policy #{} (Variational Free Energy F: {:.4})", result.active_inference_action, result.free_energy);
+        println!(" • Elastic SSM Tokens    : {} tokens streamed (Constant 1088 bytes SRAM)", result.ssm_stream_tokens);
+        println!(" • 4D Stigmergy Thought  : Consensus Node #{}", result.stigmergy_selected_node);
+        if let Some(ref hop) = result.hopfield_attractor {
+            println!(" • Hopfield Memory Basin : '{}' (Converged Attractor)", hop);
+        }
+
+        if let Some(ref sr) = result.sleep_report {
+            println!("\n{}", sr.ascii_sleep_hud);
+        }
     }
 }
 

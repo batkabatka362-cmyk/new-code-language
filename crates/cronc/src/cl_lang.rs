@@ -357,11 +357,12 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
 
     // Parse dest register if applicable (only for instructions that write to a register)
     let dest_str: String = chars[3..5].iter().collect();
-    let is_writer = opcode != "SB" && opcode != "SH" && opcode != "RS" 
+    let is_writer = opcode != "SH" && opcode != "RS" 
                  && opcode != "HL" && opcode != "DW" && opcode != "YD" && opcode != "NO"
                  && opcode != "JP" && opcode != "BZ" && opcode != "BN" && opcode != "BL" && opcode != "BG"
                  && opcode != "TI" && opcode != "TD" && opcode != "TW" && opcode != "ZL"
-                 && opcode != "DE" && opcode != "DW" && opcode != "DN" && opcode != "DS";
+                 && opcode != "DE" && opcode != "DW" && opcode != "DN" && opcode != "DS"
+                 && opcode != "bb" && opcode != "BB" && opcode != "RT" && opcode != "FE";
     let dest_reg = if is_writer {
         usize::from_str_radix(&dest_str, 16).ok()
     } else {

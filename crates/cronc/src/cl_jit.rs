@@ -96,15 +96,24 @@ impl Default for ClJitCore {
 }
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if let Some(hash_pos) = slot.find('#') {
+    if slot.len() == 10 {
+        if let Some(hash_pos) = slot.find('#') {
+            let hex_part: String = slot[hash_pos + 1..]
+                .chars()
+                .take(3)
+                .take_while(|c| c.is_ascii_hexdigit())
+                .collect();
+            u32::from_str_radix(&hex_part, 16).ok()
+        } else {
+            let chars: Vec<char> = slot.chars().collect();
+            chars[8].to_digit(16)
+        }
+    } else if let Some(hash_pos) = slot.find('#') {
         let hex_part: String = slot[hash_pos + 1..]
             .chars()
             .take_while(|c| c.is_ascii_hexdigit())
             .collect();
         u32::from_str_radix(&hex_part, 16).ok()
-    } else if slot.len() == 10 {
-        let chars: Vec<char> = slot.chars().collect();
-        chars[8].to_digit(16)
     } else {
         let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
         u32::from_str_radix(&imm_digits, 16).ok()
@@ -212,6 +221,64 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         "TT" => {
                             core.r[d] = tile_transpose(core.r[s]);
                         }
+                        "AD" => {
+                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                                (core.r[s], core.r[imm_nibble])
+                            } else {
+                                (core.r[d], core.r[s])
+                            };
+                            core.r[d] = val1.wrapping_add(val2);
+                        }
+                        "SB" => {
+                            core.spatial_broadcast_count += 1;
+                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                                (core.r[s], core.r[imm_nibble])
+                            } else {
+                                (core.r[d], core.r[s])
+                            };
+                            core.r[d] = val1.wrapping_sub(val2);
+                        }
+                        "ML" => {
+                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                                (core.r[s], core.r[imm_nibble])
+                            } else {
+                                (core.r[d], core.r[s])
+                            };
+                            core.r[d] = val1.wrapping_mul(val2);
+                        }
+                        "DV" => {
+                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                                (core.r[s], core.r[imm_nibble])
+                            } else {
+                                (core.r[d], core.r[s])
+                            };
+                            core.r[d] = if val2 != 0 { val1 / val2 } else { 0 };
+                        }
+                        "EX" => {
+                            let input_val = core.r[s];
+                            let scaled = ((input_val as f32 / 100.0).exp() * 100.0) as u32;
+                            core.r[d] = scaled & 0xFFFF;
+                        }
+                        "SQ" => {
+                            let input_val = core.r[s];
+                            core.r[d] = (input_val as f64).sqrt() as u32;
+                        }
+                        "FX" => {
+                            core.r[d] = (core.r[s] << 8) | (imm_val & 0xFF);
+                        }
+                        "LD" => {
+                            let bank = s % 16;
+                            let offset = imm_nibble % 16;
+                            let b_val = core.bank_r[bank][offset];
+                            core.r[d] = if b_val != 0 { b_val } else { core.r[s] ^ (imm_val & 0xFFFF) };
+                        }
+                        "CP" => {
+                            core.r[d] = core.r[s];
+                        }
+                        "MA" => {
+                            let mask = if imm_val != 0 { imm_val } else { 0x00FF_FFFF };
+                            core.r[d] = (core.r[d] & !mask) | (core.r[s] & mask);
+                        }
                         "PO" | "P0" | "P1" => {
                             if slot.mode == '@' {
                                 core.r[d] = core.bank_r[s][imm_nibble % 16];
@@ -301,7 +368,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             core.stdp_updates_count += 1;
                             core.r[d] = if core.r[s] > 100 { 1 } else { 0 };
                         }
-                        "TX" | "SB" | "aa" => {
+                        "TX" | "aa" => {
                             core.spatial_broadcast_count += 1;
                         }
                         "RX" => {
@@ -310,7 +377,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         "WH" => {
                             core.r[d] = core.r[s] | 0x8000;
                         }
-                        "bb" => {
+                        "bb" | "BB" => {
                             core.barrier_count += 1;
                         }
                         "RS" | "88" => {
@@ -532,3 +599,29 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cl_jit_executes_math_and_agi_opcodes() {
+        let code = r#"
+            B0000: '==01#0403 '==02#020k _AD03M1025 _SB04M102E
+            B0001: _ML05M304h _CP06M500x _MA07M600y _FX08M700z
+            B0002: _LD09M001w ~RM0AM900s _ST0BM102K !HL00#000(
+        "#;
+
+        let res = run_cl_jit(code);
+        assert!(res.is_ok(), "JIT execution failed: {:?}", res.err());
+        let core = res.unwrap();
+        assert!(core.is_halted, "Core should be halted by HL opcode");
+        assert_eq!(core.r[1], 0x40, "R1 should equal 0x40 (64)");
+        assert_eq!(core.r[2], 0x20, "R2 should equal 0x20 (32)");
+        assert_eq!(core.r[3], 0x60, "R3 (AD R1 + R2) should equal 0x60 (96)");
+        assert_eq!(core.r[4], 0x20, "R4 (SB R1 - R2) should equal 0x20 (32)");
+        assert_eq!(core.r[5], 0x60 * 0x20, "R5 (ML R3 * R4) should equal 96 * 32 = 3072");
+        assert_eq!(core.r[6], core.r[5], "R6 (CP R5) should equal R5");
+    }
+}
+

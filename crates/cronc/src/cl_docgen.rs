@@ -23,6 +23,9 @@ pub struct ClKernelDoc {
     pub reversible_ops: usize,
     pub stdp_ops: usize,
     pub ai_isa_ops: usize,
+    pub spiking_attn_ops: usize,
+    pub swarm_ops: usize,
+    pub homeostasis_ops: usize,
     pub landauer_joules: f64,
     pub raw_source: String,
 }
@@ -50,7 +53,10 @@ impl ClKernelDoc {
         md.push_str(&format!("| 🔮 Photonic MZI Optical GEMM | `{}` | 0ns optical matrix dot-products |\n", self.optical_ops));
         md.push_str(&format!("| 🛡️ Reversible Logic (Fredkin/Toffoli) | `{}` | Zero-entropy state transformations |\n", self.reversible_ops));
         md.push_str(&format!("| 🧠 Neuromorphic Plasticity (STDP) | `{}` | Spike-timing synaptic weight adaptations |\n", self.stdp_ops));
-        md.push_str(&format!("| ⚡ Dedicated AI Silicon ISA | `{}` | Softmax / SSM Mamba linear scans |\n\n", self.ai_isa_ops));
+        md.push_str(&format!("| ⚡ Dedicated AI Silicon ISA | `{}` | Softmax / SSM Mamba linear scans |\n", self.ai_isa_ops));
+        md.push_str(&format!("| ⏱️ Temporal Spiking Attention | `{}` | Coincidence gating & pulse synchronization |\n", self.spiking_attn_ops));
+        md.push_str(&format!("| 🐜 Stigmergy Swarm & NoC | `{}` | Pheromone diffusion & 4D-Torus spatial routing |\n", self.swarm_ops));
+        md.push_str(&format!("| 🌿 Living Homeostasis | `{}` | Neuromodulation & metabolic energy balance |\n\n", self.homeostasis_ops));
 
         md.push_str("## 💾 Register Footprint\n\n");
         let write_str: Vec<String> = self.written_regs.iter().map(|r| format!("`R{}`", r)).collect();
@@ -79,6 +85,9 @@ pub fn analyze_cl_file(file_name: &str, content: &str) -> ClKernelDoc {
     let mut reversible_ops = 0;
     let mut stdp_ops = 0;
     let mut ai_isa_ops = 0;
+    let mut spiking_attn_ops = 0;
+    let mut swarm_ops = 0;
+    let mut homeostasis_ops = 0;
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -109,9 +118,12 @@ pub fn analyze_cl_file(file_name: &str, content: &str) -> ClKernelDoc {
 
                         match parsed.opcode.as_str() {
                             "OP" | "WD" => optical_ops += 1,
-                            "RM" | "RV" | "RF" | "TO" => reversible_ops += 1,
-                            "ST" | "CA" | "DA" | "SE" | "AC" | "NE" => stdp_ops += 1,
+                            "RM" | "RV" | "RF" | "TO" | "BK" => reversible_ops += 1,
+                            "ST" => stdp_ops += 1,
                             "SM" | "SN" | "SS" | "GE" | "SI" => ai_isa_ops += 1,
+                            "LF" | "LI" | "CP" => spiking_attn_ops += 1,
+                            "SB" | "DF" | "TX" | "RX" => swarm_ops += 1,
+                            "DA" | "SE" | "NE" | "EE" => homeostasis_ops += 1,
                             _ => {}
                         }
                     }
@@ -140,6 +152,9 @@ pub fn analyze_cl_file(file_name: &str, content: &str) -> ClKernelDoc {
         reversible_ops,
         stdp_ops,
         ai_isa_ops,
+        spiking_attn_ops,
+        swarm_ops,
+        homeostasis_ops,
         landauer_joules,
         raw_source: content.to_string(),
     }
@@ -166,4 +181,38 @@ pub fn generate_directory_docs(src_dir: &Path, out_dir: &Path) -> Result<Vec<Pat
     }
 
     Ok(generated_files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_docgen_analyzes_agi_coprocessors() {
+        let code = r#"
+@kernel test_agi_coproc
+.target silicon.4d_torus
+.ipc_target 4.0
+
+B0000: ==01#032' ==02#010' _LD03M100_ _LD04M200_
+B0001: _SB05M304_ _CP06M501_ _LF07#080_ _TX08M700_
+B0002: _DA09#010_ _SE0A#020_ _RM0BM900~ !HL00#0000
+"#;
+        let doc = analyze_cl_file("test_agi.cl", code);
+        assert_eq!(doc.kernel_name, "test_agi_coproc");
+        assert_eq!(doc.target_silicon, "silicon.4d_torus");
+        assert_eq!(doc.ipc_target, 4.0);
+        assert_eq!(doc.bundle_count, 3);
+        assert_eq!(doc.slot_count, 12);
+        assert_eq!(doc.spiking_attn_ops, 2); // CP and LF
+        assert_eq!(doc.swarm_ops, 2); // SB and TX
+        assert_eq!(doc.homeostasis_ops, 2); // DA and SE
+        assert_eq!(doc.reversible_ops, 1); // RM
+
+        let md = doc.to_markdown();
+        assert!(md.contains("# Microcode Kernel: `test_agi_coproc`"));
+        assert!(md.contains("Temporal Spiking Attention"));
+        assert!(md.contains("Stigmergy Swarm & NoC"));
+        assert!(md.contains("Living Homeostasis"));
+    }
 }

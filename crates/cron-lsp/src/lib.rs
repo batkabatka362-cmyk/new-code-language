@@ -132,13 +132,16 @@ pub struct CodeAction {
 // === Language Identification ===
 
 pub fn is_cl_document(uri: &str, text: &str) -> bool {
-    if uri.ends_with(".cl") {
+    if uri.ends_with(".cl") || uri.ends_with(".clm") {
         return true;
     }
     text.lines().any(|l| {
         let t = l.trim();
         t.starts_with("@CORE")
-            || t.starts_with("B00")
+            || t.starts_with(".core")
+            || t.starts_with("@kernel")
+            || t.starts_with('B')
+            || t.starts_with('b')
             || (t.contains('|') && (t.contains('_') || t.contains("ALU") || t.contains("NOP") || t.contains("ADD")))
     })
 }
@@ -151,7 +154,7 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
 
     for (line_idx, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("//") {
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with(';') || trimmed.starts_with('#') {
             continue;
         }
 
@@ -294,7 +297,9 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
                     }
                 }
             }
-        } else if !trimmed.starts_with("B0") && !trimmed.starts_with('_') && !trimmed.starts_with('@') && !trimmed.starts_with('.') {
+        } else if !(trimmed.starts_with('B') || trimmed.starts_with('b') || trimmed.starts_with('L'))
+               && !trimmed.starts_with('_') && !trimmed.starts_with('\'') && !trimmed.starts_with('~') && !trimmed.starts_with('!')
+               && !trimmed.starts_with('@') && !trimmed.starts_with('.') {
             diagnostics.push(Diagnostic {
                 range: Range {
                     start: Position { line: line_u32, character: 0 },

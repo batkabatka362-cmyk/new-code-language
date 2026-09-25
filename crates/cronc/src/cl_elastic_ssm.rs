@@ -136,16 +136,16 @@ impl ElasticSsmEngine {
         compiler.emit_slot(build_valid_slot("_ML04$030", "")); // R4 = Diagonal State Decay Multiplication
         compiler.emit_slot(build_valid_slot("_MD05$022", "")); // R5 = Ternary Outer Product (K^T * V)
         compiler.emit_slot(build_valid_slot("_AD06$045", "")); // R6 = New State Matrix Slice (S_t)
-        compiler.emit_slot(build_valid_slot("_ST06$010", "")); // Write Back S_t into SRAM Bank 1
+        compiler.emit_slot(build_valid_slot("_ST07$010", "")); // R7 = Write Back S_t into SRAM Bank 1
 
         // 3. State Output Contraction: Y_t = Q S_t + D X_t
-        compiler.emit_slot(build_valid_slot("_FA07$060", "")); // R7 = Optical Contraction Dot Product
-        compiler.emit_slot(build_valid_slot("_MA08$072", "")); // R8 = Fused Add Skip Weight (D * X_t)
-        compiler.emit_slot(build_valid_slot("_TX09$CA2", "")); // R9 = Broadcast Latent Output via 4D NoC
+        compiler.emit_slot(build_valid_slot("_FA08$060", "")); // R8 = Optical Contraction Dot Product
+        compiler.emit_slot(build_valid_slot("_MA09$072", "")); // R9 = Fused Add Skip Weight (D * X_t)
+        compiler.emit_slot(build_valid_slot("_TX0A$CA2", "")); // RA = Broadcast Latent Output via 4D NoC
         compiler.emit_slot(build_valid_slot("__NOP000", "")); // Pad slot
 
         // 4. Latch & Synchronize
-        compiler.emit_slot(build_valid_slot("_RV0A$080", "")); // RA = Reversible State Checkpoint
+        compiler.emit_slot(build_valid_slot("_RV0B$080", "")); // RB = Reversible State Checkpoint
         compiler.emit_slot(build_valid_slot("_BB00$000", "")); // Core Global Barrier
         compiler.emit_slot(build_valid_slot("_HL00$0E8", "!")); // End of stream cycle
         compiler.emit_slot(build_valid_slot("__NOP000", "")); // Pad slot

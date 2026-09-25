@@ -1,7 +1,8 @@
 {
   "files.associations": {
-    "*.cl": "cl",
-    "*.cr": "cr"
+    "*.cl": "cron-cl",
+    "*.clm": "cron-cl",
+    "*.cr": "cron"
   },
   "workbench.iconTheme": "vs-seti",
   "editor.semanticHighlighting.enabled": true,
@@ -9,21 +10,58 @@
     "textMateRules": [
       {
         "scope": [
+          "keyword.control.instruction.cron-cl",
           "keyword.control.instruction.cl",
           "keyword.control.cr",
-          "keyword.control.directive.cr",
-          "keyword.control.lisp"
+          "keyword.control.directive.cr"
         ],
         "settings": {
-          "foreground": "#569CD6"
+          "foreground": "#569CD6",
+          "fontStyle": "bold"
         }
       },
       {
         "scope": [
+          "punctuation.definition.prefix.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#FF79C6",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "keyword.operator.opcode.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#4FC1FF",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "variable.other.register.dest.cron-cl",
+          "variable.parameter.register.cron-cl",
           "variable.parameter.register.cl",
-          "variable.parameter.named.cr",
-          "variable.other.cr",
-          "variable.other.lisp"
+          "variable.parameter.named.cr"
+        ],
+        "settings": {
+          "foreground": "#DCDCAA"
+        }
+      },
+      {
+        "scope": [
+          "punctuation.separator.mode.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#FF8800",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "variable.other.register.src.cron-cl",
+          "variable.other.cr"
         ],
         "settings": {
           "foreground": "#9CDCFE"
@@ -31,26 +69,54 @@
       },
       {
         "scope": [
-          "constant.numeric.hex.cl",
-          "constant.numeric.cr",
-          "constant.numeric.hex.cr",
-          "constant.numeric.decimal.cr",
-          "constant.numeric.float.cr",
-          "constant.numeric.lisp"
+          "constant.numeric.crc8.cron-cl"
         ],
         "settings": {
-          "foreground": "#B5CEA8"
+          "foreground": "#50FA7B",
+          "fontStyle": "bold"
         }
       },
       {
         "scope": [
-          "entity.name.section.cycle.cl",
-          "entity.name.section.label.cr",
-          "entity.name.function.cr",
-          "entity.name.function.lisp"
+          "entity.name.section.bundle.cron-cl",
+          "entity.name.section.cycle.cl"
         ],
         "settings": {
-          "foreground": "#DCDCAA"
+          "foreground": "#BD93F9",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "keyword.control.directive.cron-cl",
+          "keyword.control.core.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#F1FA8C",
+          "fontStyle": "italic"
+        }
+      },
+      {
+        "scope": [
+          "entity.name.function.kernel.cron-cl",
+          "entity.name.function.label.cron-cl",
+          "entity.name.function.cr"
+        ],
+        "settings": {
+          "foreground": "#8BE9FD",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "constant.numeric.hex.cron-cl",
+          "constant.numeric.decimal.cron-cl",
+          "constant.numeric.hex.cl",
+          "constant.numeric.cr",
+          "constant.numeric.hex.cr"
+        ],
+        "settings": {
+          "foreground": "#B5CEA8"
         }
       },
       {
@@ -65,21 +131,15 @@
       },
       {
         "scope": [
-          "punctuation.terminator.bundle.cl",
-          "punctuation.separator.cl"
-        ],
-        "settings": {
-          "foreground": "#808080"
-        }
-      },
-      {
-        "scope": [
+          "comment.line.semicolon.cron-cl",
+          "comment.line.double-slash.cron-cl",
           "comment.line.semicolon.cr",
           "comment.line.number-sign.cr",
           "comment.line.semicolon.cl"
         ],
         "settings": {
-          "foreground": "#6A9955"
+          "foreground": "#6A9955",
+          "fontStyle": "italic"
         }
       }
     ]

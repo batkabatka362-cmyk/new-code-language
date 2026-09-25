@@ -21,3 +21,4 @@ __pycache__/
 agi_agent_telemetry.json
 training_telemetry.csv
 *.pdf
+scratch/

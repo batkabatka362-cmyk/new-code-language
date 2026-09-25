@@ -18,7 +18,7 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.double-slash.cron-cl",
+          "name": "comment.line.semicolon.cron-cl",
           "match": "(//|#|;).*$"
         }
       ]
@@ -26,7 +26,7 @@
     "semantic_directives": {
       "patterns": [
         {
-          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include))\\b",
+          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include|target|ipc_target|data|pgas|circuit))\\b",
           "captures": {
             "1": { "name": "keyword.control.directive.cron-cl" }
           }
@@ -67,7 +67,7 @@
       "patterns": [
         {
           "name": "entity.name.section.bundle.cron-cl",
-          "match": "\\b[BCL][0-9A-Fa-f]{4}:"
+          "match": "\\b[BCLbcl][0-9A-Fa-f]{2,4}:"
         }
       ]
     },
@@ -75,7 +75,7 @@
       "patterns": [
         {
           "match": "\\b(let|barrier|op_gemm|ternary_mac|stdp_learn|pack_trits|send_noc|recv_noc|return|halt|nop)\\b",
-          "name": "keyword.control.instruction.cl"
+          "name": "keyword.control.instruction.cron-cl"
         }
       ]
     },
@@ -83,7 +83,7 @@
       "patterns": [
         {
           "match": "\\b(R[0-9A-Fa-f]|PC|SP|BP|RA|FLAGS)\\b",
-          "name": "variable.parameter.register.cl"
+          "name": "variable.parameter.register.cron-cl"
         }
       ]
     },
@@ -91,27 +91,25 @@
       "patterns": [
         {
           "match": "\\b0x[0-9A-Fa-f]+\\b",
-          "name": "constant.numeric.hex.cl"
+          "name": "constant.numeric.hex.cron-cl"
         },
         {
-          "match": "\\b[0-9]+\\b",
-          "name": "constant.numeric.decimal.cl"
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b",
+          "name": "constant.numeric.decimal.cron-cl"
         }
       ]
     },
     "cl2_slot": {
       "patterns": [
         {
-          "match": "([_'~@%&^|$#\\\\=:])([A-Za-z0-9=_]{2})([0-9A-Fa-f]{2})([$#@+\\-*/&|^~%=<>?!.:\\[\\]{}()\\\\])([A-Za-z0-9xyzwdulrio]{1,3})([0-9A-Za-z!@#$%^&*()_+=\\-\\[\\]{}|;:,.<>?/~`\\\\])([0-9A-Za-z])([>!?;\\]})|])",
+          "match": "([_'~@%&^|$#\\\\=!:])([A-Za-z0-9=_]{2})([0-9A-Fa-f]{2})([#$M@~!=+\\-*&|^/%<>?])([A-Za-z0-9#_]{3})([\\S])",
           "captures": {
             "1": { "name": "punctuation.definition.prefix.cron-cl" },
             "2": { "name": "keyword.operator.opcode.cron-cl" },
             "3": { "name": "variable.other.register.dest.cron-cl" },
             "4": { "name": "punctuation.separator.mode.cron-cl" },
             "5": { "name": "variable.other.register.src.cron-cl" },
-            "6": { "name": "constant.numeric.crc8.cron-cl" },
-            "7": { "name": "constant.numeric.imm.cron-cl" },
-            "8": { "name": "keyword.control.terminator.cron-cl" }
+            "6": { "name": "constant.numeric.crc8.cron-cl" }
           }
         }
       ]
