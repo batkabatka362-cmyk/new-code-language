@@ -127,6 +127,9 @@ pub mod cl_transpile;
 pub mod cl_hopfield;
 pub mod cl_active_inference;
 pub mod cl_elastic_ssm;
+pub mod cl_temporal_spiking_attention;
+pub mod cl_stigmergy;
+pub mod cl_living_homeostasis;
 pub mod docgen;
 
 pub use cl_compose::{
@@ -166,6 +169,9 @@ pub use cl_quantum_zeno::{QuantumOpticalQubit, QuantumHypothesisRegister};
 pub use cl_hopfield::{HopfieldMemoryBank, HopfieldPattern};
 pub use cl_active_inference::ActiveInferenceAgent;
 pub use cl_elastic_ssm::ElasticSsmEngine;
+pub use cl_temporal_spiking_attention::{TemporalSpikingAttention, SpikeEvent as TemporalSpikeEvent};
+pub use cl_stigmergy::StigmergyEngine;
+pub use cl_living_homeostasis::LivingHomeostasisEngine;
 pub use cl_reversible_thermo::{ReversibleState3, ReversiblePipelineVerifier};
 pub use cl_spatiotemporal::{SpatiotemporalStreamer, MultimodalPhaseEvent};
 

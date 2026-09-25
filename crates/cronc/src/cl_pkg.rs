@@ -460,10 +460,58 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
     );
     fs::write(target_dir.join("elastic_ssm_stream.cl"), elastic_ssm_code).map_err(|e| e.to_string())?;
 
+    // 22. spiking_temporal_attention.cl
+    let spiking_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/spiking_temporal_attention.cl\n\
+         @kernel event_spiking_temporal_coincidence\n\
+         .target silicon.spiking_temporal\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#032"), build_valid_slot("'", "==02#010"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "SB05M304"), build_valid_slot("_", "CP06M501"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "MA08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("spiking_temporal_attention.cl"), spiking_code).map_err(|e| e.to_string())?;
+
+    // 23. stigmergy_reasoning.cl
+    let stigmergy_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/stigmergy_reasoning.cl\n\
+         @kernel collective_pheromone_swarm\n\
+         .target silicon.stigmergy_4d\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#008"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "ML05M300"), build_valid_slot("_", "CP06M405"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "TX08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("stigmergy_reasoning.cl"), stigmergy_code).map_err(|e| e.to_string())?;
+
+    // 24. living_homeostasis.cl
+    let homeostasis_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/living_homeostasis.cl\n\
+         @kernel biological_homeostatic_drive\n\
+         .target silicon.living_homeostasis\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#080"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "SB05M104"), build_valid_slot("_", "ML06M302"), build_valid_slot("_", "CP07M501"), build_valid_slot("_", "AD08M600")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("living_homeostasis.cl"), homeostasis_code).map_err(|e| e.to_string())?;
+
     // Update libcl.toml
     let manifest_toml = "[package]\n\
          name = \"libcl\"\n\
-         version = \"1.4.0\"\n\
+         version = \"1.5.0\"\n\
          description = \"CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon\"\n\
          authors = [\"CRON Language Architecture Team\"]\n\
          license = \"MIT OR Apache-2.0\"\n\
@@ -489,7 +537,10 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
          sparse_attention_block = \"libcl/sparse_attention_block.cl\"\n\
          dense_associative_memory = \"libcl/dense_associative_memory.cl\"\n\
          active_inference_agent = \"libcl/active_inference_agent.cl\"\n\
-         elastic_ssm_stream = \"libcl/elastic_ssm_stream.cl\"\n";
+         elastic_ssm_stream = \"libcl/elastic_ssm_stream.cl\"\n\
+         spiking_temporal_attention = \"libcl/spiking_temporal_attention.cl\"\n\
+         stigmergy_reasoning = \"libcl/stigmergy_reasoning.cl\"\n\
+         living_homeostasis = \"libcl/living_homeostasis.cl\"\n";
     fs::write(target_dir.join("libcl.toml"), manifest_toml).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -507,8 +558,8 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
     let libcl_dir = candidates.into_iter().find(|p| p.is_dir()).unwrap_or_else(|| workspace_root.join("libcl"));
     
     // Automatically populate official kernels if not present
-    let ssm_p = libcl_dir.join("elastic_ssm_stream.cl");
-    if !ssm_p.exists() {
+    let check_p = libcl_dir.join("living_homeostasis.cl");
+    if !check_p.exists() {
         let _ = generate_standard_libcl_files(&libcl_dir);
     }
 
@@ -536,6 +587,9 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("dense_associative_memory.cl", "Continuous Modern Hopfield Dense Associative Memory (O(1) Attractor Retrieval)", "silicon.associative_hopfield", 4.0),
         ("active_inference_agent.cl", "Autonomous Active Inference & Free Energy Minimization (Perception-Action Loop)", "silicon.active_inference", 4.0),
         ("elastic_ssm_stream.cl", "Elastic State-Space Continuous Memory (O(1) Constant Space Sequence Model)", "silicon.elastic_ssm", 4.0),
+        ("spiking_temporal_attention.cl", "Event-Driven Spiking Temporal Coincidence Attention (Zero-Mul Sub-pJ)", "silicon.spiking_temporal", 4.0),
+        ("stigmergy_reasoning.cl", "Collective Cognitive Stigmergy & 4D-Torus Pheromone Swarm Reasoning", "silicon.stigmergy_4d", 4.0),
+        ("living_homeostasis.cl", "Continuous Biological Homeostasis & Neuromodulator Chemical Diffusion", "silicon.living_homeostasis", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {

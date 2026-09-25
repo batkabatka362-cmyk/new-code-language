@@ -1,6 +1,6 @@
 [package]
 name = "libcl"
-version = "1.4.0"
+version = "1.5.0"
 description = "CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon"
 authors = ["CRON Language Architecture Team"]
 license = "MIT OR Apache-2.0"
@@ -27,3 +27,6 @@ sparse_attention_block = "libcl/sparse_attention_block.cl"
 dense_associative_memory = "libcl/dense_associative_memory.cl"
 active_inference_agent = "libcl/active_inference_agent.cl"
 elastic_ssm_stream = "libcl/elastic_ssm_stream.cl"
+spiking_temporal_attention = "libcl/spiking_temporal_attention.cl"
+stigmergy_reasoning = "libcl/stigmergy_reasoning.cl"
+living_homeostasis = "libcl/living_homeostasis.cl"
