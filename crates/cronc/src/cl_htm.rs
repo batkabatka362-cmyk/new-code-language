@@ -162,7 +162,7 @@ impl Sdr2048 {
 }
 
 /// Spatial Pooler Column
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SpatialColumn {
     pub column_id: usize,
     /// Synaptic permanence to input bits: (input_bit_index, permanence)
@@ -171,12 +171,29 @@ pub struct SpatialColumn {
     pub activity_history: f32,
 }
 
+impl Default for SpatialColumn {
+    fn default() -> Self {
+        Self {
+            column_id: 0,
+            synapses: Vec::new(),
+            boost_factor: 1.0,
+            activity_history: 0.02,
+        }
+    }
+}
+
 /// Spatial Pooler: Maps arbitrary input SDRs into sparse 2048-bit minicolumn activations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SpatialPooler {
     pub columns: Vec<SpatialColumn>,
     pub target_active_columns: usize,
     pub iteration_count: usize,
+}
+
+impl Default for SpatialPooler {
+    fn default() -> Self {
+        Self::new(SDR_BITS, TARGET_ACTIVE_BITS, 40, 42)
+    }
 }
 
 impl SpatialPooler {
@@ -232,7 +249,7 @@ impl SpatialPooler {
         }
 
         // 2. K-Winners-Take-All local / global inhibition
-        overlap_scores.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        overlap_scores.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
 
         let mut active_output = Sdr2048::new();
         let winning_cols: Vec<usize> = overlap_scores
@@ -280,22 +297,40 @@ impl SpatialPooler {
 }
 
 /// A distal dendritic segment on a cell, predicting future activation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DistalSegment {
     /// Synapses from other cells: (presynaptic_cell_id, permanence)
     pub synapses: Vec<(usize, f32)>,
 }
 
+impl Default for DistalSegment {
+    fn default() -> Self {
+        Self {
+            synapses: Vec::new(),
+        }
+    }
+}
+
 /// A minicolumn cell for Temporal Memory
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HtmCell {
     pub cell_id: usize,
     pub column_id: usize,
     pub segments: Vec<DistalSegment>,
 }
 
+impl Default for HtmCell {
+    fn default() -> Self {
+        Self {
+            cell_id: 0,
+            column_id: 0,
+            segments: Vec::new(),
+        }
+    }
+}
+
 /// Temporal Memory: Learns sequential temporal transitions and outputs predictions & anomaly scores
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TemporalMemory {
     pub num_columns: usize,
     pub cells_per_column: usize,
@@ -305,6 +340,12 @@ pub struct TemporalMemory {
     pub active_cells: Vec<usize>,
     pub predictive_cells: Vec<usize>,
     pub last_anomaly_score: f64,
+}
+
+impl Default for TemporalMemory {
+    fn default() -> Self {
+        Self::new(SDR_BITS, 2, 5)
+    }
 }
 
 impl TemporalMemory {
@@ -420,7 +461,7 @@ impl TemporalMemory {
         let core_x = core_id % 4;
         let core_y = (core_id / 4) % 4;
         let core_z = (core_id / 16) % 4;
-        let core_w = (core_id / 64) % 4;
+        let core_w = core_id / 64;
 
         let mut cl_code = format!(
             "; ============================================================================\n\
@@ -468,11 +509,17 @@ impl TemporalMemory {
 }
 
 /// Unified Cortical Column Engine combining Spatial Pooler & Temporal Memory
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HierarchicalTemporalMemory {
     pub spatial_pooler: SpatialPooler,
     pub temporal_memory: TemporalMemory,
     pub total_cycles: usize,
+}
+
+impl Default for HierarchicalTemporalMemory {
+    fn default() -> Self {
+        Self::new(42)
+    }
 }
 
 impl HierarchicalTemporalMemory {

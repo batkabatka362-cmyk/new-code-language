@@ -26,6 +26,12 @@ pub struct StructuralEquation {
     pub exogenous_noise: f64,
 }
 
+impl Default for StructuralEquation {
+    fn default() -> Self {
+        Self::new(0, "")
+    }
+}
+
 impl StructuralEquation {
     pub fn new(node_id: usize, name: &str) -> Self {
         Self {
@@ -77,10 +83,35 @@ impl StructuralCausalModel {
         }
     }
 
+    /// Returns the node ID for a given variable name if it exists
+    pub fn get_node_id(&self, name: &str) -> Option<usize> {
+        self.name_to_id.get(name).copied()
+    }
+
+    /// Returns true if the causal model contains a node with the given name
+    pub fn has_node(&self, name: &str) -> bool {
+        self.name_to_id.contains_key(name)
+    }
+
+    /// Returns the number of causal nodes currently in the model
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
     /// Adds a causal node to the graph
     pub fn add_node(&mut self, name: &str, bias: f64) -> usize {
+        if let Some(&existing_id) = self.name_to_id.get(name) {
+            if existing_id < self.nodes.len() {
+                self.nodes[existing_id].bias = bias;
+            }
+            return existing_id;
+        }
+
         let id = self.nodes.len();
-        assert!(id < MAX_CAUSAL_NODES, "Exceeded maximum causal nodes");
+        if id >= MAX_CAUSAL_NODES {
+            return MAX_CAUSAL_NODES - 1;
+        }
+
         let eq = StructuralEquation {
             node_id: id,
             name: name.to_string(),
@@ -97,17 +128,20 @@ impl StructuralCausalModel {
 
     /// Adds a directed causal arrow: parent -> child with coupling weight
     pub fn add_causal_edge(&mut self, parent_name: &str, child_name: &str, weight: f64) {
-        let p_id = self.name_to_id[parent_name];
-        let c_id = self.name_to_id[child_name];
-
-        self.nodes[c_id].parent_mask |= 1 << p_id;
-        self.nodes[c_id].weights[p_id] = weight;
+        if let (Some(&p_id), Some(&c_id)) = (self.name_to_id.get(parent_name), self.name_to_id.get(child_name)) {
+            if c_id < self.nodes.len() && p_id < MAX_CAUSAL_NODES {
+                self.nodes[c_id].parent_mask |= 1 << p_id;
+                self.nodes[c_id].weights[p_id] = weight;
+            }
+        }
     }
 
     /// Computes observational state of the system in topological order: P(V)
     pub fn forward_observation(&mut self) -> [f64; MAX_CAUSAL_NODES] {
         for &id in &self.topological_order {
-            self.values[id] = self.nodes[id].evaluate(&self.values);
+            if id < self.nodes.len() {
+                self.values[id] = self.nodes[id].evaluate(&self.values);
+            }
         }
         self.values
     }
@@ -115,7 +149,10 @@ impl StructuralCausalModel {
     /// Performs Judea Pearl's Causal Intervention: do(X = x)
     /// Graph Mutilation: Sever all incoming edges to node X and set value directly.
     pub fn intervene(&self, target_name: &str, fixed_val: f64) -> [f64; MAX_CAUSAL_NODES] {
-        let target_id = self.name_to_id[target_name];
+        let target_id = match self.name_to_id.get(target_name) {
+            Some(&id) if id < self.nodes.len() => id,
+            _ => return self.values,
+        };
         let mut mutilated = self.clone();
 
         // Mutilate graph: cut parents
@@ -127,7 +164,7 @@ impl StructuralCausalModel {
         for &id in &mutilated.topological_order {
             if id == target_id {
                 values[id] = fixed_val;
-            } else {
+            } else if id < mutilated.nodes.len() {
                 values[id] = mutilated.nodes[id].evaluate(&values);
             }
         }
@@ -147,8 +184,14 @@ impl StructuralCausalModel {
         counterfactual_val: f64,
         target_name: &str,
     ) -> f64 {
-        let target_id = self.name_to_id[target_name];
-        let int_id = self.name_to_id[intervene_name];
+        let target_id = match self.name_to_id.get(target_name) {
+            Some(&id) if id < self.nodes.len() => id,
+            _ => return 0.0,
+        };
+        let int_id = match self.name_to_id.get(intervene_name) {
+            Some(&id) if id < self.nodes.len() => id,
+            _ => return factual_obs[target_id],
+        };
 
         let mut cf_model = self.clone();
 
@@ -173,7 +216,7 @@ impl StructuralCausalModel {
         for &id in &cf_model.topological_order {
             if id == int_id {
                 cf_values[id] = counterfactual_val;
-            } else {
+            } else if id < cf_model.nodes.len() {
                 cf_values[id] = cf_model.nodes[id].evaluate(&cf_values);
             }
         }
@@ -188,7 +231,7 @@ impl StructuralCausalModel {
         let core_x = core_id % 4;
         let core_y = (core_id / 4) % 4;
         let core_z = (core_id / 16) % 4;
-        let core_w = (core_id / 64) % 4;
+        let core_w = core_id / 64;
 
         let mut cl_code = format!(
             "; ============================================================================\n\
@@ -248,7 +291,7 @@ mod tests {
         // Sprinkler (P) -> WetGrass (W)
         // Rain (R) -> WetGrass (W)
         let s = scm.add_node("Season", 0.5);
-        let _p = scm.add_node("Sprinkler", -1.0);
+        let p = scm.add_node("Sprinkler", -1.0);
         let r = scm.add_node("Rain", -1.0);
         let w = scm.add_node("WetGrass", -2.0);
 
@@ -263,6 +306,8 @@ mod tests {
 
         // 2. Active Causal Intervention: do(Sprinkler = 1.0)
         let int_vals = scm.intervene("Sprinkler", 1.0);
+
+        assert_eq!(int_vals[p], 1.0, "Intervened variable must take exact fixed value");
 
         // Intervention MUST make WetGrass high
         assert!(
@@ -280,12 +325,12 @@ mod tests {
         let mut scm = StructuralCausalModel::new();
 
         // Rain -> WetGrass
-        let _ = scm.add_node("Rain", 1.5); // High baseline rain
-        let _ = scm.add_node("WetGrass", -2.0);
+        let rain = scm.add_node("Rain", 1.5); // High baseline rain
+        let wet = scm.add_node("WetGrass", -2.0);
         scm.add_causal_edge("Rain", "WetGrass", 4.0);
 
         let factual = scm.forward_observation();
-        let factual_wet = factual[scm.name_to_id["WetGrass"]];
+        let factual_wet = factual[wet];
         assert!(factual_wet > 0.70, "Grass is wet due to rain: {}", factual_wet);
 
         // Counterfactual query:
@@ -298,6 +343,7 @@ mod tests {
             cf_wet,
             factual_wet
         );
+        assert!(factual[rain] > 0.5);
     }
 
     #[test]

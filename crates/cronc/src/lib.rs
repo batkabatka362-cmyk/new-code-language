@@ -4,7 +4,9 @@
     clippy::ptr_arg,
     clippy::match_like_matches_macro,
     clippy::needless_range_loop,
-    clippy::doc_lazy_continuation
+    clippy::doc_lazy_continuation,
+    clippy::approx_constant,
+    clippy::not_unsafe_ptr_arg_deref
 )]
 
 pub mod ast;
@@ -179,6 +181,8 @@ pub use cl_stigmergy::StigmergyEngine;
 pub use cl_living_homeostasis::LivingHomeostasisEngine;
 pub use cl_reversible_thermo::{ReversibleState3, ReversiblePipelineVerifier};
 pub use cl_spatiotemporal::{SpatiotemporalStreamer, MultimodalPhaseEvent};
+pub use cl_causal::{StructuralCausalModel, StructuralEquation, MAX_CAUSAL_NODES};
+pub use cl_htm::{HierarchicalTemporalMemory, Sdr2048, SpatialColumn, SpatialPooler, DistalSegment, HtmCell, TemporalMemory, SDR_BITS, TARGET_ACTIVE_BITS};
 
 pub use cl_metaplasticity::{BcmConfig, MetaplasticEngine, MetaplasticSynapse};
 pub use cl_thermodynamics::{ThermodynamicOptimizer, TileThermodynamicState};
