@@ -175,6 +175,104 @@ pub struct Location {
     pub range: Range,
 }
 
+#[derive(Debug, Clone)]
+pub struct RawSemanticToken {
+    pub line: u32,
+    pub col: u32,
+    pub len: u32,
+    pub token_type: u32,
+    pub token_modifiers: u32,
+}
+
+pub fn classify_cl_token(w: &str, line: u32, col: u32, out: &mut Vec<RawSemanticToken>) {
+    if (w.starts_with('R') || w.starts_with('r') || w.starts_with('V') || w.starts_with('v') || w.starts_with('A') || w.starts_with('a'))
+        && w.len() >= 2
+        && w[1..].chars().all(|c| c.is_ascii_digit())
+    {
+        out.push(RawSemanticToken {
+            line,
+            col,
+            len: w.len() as u32,
+            token_type: 3, // variable
+            token_modifiers: 2, // readonly
+        });
+        return;
+    }
+
+    match w {
+        "ADD" | "SUB" | "MUL" | "DIV" | "FMA" | "FMS" | "ROPE" | "SWIZZLE" | "ROUTE_DOR"
+        | "SEND" | "RECV" | "BROADCAST" | "COLLECTIVE" | "LOAD" | "STORE" | "PREFETCH"
+        | "NOP" | "RMSNORM" | "SWIGLU" | "RELU" | "GELU" | "MAX" | "MIN" | "CMP"
+        | "AND" | "OR" | "XOR" | "SHL" | "SHR" | "BARRIER" | "SYNC" | "JMP" | "BEQ" => {
+            out.push(RawSemanticToken {
+                line,
+                col,
+                len: w.len() as u32,
+                token_type: 9, // macro
+                token_modifiers: 8, // defaultLibrary
+            });
+            return;
+        }
+        _ => {}
+    }
+
+    if (w.starts_with('#') && w.len() > 1 && w[1..].chars().all(|c| c.is_ascii_digit()))
+        || w.chars().all(|c| c.is_ascii_digit())
+        || (w.starts_with("0x") && w.len() > 2)
+    {
+        out.push(RawSemanticToken {
+            line,
+            col,
+            len: w.len() as u32,
+            token_type: 12, // number
+            token_modifiers: 0,
+        });
+    }
+}
+
+pub fn is_builtin_cognitive_fn(name: &str) -> bool {
+    matches!(
+        name,
+        "pack_wave"
+            | "compute_attention_head"
+            | "step_synaptic_plasticity"
+            | "ground_and_unify"
+            | "init_kg_partition"
+            | "assert_triple"
+            | "batch_norm_quantize"
+            | "dense_relu_step"
+            | "spatial_broadcast"
+            | "consume"
+            | "simd_splat"
+            | "simd_fma"
+            | "simd_dot"
+            | "simd_reduce_sum"
+            | "spawn_at"
+            | "torus_send"
+            | "torus_recv"
+            | "torus_broadcast"
+    )
+}
+
+pub fn is_builtin_type_name(name: &str) -> bool {
+    matches!(
+        name,
+        "wave_t"
+            | "f32"
+            | "f64"
+            | "i32"
+            | "i64"
+            | "u32"
+            | "u64"
+            | "tensor"
+            | "bool"
+            | "trit"
+            | "complex_t"
+            | "void"
+            | "str"
+    )
+}
+
 // === Language Identification ===
 
 pub fn is_cl_document(uri: &str, text: &str) -> bool {
@@ -955,7 +1053,20 @@ impl LspServer {
                         "definitionProvider": true,
                         "documentSymbolProvider": true,
                         "codeActionProvider": true,
-                        "documentFormattingProvider": true
+                        "documentFormattingProvider": true,
+                        "semanticTokensProvider": {
+                            "legend": {
+                                "tokenTypes": [
+                                    "keyword", "type", "function", "variable", "parameter",
+                                    "class", "struct", "interface", "label", "macro",
+                                    "comment", "string", "number", "operator"
+                                ],
+                                "tokenModifiers": [
+                                    "declaration", "readonly", "modification", "defaultLibrary"
+                                ]
+                            },
+                            "full": true
+                        }
                     },
                     "serverInfo": {
                         "name": "cron-lsp",
@@ -1032,6 +1143,13 @@ impl LspServer {
             "textDocument/formatting" => {
                 let edits = self.compute_formatting(&req.params);
                 Some(self.format_response(req.id, Some(serde_json::to_value(edits).unwrap_or(serde_json::Value::Array(vec![]))), None))
+            }
+            "textDocument/semanticTokens/full" => {
+                let data = self.compute_semantic_tokens(&req.params);
+                let result = serde_json::json!({
+                    "data": data
+                });
+                Some(self.format_response(req.id, Some(result), None))
             }
             "shutdown" => {
                 self.is_shutdown = true;
@@ -1408,6 +1526,213 @@ impl LspServer {
             }
         }
         locations
+    }
+
+    // === Semantic Tokens Provider (LSP 3.17) ===
+    fn compute_semantic_tokens(&self, params: &Option<serde_json::Value>) -> Vec<u32> {
+        let p = match params { Some(p) => p, None => return Vec::new() };
+        let uri = p.get("textDocument").and_then(|td| td.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
+        let doc = match self.documents.get(uri) { Some(d) => d, None => return Vec::new() };
+
+        let mut raw_tokens: Vec<RawSemanticToken> = Vec::new();
+
+        if is_cl_document(uri, doc) {
+            for (line_idx, line) in doc.lines().enumerate() {
+                let l_u32 = line_idx as u32;
+                let trimmed = line.trim_start();
+                let leading_spaces = (line.len() - trimmed.len()) as u32;
+
+                if let Some(pos) = line.find(';') {
+                    raw_tokens.push(RawSemanticToken {
+                        line: l_u32,
+                        col: pos as u32,
+                        len: (line.len() - pos) as u32,
+                        token_type: 10,
+                        token_modifiers: 0,
+                    });
+                } else if let Some(pos) = line.find("//") {
+                    raw_tokens.push(RawSemanticToken {
+                        line: l_u32,
+                        col: pos as u32,
+                        len: (line.len() - pos) as u32,
+                        token_type: 10,
+                        token_modifiers: 0,
+                    });
+                }
+
+                if trimmed.starts_with("@CORE") {
+                    raw_tokens.push(RawSemanticToken {
+                        line: l_u32,
+                        col: leading_spaces,
+                        len: 5,
+                        token_type: 5, // class
+                        token_modifiers: 1, // declaration
+                    });
+                }
+
+                if (trimmed.starts_with('B') || trimmed.starts_with('b')) && trimmed.contains(':') {
+                    let lbl_len = trimmed.find(':').unwrap_or(5);
+                    raw_tokens.push(RawSemanticToken {
+                        line: l_u32,
+                        col: leading_spaces,
+                        len: lbl_len as u32,
+                        token_type: 8, // label
+                        token_modifiers: 1, // declaration
+                    });
+                }
+
+                let mut current_word = String::new();
+                let mut word_start = 0;
+                for (char_idx, ch) in line.char_indices() {
+                    if ch.is_alphanumeric() || ch == '_' || ch == '#' {
+                        if current_word.is_empty() {
+                            word_start = char_idx;
+                        }
+                        current_word.push(ch);
+                    } else {
+                        if !current_word.is_empty() {
+                            classify_cl_token(&current_word, l_u32, word_start as u32, &mut raw_tokens);
+                            current_word.clear();
+                        }
+                    }
+                }
+                if !current_word.is_empty() {
+                    classify_cl_token(&current_word, l_u32, word_start as u32, &mut raw_tokens);
+                }
+            }
+        } else {
+            for (line_idx, line) in doc.lines().enumerate() {
+                let l_u32 = line_idx as u32;
+                if let Some(pos) = line.find("//") {
+                    raw_tokens.push(RawSemanticToken {
+                        line: l_u32,
+                        col: pos as u32,
+                        len: (line.len() - pos) as u32,
+                        token_type: 10, // comment
+                        token_modifiers: 0,
+                    });
+                } else if let Some(pos) = line.find('#') {
+                    raw_tokens.push(RawSemanticToken {
+                        line: l_u32,
+                        col: pos as u32,
+                        len: (line.len() - pos) as u32,
+                        token_type: 10, // comment
+                        token_modifiers: 0,
+                    });
+                }
+            }
+
+            let mut lexer = cronc::lexer::Lexer::new(doc);
+            if let Ok(tokens) = lexer.tokenize() {
+                let mut prev_kw: Option<&'static str> = None;
+                for sp in &tokens {
+                    let line_0 = if sp.span.line > 0 { (sp.span.line - 1) as u32 } else { 0 };
+                    let col_0 = if sp.span.col > 0 { (sp.span.col - 1) as u32 } else { 0 };
+                    let len = sp.span.len as u32;
+
+                    match &sp.value {
+                        cronc::token::Token::Lin => {
+                            raw_tokens.push(RawSemanticToken {
+                                line: line_0,
+                                col: col_0,
+                                len,
+                                token_type: 0, // keyword
+                                token_modifiers: 2, // readonly
+                            });
+                            prev_kw = Some("lin");
+                        }
+                        cronc::token::Token::Def => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 0, token_modifiers: 0 });
+                            prev_kw = Some("def");
+                        }
+                        cronc::token::Token::Struct => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 0, token_modifiers: 0 });
+                            prev_kw = Some("struct");
+                        }
+                        cronc::token::Token::Trait => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 0, token_modifiers: 0 });
+                            prev_kw = Some("trait");
+                        }
+                        cronc::token::Token::Brain => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 0, token_modifiers: 0 });
+                            prev_kw = Some("brain");
+                        }
+                        cronc::token::Token::Region => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 0, token_modifiers: 0 });
+                            prev_kw = Some("region");
+                        }
+                        cronc::token::Token::Let | cronc::token::Token::Mut | cronc::token::Token::Consume
+                        | cronc::token::Token::Spawn | cronc::token::Token::Await | cronc::token::Token::ResilientCompute
+                        | cronc::token::Token::If | cronc::token::Token::Else | cronc::token::Token::While
+                        | cronc::token::Token::For | cronc::token::Token::Return | cronc::token::Token::Export
+                        | cronc::token::Token::Impl | cronc::token::Token::Schedule | cronc::token::Token::Fuse => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 0, token_modifiers: 0 });
+                            prev_kw = None;
+                        }
+                        cronc::token::Token::Ident(name) => {
+                            let (token_type, token_modifiers) = match prev_kw {
+                                Some("def") => (2, 1),       // function, declaration
+                                Some("struct") => (6, 1),    // struct, declaration
+                                Some("trait") => (7, 1),     // interface, declaration
+                                Some("brain") => (5, 1),     // class, declaration
+                                _ => {
+                                    if is_builtin_cognitive_fn(name) {
+                                        (2, 8) // function, defaultLibrary
+                                    } else if is_builtin_type_name(name) {
+                                        (1, 8) // type, defaultLibrary
+                                    } else {
+                                        (3, 0) // variable
+                                    }
+                                }
+                            };
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type, token_modifiers });
+                            prev_kw = None;
+                        }
+                        cronc::token::Token::StringLit(_) => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 11, token_modifiers: 0 });
+                            prev_kw = None;
+                        }
+                        cronc::token::Token::IntLit(_) | cronc::token::Token::HexLit(_) | cronc::token::Token::FloatLit(_) => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 12, token_modifiers: 0 });
+                            prev_kw = None;
+                        }
+                        cronc::token::Token::Axis(_) => {
+                            raw_tokens.push(RawSemanticToken { line: line_0, col: col_0, len, token_type: 8, token_modifiers: 0 });
+                            prev_kw = None;
+                        }
+                        _ => {
+                            prev_kw = None;
+                        }
+                    }
+                }
+            }
+        }
+
+        raw_tokens.sort_by_key(|t| (t.line, t.col));
+        raw_tokens.dedup_by_key(|t| (t.line, t.col));
+
+        let mut data: Vec<u32> = Vec::new();
+        let mut prev_line = 0;
+        let mut prev_col = 0;
+
+        for tok in raw_tokens {
+            let delta_line = tok.line.saturating_sub(prev_line);
+            let delta_col = if delta_line == 0 {
+                tok.col.saturating_sub(prev_col)
+            } else {
+                tok.col
+            };
+            data.push(delta_line);
+            data.push(delta_col);
+            data.push(tok.len);
+            data.push(tok.token_type);
+            data.push(tok.token_modifiers);
+
+            prev_line = tok.line;
+            prev_col = tok.col;
+        }
+
+        data
     }
 
     fn compute_code_actions(&self, params: &Option<serde_json::Value>) -> Vec<CodeAction> {
@@ -1822,9 +2147,10 @@ mod tests {
         let triggers = caps["signatureHelpProvider"]["triggerCharacters"].as_array().unwrap();
         assert!(triggers.iter().any(|t| t == "("));
         assert!(triggers.iter().any(|t| t == ","));
-        // definition and documentSymbol
+        // definition, documentSymbol, and semanticTokens
         assert_eq!(caps["definitionProvider"], true);
         assert_eq!(caps["documentSymbolProvider"], true);
+        assert_eq!(caps["semanticTokensProvider"]["full"], true);
         // version updated
         assert_eq!(resp["result"]["serverInfo"]["version"], "3.17.1");
     }
@@ -1969,5 +2295,93 @@ mod tests {
         assert!(!locs.is_empty());
         assert_eq!(locs[0]["uri"], "file:///net.cr");
         assert_eq!(locs[0]["range"]["start"]["line"], 0);
+    }
+
+    #[test]
+    fn test_lsp_semantic_tokens_cr() {
+        let mut server = LspServer::new();
+        let cr_code = "let lin photon = pack_wave(amp=[1.0, 0.5])\n";
+        server.documents.insert("file:///wave.cr".to_string(), cr_code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 70,
+            "method": "textDocument/semanticTokens/full",
+            "params": {
+                "textDocument": { "uri": "file:///wave.cr" }
+            }
+        });
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let data = resp["result"]["data"].as_array().unwrap();
+        // Semantic tokens are 5-tuples [deltaLine, deltaCol, len, tokenType, tokenModifiers]
+        assert_eq!(data.len() % 5, 0);
+        assert!(!data.is_empty());
+
+        // Find the 'lin' token: tokenType == 0 (keyword), tokenModifiers == 2 (readonly)
+        let mut found_lin = false;
+        let mut found_pack_wave = false;
+        for chunk in data.chunks(5) {
+            let len = chunk[2].as_u64().unwrap();
+            let token_type = chunk[3].as_u64().unwrap();
+            let modifiers = chunk[4].as_u64().unwrap();
+            if len == 3 && token_type == 0 && modifiers == 2 {
+                found_lin = true;
+            }
+            // 'pack_wave' has len 9, token_type 2 (function), modifiers 8 (defaultLibrary)
+            if len == 9 && token_type == 2 && modifiers == 8 {
+                found_pack_wave = true;
+            }
+        }
+        assert!(found_lin, "lin token not properly identified with readonly modifier");
+        assert!(found_pack_wave, "pack_wave builtin function not properly identified");
+    }
+
+    #[test]
+    fn test_lsp_semantic_tokens_cl() {
+        let mut server = LspServer::new();
+        let cl_code = concat!(
+            "@CORE(0,0,0,0)\n",
+            "B0000: ADD R0, R1, R2 | NOP | LOAD [R3] | NOP ; test comment\n"
+        );
+        server.documents.insert("file:///core.cl".to_string(), cl_code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 71,
+            "method": "textDocument/semanticTokens/full",
+            "params": {
+                "textDocument": { "uri": "file:///core.cl" }
+            }
+        });
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let data = resp["result"]["data"].as_array().unwrap();
+        assert_eq!(data.len() % 5, 0);
+        assert!(!data.is_empty());
+
+        let mut found_core = false;
+        let mut found_bundle = false;
+        let mut found_add = false;
+        let mut found_reg = false;
+        for chunk in data.chunks(5) {
+            let len = chunk[2].as_u64().unwrap();
+            let token_type = chunk[3].as_u64().unwrap();
+            let modifiers = chunk[4].as_u64().unwrap();
+            if len == 5 && token_type == 5 {
+                found_core = true; // @CORE
+            }
+            if len == 5 && token_type == 8 {
+                found_bundle = true; // B0000
+            }
+            if len == 3 && token_type == 9 {
+                found_add = true; // ADD (macro)
+            }
+            if len == 2 && token_type == 3 && modifiers == 2 {
+                found_reg = true; // R0..R2 (variable, readonly)
+            }
+        }
+        assert!(found_core, "@CORE directive should be classified as class");
+        assert!(found_bundle, "B0000 should be classified as label");
+        assert!(found_add, "ADD should be classified as macro");
+        assert!(found_reg, "R0..R2 registers should be classified as readonly variables");
     }
 }

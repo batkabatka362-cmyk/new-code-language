@@ -455,12 +455,38 @@ pub fn compile_source_with_fdo(source: &str, fdo_profile: &str) -> Result<String
     Ok(optimized)
 }
 
+fn extract_line_col_from_err(msg: &str) -> (usize, usize) {
+    if let Some(rest) = msg.strip_prefix("Line ") {
+        if let Some((line_part, after_line)) = rest.split_once(':') {
+            if let Some((col_part, _)) = after_line.split_once(':') {
+                if let (Ok(line), Ok(col)) = (line_part.trim().parse::<usize>(), col_part.trim().parse::<usize>()) {
+                    return (line, col);
+                }
+            }
+        }
+    }
+    if let Some(pos) = msg.find("at line ") {
+        let rest = &msg[pos + 8..];
+        if let Some((line_part, after_line)) = rest.split_once(',') {
+            if let Some(col_pos) = after_line.find("col ") {
+                let col_str = &after_line[col_pos + 4..];
+                let col_num_str: String = col_str.chars().take_while(|c| c.is_ascii_digit()).collect();
+                if let (Ok(line), Ok(col)) = (line_part.trim().parse::<usize>(), col_num_str.parse::<usize>()) {
+                    return (line, col);
+                }
+            }
+        }
+    }
+    (1, 1)
+}
+
 pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
     let mut lexer = Lexer::new(source);
     let tokens = match lexer.tokenize() {
         Ok(t) => t,
         Err(e) => {
-            return vec![Diagnostic::new("E0001", &e, 1, 1)
+            let (l, c) = extract_line_col_from_err(&e);
+            return vec![Diagnostic::new("E0001", &e, l, c)
                 .with_source(source)
                 .with_help("Check EBNF grammar syntax rules in docs/cron_spec.md")];
         }
@@ -470,7 +496,8 @@ pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
     let mut program = match parser.parse_program() {
         Ok(p) => p,
         Err(e) => {
-            return vec![Diagnostic::new("E0001", &e, 1, 1)
+            let (l, c) = extract_line_col_from_err(&e);
+            return vec![Diagnostic::new("E0001", &e, l, c)
                 .with_source(source)
                 .with_help("Verify module declaration, matching braces and parentheses")];
         }
