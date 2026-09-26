@@ -21,4 +21,7 @@ __pycache__/
 agi_agent_telemetry.json
 training_telemetry.csv
 *.pdf
-scratch/
+# Node / VSCode
+node_modules/
+*.vsix
+package-lock.json

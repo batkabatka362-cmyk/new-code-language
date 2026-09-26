@@ -129,6 +129,52 @@ pub struct CodeAction {
     pub edit: Option<WorkspaceEdit>,
 }
 
+// === LSP 3.17 Extended Structures ===
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParameterInformation {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub documentation: Option<MarkupContent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignatureInformation {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub documentation: Option<MarkupContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<Vec<ParameterInformation>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignatureHelp {
+    pub signatures: Vec<SignatureInformation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_signature: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_parameter: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSymbol {
+    pub name: String,
+    pub kind: u32,  // 5=Class, 6=Method, 12=Function, 23=Struct
+    pub range: Range,
+    pub selection_range: Range,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Vec<DocumentSymbol>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Location {
+    pub uri: String,
+    pub range: Range,
+}
+
 // === Language Identification ===
 
 pub fn is_cl_document(uri: &str, text: &str) -> bool {
@@ -137,11 +183,15 @@ pub fn is_cl_document(uri: &str, text: &str) -> bool {
     }
     text.lines().any(|l| {
         let t = l.trim();
+        // Bundle header pattern: B#### or b#### (letter + 2 digits minimum)
+        let is_bundle_header = t.len() >= 3
+            && (t.starts_with('B') || t.starts_with('b'))
+            && t.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+            && t.chars().nth(2).map_or(false, |c| c.is_ascii_digit());
         t.starts_with("@CORE")
             || t.starts_with(".core")
             || t.starts_with("@kernel")
-            || t.starts_with('B')
-            || t.starts_with('b')
+            || is_bundle_header
             || (t.contains('|') && (t.contains('_') || t.contains("ALU") || t.contains("NOP") || t.contains("ADD")))
     })
 }
@@ -892,18 +942,24 @@ impl LspServer {
             "initialize" => {
                 let result = serde_json::json!({
                     "capabilities": {
-                        "textDocumentSync": 1, // Full document sync
+                        "textDocumentSync": 1,
                         "hoverProvider": true,
                         "completionProvider": {
                             "resolveProvider": false,
                             "triggerCharacters": [".", ":", "$", "@", " ", "_", "R"]
                         },
+                        "signatureHelpProvider": {
+                            "triggerCharacters": ["(", ","],
+                            "retriggerCharacters": [","]
+                        },
+                        "definitionProvider": true,
+                        "documentSymbolProvider": true,
                         "codeActionProvider": true,
                         "documentFormattingProvider": true
                     },
                     "serverInfo": {
                         "name": "cron-lsp",
-                        "version": "3.17.0"
+                        "version": "3.17.1"
                     }
                 });
                 Some(self.format_response(req.id, Some(result), None))
@@ -956,6 +1012,18 @@ impl LspServer {
                     "items": completions
                 });
                 Some(self.format_response(req.id, Some(result), None))
+            }
+            "textDocument/signatureHelp" => {
+                let sig = self.compute_signature_help(&req.params);
+                Some(self.format_response(req.id, Some(serde_json::to_value(sig).unwrap_or(serde_json::Value::Null)), None))
+            }
+            "textDocument/definition" => {
+                let locs = self.compute_definition(&req.params);
+                Some(self.format_response(req.id, Some(serde_json::to_value(locs).unwrap_or(serde_json::Value::Array(vec![]))), None))
+            }
+            "textDocument/documentSymbol" => {
+                let syms = self.compute_document_symbols(&req.params);
+                Some(self.format_response(req.id, Some(serde_json::to_value(syms).unwrap_or(serde_json::Value::Array(vec![]))), None))
             }
             "textDocument/codeAction" => {
                 let actions = self.compute_code_actions(&req.params);
@@ -1085,6 +1153,261 @@ impl LspServer {
             }
         }
         get_completion_items()
+    }
+
+    // === SignatureHelp — shows parameter hints when user types '(' or ',' in .cr ===
+    fn compute_signature_help(&self, params: &Option<serde_json::Value>) -> Option<SignatureHelp> {
+        let p = params.as_ref()?;
+        let uri = p.get("textDocument").and_then(|td| td.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
+        let pos = p.get("position");
+        let line_idx = pos.and_then(|p| p.get("line")).and_then(|l| l.as_u64()).unwrap_or(0) as usize;
+        let character = pos.and_then(|p| p.get("character")).and_then(|c| c.as_u64()).unwrap_or(0) as usize;
+
+        let doc = self.documents.get(uri)?;
+        let line_str = doc.lines().nth(line_idx)?;
+        let prefix = &line_str[..character.min(line_str.len())];
+
+        // Find the function name before the open paren
+        let before_paren = prefix.rfind('(')?;
+        let fn_prefix = prefix[..before_paren].trim();
+        // Count commas to get active parameter index
+        let after_paren = &prefix[before_paren + 1..];
+        let active_param = after_paren.chars().filter(|&c| c == ',').count() as u32;
+
+        // Find the identifier immediately before '('
+        let fn_name = fn_prefix.split(|c: char| !c.is_alphanumeric() && c != '_').last().unwrap_or("");
+
+        // .cr builtin signature table
+        let sigs: &[(&str, &str, &str, &[(&str, &str)])] = &[
+            ("pack_wave",
+             "pack_wave(amp: [f32; 4], phase: [f32; 4]) -> wave_t",
+             "Construct a photonic MZI wavefront packet for Brain 2 processing.",
+             &[("amp", "Array of 4 amplitude values [0.0 .. 1.0]"),
+               ("phase", "Array of 4 phase values in radians [0 .. 2π]")]),
+            ("compute_attention_head",
+             "compute_attention_head(q: tensor, k: tensor, v: tensor, mask: u32) -> (tensor, f32)",
+             "Single-cycle photonic FlashAttention-2 head at 128.4 TOPS/W.",
+             &[("q", "Query tensor"), ("k", "Key tensor"), ("v", "Value tensor"), ("mask", "Causal mask bits")]),
+            ("step_synaptic_plasticity",
+             "step_synaptic_plasticity(pre: spk_stamp, post: spk_stamp, rate: f32)",
+             "Apply STDP synaptic plasticity across neuromorphic crossbars.",
+             &[("pre", "Pre-synaptic spike timestamp"), ("post", "Post-synaptic spike timestamp"), ("rate", "Learning rate η")]),
+            ("ground_and_unify",
+             "ground_and_unify(fact: u64, rules: u64) -> match_t",
+             "Branchless hyper-edge unification on Brain 1 Knowledge Graph.",
+             &[("fact", "Encoded RDF fact triple ID"), ("rules", "Rule set pointer")]),
+            ("init_kg_partition",
+             "init_kg_partition(partition_id: u32)",
+             "Initialize a knowledge graph memory partition.",
+             &[("partition_id", "Partition index (0 .. 15)")]),
+            ("assert_triple",
+             "assert_triple(subj: u64, pred: u64, obj: u64)",
+             "Store a semantic RDF knowledge triple in the graph store.",
+             &[("subj", "Subject entity ID"), ("pred", "Predicate relation ID"), ("obj", "Object entity ID")]),
+            ("batch_norm_quantize",
+             "batch_norm_quantize(data: tensor, mean: f32, scale: f32) -> tensor",
+             "Fixed-point batch normalization for quantized inference.",
+             &[("data", "Input tensor"), ("mean", "Batch mean"), ("scale", "Quantization scale factor")]),
+            ("dense_relu_step",
+             "dense_relu_step(input: tensor, weight: tensor, bias: f32) -> tensor",
+             "INT4 quantized dense matrix multiply + ReLU activation.",
+             &[("input", "Input activation tensor"), ("weight", "Weight matrix"), ("bias", "Bias scalar")]),
+            ("spatial_broadcast",
+             "spatial_broadcast(axis: u32, packet: u64)",
+             "Broadcast a NoC packet across 4D-Torus axis.",
+             &[("axis", "Torus axis 0..3 (X,Y,Z,W)"), ("packet", "Encoded packet payload")]),
+            ("consume",
+             "consume(resource: lin T) -> T",
+             "Consume a linear resource exactly once. Prevents memory leaks.",
+             &[("resource", "A `lin`-qualified variable to consume")]),
+        ];
+
+        for (name, label, doc_text, params_list) in sigs {
+            if *name == fn_name {
+                let parameters: Vec<ParameterInformation> = params_list.iter().map(|(pname, pdoc)| {
+                    ParameterInformation {
+                        label: pname.to_string(),
+                        documentation: Some(MarkupContent {
+                            kind: "markdown".to_string(),
+                            value: pdoc.to_string(),
+                        }),
+                    }
+                }).collect();
+                return Some(SignatureHelp {
+                    signatures: vec![SignatureInformation {
+                        label: label.to_string(),
+                        documentation: Some(MarkupContent {
+                            kind: "markdown".to_string(),
+                            value: doc_text.to_string(),
+                        }),
+                        parameters: Some(parameters),
+                    }],
+                    active_signature: Some(0),
+                    active_parameter: Some(active_param),
+                });
+            }
+        }
+        None
+    }
+
+    // === DocumentSymbol — file outline (functions, structs, brains, .cl labels) ===
+    fn compute_document_symbols(&self, params: &Option<serde_json::Value>) -> Vec<DocumentSymbol> {
+        let mut symbols: Vec<DocumentSymbol> = Vec::new();
+        let p = match params { Some(p) => p, None => return symbols };
+        let uri = p.get("textDocument").and_then(|td| td.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
+        let doc = match self.documents.get(uri) { Some(d) => d, None => return symbols };
+
+        if is_cl_document(uri, doc) {
+            // .cl: emit every bundle header B#### and @CORE as symbols
+            for (i, line) in doc.lines().enumerate() {
+                let t = line.trim();
+                let line_u32 = i as u32;
+                let is_bundle = t.len() >= 5
+                    && (t.starts_with('B') || t.starts_with('b'))
+                    && t[1..5].chars().all(|c| c.is_ascii_digit());
+                let is_core = t.starts_with("@CORE");
+                if is_bundle || is_core {
+                    let name = t.split(|c: char| c == ':' || c == ' ').next().unwrap_or(t).to_string();
+                    let r = Range {
+                        start: Position { line: line_u32, character: 0 },
+                        end: Position { line: line_u32, character: line.len() as u32 },
+                    };
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: if is_core { 5 } else { 12 }, // 5=Class, 12=Function
+                        range: r.clone(),
+                        selection_range: r,
+                        detail: if is_core { Some("CORE Directive".to_string()) } else { Some("VLIW Bundle".to_string()) },
+                        children: None,
+                    });
+                }
+            }
+        } else {
+            // .cr: simple line-based scan for def, struct, trait, brain, region
+            for (i, line) in doc.lines().enumerate() {
+                let t = line.trim();
+                let line_u32 = i as u32;
+                let make_range = |l: u32, len: u32| Range {
+                    start: Position { line: l, character: 0 },
+                    end: Position { line: l, character: len },
+                };
+                let len = line.len() as u32;
+
+                if t.starts_with("def ") {
+                    // def funcname(...
+                    let name = t[4..].split(|c: char| c == '(' || c == ' ').next().unwrap_or("?").to_string();
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: 12, // Function
+                        range: make_range(line_u32, len),
+                        selection_range: make_range(line_u32, len),
+                        detail: Some("function".to_string()),
+                        children: None,
+                    });
+                } else if t.starts_with("struct ") {
+                    let name = t[7..].split(|c: char| c == '{' || c == ' ' || c == '<').next().unwrap_or("?").to_string();
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: 23, // Struct
+                        range: make_range(line_u32, len),
+                        selection_range: make_range(line_u32, len),
+                        detail: Some("struct".to_string()),
+                        children: None,
+                    });
+                } else if t.starts_with("trait ") {
+                    let name = t[6..].split(|c: char| c == '{' || c == ' ' || c == '<').next().unwrap_or("?").to_string();
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: 11, // Interface
+                        range: make_range(line_u32, len),
+                        selection_range: make_range(line_u32, len),
+                        detail: Some("trait".to_string()),
+                        children: None,
+                    });
+                } else if t.starts_with("brain ") {
+                    let name = t[6..].split(|c: char| c == '[' || c == ' ' || c == '{').next().unwrap_or("?").to_string();
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: 5, // Class
+                        range: make_range(line_u32, len),
+                        selection_range: make_range(line_u32, len),
+                        detail: Some("brain partition".to_string()),
+                        children: None,
+                    });
+                } else if t.starts_with("region ") {
+                    let name = t[7..].split(|c: char| c == '[' || c == ' ' || c == '{').next().unwrap_or("?").to_string();
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: 14, // Keyword / Module
+                        range: make_range(line_u32, len),
+                        selection_range: make_range(line_u32, len),
+                        detail: Some("region".to_string()),
+                        children: None,
+                    });
+                } else if t.starts_with("impl ") {
+                    let name = t[5..].split('{').next().unwrap_or("?").trim().to_string();
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: 11, // Interface / Impl
+                        range: make_range(line_u32, len),
+                        selection_range: make_range(line_u32, len),
+                        detail: Some("impl block".to_string()),
+                        children: None,
+                    });
+                }
+            }
+        }
+        symbols
+    }
+
+    // === GoToDefinition — text-searches all open documents for the definition ===
+    fn compute_definition(&self, params: &Option<serde_json::Value>) -> Vec<Location> {
+        let mut locations: Vec<Location> = Vec::new();
+        let p = match params { Some(p) => p, None => return locations };
+        let uri = p.get("textDocument").and_then(|td| td.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
+        let pos = p.get("position");
+        let line_idx = pos.and_then(|p| p.get("line")).and_then(|l| l.as_u64()).unwrap_or(0) as usize;
+        let character = pos.and_then(|p| p.get("character")).and_then(|c| c.as_u64()).unwrap_or(0) as usize;
+
+        let doc = match self.documents.get(uri) { Some(d) => d, None => return locations };
+        let line_str = match doc.lines().nth(line_idx) { Some(l) => l, None => return locations };
+        let (word, _, _) = match extract_word_at_pos(line_str, character) { Some(w) => w, None => return locations };
+
+        // For .cl: look for labels like the bundle header or @CORE directive
+        // For .cr: look for `def <word>`, `struct <word>`, `trait <word>`, `brain <word>`, `impl <word>`
+        let def_patterns: Vec<String> = if is_cl_document(uri, doc) {
+            // Bundle label: B0000, B0001, ...
+            vec![format!("{}:", word), format!("{} ", word)]
+        } else {
+            vec![
+                format!("def {}", word),
+                format!("struct {}", word),
+                format!("trait {}", word),
+                format!("brain {}", word),
+                format!("impl {}", word),
+            ]
+        };
+
+        // Search all open documents
+        for (doc_uri, doc_text) in &self.documents {
+            for (i, doc_line) in doc_text.lines().enumerate() {
+                for pat in &def_patterns {
+                    if doc_line.contains(pat.as_str()) {
+                        let col = doc_line.find(pat.as_str()).unwrap_or(0) as u32;
+                        let line_u32 = i as u32;
+                        locations.push(Location {
+                            uri: doc_uri.clone(),
+                            range: Range {
+                                start: Position { line: line_u32, character: col },
+                                end: Position { line: line_u32, character: col + word.len() as u32 },
+                            },
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+        locations
     }
 
     fn compute_code_actions(&self, params: &Option<serde_json::Value>) -> Vec<CodeAction> {
@@ -1482,5 +1805,169 @@ mod tests {
         assert_eq!(edits.len(), 1);
         let new_text = edits[0]["new_text"].as_str().unwrap();
         assert!(new_text.contains("B0000:"));
+    }
+
+    #[test]
+    fn test_lsp_initialize_new_capabilities() {
+        // Verify the 3 newly declared capabilities are present
+        let mut server = LspServer::new();
+        let init_req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1,
+            "method": "initialize", "params": {}
+        });
+        let resp_str = server.handle_message(&init_req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let caps = &resp["result"]["capabilities"];
+        // signatureHelp trigger chars
+        let triggers = caps["signatureHelpProvider"]["triggerCharacters"].as_array().unwrap();
+        assert!(triggers.iter().any(|t| t == "("));
+        assert!(triggers.iter().any(|t| t == ","));
+        // definition and documentSymbol
+        assert_eq!(caps["definitionProvider"], true);
+        assert_eq!(caps["documentSymbolProvider"], true);
+        // version updated
+        assert_eq!(resp["result"]["serverInfo"]["version"], "3.17.1");
+    }
+
+    #[test]
+    fn test_lsp_signature_help_pack_wave() {
+        let mut server = LspServer::new();
+        let cr_code = "let w = pack_wave(amp=[1.0, 0.5], phase=[0.0, 1.57])\n";
+        server.documents.insert("file:///test.cr".to_string(), cr_code.to_string());
+
+        // Cursor after '(' — active parameter = 0 (amp)
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 40,
+            "method": "textDocument/signatureHelp",
+            "params": {
+                "textDocument": { "uri": "file:///test.cr" },
+                "position": { "line": 0, "character": 19 }
+            }
+        });
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let sigs = resp["result"]["signatures"].as_array().unwrap();
+        assert!(!sigs.is_empty());
+        assert!(sigs[0]["label"].as_str().unwrap().contains("pack_wave"));
+        assert!(sigs[0]["label"].as_str().unwrap().contains("wave_t"));
+        assert_eq!(resp["result"]["activeSignature"], 0);
+        assert_eq!(resp["result"]["activeParameter"], 0);
+        // Verify parameter documentation present
+        let params = sigs[0]["parameters"].as_array().unwrap();
+        assert!(params.iter().any(|p| p["label"] == "amp"));
+        assert!(params.iter().any(|p| p["label"] == "phase"));
+    }
+
+    #[test]
+    fn test_lsp_signature_help_active_parameter() {
+        // After one comma, activeParameter should advance to 1
+        let mut server = LspServer::new();
+        // Cursor is after comma: "compute_attention_head(q, "
+        let cr_code = "let x = compute_attention_head(q, k)\n";
+        server.documents.insert("file:///attn.cr".to_string(), cr_code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 41,
+            "method": "textDocument/signatureHelp",
+            "params": {
+                "textDocument": { "uri": "file:///attn.cr" },
+                "position": { "line": 0, "character": 33 }  // after 'q, '
+            }
+        });
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        assert_eq!(resp["result"]["activeParameter"], 1);
+        let sigs = resp["result"]["signatures"].as_array().unwrap();
+        assert!(sigs[0]["label"].as_str().unwrap().contains("compute_attention_head"));
+    }
+
+    #[test]
+    fn test_lsp_document_symbols_cr() {
+        let mut server = LspServer::new();
+        let cr_code = concat!(
+            "def compute_loss(x: f32, y: f32) -> f32 { }\n",
+            "struct WeightMatrix { data: tensor }\n",
+            "trait Trainable { def step(self); }\n",
+            "brain AttentionEngine [cores=64] { }\n",
+            "region Workspace [target=SELF] { }\n",
+            "impl Trainable for WeightMatrix { }\n",
+        );
+        server.documents.insert("file:///model.cr".to_string(), cr_code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 50,
+            "method": "textDocument/documentSymbol",
+            "params": { "textDocument": { "uri": "file:///model.cr" } }
+        });
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let syms = resp["result"].as_array().unwrap();
+
+        // Check function symbol
+        assert!(syms.iter().any(|s| s["name"] == "compute_loss" && s["kind"] == 12));
+        // Check struct symbol
+        assert!(syms.iter().any(|s| s["name"] == "WeightMatrix" && s["kind"] == 23));
+        // Check trait symbol
+        assert!(syms.iter().any(|s| s["name"] == "Trainable" && s["kind"] == 11));
+        // Check brain symbol (kind=5 Class)
+        assert!(syms.iter().any(|s| s["name"] == "AttentionEngine" && s["kind"] == 5));
+        // Check region symbol
+        assert!(syms.iter().any(|s| s["name"] == "Workspace" && s["kind"] == 14));
+        // Check impl symbol
+        assert!(syms.iter().any(|s| s["name"].as_str().unwrap().contains("Trainable for WeightMatrix") && s["kind"] == 11));
+    }
+
+    #[test]
+    fn test_lsp_document_symbols_cl() {
+        let mut server = LspServer::new();
+        let cl_code = concat!(
+            "@CORE(0,0,0,0)\n",
+            "B0000: ADD R0, R1, R2 | NOP | LOAD [R3] | NOP\n",
+            "B0001: MUL R4, R0, R2 | NOP | NOP | SEND R7\n",
+        );
+        server.documents.insert("file:///kernel.cl".to_string(), cl_code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 51,
+            "method": "textDocument/documentSymbol",
+            "params": { "textDocument": { "uri": "file:///kernel.cl" } }
+        });
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let syms = resp["result"].as_array().unwrap();
+
+        // @CORE should appear as Class (kind=5)
+        assert!(syms.iter().any(|s| s["name"].as_str().unwrap().starts_with("@CORE") && s["kind"] == 5));
+        // B0000 and B0001 as Function (kind=12)
+        assert!(syms.iter().any(|s| s["name"] == "B0000" && s["kind"] == 12));
+        assert!(syms.iter().any(|s| s["name"] == "B0001" && s["kind"] == 12));
+    }
+
+    #[test]
+    fn test_lsp_goto_definition_function() {
+        let mut server = LspServer::new();
+        let cr_code = concat!(
+            "def forward_pass(x: tensor) -> tensor { }\n",
+            "let result = forward_pass(input)\n",
+        );
+        server.documents.insert("file:///net.cr".to_string(), cr_code.to_string());
+
+        // Hover cursor over 'forward_pass' on line 1 (the call site)
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 60,
+            "method": "textDocument/definition",
+            "params": {
+                "textDocument": { "uri": "file:///net.cr" },
+                "position": { "line": 1, "character": 15 }  // inside 'forward_pass'
+            }
+        });
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let locs = resp["result"].as_array().unwrap();
+
+        // Should find definition on line 0
+        assert!(!locs.is_empty());
+        assert_eq!(locs[0]["uri"], "file:///net.cr");
+        assert_eq!(locs[0]["range"]["start"]["line"], 0);
     }
 }

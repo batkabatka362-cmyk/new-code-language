@@ -2,10 +2,21 @@
   "name": "cron-lang",
   "displayName": "CRON Cognitive Language Support",
   "description": "Language support, syntax highlighting, snippets, and LSP 3.17 engine for CRON (.cr) & CRON Low-Level (.cl) 256-Core 4D-Torus Processor",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "cron-ai",
   "engines": {
     "vscode": "^1.80.0"
+  },
+  "scripts": {
+    "vscode:prepublish": "echo ready",
+    "package": "vsce package --allow-missing-repository"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.0.0"
   },
   "categories": [
     "Programming Languages",

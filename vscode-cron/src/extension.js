@@ -38,7 +38,7 @@ function resolveCronExecutable() {
 
 function activate(context) {
     const outputChannel = vscode.window.createOutputChannel('CRON Language Server');
-    outputChannel.appendLine('[CRON Extension] Activating CRON Cognitive Language extension v1.1.0...');
+    outputChannel.appendLine('[CRON Extension] Activating CRON Cognitive Language extension v1.2.0...');
 
     const serverExe = resolveCronExecutable();
     outputChannel.appendLine(`[CRON Extension] Resolved executable: ${serverExe}`);
