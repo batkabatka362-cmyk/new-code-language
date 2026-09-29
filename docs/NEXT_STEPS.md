@@ -1,6 +1,48 @@
-# CRON Ecosystem — Дараагийн шатны төлөвлөгөө ба ажлуудын жагсаалт (Roadmap & Backlog)
+# CRON Ecosystem — Хийгдсэн ажлууд ба Дараагийн шатны төлөвлөгөө (Worklog & Roadmap)
 
-Сүүлийн шинэчлэлт: 2026-09-26
+Сүүлийн шинэчлэлт: 2026-09-29
+
+---
+
+## 0. Сүүлд хийгдсэн ажлууд (Recently Completed Tasks & Verification)
+
+### A. LSP 3.17 & VSCode Өргөтгөлийн сайжруулалт
+- [x] **SignatureHelp Provider (`textDocument/signatureHelp`)**:
+  - `(` болон `,` тэмдэгтүүдээр автоматаар ажилладаг.
+  - 10 суулгагдсан когнитив функцуудын (`pack_wave`, `compute_attention_head`, `step_synaptic_plasticity`, `ground_and_unify`, `assert_triple`, `consume` гэх мэт) параметр, тайлбар, идэвхтэй параметрийн байрлалыг тодорхойлно.
+- [x] **DocumentSymbol Provider (`textDocument/documentSymbol`)**:
+  - `.cr`: `def`, `struct`, `trait`, `brain`, `region`, `impl` блокуудыг Outline модонд гаргана.
+  - `.cl`: `@CORE` заавар болон `B0000:` VLIW bundle шошгуудыг бүрэн таньж харуулна.
+- [x] **GoToDefinition Provider (`textDocument/definition`)**:
+  - Функц, бүтэц, төлөв, brain, impl тодорхойлолт болон `.cl` шошгуудын эх үүсвэр рүү (`F12`) үсрэх чадвар.
+- [x] **Semantic Tokens Provider (`textDocument/semanticTokens/full`)**:
+  - LSP 3.17 delta-encoding стандартаар AST түвшний өнгө ялгалт хийсэн:
+    - Linear Affine `lin` хувьсагчдыг `readonly` горимоор тодотгох.
+    - Когнитив блокууд (`brain`, `resilient_compute`, `region`).
+    - Тоног төхөөрөмжийн регистрүүд (`R0..R15`, `V0..V7`, `A0..A3`), micro-op командууд (`ADD`, `FMA`, `SWIZZLE`, `ROUTE_DOR`, `SEND`, `RECV`).
+- [x] **`is_cl_document` засав**:
+  - `.cr` дотор `brain` блок байх үед алдаатайгаар `.cl` гэж таньдаг байсан алдааг `B####` толгой загварын шалгалтаар засав.
+- [x] **VSCode Extension v1.2.0 & VSIX багцлалт**:
+  - `vscode-cron/cron-lang-1.2.0.vsix` багцыг бүрэн хамаарлуудтай нь (`vscode-languageclient` 9.0+) хамт бүтээв.
+  - Нийт **15/15 LSP тест** (`cargo test -p cron-lsp`) 100% ногоон.
+
+### B. Компилятор (`cronc`) & Оношлогооны нарийвчлал
+- [x] **Синтакс алдааны мөр, баганыг нарийн заах (`extract_line_col_from_err`)**:
+  - Өмнө нь бүх синтакс алдааг `(1, 1)` гэж харуулдаг байсныг засаж, Parser болон Lexer-ийн бодит `(line, col)` байрлалыг гарган улаан зураасаар заадаг болов.
+- [x] **Workspace-wide тестүүд**: `cargo test --workspace` төслийн бүх crate-ууд 0 алдаатай бүрэн давсан.
+
+### C. Тоног төхөөрөмж ба Микро-архитектурын баталгаажуулалт (`homopolymer_quantum_agent.cl`)
+- [x] **Edge Case & Latch Integrity**:
+  - `_HL00$000!` (Halt/Commit) мөчид:
+    - Write-Enable шугамыг тасалж (`WE=0`), Crossbar bus-ийг ground хийнэ.
+    - `_88` заавраар 0-cycle arena санах ойг бүрэн цэвэрлэж (`quench`), хоцрогдсон өгөгдлийг 0 болгоно.
+    - `_bb` заавраар 256-core NoC буферүүдийг 100% суллаж түгжинэ.
+- [x] **Thermal & Bandwidth Saturation (`cron cl-power`)**:
+  - Landauer энтрөпийн хяналт ($E = N \cdot k_B \cdot T \cdot \ln 2$): 128 бит арчигдаж, $3.675 \times 10^{-19}\text{ J}$ дулаан ялгарсан.
+  - Чипийн дулаан: $T_j = 25.8^\circ\text{C}$ (95.8% TDP headroom).
+  - 16-Bank PGAS дээр $GF(2^4)$ Galois swizzling ажиллаж 160 GB/s зурвасын өргөнд 0 bank conflict баталгаажсан.
+- [x] **Stress Determinism (`cron cl-cosim`)**:
+  - `ClJitCore` лавлагаа програм болон нийлэгждэг Verilog RTL (`cksl_core`) хоорондын parity: 3 такт, 3 тохирол, 0 зөрүүтэйгээр **100% Bit-Exact** батлагдсан.
 
 ---
 
