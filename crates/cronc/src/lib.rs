@@ -386,7 +386,7 @@ pub use model_importer::{
     OnnxGraph, OnnxModel, OnnxNode, OnnxTensor,
 };
 
-use checker::SemanticChecker;
+pub use checker::{InlayHintInfo, SemanticChecker};
 use codegen::Codegen;
 use diagnostic::Diagnostic;
 use lexer::Lexer;
@@ -507,21 +507,47 @@ pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
     let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
 
     let mut checker = SemanticChecker::new();
-    if let Err(type_err) = checker.check_program(&program) {
-        let span = type_err.span.unwrap_or(crate::token::Span::point(1, 1, 0));
-        let mut diag = Diagnostic::new(type_err.code, &type_err.message, span.line, span.col)
-            .with_span(span.len)
-            .with_source(source);
-        if let Some(note) = type_err.note {
-            diag = diag.with_note(note);
-        }
-        if let Some(help) = type_err.help {
-            diag = diag.with_help(help);
-        }
-        return vec![diag];
+    let type_errors = checker.check_program_multi(&program);
+    if !type_errors.is_empty() {
+        return type_errors
+            .into_iter()
+            .map(|type_err| {
+                let span = type_err.span.unwrap_or(crate::token::Span::point(1, 1, 0));
+                let mut diag = Diagnostic::new(type_err.code, &type_err.message, span.line, span.col)
+                    .with_span(span.len)
+                    .with_source(source);
+                if let Some(note) = type_err.note {
+                    diag = diag.with_note(note);
+                }
+                if let Some(help) = type_err.help {
+                    diag = diag.with_help(help);
+                }
+                diag
+            })
+            .collect();
     }
 
     Vec::new()
+}
+
+/// Collects rich Inlay Hints from source code for language servers (LSP 3.17)
+pub fn collect_inlay_hints(source: &str) -> Vec<InlayHintInfo> {
+    let mut lexer = Lexer::new(source);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut parser = Parser::new(tokens);
+    let mut program = match parser.parse_program() {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+
+    let _ = autodiff::AutodiffEngine::differentiate_program(&mut program);
+
+    let mut checker = SemanticChecker::new();
+    checker.collect_inlay_hints(&program)
 }
 
 pub fn compile_to_verilog(source: &str, module_name: &str) -> Result<String, String> {
@@ -1173,5 +1199,45 @@ mod tests {
         // Corrupt a byte in the payload and verify detection
         let corrupted = "_OP05$1".to_string() + &packed_slot[7..];
         assert!(!verify_token_crc8(&corrupted));
+    }
+
+    #[test]
+    fn test_multi_error_diagnostics_collected() {
+        let code = r#"
+        .MODULE MultiErr
+        _main:
+            let x = 10
+            x = 20
+            let lin photon_bundle = 1
+            let lin wave_bundle = 2
+        .END
+        "#;
+        let diags = check_source_diagnostics(code);
+        // Previously only 1 error was returned; now all independent semantic errors are collected!
+        assert!(diags.len() >= 2, "Expected multiple diagnostics, found: {}", diags.len());
+        assert!(diags.iter().any(|d| d.code == "E0005"), "Expected E0005 immutable reassignment error");
+        assert!(diags.iter().any(|d| d.code == "E0002"), "Expected E0002 linear leak error");
+    }
+
+    #[test]
+    fn test_collect_inlay_hints_metadata() {
+        let code = r#"
+        .MODULE HintDemo
+        _main:
+            let int_val = 42
+            let float_val = 3.14
+            let str_val = "photonic"
+            let flag = true
+            let lin wave = pack_wave()
+            consume(wave)
+        .END
+        "#;
+        let hints = collect_inlay_hints(code);
+        assert!(!hints.is_empty(), "Expected inlay hints to be generated");
+        assert!(hints.iter().any(|h| h.label == ": i64"), "Expected : i64 hint for int_val");
+        assert!(hints.iter().any(|h| h.label == ": f64"), "Expected : f64 hint for float_val");
+        assert!(hints.iter().any(|h| h.label == ": string"), "Expected : string hint for str_val");
+        assert!(hints.iter().any(|h| h.label == ": bool"), "Expected : bool hint for flag");
+        assert!(hints.iter().any(|h| h.label == ": wave_t [linear]" && h.is_linear), "Expected wave_t [linear] hint");
     }
 }

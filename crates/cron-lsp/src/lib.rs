@@ -175,6 +175,21 @@ pub struct Location {
     pub range: Range,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InlayHint {
+    pub position: Position,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<u32>, // 1 = Type, 2 = Parameter
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub padding_left: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub padding_right: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tooltip: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RawSemanticToken {
     pub line: u32,
@@ -1054,6 +1069,7 @@ impl LspServer {
                         "documentSymbolProvider": true,
                         "codeActionProvider": true,
                         "documentFormattingProvider": true,
+                        "inlayHintProvider": true,
                         "semanticTokensProvider": {
                             "legend": {
                                 "tokenTypes": [
@@ -1143,6 +1159,10 @@ impl LspServer {
             "textDocument/formatting" => {
                 let edits = self.compute_formatting(&req.params);
                 Some(self.format_response(req.id, Some(serde_json::to_value(edits).unwrap_or(serde_json::Value::Array(vec![]))), None))
+            }
+            "textDocument/inlayHint" => {
+                let hints = self.compute_inlay_hints(&req.params);
+                Some(self.format_response(req.id, Some(serde_json::to_value(hints).unwrap_or(serde_json::Value::Array(vec![]))), None))
             }
             "textDocument/semanticTokens/full" => {
                 let data = self.compute_semantic_tokens(&req.params);
@@ -1785,10 +1805,233 @@ impl LspServer {
                             edit: Some(WorkspaceEdit { changes: Some(opt_changes) }),
                         });
                     }
+                } else {
+                    // Action for .cr: Auto-Fix / QuickFix for linear type leaks (E0002/E0003)
+                    if let Some(ctx) = p.get("context") {
+                        if let Some(diags) = ctx.get("diagnostics").and_then(|d| d.as_array()) {
+                            for diag in diags {
+                                let code = diag.get("code").and_then(|c| c.as_str()).unwrap_or("");
+                                let msg = diag.get("message").and_then(|m| m.as_str()).unwrap_or("");
+                                if code == "E0002" || code == "E0003" || msg.contains("Linear variable") {
+                                    if let Some(start_quote) = msg.find('\'') {
+                                        if let Some(end_quote) = msg[start_quote + 1..].find('\'') {
+                                            let var_name = &msg[start_quote + 1..start_quote + 1 + end_quote];
+                                            let mut insert_line = doc.lines().count() as u32;
+                                            for (idx, line) in doc.lines().enumerate() {
+                                                if line.trim().starts_with(".END") {
+                                                    insert_line = idx as u32;
+                                                    break;
+                                                }
+                                            }
+                                            let mut changes = HashMap::new();
+                                            changes.insert(uri.to_string(), vec![TextEdit {
+                                                range: Range {
+                                                    start: Position { line: insert_line, character: 0 },
+                                                    end: Position { line: insert_line, character: 0 },
+                                                },
+                                                new_text: format!("    consume({})\n", var_name),
+                                            }]);
+
+                                            actions.push(CodeAction {
+                                                title: format!("Insert 'consume({})' to resolve linear type leak", var_name),
+                                                kind: Some("quickfix".to_string()),
+                                                diagnostics: None,
+                                                is_preferred: Some(true),
+                                                edit: Some(WorkspaceEdit { changes: Some(changes) }),
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
         actions
+    }
+
+    fn compute_inlay_hints(&self, params: &Option<serde_json::Value>) -> Vec<InlayHint> {
+        let mut hints = Vec::new();
+        let p = match params {
+            Some(p) => p,
+            None => return hints,
+        };
+        let uri = p.get("textDocument").and_then(|td| td.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
+        let doc = match self.documents.get(uri) {
+            Some(d) => d,
+            None => return hints,
+        };
+
+        let range_filter = p.get("range").and_then(|r| {
+            let start_line = r.get("start")?.get("line")?.as_u64()? as u32;
+            let end_line = r.get("end")?.get("line")?.as_u64()? as u32;
+            Some((start_line, end_line))
+        });
+
+        if is_cl_document(uri, doc) {
+            // Inlay hints for .cl (Clean Assembly / VLIW)
+            for (line_idx, line) in doc.lines().enumerate() {
+                let line_u32 = line_idx as u32;
+                if let Some((start_l, end_l)) = range_filter {
+                    if line_u32 < start_l || line_u32 > end_l {
+                        continue;
+                    }
+                }
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with(';') || trimmed.starts_with('#') {
+                    continue;
+                }
+
+                // Check for bundle header: B####:
+                if trimmed.len() >= 6
+                    && (trimmed.starts_with('B') || trimmed.starts_with('b'))
+                    && trimmed[1..5].chars().all(|c| c.is_ascii_digit())
+                    && trimmed.chars().nth(5) == Some(':')
+                {
+                    if let Ok(bundle_num) = trimmed[1..5].parse::<u32>() {
+                        if let Some(colon_pos) = line.find(':') {
+                            hints.push(InlayHint {
+                                position: Position { line: line_u32, character: (colon_pos + 1) as u32 },
+                                label: format!(" [C#{}]", bundle_num),
+                                kind: Some(2),
+                                padding_left: Some(true),
+                                padding_right: Some(true),
+                                tooltip: Some(format!("VLIW Execution Cycle #{}", bundle_num)),
+                            });
+                        }
+                    }
+
+                    let payload = trimmed[6..].trim();
+                    if payload.contains('|') {
+                        let slots: Vec<&str> = payload.split('|').collect();
+                        let slot_labels = ["ALU", "FMA", "MEM", "NOC"];
+                        let mut search_from = 6;
+                        for (idx, slot) in slots.iter().enumerate() {
+                            let slot_trimmed = slot.trim();
+                            if !slot_trimmed.is_empty() {
+                                if let Some(found_idx) = line[search_from..].find(slot_trimmed) {
+                                    let col = search_from + found_idx;
+                                    let label_text = if idx < slot_labels.len() { slot_labels[idx] } else { "SLOT" };
+                                    hints.push(InlayHint {
+                                        position: Position { line: line_u32, character: col as u32 },
+                                        label: format!("[{}] ", label_text),
+                                        kind: Some(2),
+                                        padding_left: Some(false),
+                                        padding_right: Some(true),
+                                        tooltip: Some(format!("Port Slot {}: {}", idx, label_text)),
+                                    });
+                                    search_from = col + slot_trimmed.len();
+                                }
+                            }
+                        }
+                    } else {
+                        let tokens: Vec<&str> = payload.split_whitespace().collect();
+                        let slot_labels = ["ALU", "FMA", "OPT", "NOC"];
+                        let mut search_from = 6;
+                        for (idx, tok) in tokens.iter().enumerate() {
+                            if let Some(found_idx) = line[search_from..].find(tok) {
+                                let col = search_from + found_idx;
+                                let label_text = if idx < slot_labels.len() { slot_labels[idx] } else { "SLOT" };
+                                hints.push(InlayHint {
+                                    position: Position { line: line_u32, character: col as u32 },
+                                    label: format!("[{}] ", label_text),
+                                    kind: Some(2),
+                                    padding_left: Some(false),
+                                    padding_right: Some(true),
+                                    tooltip: Some(format!("Port Slot {}: {}", idx, label_text)),
+                                });
+                                search_from = col + tok.len();
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Inlay hints for .cr (CRON High-Level Language)
+            let collected = cronc::collect_inlay_hints(doc);
+            if collected.is_empty() {
+                // Line-level fallback for live typing resilience
+                for (line_idx, line) in doc.lines().enumerate() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("let ") {
+                        let rest = trimmed[4..].trim();
+                        let (is_lin, var_part) = if rest.starts_with("lin ") {
+                            (true, rest[4..].trim())
+                        } else if rest.starts_with("mut ") {
+                            (false, rest[4..].trim())
+                        } else {
+                            (false, rest)
+                        };
+
+                        if let Some((lhs, rhs)) = var_part.split_once('=') {
+                            let var_name = lhs.trim();
+                            if !var_name.contains(':') && !var_name.is_empty() {
+                                let rhs_trim = rhs.trim();
+                                let inferred = if rhs_trim.starts_with('"') {
+                                    Some("string")
+                                } else if rhs_trim == "true" || rhs_trim == "false" {
+                                    Some("bool")
+                                } else if rhs_trim.contains('.') && rhs_trim.chars().any(|c| c.is_ascii_digit()) {
+                                    Some("f64")
+                                } else if rhs_trim.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                                    Some("i64")
+                                } else if rhs_trim.starts_with("pack_wave") {
+                                    Some("wave_t")
+                                } else {
+                                    None
+                                };
+
+                                let label = match (inferred, is_lin) {
+                                    (Some(t), true) => format!(": {} [linear]", t),
+                                    (Some(t), false) => format!(": {}", t),
+                                    (None, true) => ": [linear]".to_string(),
+                                    (None, false) => String::new(),
+                                };
+
+                                if !label.is_empty() {
+                                    if let Some(var_pos) = line.find(var_name) {
+                                        let col = var_pos + var_name.len();
+                                        hints.push(InlayHint {
+                                            position: Position { line: line_idx as u32, character: col as u32 },
+                                            label,
+                                            kind: Some(1),
+                                            padding_left: Some(true),
+                                            padding_right: Some(false),
+                                            tooltip: if is_lin {
+                                                Some("Linear Affine Resource: Must be consumed exactly once".to_string())
+                                            } else {
+                                                None
+                                            },
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for h in collected {
+                    let line_u32 = h.line.saturating_sub(1) as u32;
+                    let col_u32 = h.col.saturating_sub(1) as u32;
+                    if let Some((start_l, end_l)) = range_filter {
+                        if line_u32 < start_l || line_u32 > end_l {
+                            continue;
+                        }
+                    }
+                    hints.push(InlayHint {
+                        position: Position { line: line_u32, character: col_u32 },
+                        label: h.label,
+                        kind: if h.is_type { Some(1) } else { Some(2) },
+                        padding_left: Some(true),
+                        padding_right: Some(false),
+                        tooltip: h.tooltip,
+                    });
+                }
+            }
+        }
+
+        hints
     }
 
     fn compute_formatting(&self, params: &Option<serde_json::Value>) -> Vec<TextEdit> {
@@ -1922,6 +2165,7 @@ mod tests {
         assert_eq!(resp["result"]["capabilities"]["hoverProvider"], true);
         assert_eq!(resp["result"]["capabilities"]["codeActionProvider"], true);
         assert_eq!(resp["result"]["capabilities"]["documentFormattingProvider"], true);
+        assert_eq!(resp["result"]["capabilities"]["inlayHintProvider"], true);
     }
 
     #[test]
@@ -1952,6 +2196,40 @@ mod tests {
         assert!(!diags.is_empty());
         assert_eq!(diags[0]["code"], "E0002");
         assert!(diags[0]["message"].as_str().unwrap().contains("Linear variable 'unconsumed_photon' was allocated but never consumed"));
+    }
+
+    #[test]
+    fn test_lsp_cr_multi_error_diagnostics() {
+        let mut server = LspServer::new();
+        let code = r#"
+        .MODULE MultiLeak
+        _main:
+            let a = 1
+            a = 2
+            let lin leak1 = 10
+            let lin leak2 = 20
+        .END
+        "#;
+
+        let open_req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": "file:///workspace/multi_err.cr",
+                    "text": code
+                }
+            }
+        });
+
+        let resp_str = server.handle_message(&open_req.to_string()).unwrap();
+        let notify: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        assert_eq!(notify["method"], "textDocument/publishDiagnostics");
+        let diags = notify["params"]["diagnostics"].as_array().unwrap();
+        // Multi-error diagnostics: all errors in the file are published in a single pass!
+        assert!(diags.len() >= 2, "Expected multiple diagnostics, got: {}", diags.len());
+        assert!(diags.iter().any(|d| d["code"] == "E0005"));
+        assert!(diags.iter().any(|d| d["code"] == "E0002"));
     }
 
     #[test]
@@ -2150,6 +2428,7 @@ mod tests {
         // definition, documentSymbol, and semanticTokens
         assert_eq!(caps["definitionProvider"], true);
         assert_eq!(caps["documentSymbolProvider"], true);
+        assert_eq!(caps["inlayHintProvider"], true);
         assert_eq!(caps["semanticTokensProvider"]["full"], true);
         // version updated
         assert_eq!(resp["result"]["serverInfo"]["version"], "3.17.1");
@@ -2383,5 +2662,101 @@ mod tests {
         assert!(found_bundle, "B0000 should be classified as label");
         assert!(found_add, "ADD should be classified as macro");
         assert!(found_reg, "R0..R2 registers should be classified as readonly variables");
+    }
+
+    #[test]
+    fn test_lsp_cr_inlay_hints() {
+        let mut server = LspServer::new();
+        let code = r#"
+        .MODULE InlayDemo
+        _main:
+            let a = 10
+            let lin photon = pack_wave()
+            consume(photon)
+        .END
+        "#;
+        server.documents.insert("file:///workspace/demo.cr".to_string(), code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "textDocument/inlayHint",
+            "params": {
+                "textDocument": { "uri": "file:///workspace/demo.cr" },
+                "range": {
+                    "start": { "line": 0, "character": 0 },
+                    "end": { "line": 10, "character": 0 }
+                }
+            }
+        });
+
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let hints = resp["result"].as_array().unwrap();
+        assert!(!hints.is_empty(), "Inlay hints should be computed for .cr");
+        assert!(hints.iter().any(|h| h["label"] == ": i64"), "Expected : i64 inlay hint for 'a'");
+        assert!(hints.iter().any(|h| h["label"].as_str().unwrap().contains("wave_t") && h["label"].as_str().unwrap().contains("[linear]")), "Expected wave_t [linear] hint");
+    }
+
+    #[test]
+    fn test_lsp_cl_inlay_hints() {
+        let mut server = LspServer::new();
+        let cl_code = "B0001: ADD R1, R2, R3 | FMA V0, V1, V2 | LOAD R4, [R5] | SEND R6\n";
+        server.documents.insert("file:///workspace/test.cl".to_string(), cl_code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 100,
+            "method": "textDocument/inlayHint",
+            "params": {
+                "textDocument": { "uri": "file:///workspace/test.cl" }
+            }
+        });
+
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let hints = resp["result"].as_array().unwrap();
+        assert!(!hints.is_empty(), "Inlay hints should be computed for .cl");
+        assert!(hints.iter().any(|h| h["label"].as_str().unwrap().contains("[C#1]")), "Expected cycle hint [C#1]");
+        assert!(hints.iter().any(|h| h["label"].as_str().unwrap().contains("[ALU]")), "Expected [ALU] slot hint");
+        assert!(hints.iter().any(|h| h["label"].as_str().unwrap().contains("[FMA]")), "Expected [FMA] slot hint");
+    }
+
+    #[test]
+    fn test_lsp_cr_code_action_consume_linear() {
+        let mut server = LspServer::new();
+        let code = r#"
+        .MODULE ActionDemo
+        _main:
+            let lin orphan_photon = 42
+        .END
+        "#;
+        server.documents.insert("file:///workspace/action.cr".to_string(), code.to_string());
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 101,
+            "method": "textDocument/codeAction",
+            "params": {
+                "textDocument": { "uri": "file:///workspace/action.cr" },
+                "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 3, "character": 30 } },
+                "context": {
+                    "diagnostics": [
+                        {
+                            "code": "E0002",
+                            "message": "Linear type leak: Linear variable 'orphan_photon' was allocated but never consumed or exported",
+                            "range": { "start": { "line": 3, "character": 12 }, "end": { "line": 3, "character": 25 } }
+                        }
+                    ]
+                }
+            }
+        });
+
+        let resp_str = server.handle_message(&req.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let actions = resp["result"].as_array().unwrap();
+        assert!(!actions.is_empty(), "Expected code action for unconsumed linear resource");
+        assert!(actions[0]["title"].as_str().unwrap().contains("consume(orphan_photon)"));
+        assert_eq!(actions[0]["kind"], "quickfix");
     }
 }

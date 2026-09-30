@@ -58,6 +58,16 @@ pub struct VarInfo {
     pub in_region: bool,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlayHintInfo {
+    pub line: usize,
+    pub col: usize,
+    pub label: String,
+    pub is_type: bool,
+    pub is_linear: bool,
+    pub tooltip: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Scope {
     pub vars: HashMap<String, VarInfo>,
@@ -498,6 +508,293 @@ impl SemanticChecker {
         Ok(())
     }
 
+    /// Checks the entire program and accumulates all semantic, type, contract, and linear leak errors
+    /// instead of stopping at the first error. Essential for IDE/LSP multi-error diagnostics.
+    pub fn check_program_multi(&mut self, program: &Program) -> Vec<TypeError> {
+        let mut errors = Vec::new();
+
+        // Register all function names and parameter/return types
+        for func in &program.functions {
+            self.known_functions.insert(func.name.clone());
+            let params: Vec<(String, String)> = func.params.iter().map(|p| (p.name.clone(), p.param_type.clone())).collect();
+            self.fn_param_types.insert(func.name.clone(), params);
+            if let Some(ret) = &func.return_type {
+                self.fn_return_types.insert(func.name.clone(), ret.clone());
+            }
+        }
+
+        // Register structs
+        for s in &program.structs {
+            let mut field_map = HashMap::new();
+            for (f_name, f_type) in &s.fields {
+                field_map.insert(f_name.clone(), f_type.clone());
+            }
+            self.known_structs.insert(s.name.clone(), field_map);
+        }
+
+        // Register type aliases
+        for t in &program.type_aliases {
+            self.known_types.insert(t.name.clone(), t.target_type.clone());
+        }
+
+        // Register algebraic enum types
+        for e in &program.enums {
+            self.known_types.insert(e.name.clone(), "enum".to_string());
+            let variant_names: Vec<String> = e.variants.iter().map(|v| v.name.clone()).collect();
+            for v in &e.variants {
+                self.known_enum_payloads.insert((e.name.clone(), v.name.clone()), v.payload.clone());
+            }
+            self.known_enums.insert(e.name.clone(), variant_names);
+        }
+
+        // Register trait contracts
+        for trait_decl in &program.traits {
+            let methods: Vec<(String, Vec<String>, Option<String>)> = trait_decl
+                .methods
+                .iter()
+                .map(|m| {
+                    let param_types: Vec<String> = m.params.iter()
+                        .filter(|p| p.name != "self")
+                        .map(|p| p.param_type.clone())
+                        .collect();
+                    (m.name.clone(), param_types, m.return_type.clone())
+                })
+                .collect();
+            self.known_traits.insert(trait_decl.name.clone(), methods);
+        }
+
+        // Verify impl blocks satisfy trait contracts
+        for impl_decl in &program.impls {
+            if let Some(trait_methods) = self.known_traits.get(&impl_decl.trait_name) {
+                let impl_method_names: HashSet<String> = impl_decl.methods.iter().map(|m| m.name.clone()).collect();
+                for (trait_method_name, _param_types, _ret_type) in trait_methods {
+                    if !impl_method_names.contains(trait_method_name) {
+                        let span = if let Some(first_method) = impl_decl.methods.first() {
+                            first_method.params.first().map(|p| p.span).unwrap_or(Span::default())
+                        } else {
+                            Span::default()
+                        };
+                        errors.push(TypeError::new(
+                            "E0008",
+                            format!(
+                                "Trait contract violation: impl {} for {} is missing method '{}'",
+                                impl_decl.trait_name, impl_decl.target_struct, trait_method_name
+                            ),
+                            span,
+                        )
+                        .with_note("Milestone #005: All trait methods must be monomorphized at compile-time")
+                        .with_help(format!("Add `def {}(...)` to the impl block", trait_method_name)));
+                    }
+                }
+                self.known_impls.insert(
+                    (impl_decl.trait_name.clone(), impl_decl.target_struct.clone()),
+                    impl_method_names,
+                );
+            }
+
+            // Register impl methods as known functions and check their bodies
+            for method in &impl_decl.methods {
+                self.known_functions.insert(method.name.clone());
+                let mut func_checker = SemanticChecker::new();
+                func_checker.known_functions = self.known_functions.clone();
+                func_checker.known_structs = self.known_structs.clone();
+                func_checker.known_types = self.known_types.clone();
+                for gp in &impl_decl.generic_params {
+                    func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
+                }
+                for gp in &method.generic_params {
+                    func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
+                }
+                func_checker.known_traits = self.known_traits.clone();
+                func_checker.known_impls = self.known_impls.clone();
+                func_checker.known_enums = self.known_enums.clone();
+                func_checker.fn_param_types = self.fn_param_types.clone();
+                func_checker.fn_return_types = self.fn_return_types.clone();
+                for param in &method.params {
+                    if param.name == "self" { continue; }
+                    func_checker.insert_var(VarInfo {
+                        name: param.name.clone(),
+                        is_lin: param.is_lin,
+                        is_grad: param.is_grad,
+                        is_mut: false,
+                        is_consumed: false,
+                        is_tainted: false,
+                        is_capability: false,
+                        def_span: param.span,
+                        var_type: Some(param.param_type.clone()),
+                        in_region: false,
+                    });
+                }
+                func_checker.check_statements_multi(&method.body, &mut errors);
+                func_checker.verify_all_linear_consumed_multi(&mut errors);
+            }
+        }
+
+        // Check functions
+        for func in &program.functions {
+            let mut func_checker = SemanticChecker::new();
+            func_checker.known_functions = self.known_functions.clone();
+            func_checker.known_structs = self.known_structs.clone();
+            func_checker.known_types = self.known_types.clone();
+            for gp in &func.generic_params {
+                func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
+            }
+            func_checker.known_traits = self.known_traits.clone();
+            func_checker.known_impls = self.known_impls.clone();
+            func_checker.known_enums = self.known_enums.clone();
+            func_checker.fn_param_types = self.fn_param_types.clone();
+            func_checker.fn_return_types = self.fn_return_types.clone();
+            for param in &func.params {
+                func_checker.insert_var(VarInfo {
+                    name: param.name.clone(),
+                    is_lin: param.is_lin,
+                    is_grad: param.is_grad,
+                    is_mut: false,
+                    is_consumed: false,
+                    is_tainted: false,
+                    is_capability: false,
+                    def_span: param.span,
+                    var_type: Some(param.param_type.clone()),
+                    in_region: false,
+                });
+            }
+            func_checker.check_statements_multi(&func.body, &mut errors);
+            func_checker.verify_all_linear_consumed_multi(&mut errors);
+        }
+
+        // Check cognitive brain blocks
+        for brain in &program.brains {
+            let mut brain_checker = SemanticChecker::new();
+            brain_checker.known_functions = self.known_functions.clone();
+            brain_checker.known_structs = self.known_structs.clone();
+            brain_checker.known_types = self.known_types.clone();
+            brain_checker.known_traits = self.known_traits.clone();
+            brain_checker.known_impls = self.known_impls.clone();
+            brain_checker.known_enums = self.known_enums.clone();
+            brain_checker.fn_param_types = self.fn_param_types.clone();
+            brain_checker.fn_return_types = self.fn_return_types.clone();
+            brain_checker.check_statements_multi(&brain.body, &mut errors);
+            brain_checker.verify_all_linear_consumed_multi(&mut errors);
+        }
+
+        // Check decoupled schedule declarations
+        for sched in &program.schedules {
+            let fn_exists = self.known_functions.contains(&sched.target_fn)
+                || program.functions.iter().any(|f| f.name == sched.target_fn)
+                || program.impls.iter().any(|imp| imp.methods.iter().any(|m| m.name == sched.target_fn));
+            if !fn_exists {
+                errors.push(TypeError::new(
+                    "E0011",
+                    format!("Schedule target function '{}' not found in program", sched.target_fn),
+                    sched.span,
+                )
+                .with_note("Decoupled silicon schedules must target an existing function or kernel")
+                .with_help(format!("Define `def {}(...)` before or after this schedule", sched.target_fn)));
+            }
+
+            for dir in &sched.directives {
+                match dir {
+                    ScheduleDirective::TileSize(w, h) => {
+                        if *w == 0 || *h == 0 {
+                            errors.push(TypeError::new(
+                                "E0012",
+                                format!("Invalid tile_size({}, {}): dimensions must be non-zero", w, h),
+                                sched.span,
+                            ));
+                        }
+                    }
+                    ScheduleDirective::Unroll(factor) => {
+                        if *factor == 0 {
+                            errors.push(TypeError::new(
+                                "E0012",
+                                format!("Invalid unroll factor {}: must be greater than 0", factor),
+                                sched.span,
+                            ));
+                        }
+                    }
+                    ScheduleDirective::Distribute4D { axis, cores } => {
+                        if *cores == 0 {
+                            errors.push(TypeError::new(
+                                "E0012",
+                                format!("Invalid core count {} in distribute_4d: must be greater than 0", cores),
+                                sched.span,
+                            ));
+                        }
+                        let clean_axis = axis.trim_matches('"');
+                        if !["X", "Y", "Z", "W", "X+", "X-", "Y+", "Y-", "Z+", "Z-", "W+", "W-"].contains(&clean_axis) {
+                            errors.push(TypeError::new(
+                                "E0012",
+                                format!("Invalid 4D-Torus axis '{}' in distribute_4d directive", axis),
+                                sched.span,
+                            )
+                            .with_help("Supported axes are: X, Y, Z, W, X+, X-, Y+, Y-, Z+, Z-, W+, W-"));
+                        }
+                    }
+                    ScheduleDirective::Vectorize(width)
+                        if *width == 0 || (*width & (*width - 1)) != 0 =>
+                    {
+                        errors.push(TypeError::new(
+                            "E0012",
+                            format!("Invalid vector width {}: must be a power of two", width),
+                            sched.span,
+                        ));
+                    }
+                    ScheduleDirective::Autotune { tile_sizes, unrolls, vectorize_widths, metric } => {
+                        if tile_sizes.is_empty() {
+                            errors.push(TypeError::new(
+                                "E0012",
+                                "Autotune directive requires at least one candidate tile_size",
+                                sched.span,
+                            ));
+                        }
+                        for (w, h) in tile_sizes {
+                            if *w == 0 || *h == 0 {
+                                errors.push(TypeError::new(
+                                    "E0012",
+                                    format!("Invalid autotune tile_size({}, {}): dimensions must be non-zero", w, h),
+                                    sched.span,
+                                ));
+                            }
+                        }
+                        for u in unrolls {
+                            if *u == 0 {
+                                errors.push(TypeError::new(
+                                    "E0012",
+                                    format!("Invalid autotune unroll factor {}: must be greater than 0", u),
+                                    sched.span,
+                                ));
+                            }
+                        }
+                        for vw in vectorize_widths {
+                            if *vw == 0 || (*vw & (*vw - 1)) != 0 {
+                                errors.push(TypeError::new(
+                                    "E0012",
+                                    format!("Invalid autotune vectorize width {}: must be a power of two", vw),
+                                    sched.span,
+                                ));
+                            }
+                        }
+                        let clean_metric = metric.trim_matches('"');
+                        if !["min_latency", "max_throughput", "energy_efficient"].contains(&clean_metric) {
+                            errors.push(TypeError::new(
+                                "E0012",
+                                format!("Unknown autotune optimization metric '{}'", metric),
+                                sched.span,
+                            ).with_help("Supported metrics: \"min_latency\", \"max_throughput\", \"energy_efficient\""));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Check main statements
+        self.check_statements_multi(&program.main_statements, &mut errors);
+        self.verify_all_linear_consumed_multi(&mut errors);
+
+        errors
+    }
+
     /// Parses a tensor shape string like `tensor<1, 32, 64, f32>` or `tensor<B, M, K, f32>`
     pub fn parse_tensor_shape(type_str: &str) -> Option<(Vec<String>, String)> {
         let trimmed = type_str.trim();
@@ -517,6 +814,46 @@ impl SemanticChecker {
     /// Infers the static type of an expression, including dependent tensor dimensions
     pub fn infer_expr_type(&self, expr: &Expr) -> Option<String> {
         match expr {
+            Expr::LiteralInt(_) => Some("i64".to_string()),
+            Expr::LiteralHex(_) => Some("u64".to_string()),
+            Expr::LiteralFloat(_) => Some("f64".to_string()),
+            Expr::LiteralString(_) => Some("string".to_string()),
+            Expr::LiteralBool(_) => Some("bool".to_string()),
+            Expr::LiteralAxis(_) => Some("axis".to_string()),
+            Expr::Cast { target_type, .. } => Some(target_type.clone()),
+            Expr::StructInit { struct_name, .. } => Some(struct_name.clone()),
+            Expr::Array(elements) => {
+                if let Some(first) = elements.first() {
+                    let elem_t = self.infer_expr_type(first).unwrap_or_else(|| "any".to_string());
+                    Some(format!("[{}]", elem_t))
+                } else {
+                    Some("[]".to_string())
+                }
+            }
+            Expr::Tuple(elements) => {
+                let types: Vec<String> = elements
+                    .iter()
+                    .map(|e| self.infer_expr_type(e).unwrap_or_else(|| "_".to_string()))
+                    .collect();
+                Some(format!("({})", types.join(", ")))
+            }
+            Expr::Unary { op, operand } => {
+                if op == "!" {
+                    Some("bool".to_string())
+                } else {
+                    self.infer_expr_type(operand)
+                }
+            }
+            Expr::FieldAccess { object, field } => {
+                if let Some(obj_type) = self.infer_expr_type(object) {
+                    if let Some(field_map) = self.known_structs.get(&obj_type) {
+                        if let Some(ftype) = field_map.get(field) {
+                            return Some(ftype.clone());
+                        }
+                    }
+                }
+                None
+            }
             Expr::Ident(name, _) | Expr::Consume(name, _) => {
                 if let Some((enum_name, _)) = name.split_once("::") {
                     if self.known_enums.contains_key(enum_name) {
@@ -531,7 +868,16 @@ impl SemanticChecker {
                         return Some(enum_name.to_string());
                     }
                 }
-                if callee == "tensor_matmul" && args.len() >= 2 {
+                if callee == "pack_wave"
+                    || callee == "compute_attention_head"
+                    || callee == "step_synaptic_plasticity"
+                {
+                    return Some("wave_t".to_string());
+                } else if callee == "ground_and_unify" {
+                    return Some("bool".to_string());
+                } else if callee == "init_kg_partition" || callee == "assert_triple" {
+                    return Some("void".to_string());
+                } else if callee == "tensor_matmul" && args.len() >= 2 {
                     let type_a = self.infer_expr_type(&args[0].value)?;
                     let type_b = self.infer_expr_type(&args[1].value)?;
                     let (dims_a, elem_a) = Self::parse_tensor_shape(&type_a)?;
@@ -593,6 +939,9 @@ impl SemanticChecker {
                 None
             }
             Expr::Binary { op, left, right } => {
+                if matches!(op.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||") {
+                    return Some("bool".to_string());
+                }
                 if op == "@" {
                     let type_a = self.infer_expr_type(left)?;
                     let type_b = self.infer_expr_type(right)?;
@@ -626,10 +975,242 @@ impl SemanticChecker {
                             return Some(t_right);
                         }
                     }
+                    let t_left = self.infer_expr_type(left);
+                    let t_right = self.infer_expr_type(right);
+                    if t_left.as_deref() == Some("f64") || t_right.as_deref() == Some("f64") {
+                        return Some("f64".to_string());
+                    }
+                    if t_left.as_deref() == Some("i64") || t_right.as_deref() == Some("i64") {
+                        return Some("i64".to_string());
+                    }
                 }
                 None
             }
             _ => None,
+        }
+    }
+
+    /// Traverses the AST and collects rich Inlay Hints for inferred types and linear affine bindings
+    pub fn collect_inlay_hints(&mut self, program: &Program) -> Vec<InlayHintInfo> {
+        let mut hints = Vec::new();
+
+        // Register structs, enums, functions as in check_program
+        for s in &program.structs {
+            let mut field_map = HashMap::new();
+            for (f_name, f_type) in &s.fields {
+                field_map.insert(f_name.clone(), f_type.clone());
+            }
+            self.known_structs.insert(s.name.clone(), field_map);
+        }
+        for e in &program.enums {
+            let variant_names: Vec<String> = e.variants.iter().map(|v| v.name.clone()).collect();
+            self.known_enums.insert(e.name.clone(), variant_names);
+        }
+        for f in &program.functions {
+            if let Some(ref ret) = f.return_type {
+                self.fn_return_types.insert(f.name.clone(), ret.clone());
+            }
+            let params = f.params.iter().map(|p| (p.name.clone(), p.param_type.clone())).collect();
+            self.fn_param_types.insert(f.name.clone(), params);
+        }
+
+        // Collect from main statements
+        self.collect_hints_from_statements(&program.main_statements, &mut hints);
+
+        // Collect from functions
+        for f in &program.functions {
+            self.push_scope();
+            for p in &f.params {
+                self.insert_var(VarInfo {
+                    name: p.name.clone(),
+                    is_lin: p.is_lin,
+                    is_grad: p.is_grad,
+                    is_mut: false,
+                    is_consumed: false,
+                    is_tainted: false,
+                    is_capability: false,
+                    def_span: Span::default(),
+                    var_type: Some(p.param_type.clone()),
+                    in_region: false,
+                });
+            }
+            self.collect_hints_from_statements(&f.body, &mut hints);
+            self.pop_scope();
+        }
+
+        // Collect from impl blocks
+        for imp in &program.impls {
+            for m in &imp.methods {
+                self.push_scope();
+                for p in &m.params {
+                    self.insert_var(VarInfo {
+                        name: p.name.clone(),
+                        is_lin: p.is_lin,
+                        is_grad: p.is_grad,
+                        is_mut: false,
+                        is_consumed: false,
+                        is_tainted: false,
+                        is_capability: false,
+                        def_span: Span::default(),
+                        var_type: Some(p.param_type.clone()),
+                        in_region: false,
+                    });
+                }
+                self.collect_hints_from_statements(&m.body, &mut hints);
+                self.pop_scope();
+            }
+        }
+
+        // Collect from brains
+        for b in &program.brains {
+            self.push_scope();
+            self.collect_hints_from_statements(&b.body, &mut hints);
+            self.pop_scope();
+        }
+
+        hints
+    }
+
+    fn collect_hints_from_statements(&mut self, stmts: &[Statement], hints: &mut Vec<InlayHintInfo>) {
+        for stmt in stmts {
+            match stmt {
+                Statement::Let {
+                    is_lin,
+                    is_grad,
+                    is_mut,
+                    name,
+                    type_annot,
+                    value,
+                    extra_vars,
+                    span,
+                } => {
+                    let inferred = self.infer_expr_type(value);
+                    if type_annot.is_none() {
+                        let label = match (&inferred, *is_lin) {
+                            (Some(t), true) => format!(": {} [linear]", t),
+                            (Some(t), false) => format!(": {}", t),
+                            (None, true) => ": [linear]".to_string(),
+                            (None, false) => String::new(),
+                        };
+                        if !label.is_empty() {
+                            hints.push(InlayHintInfo {
+                                line: span.line,
+                                col: span.col + span.len,
+                                label,
+                                is_type: true,
+                                is_linear: *is_lin,
+                                tooltip: if *is_lin {
+                                    Some("Linear Affine Resource: Must be consumed exactly once".to_string())
+                                } else {
+                                    None
+                                },
+                            });
+                        }
+                    } else if *is_lin {
+                        hints.push(InlayHintInfo {
+                            line: span.line,
+                            col: span.col + span.len,
+                            label: " [linear]".to_string(),
+                            is_type: true,
+                            is_linear: true,
+                            tooltip: Some("Linear Affine Resource: Must be consumed exactly once".to_string()),
+                        });
+                    }
+
+                    // Register var in current scope
+                    let var_type = type_annot.clone().or_else(|| inferred.clone());
+                    self.insert_var(VarInfo {
+                        name: name.clone(),
+                        is_lin: *is_lin,
+                        is_grad: *is_grad,
+                        is_mut: *is_mut,
+                        is_consumed: false,
+                        is_tainted: false,
+                        is_capability: false,
+                        def_span: *span,
+                        var_type,
+                        in_region: self.in_region,
+                    });
+
+                    for (e_lin, e_grad, e_name, e_type) in extra_vars {
+                        self.insert_var(VarInfo {
+                            name: e_name.clone(),
+                            is_lin: *e_lin,
+                            is_grad: *e_grad,
+                            is_mut: *is_mut,
+                            is_consumed: false,
+                            is_tainted: false,
+                            is_capability: false,
+                            def_span: *span,
+                            var_type: e_type.clone(),
+                            in_region: self.in_region,
+                        });
+                    }
+                }
+                Statement::Region { body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                }
+                Statement::Resilient { body, fallback, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                    if let Some(fb) = fallback {
+                        self.push_scope();
+                        self.collect_hints_from_statements(fb, hints);
+                        self.pop_scope();
+                    }
+                }
+                Statement::Fuse { body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                }
+                Statement::If { then_body, else_body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(then_body, hints);
+                    self.pop_scope();
+                    if let Some(eb) = else_body {
+                        self.push_scope();
+                        self.collect_hints_from_statements(eb, hints);
+                        self.pop_scope();
+                    }
+                }
+                Statement::While { body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                }
+                Statement::For { body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                }
+                Statement::Brain { body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                }
+                Statement::Match { arms, .. } => {
+                    for arm in arms {
+                        self.push_scope();
+                        self.collect_hints_from_statements(&arm.body, hints);
+                        self.pop_scope();
+                    }
+                }
+                Statement::Comptime { body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                }
+                Statement::SystolicBlock { body, .. } => {
+                    self.push_scope();
+                    self.collect_hints_from_statements(body, hints);
+                    self.pop_scope();
+                }
+                _ => {}
+            }
         }
     }
 
@@ -638,6 +1219,14 @@ impl SemanticChecker {
             self.check_statement(stmt)?;
         }
         Ok(())
+    }
+
+    fn check_statements_multi(&mut self, stmts: &[Statement], errors: &mut Vec<TypeError>) {
+        for stmt in stmts {
+            if let Err(e) = self.check_statement(stmt) {
+                errors.push(e);
+            }
+        }
     }
 
     fn check_statement(&mut self, stmt: &Statement) -> Result<(), TypeError> {
@@ -1608,6 +2197,25 @@ impl SemanticChecker {
             }
         }
         Ok(())
+    }
+
+    fn verify_all_linear_consumed_multi(&self, errors: &mut Vec<TypeError>) {
+        for scope in &self.scopes {
+            for (var_name, var) in &scope.vars {
+                if var.is_lin && !var.is_consumed && !self.exported_vars.contains(var_name) {
+                    errors.push(TypeError::new(
+                        "E0002",
+                        format!(
+                            "Linear type leak: Linear variable '{}' was allocated but never consumed or exported",
+                            var_name
+                        ),
+                        var.def_span,
+                    )
+                    .with_note("Target Architecture: 256-Core 4D-Torus Photonic Neuromorphic Silicon")
+                    .with_help("Linear resources (`lin`) must be consumed exactly once using `consume(...)` or exported"));
+                }
+            }
+        }
     }
 
     /// Recursively register pattern bindings and collect coverage information

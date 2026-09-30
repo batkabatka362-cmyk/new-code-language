@@ -47,20 +47,22 @@
 ---
 
 ## 1. Compiler & Diagnostics (`cronc`)
-- [ ] **Multi-Error Semantic Recovery**:
-  - `SemanticChecker`-ийг эхний алдаан дээр зогсохгүйгээр дараагийн функц, илэрхийллүүдийг үргэлжлүүлэн шалгадаг (`Vec<TypeError>` цуглуулдаг) горимтой болгох.
-  - Олон төрлийн алдааг нэг дор илрүүлж LSP-д дамжуулах.
-- [ ] **Type Inference & Inlay Hints Metadata**:
-  - `let` хувьсагчдын тодорхой бус төрлийг автоматаар тооцоолж LSP-д `InlayHint` өгөгдөл болгон бэлдэх.
+- [x] **Multi-Error Semantic Recovery**:
+  - `SemanticChecker`-ийг эхний алдаан дээр зогсохгүйгээр дараагийн функц, илэрхийллүүдийг үргэлжлүүлэн шалгадаг (`Vec<TypeError>` цуглуулдаг `check_program_multi`, `check_statements_multi`, `verify_all_linear_consumed_multi`) горимтой болгов.
+  - Олон төрлийн алдааг (жишээ нь `E0005` immutable reassignment болон `E0002` linear leak) нэг дор илрүүлж LSP-д `textDocument/publishDiagnostics`-ээр зэрэг дамжуулна.
+- [x] **Type Inference & Inlay Hints Metadata**:
+  - `infer_expr_type`-ийг өргөтгөж literal утгууд (`i64`, `f64`, `string`, `bool`, `u64`), cognitive суулгагдсан функцууд (`pack_wave` -> `wave_t`), болон бүтэц, матриц үржвэрүүдийг автоматаар тооцоолдог болгов.
+  - `collect_inlay_hints(&Program) -> Vec<InlayHintInfo>` функцээр `let` хувьсагчдын төрөл, `[linear]` төлөв, tooltip мэдээллийг AST-аас үүсгэдэг болгов.
 
 ---
 
 ## 2. LSP & Developer Tooling (`cron-lsp`, `vscode-cron`)
-- [ ] **Inlay Hints Provider (`textDocument/inlayHint`)**:
-  - Хувьсагчийн төрөл (`: f32`, `: wave_t`), болон linear resource төлөвийг редактор дээр шууд харуулах.
-- [ ] **Code Action / Auto-Fix интеграци**:
-  - `E0003` (Unconsumed linear type) гарсан үед шууд `consume(...)` автоматаар нэмэх quick-fix санал болгох.
-  - `CL001..CL005` VLIW slot зөрчлийг `Autonomous Vibe-Loop Heal`-ээр нэг товшилтоор засах.
+- [x] **Inlay Hints Provider (`textDocument/inlayHint`)**:
+  - `.cr`: Хувьсагчийн далд төрлийг (`: i64`, `: f64`, `: wave_t [linear]`) тооцоолж редактор дээр шууд харуулна. Live editing үед синтакс дутуу байсан ч line-level fallback scanner-аар тасралтгүй ажиллана.
+  - `.cl`: VLIW bundle-ийн такт (`[C#1]`) болон функциональ нэгжийн портуудыг (`[ALU]`, `[FMA]`, `[MEM]`, `[NOC]`) micro-op бүрийн өмнө тодорхой харуулна.
+- [x] **Code Action / Auto-Fix интеграци**:
+  - `E0002`/`E0003` (Unconsumed linear type leak) гарсан үед шууд `consume(<var_name>)` автоматаар код дотор нэмэх Quick-Fix санал болгодог болов.
+  - `CL001..CL005` VLIW slot зөрчлийг `Autonomous Vibe-Loop Heal`-ээр нэг товшилтоор засах Quick-Fix бэлэн.
 - [ ] **Debug Adapter Protocol (DAP)**:
   - `.cr` болон `.cl` програмыг bundle-by-bundle алхам алхмаар trace хийх, регистр (`R0..R15`, `V0..V7`)-ийн утгыг шалгах debugger.
 - [ ] **VS Code 4D-Torus Mesh Visualizer**:
