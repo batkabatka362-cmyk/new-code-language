@@ -89,15 +89,30 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("}\n\n");
 
     out.push_str("static inline uint32_t cron_subbyte_ternary_dot(uint32_t reg_a, uint32_t reg_b) {\n");
-    out.push_str("    int32_t sum = 0;\n");
-    out.push_str("    for (int i = 0; i < 16; i++) {\n");
-    out.push_str("        uint32_t code_a = (reg_a >> (i * 2)) & 0x3;\n");
-    out.push_str("        uint32_t code_b = (reg_b >> (i * 2)) & 0x3;\n");
-    out.push_str("        int32_t sa = (code_a == 1) ? 1 : ((code_a == 2) ? -1 : 0);\n");
-    out.push_str("        int32_t sb = (code_b == 1) ? 1 : ((code_b == 2) ? -1 : 0);\n");
-    out.push_str("        sum += sa * sb;\n");
-    out.push_str("    }\n");
-    out.push_str("    return (uint32_t)sum;\n");
+    out.push_str("    // BitNet ternary dot product (-1, 0, +1) accelerated with branchless bitwise popcount\n");
+    out.push_str("    uint32_t lo_a = reg_a & 0x55555555u;\n");
+    out.push_str("    uint32_t hi_a = (reg_a >> 1) & 0x55555555u;\n");
+    out.push_str("    uint32_t pos_a = lo_a & ~hi_a;\n");
+    out.push_str("    uint32_t neg_a = ~lo_a & hi_a;\n");
+    out.push_str("    uint32_t lo_b = reg_b & 0x55555555u;\n");
+    out.push_str("    uint32_t hi_b = (reg_b >> 1) & 0x55555555u;\n");
+    out.push_str("    uint32_t pos_b = lo_b & ~hi_b;\n");
+    out.push_str("    uint32_t neg_b = ~lo_b & hi_b;\n");
+    out.push_str("    uint32_t plus_matches = (pos_a & pos_b) | (neg_a & neg_b);\n");
+    out.push_str("    uint32_t minus_matches = (pos_a & neg_b) | (neg_a & pos_b);\n");
+    out.push_str("    int32_t pos_count = (int32_t)__builtin_popcount(plus_matches);\n");
+    out.push_str("    int32_t neg_count = (int32_t)__builtin_popcount(minus_matches);\n");
+    out.push_str("    return (uint32_t)(pos_count - neg_count);\n");
+    out.push_str("}\n\n");
+
+    out.push_str("static inline uint32_t cron_photonic_simd_dot(uint32_t a, uint32_t b) {\n");
+    out.push_str("    int16_t a_lo = (int16_t)(a & 0xFFFF);\n");
+    out.push_str("    int16_t a_hi = (int16_t)((a >> 16) & 0xFFFF);\n");
+    out.push_str("    int16_t b_lo = (int16_t)(b & 0xFFFF);\n");
+    out.push_str("    int16_t b_hi = (int16_t)((b >> 16) & 0xFFFF);\n");
+    out.push_str("    int32_t dot = ((int32_t)a_lo * b_lo + (int32_t)a_hi * b_hi) >> 8;\n");
+    out.push_str("    uint32_t mag = ((uint32_t)(dot < 0 ? -dot : dot) & 0xFFFF) | 0x00FF0000u;\n");
+    out.push_str("    return mag;\n");
     out.push_str("}\n\n");
 
     out.push_str("static inline uint32_t cron_tile_transpose(uint32_t v) {\n");
@@ -175,15 +190,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         }
                         "OP" | "WD" => {
                             out.push_str("    core->optical_gemm_count++;\n");
-                            out.push_str("    {\n");
-                            out.push_str(&format!("        int16_t a_lo = (int16_t)(core->r[{}] & 0xFFFF);\n", d));
-                            out.push_str(&format!("        int16_t a_hi = (int16_t)((core->r[{}] >> 16) & 0xFFFF);\n", d));
-                            out.push_str(&format!("        int16_t b_lo = (int16_t)(core->r[{}] & 0xFFFF);\n", s));
-                            out.push_str(&format!("        int16_t b_hi = (int16_t)((core->r[{}] >> 16) & 0xFFFF);\n", s));
-                            out.push_str("        int32_t dot = ((int32_t)a_lo * b_lo + (int32_t)a_hi * b_hi) >> 8;\n");
-                            out.push_str("        uint32_t mag = ((uint32_t)(dot < 0 ? -dot : dot) & 0xFFFF) | 0x00FF0000u;\n");
-                            out.push_str(&format!("        core->r[{}] = mag;\n", d));
-                            out.push_str("    }\n");
+                            out.push_str(&format!("    core->r[{}] = cron_photonic_simd_dot(core->r[{}], core->r[{}]);\n", d, d, s));
                         }
                         "FA" => {
                             out.push_str(&format!("    if (core->rev_sp < 256) core->rev_stack[core->rev_sp++] = core->r[{}];\n", s));
@@ -491,26 +498,37 @@ pub fn compile_cl_to_native_binary(
             format!("-O{}", opt_level)
         };
 
-        let mut cmd = Command::new(cc);
-        cmd.arg(temp_c_file.to_str().unwrap());
-        cmd.arg("-o");
-        cmd.arg(output_binary_path);
-        cmd.arg(&opt_flag);
-        cmd.arg("-std=c11");
-        cmd.arg("-lm");
+        for &(std_flag, use_simd) in &[("-std=c23", true), ("-std=c2x", true), ("-std=c23", false), ("-std=c11", false)] {
+            let mut cmd = Command::new(cc);
+            cmd.arg(temp_c_file.to_str().unwrap());
+            cmd.arg("-o");
+            cmd.arg(output_binary_path);
+            cmd.arg(&opt_flag);
+            cmd.arg(std_flag);
+            if use_simd {
+                cmd.arg("-mavx2");
+                cmd.arg("-mfma");
+            }
+            cmd.arg("-lm");
 
-        match cmd.output() {
-            Ok(out) => {
-                if out.status.success() {
-                    success = true;
+            match cmd.output() {
+                Ok(out) => {
+                    if out.status.success() {
+                        success = true;
+                        break;
+                    } else {
+                        last_err = String::from_utf8_lossy(&out.stderr).to_string();
+                    }
+                }
+                Err(e) => {
+                    last_err = format!("Failed to invoke {}: {}", cc, e);
                     break;
-                } else {
-                    last_err = String::from_utf8_lossy(&out.stderr).to_string();
                 }
             }
-            Err(e) => {
-                last_err = format!("Failed to invoke {}: {}", cc, e);
-            }
+        }
+
+        if success {
+            break;
         }
     }
 

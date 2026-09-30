@@ -797,34 +797,40 @@ pub fn compile_native_binary(source: &str, output_path: &std::path::Path, extra_
     let temp_c_path = output_path.with_extension("c");
     std::fs::write(&temp_c_path, c23_code).map_err(|e| format!("Failed to write temporary C source: {}", e))?;
 
-    let compilers = ["clang", "gcc"];
+    let compilers = ["gcc", "clang"];
     let mut success = false;
     let mut last_err = String::new();
 
     for comp in &compilers {
-        let mut cmd = std::process::Command::new(comp);
-        cmd.arg("-std=c2x")
-           .arg("-O3")
-           .arg(&temp_c_path)
-           .arg("-o")
-           .arg(output_path);
+        for std_flag in &["-std=c23", "-std=c2x", "-std=c11"] {
+            let mut cmd = std::process::Command::new(comp);
+            cmd.arg(std_flag)
+               .arg("-O3")
+               .arg(&temp_c_path)
+               .arg("-o")
+               .arg(output_path);
 
-        for flag in extra_flags {
-            cmd.arg(flag);
-        }
+            for flag in extra_flags {
+                cmd.arg(flag);
+            }
 
-        match cmd.output() {
-            Ok(output) => {
-                if output.status.success() {
-                    success = true;
+            match cmd.output() {
+                Ok(output) => {
+                    if output.status.success() {
+                        success = true;
+                        break;
+                    } else {
+                        last_err = String::from_utf8_lossy(&output.stderr).to_string();
+                    }
+                }
+                Err(e) => {
+                    last_err = format!("Failed to execute '{}': {}", comp, e);
                     break;
-                } else {
-                    last_err = String::from_utf8_lossy(&output.stderr).to_string();
                 }
             }
-            Err(e) => {
-                last_err = format!("Failed to execute '{}': {}", comp, e);
-            }
+        }
+        if success {
+            break;
         }
     }
 

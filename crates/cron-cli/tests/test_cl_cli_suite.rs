@@ -1787,6 +1787,101 @@ fn test_cli_swarm_wafer_flag() {
     assert!(s.contains("\"tier3_wafer_quorum\": true"));
 }
 
+#[test]
+fn test_cli_section4_c23_transpilation_and_run() {
+    let cl_path = get_attention_cl_path();
+    let temp_dir = std::env::temp_dir();
+    let out_c = temp_dir.join("test_sec4_attention.c");
+
+    // 1. Transpile to C23 file
+    let transpile_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["c23", &cl_path, "-o", out_c.to_str().unwrap()])
+        .output()
+        .expect("Failed to execute cron c23");
+    assert!(transpile_out.status.success(), "c23 transpilation must succeed");
+    assert!(out_c.exists(), "C23 source file must be generated");
+    let c_code = fs::read_to_string(&out_c).unwrap();
+    assert!(c_code.contains("cron_subbyte_ternary_dot"), "Must contain BitNet ternary dot product");
+    assert!(c_code.contains("cron_photonic_simd_dot"), "Must contain photonic SIMD dot product");
+    assert!(c_code.contains("__builtin_popcount"), "Must utilize popcount acceleration");
+    let _ = fs::remove_file(&out_c);
+
+    // 2. Direct native compile and run via C23
+    let run_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["c23", &cl_path, "--run"])
+        .output()
+        .expect("Failed to execute cron c23 --run");
+    assert!(run_out.status.success(), "c23 --run must succeed");
+    let stdout = String::from_utf8_lossy(&run_out.stdout);
+    assert!(stdout.contains("CRON SILICON C23 NATIVE EXECUTION TELEMETRY"));
+    assert!(stdout.contains("Photonic MZI Optical Ops:    2"));
+    assert!(stdout.contains("STATUS: 100% BIT-EXACT SILICON C23 PARITY VERIFIED"));
+}
+
+#[test]
+fn test_cli_section4_jit_unified_execution() {
+    let cl_path = get_attention_cl_path();
+
+    // 1. JSON Telemetry output
+    let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["jit", &cl_path, "--json"])
+        .output()
+        .expect("Failed to execute cron jit --json");
+    assert!(json_out.status.success(), "jit --json must succeed");
+    let json_str = String::from_utf8_lossy(&json_out.stdout);
+    assert!(json_str.contains("\"backend\":\"cl-jit\""));
+    assert!(json_str.contains("\"cycles\":8"));
+    assert!(json_str.contains("\"active_cores\":256"));
+    assert!(json_str.contains("\"status\":\"success\""));
+
+    // 2. Human-readable HUD output
+    let hud_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["jit", &cl_path])
+        .output()
+        .expect("Failed to execute cron jit");
+    assert!(hud_out.status.success(), "jit must succeed");
+    let hud_str = String::from_utf8_lossy(&hud_out.stdout);
+    assert!(hud_str.contains("CRON .cl DIRECT IN-MEMORY JIT MACHINE EXECUTION"));
+    assert!(hud_str.contains("Total Execution Cycles:       8 cycles"));
+    assert!(hud_str.contains("Photonic MZI Optical Ops:     2 ops"));
+}
+
+#[test]
+fn test_cli_section4_verilog_synthesis_and_testbench() {
+    let cl_path = get_attention_cl_path();
+    let temp_dir = std::env::temp_dir();
+    let out_v = temp_dir.join("test_sec4_core.v");
+    let out_tb = temp_dir.join("test_sec4_tb.v");
+
+    let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "verilog",
+            &cl_path,
+            "-o",
+            out_v.to_str().unwrap(),
+            "--tb",
+            out_tb.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Failed to execute cron verilog -o ... --tb ...");
+    assert!(synth_out.status.success(), "verilog synthesis with --tb must succeed");
+    assert!(out_v.exists(), "Synthesized Verilog core must exist");
+    assert!(out_tb.exists(), "Automated testbench must exist");
+
+    let core_v = fs::read_to_string(&out_v).unwrap();
+    assert!(core_v.contains("module mini_transformer_attention"));
+    assert!(core_v.contains("reg [31:0] inst_data;"));
+
+    let tb_v = fs::read_to_string(&out_tb).unwrap();
+    assert!(tb_v.contains("module tb_mini_transformer_attention;"));
+    assert!(tb_v.contains("CKSL CORE RTL SIMULATION REPORT"));
+    assert!(tb_v.contains("mini_transformer_attention dut ("));
+
+    let _ = fs::remove_file(&out_v);
+    let _ = fs::remove_file(&out_tb);
+}
+
+
 
 
 

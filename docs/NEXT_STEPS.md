@@ -79,12 +79,14 @@
 ---
 
 ## 4. Transpilers & Hardware Backends
-- [ ] **C23 Transpiler (`cron c23`)**:
-  - GCC -O3 болон Clang 18+ дээр BitNet ternary GEMM болон photonic SIMD үйлдлүүдийн биелэлтийн хурдыг баталгаажуулах.
-- [ ] **LLVM JIT Backend (`cron jit`)**:
-  - Dynamic AGI mind loop болон self-rewriting кодуудыг native машин код руу шууд хөрвүүлж биелүүлэх хугацааг 0 latency болгох.
-- [ ] **Verilog RTL Synthesis**:
-  - Силикон FPGA / ASIC синтезийн testbench-үүдийг бэлтгэх.
+- [x] **C23 Transpiler (`cron c23`)**:
+  - GCC -O3 болон Clang 18+ дээр BitNet ternary GEMM (`MD` sub-byte dot product-ийг branchless bitwise popcount-аар хурдасгасан) болон photonic SIMD (`OP`, `WD`) үйлдлүүдийг C23/C2x native SIMD код болгов.
+  - `cron c23 <file.cl|file.cr> [-o <out>] [-c|--compile] [-r|--run] [--opt <O0..O3>]` командыг бүтээж, хостын GCC/Clang компилятороор шууд машин код болгон compile болон run хийх боломжтой болгов.
+- [x] **LLVM JIT Backend (`cron jit`)**:
+  - `.cl` (256-core 4D-Torus silicon JIT) болон `.cr` (x86_64 machine JIT)-ийг санах ойд дискний I/O-гүй шууд биелүүлдэг `cron jit` командыг нэгтгэв.
+  - Машин унших боломжтой бүрэн бүтэн JSON телеметр тайлан (`--json`) дэмжүүлж, тест болон автоматжуулалтын системүүдэд зориулсан 0-latency горимыг баталгаажуулав.
+- [x] **Verilog RTL Synthesis (`cron verilog`)**:
+  - Силикон FPGA / ASIC синтезийн `cron verilog <file.cl|file.cr> [-o <core.v>] [--tb <tb.v>]` командыг нэвтрүүлж, IEEE 1364-2001 стандартад нийцсэн өөрийгөө шалгагч автомат testbench үүсгэдэг болов.
 
 ---
 

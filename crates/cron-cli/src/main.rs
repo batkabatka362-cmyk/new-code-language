@@ -1200,46 +1200,6 @@ fn main() {
                 }
             }
         }
-        "verilog" => {
-            if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron verilog <file.cr> [-o <out.v>]");
-                std::process::exit(1);
-            }
-            let input_path = &args[2];
-            let content = match fs::read_to_string(input_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Error reading '{}': {}", input_path, e);
-                    std::process::exit(1);
-                }
-            };
-
-            let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let module_name = format!("cksl_{}_core", stem);
-            println!("[VERILOG BACKEND] Synthesizing RTL for '{}'...", input_path);
-            match cronc::compile_to_verilog(&content, &module_name) {
-                Ok(v_output) => {
-                    let mut out_path = format!("{}.v", stem);
-                    if args.len() >= 5 && args[3] == "-o" {
-                        out_path = args[4].clone();
-                    }
-
-                    if let Err(e) = fs::write(&out_path, &v_output) {
-                        eprintln!("Error writing output to '{}': {}", out_path, e);
-                        std::process::exit(1);
-                    }
-                    println!("[SUCCESS] Synthesized IEEE 1364-2001 Verilog HDL: '{}'", out_path);
-                    println!("\nPreview of Verilog module:");
-                    for line in v_output.lines().take(15) {
-                        println!("  {}", line);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
         "check" => {
             if args.len() < 3 {
                 eprintln!("Error: Missing input file. Usage: cron check <file.cr|file.cl>");
@@ -1759,47 +1719,117 @@ fn main() {
             println!("  AUDIT STATUS: {} | INTEGRITY: 100%", rating);
             println!("================================================================================\n");
         }
-        "cl-run" => {
+        "jit" | "cl-run" | "cl-jit" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron cl-run <file.cl>");
+                eprintln!("Error: Missing input file. Usage: cron jit <file.cl|file.cr> [--json] [--native]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
-            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
+            let source = fs::read_to_string(input_path).unwrap_or_else(|e| {
                 eprintln!("Error reading '{}': {}", input_path, e);
                 std::process::exit(1);
             });
 
-            print_banner();
-            println!("============================================================");
-            println!("     CRON .cl DIRECT IN-MEMORY JIT MACHINE EXECUTION       ");
-            println!("     Target: 256-Core 4D-Torus Hybrid Silicon (Zero I/O)    ");
-            println!("============================================================\n");
+            let is_json = args.iter().any(|a| a == "--json");
+            let is_native = args.iter().any(|a| a == "--native");
+            let is_cl = input_path.ends_with(".cl") || source.trim_start().starts_with('B') || source.contains("B0000:");
 
-            match cronc::cl_jit::run_cl_jit(&cl_code) {
-                Ok(core) => {
-                    println!("  Total Execution Cycles:       {} cycles", core.cycle_count);
-                    println!("  Active Physical Cores:        256 cores (4D Torus)");
-                    println!("  Photonic MZI Optical Ops:     {} ops (0ns latency)", core.optical_gemm_count);
-                    println!("  Reversible Gate Ops:          {} ops (0 entropy loss)", core.reversible_ops_count);
-                    println!("  STDP Synapse Adaptations:     {} updates", core.stdp_updates_count);
-                    println!("  Spatial Broadcasts:           {} broadcasts", core.spatial_broadcast_count);
-                    println!("  Barrier Synchronizations:     {} barriers", core.barrier_count);
-                    if core.fused_ops_count > 0 {
-                        println!("  Streaming Fused Ops:          {} ops", core.fused_ops_count);
-                        println!("  DRAM/HBM Traffic Eliminated:  {} B", core.hbm_bytes_saved);
+            if !is_cl && is_native {
+                match cronc::run_source_jit(&source) {
+                    Ok(result) => {
+                        if is_json {
+                            println!("{{\"backend\":\"x86_64-llvm-jit\",\"result\":{},\"status\":\"success\"}}", result);
+                        } else {
+                            print_banner();
+                            println!("============================================================");
+                            println!("     CRON .cr DIRECT IN-MEMORY JIT EXECUTION (x86_64)       ");
+                            println!("============================================================\n");
+                            println!("  Execution Result:             {}", result);
+                            println!("============================================================");
+                            println!("  STATUS: .cr JIT EXECUTED SUCCESSFULLY\n");
+                        }
                     }
-                    println!("------------------------------------------------------------");
-                    println!("  Final Register R0:            0x{:08X} ({})", core.r[0], core.r[0]);
-                    println!("  Final Register R1:            0x{:08X} ({})", core.r[1], core.r[1]);
-                    println!("  Final Register R4:            0x{:08X} ({})", core.r[4], core.r[4]);
-                    println!("  Final Register R6:            0x{:08X} ({})", core.r[6], core.r[6]);
-                    println!("============================================================");
-                    println!("  STATUS: .cl JIT EXECUTED WITH 100% BIT-EXACT SILICON PARITY\n");
+                    Err(e) => {
+                        if is_json {
+                            println!("{{\"backend\":\"x86_64-llvm-jit\",\"error\":\"{}\",\"status\":\"error\"}}", e.replace('"', "\\\""));
+                        } else {
+                            eprintln!("[.cr JIT ERROR] {}", e);
+                        }
+                        std::process::exit(1);
+                    }
                 }
-                Err(e) => {
-                    eprintln!("[.cl JIT ERROR] {}", e);
-                    std::process::exit(1);
+            } else {
+                let cl_code = if is_cl {
+                    source
+                } else {
+                    match cronc::compile_source(&source) {
+                        Ok(cl) => cl,
+                        Err(e) => {
+                            if is_json {
+                                println!("{{\"error\":\"{}\",\"status\":\"compilation_error\"}}", e.replace('"', "\\\""));
+                            } else {
+                                eprintln!("[COMPILATION ERROR] {}", e);
+                            }
+                            std::process::exit(1);
+                        }
+                    }
+                };
+
+                if !is_json {
+                    print_banner();
+                    println!("============================================================");
+                    println!("     CRON .cl DIRECT IN-MEMORY JIT MACHINE EXECUTION       ");
+                    println!("     Target: 256-Core 4D-Torus Hybrid Silicon (Zero I/O)    ");
+                    println!("============================================================\n");
+                }
+
+                match cronc::cl_jit::run_cl_jit(&cl_code) {
+                    Ok(core) => {
+                        if is_json {
+                            println!(
+                                "{{\"backend\":\"cl-jit\",\"cycles\":{},\"active_cores\":256,\"optical_ops\":{},\"reversible_ops\":{},\"stdp_updates\":{},\"spatial_broadcasts\":{},\"barriers\":{},\"fused_ops\":{},\"hbm_bytes_saved\":{},\"r0\":{},\"r1\":{},\"r4\":{},\"r6\":{},\"status\":\"success\"}}",
+                                core.cycle_count,
+                                core.optical_gemm_count,
+                                core.reversible_ops_count,
+                                core.stdp_updates_count,
+                                core.spatial_broadcast_count,
+                                core.barrier_count,
+                                core.fused_ops_count,
+                                core.hbm_bytes_saved,
+                                core.r[0],
+                                core.r[1],
+                                core.r[4],
+                                core.r[6]
+                            );
+                        } else {
+                            println!("  Total Execution Cycles:       {} cycles", core.cycle_count);
+                            println!("  Active Physical Cores:        256 cores (4D Torus)");
+                            println!("  Photonic MZI Optical Ops:     {} ops (0ns latency)", core.optical_gemm_count);
+                            println!("  Reversible Gate Ops:          {} ops (0 entropy loss)", core.reversible_ops_count);
+                            println!("  STDP Synapse Adaptations:     {} updates", core.stdp_updates_count);
+                            println!("  Spatial Broadcasts:           {} broadcasts", core.spatial_broadcast_count);
+                            println!("  Barrier Synchronizations:     {} barriers", core.barrier_count);
+                            if core.fused_ops_count > 0 {
+                                println!("  Streaming Fused Ops:          {} ops", core.fused_ops_count);
+                                println!("  DRAM/HBM Traffic Eliminated:  {} B", core.hbm_bytes_saved);
+                            }
+                            println!("------------------------------------------------------------");
+                            println!("  Final Register R0:            0x{:08X} ({})", core.r[0], core.r[0]);
+                            println!("  Final Register R1:            0x{:08X} ({})", core.r[1], core.r[1]);
+                            println!("  Final Register R4:            0x{:08X} ({})", core.r[4], core.r[4]);
+                            println!("  Final Register R6:            0x{:08X} ({})", core.r[6], core.r[6]);
+                            println!("============================================================");
+                            println!("  STATUS: .cl JIT EXECUTED WITH 100% BIT-EXACT SILICON PARITY\n");
+                        }
+                    }
+                    Err(e) => {
+                        if is_json {
+                            println!("{{\"error\":\"{}\",\"status\":\"jit_error\"}}", e.replace('"', "\\\""));
+                        } else {
+                            eprintln!("[.cl JIT ERROR] {}", e);
+                        }
+                        std::process::exit(1);
+                    }
                 }
             }
         }
@@ -1838,73 +1868,202 @@ fn main() {
                 }
             }
         }
-        "cl-verilog" => {
+        "verilog" | "cl-verilog" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron cl-verilog <file.cl> [-o <out.v>]");
+                eprintln!("Error: Missing input file. Usage: cron verilog <file.cl|file.cr> [-o <out.v>] [--tb <tb.v>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
-            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
+            let content = fs::read_to_string(input_path).unwrap_or_else(|e| {
                 eprintln!("Error reading '{}': {}", input_path, e);
                 std::process::exit(1);
             });
 
             let mut out_path = None;
-            if args.len() >= 5 && args[3] == "-o" {
-                out_path = Some(args[4].clone());
+            let mut tb_path = None;
+            let mut i = 3;
+            while i < args.len() {
+                if args[i] == "-o" && i + 1 < args.len() {
+                    out_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else if (args[i] == "--tb" || args[i] == "--testbench") && i + 1 < args.len() {
+                    tb_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
             }
 
-            let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            match cronc::verilog_backend::generate_verilog_hdl(&cl_code, module_name) {
-                Ok(verilog) => {
-                    if let Some(path) = out_path {
-                        if let Err(e) = fs::write(&path, &verilog) {
-                            eprintln!("Error writing Verilog RTL to '{}': {}", path, e);
-                            std::process::exit(1);
-                        }
-                        println!("[SUCCESS] Synthesized Verilog RTL Hardware Core: '{}'", path);
-                    } else {
-                        println!("{}", verilog);
+            let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+            let is_cl = input_path.ends_with(".cl") || content.trim_start().starts_with('B') || content.contains("B0000:");
+
+            let (verilog_rtl, module_name) = if is_cl {
+                let mod_name = stem.to_string();
+                let rtl = match cronc::verilog_backend::generate_verilog_hdl(&content, &mod_name) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("[VERILOG SYNTHESIS ERROR] {}", e);
+                        std::process::exit(1);
                     }
-                }
-                Err(e) => {
-                    eprintln!("[VERILOG SYNTHESIS ERROR] {}", e);
+                };
+                (rtl, mod_name)
+            } else {
+                let mod_name = format!("cksl_{}_core", stem);
+                println!("[VERILOG BACKEND] Synthesizing RTL for '{}'...", input_path);
+                let rtl = match cronc::compile_to_verilog(&content, &mod_name) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("[VERILOG SYNTHESIS ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                (rtl, mod_name)
+            };
+
+            if let Some(ref path) = out_path {
+                if let Err(e) = fs::write(path, &verilog_rtl) {
+                    eprintln!("Error writing Verilog RTL to '{}': {}", path, e);
                     std::process::exit(1);
                 }
+                println!("[SUCCESS] Synthesized Verilog RTL Hardware Core: '{}'", path);
+            } else if tb_path.is_none() {
+                println!("{}", verilog_rtl);
+            }
+
+            if let Some(ref path) = tb_path {
+                let tb_code = cronc::verilog_backend::generate_testbench(&module_name);
+                if let Err(e) = fs::write(path, &tb_code) {
+                    eprintln!("Error writing Verilog Testbench to '{}': {}", path, e);
+                    std::process::exit(1);
+                }
+                println!("[SUCCESS] Generated IEEE 1364-2001 Automated Testbench: '{}'", path);
             }
         }
-        "cl-c23" => {
+        "c23" | "cl-c23" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron cl-c23 <file.cl> [-o <out.c>]");
+                eprintln!("Error: Missing input file. Usage: cron c23 <file.cl|file.cr> [-o <out>] [-c|--compile] [-r|--run] [--opt <O0|O1|O2|O3>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
-            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
+            let content = fs::read_to_string(input_path).unwrap_or_else(|e| {
                 eprintln!("Error reading '{}': {}", input_path, e);
                 std::process::exit(1);
             });
 
             let mut out_path = None;
-            if args.len() >= 5 && args[3] == "-o" {
-                out_path = Some(args[4].clone());
+            let mut do_compile = false;
+            let mut do_run = false;
+            let mut opt_level = "3".to_string();
+
+            let mut i = 3;
+            while i < args.len() {
+                if args[i] == "-o" && i + 1 < args.len() {
+                    out_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "-c" || args[i] == "--compile" {
+                    do_compile = true;
+                    i += 1;
+                } else if args[i] == "-r" || args[i] == "--run" {
+                    do_run = true;
+                    i += 1;
+                } else if (args[i] == "--opt" || args[i] == "-O") && i + 1 < args.len() {
+                    opt_level = args[i + 1].trim_start_matches("-O").to_string();
+                    i += 2;
+                } else if args[i].starts_with("-O") {
+                    opt_level = args[i].trim_start_matches("-O").to_string();
+                    i += 1;
+                } else {
+                    i += 1;
+                }
             }
 
-            let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            match cronc::cl_c23::compile_cl_to_c23(&cl_code, module_name) {
-                Ok(c_code) => {
-                    if let Some(path) = out_path {
-                        if let Err(e) = fs::write(&path, &c_code) {
-                            eprintln!("Error writing C23 to '{}': {}", path, e);
-                            std::process::exit(1);
-                        }
-                        println!("[SUCCESS] Transpiled .cl to Native C23: '{}'", path);
-                    } else {
-                        println!("{}", c_code);
+            let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+            let is_cl = input_path.ends_with(".cl") || content.trim_start().starts_with('B') || content.contains("B0000:");
+
+            let c23_code = if is_cl {
+                match cronc::cl_c23::compile_cl_to_c23(&content, stem) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("[C23 TRANSPILATION ERROR] {}", e);
+                        std::process::exit(1);
                     }
                 }
-                Err(e) => {
-                    eprintln!("[C23 TRANSPILATION ERROR] {}", e);
+            } else {
+                match cronc::compile_to_c23(&content) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("[C23 TRANSPILATION ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            };
+
+            if do_run {
+                let temp_dir = std::env::temp_dir();
+                let exe_name = if cfg!(windows) {
+                    format!("cron_c23_run_{}.exe", std::process::id())
+                } else {
+                    format!("cron_c23_run_{}", std::process::id())
+                };
+                let temp_bin = temp_dir.join(&exe_name);
+
+                let comp_res = if is_cl {
+                    cronc::cl_c23::compile_cl_to_native_binary(&content, temp_bin.to_str().unwrap(), &opt_level)
+                } else {
+                    cronc::compile_native_binary(&content, &temp_bin, &[])
+                };
+
+                if let Err(e) = comp_res {
+                    eprintln!("[NATIVE COMPILATION ERROR] {}", e);
                     std::process::exit(1);
+                }
+
+                let run_status = std::process::Command::new(&temp_bin).status();
+                let _ = fs::remove_file(&temp_bin);
+
+                match run_status {
+                    Ok(s) => {
+                        if !s.success() {
+                            std::process::exit(s.code().unwrap_or(1));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[EXECUTION ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else if do_compile {
+                let default_bin = if cfg!(windows) {
+                    format!("{}.exe", stem)
+                } else {
+                    stem.to_string()
+                };
+                let bin_path = out_path.unwrap_or(default_bin);
+
+                let comp_res = if is_cl {
+                    cronc::cl_c23::compile_cl_to_native_binary(&content, &bin_path, &opt_level)
+                } else {
+                    cronc::compile_native_binary(&content, Path::new(&bin_path), &[])
+                };
+
+                match comp_res {
+                    Ok(()) => {
+                        println!("[SUCCESS] Compiled to Native Host C23 Executable: '{}' (Opt: -O{})", bin_path, opt_level);
+                    }
+                    Err(e) => {
+                        eprintln!("[NATIVE COMPILATION ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                if let Some(path) = out_path {
+                    if let Err(e) = fs::write(&path, &c23_code) {
+                        eprintln!("Error writing C23 to '{}': {}", path, e);
+                        std::process::exit(1);
+                    }
+                    println!("[SUCCESS] Transpiled to Native C23: '{}'", path);
+                } else {
+                    println!("{}", c23_code);
                 }
             }
         }
@@ -4445,47 +4604,6 @@ fn main() {
                 }
             }
         }
-        "c23" => {
-            if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron c23 <file.cr|file.cl> [-o <out.c>]");
-                std::process::exit(1);
-            }
-            let input_path = &args[2];
-            let content = match fs::read_to_string(input_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Error reading '{}': {}", input_path, e);
-                    std::process::exit(1);
-                }
-            };
-            let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let c_result = if input_path.ends_with(".cl") || content.trim_start().starts_with("B0") {
-                println!("[CRON C23] Transpiling native .cl Silicon VLIW '{}' to C23...", input_path);
-                cronc::compile_cl_to_c23(&content, stem)
-            } else {
-                println!("[CRON C23] Transpiling '{}' to high-performance C23...", input_path);
-                cronc::compile_to_c23_with_name(&content, Some(input_path))
-            };
-
-            match c_result {
-                Ok(c_code) => {
-                    let mut out_path = format!("{}.c", stem);
-                    if args.len() >= 5 && args[3] == "-o" {
-                        out_path = args[4].clone();
-                    }
-                    if let Err(e) = fs::write(&out_path, &c_code) {
-                        eprintln!("Error writing '{}': {}", out_path, e);
-                        std::process::exit(1);
-                    }
-                    println!("[SUCCESS] Generated C23 source: '{}'", out_path);
-                    println!("To compile manually with GCC: gcc -O3 {} -o {} -lm", out_path, out_path.trim_end_matches(".c"));
-                }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
         "native" => {
             if args.len() < 3 {
                 eprintln!("Error: Missing input file. Usage: cron native <file.cr> [-o <out>]");
@@ -4662,7 +4780,7 @@ fn main() {
                 }
             }
         }
-        "jit" => {
+        "_jit_legacy" => {
             if args.len() < 3 {
                 eprintln!("Error: Missing input file. Usage: cron jit <file.cr>");
                 std::process::exit(1);
