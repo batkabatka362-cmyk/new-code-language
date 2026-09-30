@@ -4,10 +4,11 @@
 // 1F1B Zero-Bubble Pipeline Parallelism, agent hierarchy, and full wafer telemetry.
 // =============================================================================
 
-use cronc::cl_swarm::AgentRole;
+use cronc::cl_swarm::{AgentRole, PacketKind};
 use cronc::cl_swarm_wafer::{
-    Coord8D, PipelineSchedule, WaferDORRouter, WaferHierarchy, WaferSwarmMesh,
-    CORES_PER_DIE, TOTAL_DIES, TOTAL_WAFER_CORES, WAFER_DIES_X, WAFER_DIES_Y,
+    CollisionAvoidanceBuffer, Coord8D, PipelineSchedule, VirtualChannel, WaferDORRouter,
+    WaferHierarchy, WaferSwarmMesh, WaferSwarmPacket, CORES_PER_DIE, TOTAL_DIES, TOTAL_WAFER_CORES,
+    WAFER_DIES_X, WAFER_DIES_Y,
 };
 
 // -----------------------------------------------------------------------------
@@ -286,3 +287,114 @@ fn test_ascii_wafer_hud_rendering() {
     assert!(hud.contains("Tier1: 256/256 | Tier2: 16/16 | Tier3: PASS"));
     assert!(hud.contains("Inter-Die Photonic Mesh: 12.8 Tbps/die"));
 }
+
+// -----------------------------------------------------------------------------
+// 6. Virtual Channels & Zero-Collision Collision Avoidance Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_virtual_channel_allocation_direct_and_wraparound() {
+    let c_start = Coord8D::new(0, 0, 0, 0, 0, 0, 0, 0);
+    // Direct step: 0 -> 1 along Wafer X
+    let c_direct = Coord8D::new(1, 0, 0, 0, 0, 0, 0, 0);
+    let (next, vc) = WaferDORRouter::route_step_vc(&c_start, &c_direct);
+    assert_eq!(next.wafer_x, 1);
+    assert_eq!(vc, VirtualChannel::VC0_Direct);
+
+    // Wraparound step: 0 -> 15 along Wafer X
+    let c_wrap = Coord8D::new(15, 0, 0, 0, 0, 0, 0, 0);
+    let (next_wrap, vc_wrap) = WaferDORRouter::route_step_vc(&c_start, &c_wrap);
+    assert_eq!(next_wrap.wafer_x, 15);
+    assert_eq!(vc_wrap, VirtualChannel::VC1_Wraparound);
+}
+
+#[test]
+fn test_collision_avoidance_buffer_priority_and_isolation() {
+    let mut buf = CollisionAvoidanceBuffer::new();
+    assert_eq!(buf.collisions_detected, 0);
+
+    let mk_pkt = |vc: VirtualChannel, payload: &str| WaferSwarmPacket {
+        src: Coord8D::new(0, 0, 0, 0, 0, 0, 0, 0),
+        dst: Coord8D::new(1, 1, 0, 0, 0, 0, 0, 0),
+        kind: PacketKind::Proposal,
+        payload: payload.to_string(),
+        hops: 1,
+        is_inter_die: true,
+        optical_wavelength: 0,
+        pipeline_tag: 0,
+        virtual_channel: vc,
+        was_deflected: false,
+    };
+
+    // Push in reverse priority order: VC0, VC1, VC2, VC3
+    buf.push(mk_pkt(VirtualChannel::VC0_Direct, "direct"));
+    buf.push(mk_pkt(VirtualChannel::VC1_Wraparound, "wrap"));
+    buf.push(mk_pkt(VirtualChannel::VC2_Detour, "detour"));
+    buf.push(mk_pkt(VirtualChannel::VC3_Priority, "priority"));
+
+    assert_eq!(buf.total_packets(), 4);
+    assert_eq!(buf.collisions_detected, 0);
+
+    // Must pop in strict priority order: VC3 -> VC2 -> VC1 -> VC0
+    let p1 = buf.pop().unwrap();
+    assert_eq!(p1.virtual_channel, VirtualChannel::VC3_Priority);
+    let p2 = buf.pop().unwrap();
+    assert_eq!(p2.virtual_channel, VirtualChannel::VC2_Detour);
+    let p3 = buf.pop().unwrap();
+    assert_eq!(p3.virtual_channel, VirtualChannel::VC1_Wraparound);
+    let p4 = buf.pop().unwrap();
+    assert_eq!(p4.virtual_channel, VirtualChannel::VC0_Direct);
+    assert!(buf.pop().is_none());
+}
+
+#[test]
+fn test_8d_thermal_deflection_routing_bypasses_throttled_die() {
+    let mut throttled_dies = [false; TOTAL_DIES];
+    // Start at Die 0: (0,0)
+    let c_start = Coord8D::new(0, 0, 0, 0, 0, 0, 0, 0);
+    // Destination at Die 2: (2,0)
+    let c_target = Coord8D::new(2, 0, 0, 0, 0, 0, 0, 0);
+
+    // Natural DOR step from (0,0) is Die 1: (1,0) -> id 1
+    // Mark Die 1 as thermally throttled (> 105°C)
+    throttled_dies[1] = true;
+
+    // Resilient step should detect hot Die 1 and detour orthogonally
+    let (detour_next, vc, deflected) = WaferDORRouter::route_step_with_thermal_deflection(
+        &c_start,
+        &c_target,
+        &throttled_dies,
+    );
+
+    assert!(deflected, "Routing must deflect around hot Die 1");
+    assert_eq!(vc, VirtualChannel::VC2_Detour);
+    assert_ne!(detour_next.die_id(), 1, "Next hop must not be the hot die");
+
+    // Full path routing should reach the target without stalls or drops
+    let (path, hops, any_deflected) = WaferDORRouter::route_path_zero_collision(
+        &c_start,
+        &c_target,
+        &throttled_dies,
+    );
+    assert!(any_deflected);
+    assert_eq!(*path.last().unwrap(), c_target);
+    assert!(hops >= 2);
+}
+
+#[test]
+fn test_wafer_scale_execution_with_hotspots_and_zero_collision() {
+    let mut mesh = WaferSwarmMesh::new_65536();
+    // Inject 12 thermal hotspots across the wafer
+    mesh.inject_thermal_hotspots(12);
+
+    let report = mesh.execute_task("Synthesize Resilient 8D Convolution across 65,536 Cores");
+
+    assert!(report.consensus_achieved);
+    assert_eq!(report.telemetry.packet_collisions, 0, "Packet collisions must be strictly 0");
+    assert!(report.telemetry.zero_collision_verified);
+    assert!(report.telemetry.throttled_dies_count > 0, "Hotspots must be recorded as throttled");
+    assert!(report.telemetry.peak_die_temp_c >= 105.0);
+    assert!(report.telemetry.thermal_deflections_count > 0, "Deflection count must be positive");
+    assert!(report.ascii_wafer_hud.contains("0 Collisions (VERIFIED)"));
+}
+

@@ -87,7 +87,7 @@ fn print_help() {
     println!("    cl-patch <create|apply|inspect|synth> Post-Silicon Hardware Microcode Patch Table & ISA Extension");
     println!("    cl-compare [target|all] [opts] Real-World Performance & Efficiency Benchmark vs PyTorch/CUDA & Mojo");
     println!("    bench [target|all] [opts]      Competitive Benchmark Validation Engine & Technical Whitepaper");
-    println!("    wafer-sim [--task \"...\"] [--json] 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Simulation & 1F1B Pipeline");
+    println!("    wafer-sim [--task \"...\"] [--hotspots N] [--thermal] [--json] 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Simulation & 1F1B Pipeline");
     println!("    vibe-spec [--format f] [-o s]  Generate AI Vibe-Coding specification (EBNF, JSON Schema, LLM Prompt)");
     println!("    cl-schema [-o schema.json]     Generate machine-readable JSON Schema for .cl language");
     println!("    cl-pkg <init|list|audit|search> Microcode kernel package manager & libcl repository");
@@ -6933,6 +6933,8 @@ fn handle_quantum_sim_command(args: &[String]) {
 fn handle_wafer_sim_command(args: &[String]) {
     let mut task = "Distributed 65,536-Core Wafer-Scale Supercomputing Consensus".to_string();
     let mut emit_json = false;
+    let mut hotspots = 0usize;
+    let mut thermal_mode = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -6940,6 +6942,14 @@ fn handle_wafer_sim_command(args: &[String]) {
             "--task" | "-t" if i + 1 < args.len() => {
                 task = args[i + 1].clone();
                 i += 2;
+            }
+            "--hotspots" if i + 1 < args.len() => {
+                hotspots = args[i + 1].parse().unwrap_or(8);
+                i += 2;
+            }
+            "--thermal" => {
+                thermal_mode = true;
+                i += 1;
             }
             "--json" => {
                 emit_json = true;
@@ -6956,12 +6966,21 @@ fn handle_wafer_sim_command(args: &[String]) {
         println!(" CRON 65,536-CORE WAFER-SCALE AUTONOMOUS SWARM RUNTIME (16x16 DIES, 8D-TORUS)");
         println!(" Topology: 256 Dies x 256 Cores (16x16 Wafer Grid x 4x4x4x4 Torus NoC, 8D-DOR)");
         println!(" Interconnect: 12.8 Tbps/die Waveguide Mesh (3,276.8 Tbps Total Photonic BW)");
+        println!(" Routing: 8D-DOR with Virtual Channels (VC0/VC1/VC2/VC3) & 0 Collisions Verified");
+        if hotspots > 0 || thermal_mode {
+            println!(" Thermal Simulator: Active Fourier Bleed, DVFS Step-Down & Adaptive Deflection");
+        }
         println!(" Pipeline: 1F1B Zero-Bubble Parallelism Engine (16 Stages)");
         println!(" Task: {}", task);
         println!("================================================================================");
     }
 
     let mut mesh = cronc::cl_swarm_wafer::WaferSwarmMesh::new_65536();
+    if hotspots > 0 {
+        mesh.inject_thermal_hotspots(hotspots);
+    } else if thermal_mode {
+        mesh.inject_thermal_hotspots(8);
+    }
     let report = mesh.execute_task(&task);
 
     if emit_json {

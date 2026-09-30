@@ -278,6 +278,8 @@ impl ClusterSimulator {
                     target_id: dst_core,
                     payload,
                     hop_count: 1,
+                    virtual_channel: 0,
+                    was_deflected: false,
                 });
         } else {
             // Cross-chip optical routing

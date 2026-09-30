@@ -41,6 +41,102 @@ impl Coord4D {
             _ => *self,
         }
     }
+
+    /// Minimal Manhattan distance on 4x4x4x4 4D Torus
+    pub fn manhattan_distance(&self, other: &Coord4D) -> usize {
+        let wrap4 = |a: usize, b: usize| -> usize {
+            let d = (a as isize - b as isize).unsigned_abs();
+            d.min(4 - d)
+        };
+        wrap4(self.x, other.x) + wrap4(self.y, other.y) + wrap4(self.z, other.z) + wrap4(self.w, other.w)
+    }
+
+    /// Dimension-Order Routing (4D-DOR): X -> Y -> Z -> W
+    pub fn dor_step(&self, target: &Coord4D) -> (Coord4D, &'static str) {
+        if self.x != target.x {
+            let diff = (target.x as isize - self.x as isize).rem_euclid(4) as usize;
+            if diff <= 2 {
+                (self.neighbor("X+"), "X+")
+            } else {
+                (self.neighbor("X-"), "X-")
+            }
+        } else if self.y != target.y {
+            let diff = (target.y as isize - self.y as isize).rem_euclid(4) as usize;
+            if diff <= 2 {
+                (self.neighbor("Y+"), "Y+")
+            } else {
+                (self.neighbor("Y-"), "Y-")
+            }
+        } else if self.z != target.z {
+            let diff = (target.z as isize - self.z as isize).rem_euclid(4) as usize;
+            if diff <= 2 {
+                (self.neighbor("Z+"), "Z+")
+            } else {
+                (self.neighbor("Z-"), "Z-")
+            }
+        } else if self.w != target.w {
+            let diff = (target.w as isize - self.w as isize).rem_euclid(4) as usize;
+            if diff <= 2 {
+                (self.neighbor("W+"), "W+")
+            } else {
+                (self.neighbor("W-"), "W-")
+            }
+        } else {
+            (*self, "STAY")
+        }
+    }
+
+    /// Adaptive Thermal Deflection Routing:
+    /// If natural DOR next-hop core is thermally throttled or hotspot,
+    /// deflects packet to orthogonal cooler 4D neighbor (X+, Y-, Z+, W-) without stalling!
+    pub fn resilient_step_with_thermal_deflection(
+        &self,
+        target: &Coord4D,
+        hot_cores: &[bool; 256],
+    ) -> (Coord4D, &'static str, bool) {
+        if self == target {
+            return (*self, "STAY", false);
+        }
+
+        let (dor_next, dor_axis) = self.dor_step(target);
+        let next_id = dor_next.to_core_id();
+
+        // If target reached or next hop is cool, use standard DOR
+        if dor_next == *target || !hot_cores[next_id] {
+            return (dor_next, dor_axis, false);
+        }
+
+        // Hotspot detected! Select best orthogonal deflection axis that bypasses the hotspot
+        let axes = ["X+", "X-", "Y+", "Y-", "Z+", "Z-", "W+", "W-"];
+        let mut best_detour = dor_next;
+        let mut best_axis = dor_axis;
+        let mut min_dist = usize::MAX;
+        let mut found_cool_detour = false;
+
+        for &ax in &axes {
+            if ax == dor_axis {
+                continue; // Skip the hot direct route
+            }
+            let cand = self.neighbor(ax);
+            let cid = cand.to_core_id();
+            if !hot_cores[cid] {
+                let dist = cand.manhattan_distance(target);
+                if dist < min_dist {
+                    min_dist = dist;
+                    best_detour = cand;
+                    best_axis = ax;
+                    found_cool_detour = true;
+                }
+            }
+        }
+
+        if found_cool_detour {
+            (best_detour, best_axis, true)
+        } else {
+            // All neighbors congested/hot - proceed on standard DOR with emergency DVFS
+            (dor_next, dor_axis, false)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +145,8 @@ pub struct MeshPacket {
     pub target_id: usize,
     pub payload: u32,
     pub hop_count: usize,
+    pub virtual_channel: u8, // 0 = VC0_Direct, 1 = VC1_Wrap, 2 = VC2_Deflection, 3 = VC3_Priority
+    pub was_deflected: bool,
 }
 
 pub struct TorusMesh {
@@ -81,8 +179,51 @@ impl TorusMesh {
                 target_id: neighbor_id,
                 payload,
                 hop_count: 1,
+                virtual_channel: 0,
+                was_deflected: false,
             });
         }
+    }
+
+    /// Routes a point-to-point packet across 4D Torus with live thermal deflection
+    pub fn route_packet_with_thermal_deflection(
+        &mut self,
+        source_id: usize,
+        target_id: usize,
+        payload: u32,
+        hot_cores: &[bool; 256],
+    ) -> (usize, bool) {
+        if source_id == target_id {
+            return (0, false);
+        }
+
+        let mut curr = Coord4D::from_core_id(source_id);
+        let target = Coord4D::from_core_id(target_id);
+        let mut hops = 0;
+        let mut any_deflected = false;
+
+        // Traverse in 4D with max 16 hops to prevent any infinite loops
+        while curr != target && hops < 16 {
+            let (next, _axis, was_deflected) = curr.resilient_step_with_thermal_deflection(&target, hot_cores);
+            if was_deflected {
+                any_deflected = true;
+            }
+            curr = next;
+            hops += 1;
+        }
+
+        let dest_id = curr.to_core_id();
+        let vc = if any_deflected { 2 } else { 0 };
+        self.packet_queues[dest_id].push(MeshPacket {
+            source_id,
+            target_id: dest_id,
+            payload,
+            hop_count: hops,
+            virtual_channel: vc,
+            was_deflected: any_deflected,
+        });
+
+        (hops, any_deflected)
     }
 
     pub fn deliver_packets(&mut self, core_id: usize) -> Vec<MeshPacket> {

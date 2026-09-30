@@ -974,8 +974,10 @@ impl CoreEngine {
             self.bank_registers[10][10] = acc;
         }
 
-        // Slight thermal dissipation check
-        self.thermal_level = (self.thermal_level + 1).min(self.thermal_threshold);
+        // Active compute slightly warms silicon towards nominal steady state (~45°C), well below 105°C throttle ceiling
+        if op != "NO" && op != "HL" && self.thermal_level < 45 {
+            self.thermal_level = (self.thermal_level + 1).min(self.thermal_threshold);
+        }
 
         // Increment hardware CSR cycle counter
         self.csr_cycle_cnt += 1;

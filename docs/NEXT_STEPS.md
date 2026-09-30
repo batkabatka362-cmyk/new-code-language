@@ -71,10 +71,13 @@
 ---
 
 ## 3. Hardware Simulator & Wafer-Scale Engine (`cron-vm`, `cron-rt`)
-- [ ] **Wafer-65536 Mesh Routing Optimization**:
-  - 8D координатын систем (`Coord8D`) дээрх DOR чиглүүлэлтийг сайжруулах, пакет мөргөлдөөнийг 0 болгох.
-- [ ] **Live Telemetry & Thermal Throttling Simulator**:
-  - Бодит цагийн дулааны динамик, 4D тэнхлэгээр (`X+, Y-, Z+, W-`) багцыг автоматаар тойруулах resilient compute загварчлал.
+- [x] **Wafer-65536 Mesh Routing Optimization**:
+  - 8D координатын систем (`Coord8D`) дээрх Dimension-Order Routing (8D-DOR)-ийг сайжруулав: Wafer_X -> Wafer_Y -> Chip_X -> Chip_Y -> Core_X -> Core_Y -> Core_Z -> Core_W дарааллаар чиглүүлнэ.
+  - Дөрвөн Virtual Channel (`VC0_Direct`, `VC1_Wraparound`, `VC2_Detour`, `VC3_Priority`) болон `CollisionAvoidanceBuffer` бүтээж, 65,536 цөм дээр баталгаатай 0 packet collisions (`zero_collision_verified: true`) хүрэв.
+- [x] **Live Telemetry & Thermal Throttling Simulator**:
+  - Бодит цагийн 2D болон 4D Фурье дулаан дамжуулалт (Fourier heat diffusion) болон цахиур интерпозерын дулаан алдагдлыг загварчлав.
+  - Цөм/дайн температурын тааз $T \ge 105^\circ\text{C}$ хүрэхэд DVFS давтамжийг 2 дахин бууруулж (odd cycles stall), хөргөлтийн гистерезис ($T \le 85^\circ\text{C}$) ажиллана.
+  - Хэт халсан цөм/дайг тойруулан 4D болон 8D ортогональ тэнхлэгээр (`X+, Y-, Z+, W-`) пакет алдагдалгүй, гацалтгүй автоматаар тойруулах resilient deflection routing амжилттай хэрэгжиж бүрэн тестчлэгдэв.
 
 ---
 
