@@ -6,5 +6,6 @@ description = "Language Server Protocol (LSP 3.17) server for CRON Language"
 
 [dependencies]
 cronc = { path = "../cronc" }
+cron-vm = { path = "../cron-vm" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

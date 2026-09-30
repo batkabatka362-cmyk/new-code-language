@@ -24,6 +24,7 @@ dependencies = [
 name = "cron-lsp"
 version = "0.1.0"
 dependencies = [
+ "cron-vm",
  "cronc",
  "serde",
  "serde_json",

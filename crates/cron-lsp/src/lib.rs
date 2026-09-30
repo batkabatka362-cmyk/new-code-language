@@ -15,6 +15,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use serde::{Deserialize, Serialize};
 
+pub mod dap;
+pub use dap::{run_dap_server, DapServer};
+
 // === JSON-RPC 2.0 Types ===
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

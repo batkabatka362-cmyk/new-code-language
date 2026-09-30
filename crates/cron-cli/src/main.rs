@@ -88,6 +88,7 @@ fn print_help() {
     println!("    cl-compare [target|all] [opts] Real-World Performance & Efficiency Benchmark vs PyTorch/CUDA & Mojo");
     println!("    bench [target|all] [opts]      Competitive Benchmark Validation Engine & Technical Whitepaper");
     println!("    wafer-sim [--task \"...\"] [--hotspots N] [--thermal] [--json] 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Simulation & 1F1B Pipeline");
+    println!("    dap                            Run Debug Adapter Protocol (DAP) server over stdio for VS Code / IDE debugger");
     println!("    vibe-spec [--format f] [-o s]  Generate AI Vibe-Coding specification (EBNF, JSON Schema, LLM Prompt)");
     println!("    cl-schema [-o schema.json]     Generate machine-readable JSON Schema for .cl language");
     println!("    cl-pkg <init|list|audit|search> Microcode kernel package manager & libcl repository");
@@ -4502,6 +4503,24 @@ fn main() {
             }
             if let Err(e) = cron_lsp::run_stdio_server() {
                 eprintln!("[CRON-LSP ERROR] Language server exited with error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        "dap" => {
+            let mut is_version = false;
+            for arg in &args[2..] {
+                if arg == "--version" || arg == "-v" {
+                    is_version = true;
+                }
+            }
+            if is_version {
+                println!("cron-dap 1.0.0 (CRON Debug Adapter Protocol Engine for VS Code / IDEs)");
+                return;
+            }
+            let stdin = std::io::stdin();
+            let stdout = std::io::stdout();
+            if let Err(e) = cron_lsp::run_dap_server(stdin.lock(), stdout.lock()) {
+                eprintln!("[CRON-DAP ERROR] Debug adapter server exited with error: {}", e);
                 std::process::exit(1);
             }
         }

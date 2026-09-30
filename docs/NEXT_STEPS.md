@@ -63,10 +63,12 @@
 - [x] **Code Action / Auto-Fix интеграци**:
   - `E0002`/`E0003` (Unconsumed linear type leak) гарсан үед шууд `consume(<var_name>)` автоматаар код дотор нэмэх Quick-Fix санал болгодог болов.
   - `CL001..CL005` VLIW slot зөрчлийг `Autonomous Vibe-Loop Heal`-ээр нэг товшилтоор засах Quick-Fix бэлэн.
-- [ ] **Debug Adapter Protocol (DAP)**:
-  - `.cr` болон `.cl` програмыг bundle-by-bundle алхам алхмаар trace хийх, регистр (`R0..R15`, `V0..V7`)-ийн утгыг шалгах debugger.
-- [ ] **VS Code 4D-Torus Mesh Visualizer**:
-  - VS Code дотор 256/65536 core wafer mesh-ийн температур, пакетын урсгалыг харуулах Webview самбар.
+- [x] **Debug Adapter Protocol (DAP)**:
+  - `.cr` болон `.cl` програмыг bundle-by-bundle алхам алхмаар trace хийх, регистр (`R0..R15`), фотоник долгион (`W0..W3`), STDP синапсын жин, техник хангамжийн CSR телеметр шалгах бүрэн стандартын DAP сервер (`cron dap`, `cron_lsp::dap`).
+  - Нөхцөлт breakpoint (`R0 == 42`, `temp >= 105`, `trap`, `OP`), Step Over (`next`), Step In (`stepIn`), Step Back (`stepBack`), хувьсагч засварлах (`setVariable`) болон VS Code-ийн төрөлхийн дибаг интерфейс (`launch.json` provider)-тэй бүрэн холбогдов.
+- [x] **VS Code 4D-Torus Mesh Visualizer**:
+  - VS Code дотор 256/65,536 core wafer mesh-ийн температур, пакетын урсгал, виртуал сувгуудыг (`VC0..VC3`) харуулах интерактив Webview самбар (`cron.openMeshVisualizer`).
+  - 16x16 Wafer Matrix дээр шууд халсан цөмийг (`125°C Hotspot`) шахаж турших, Фурье дулаан сарнилт болон ортогональ resilient deflection чиглүүлэлтийг харах удирдлагын хяналтын самбар нэмэгдэв.
 
 ---
 

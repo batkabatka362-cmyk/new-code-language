@@ -109,6 +109,57 @@
       {
         "command": "cron.openSwarmTui",
         "title": "CRON: Launch 256-Core Swarm Silicon TUI Monitor"
+      },
+      {
+        "command": "cron.startDebugging",
+        "title": "CRON: Start Hardware Debugger Session (DAP)"
+      },
+      {
+        "command": "cron.openMeshVisualizer",
+        "title": "CRON: Open 4D-Torus & Wafer-65536 Live Silicon Visualizer"
+      }
+    ],
+    "breakpoints": [
+      { "language": "cron" },
+      { "language": "cron-cl" }
+    ],
+    "debuggers": [
+      {
+        "type": "cron",
+        "label": "CRON Hardware Debugger",
+        "languages": ["cron", "cron-cl"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute or workspace-relative path to .cr or .cl file to debug",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop at entry (Cycle #1)",
+                "default": true
+              },
+              "coreId": {
+                "type": "number",
+                "description": "Core index in 256-core 4D-Torus to inspect (0-255)",
+                "default": 0
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "cron",
+            "name": "Debug CRON Hardware Program",
+            "request": "launch",
+            "program": "${file}",
+            "stopOnEntry": true,
+            "coreId": 0
+          }
+        ]
       }
     ],
     "menus": {

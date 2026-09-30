@@ -572,6 +572,25 @@ impl Debugger {
         self.sim = sim;
     }
 
+    /// Step backward one cycle using recorded step history
+    pub fn step_backward(&mut self) -> bool {
+        if let Some((cycle, saved_regs, saved_stats)) = self.step_history.pop() {
+            self.current_cycle = cycle;
+            if self.sim.step_index > 0 {
+                self.sim.step_index -= 1;
+            }
+            self.sim.cores[self.inspected_core].registers = saved_regs;
+            self.previous_registers = saved_regs;
+            self.sim.stats = saved_stats;
+            self.is_halted = false;
+            self.hit_breakpoint = None;
+            self.last_reg_diffs.clear();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Read inspected core's 4D Torus coordinates
     pub fn get_core_coord(&self) -> Coord4D {
         Coord4D::from_core_id(self.inspected_core)
