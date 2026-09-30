@@ -81,3 +81,8 @@ import { LivePatchDescriptor, create_patch_descriptor, hot_patch_slot } from "sa
 import { EpisodicBuffer, create_episodic_buffer, record_episodic_trace, execute_sleep_cycle } from "sagi/sleep_consolidation.cr"
 import { DvsEventPacket, create_dvs_event, ingest_dvs_event, CochleaAudioSpike, create_cochlea_spike, ingest_cochlea_spike } from "sagi/sensory_hal.cr"
 
+// Advanced Cognitive & Multimodal Extensions (v1.3.0)
+import { Mamba2State, ssm_selective_scan_step, mamba2_transformer_hybrid_forward } from "neuro/mamba2_hybrid.cr"
+import { CochleaChannelState, AuditorySpikePacket, init_cochlea_channel, step_cochlea_channel, process_audio_filterbank } from "sensory/neuromorphic_cochlea.cr"
+import { VisionPatchTile, DvsSpatialEvent, init_vision_patch_tile, patch_to_core_id, accumulate_patch_dvs_event, project_patch_token_wave } from "sensory/spatial_vision_patch.cr"
+

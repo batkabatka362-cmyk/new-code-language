@@ -1,8 +1,8 @@
 {
   "name": "cron-lang",
   "displayName": "CRON Cognitive Language Support",
-  "description": "Language support, syntax highlighting, snippets, and LSP 3.17 engine for CRON (.cr) & CRON Low-Level (.cl) 256-Core 4D-Torus Processor",
-  "version": "1.2.0",
+  "description": "Language support, LSP 3.17, DAP Hardware Debugger, and 4D-Torus & Wafer-65536 Silicon Visualizer for CRON (.cr) & CRON Low-Level (.cl)",
+  "version": "1.3.0",
   "publisher": "cron-ai",
   "engines": {
     "vscode": "^1.80.0"
