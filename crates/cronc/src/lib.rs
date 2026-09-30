@@ -137,6 +137,7 @@ pub mod cl_liquid_nn;
 pub mod cl_causal;
 pub mod cl_htm;
 pub mod cl_self_evolve;
+pub mod cl_lyapunov;
 pub mod docgen;
 
 pub use cl_compose::{
@@ -174,8 +175,10 @@ pub use cl_structural_morph::{StructuralMorphEngine, CoreSpecialization};
 pub use cl_self_compiler::{SelfRewritingJitEngine, LiveSlotMutation};
 pub use cl_quantum_zeno::{QuantumOpticalQubit, QuantumHypothesisRegister};
 pub use cl_hopfield::{HopfieldMemoryBank, HopfieldPattern};
-pub use cl_active_inference::ActiveInferenceAgent;
-pub use cl_elastic_ssm::ElasticSsmEngine;
+pub use cl_elastic_ssm::{
+    ElasticSsmEngine, HiPPOEngine, HybridContextMemory,
+    HybridContextBenchmarkResult, run_hybrid_context_scaling_benchmark,
+};
 pub use cl_temporal_spiking_attention::{TemporalSpikingAttention, SpikeEvent as TemporalSpikeEvent};
 pub use cl_stigmergy::StigmergyEngine;
 pub use cl_living_homeostasis::LivingHomeostasisEngine;
@@ -183,6 +186,11 @@ pub use cl_reversible_thermo::{ReversibleState3, ReversiblePipelineVerifier};
 pub use cl_spatiotemporal::{SpatiotemporalStreamer, MultimodalPhaseEvent};
 pub use cl_causal::{StructuralCausalModel, StructuralEquation, MAX_CAUSAL_NODES};
 pub use cl_htm::{HierarchicalTemporalMemory, Sdr2048, SpatialColumn, SpatialPooler, DistalSegment, HtmCell, TemporalMemory, SDR_BITS, TARGET_ACTIVE_BITS};
+pub use cl_hdc::{
+    DynamicHyperVector, DynamicItemMemory, HdcCapacityBenchmarkResult,
+    run_hdc_capacity_scaling_suite, HyperVector as HdcHyperVector, HdcItemMemory,
+};
+pub use cl_lyapunov::{LyapunovWatchdog, LyapunovWatchdogConfig, LyapunovStatus};
 
 pub use cl_metaplasticity::{BcmConfig, MetaplasticEngine, MetaplasticSynapse};
 pub use cl_thermodynamics::{ThermodynamicOptimizer, TileThermodynamicState};
@@ -357,6 +365,7 @@ pub use cl_cosim::{
 pub use cl_memcheck::{verify_cl_memory_access, ClMemcheckReport, MemcheckOptions, CycleBankConflict, compute_linear_bank, compute_swizzled_bank, prove_strided_conflict_freedom};
 pub use cl_fuzz::{run_cl_fuzz, ClFuzzReport, FuzzOptions, MutationStrategy};
 pub use cl_bench::{analyze_cl_roofline, ClBenchReport, RooflineRegime, PEAK_CORE_COMPUTE_GFLOPS, PEAK_CORE_SRAM_BW_GBPS, ROOFLINE_KNEE_OI};
+pub use cl_benchmark::{BareMetalJitterReport, run_bare_metal_jitter_profiler};
 pub use cl_kernel::{
     generate_flash_attention, generate_flash_attention_3, generate_bitnet_gemm, generate_rmsnorm,
     generate_swiglu, generate_rope, generate_kv_cache_stream,
@@ -371,7 +380,7 @@ pub use cl_opt::{optimize_cl_program, optimize_cl_program_advanced, ClOptConfig,
 pub use comptime::{evaluate_and_fold_program, ComptimeEvaluator, ComptimeValue, ComptimeEnv};
 pub use silicon_flash::{generate_hardware_package, emit_hardware_package, FlashConfig, HardwarePackage, HostInterface, SiliconTarget};
 pub use formal_verify::{FormalVerifier, FormalVerificationReport};
-pub use scheduler::{AOTHazardScheduler, IRInstruction};
+pub use scheduler::{AOTHazardScheduler, IRInstruction, SoftwarePipelineReport};
 pub use jit_backend::run_source_jit;
 pub use cl_binary::{assemble_cl_to_clb, disassemble_clb_to_cl};
 pub use optimizer::Optimizer;

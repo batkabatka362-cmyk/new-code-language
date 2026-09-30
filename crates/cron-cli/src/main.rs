@@ -2673,6 +2673,31 @@ fn main() {
             }
         }
         "cl-bench" => {
+            let mut bare_metal = false;
+            let mut samples = 10_000;
+            let mut json_mode = false;
+            for (idx, arg) in args.iter().enumerate().skip(2) {
+                if arg == "--bare-metal" {
+                    bare_metal = true;
+                } else if arg == "--samples" && idx + 1 < args.len() {
+                    if let Ok(s) = args[idx + 1].parse::<usize>() {
+                        samples = s;
+                    }
+                } else if arg == "--json" {
+                    json_mode = true;
+                }
+            }
+
+            if bare_metal {
+                let rep = cronc::run_bare_metal_jitter_profiler(samples);
+                if json_mode {
+                    println!("{}", rep.to_json());
+                } else {
+                    println!("{}", rep.format_ascii_hud());
+                }
+                return;
+            }
+
             if args.len() < 3 || args[2] == "--libcl" || args[2] == "libcl" {
                 let iters = if args.len() >= 4 { args[3].parse::<usize>().unwrap_or(1000) } else { 1000 };
                 let ws = env::current_dir().unwrap_or_default();
@@ -3563,6 +3588,26 @@ fn main() {
             handle_cl_patch_command(&args[2..]);
         }
         "cl-compare" | "bench" => {
+            if args.iter().any(|a| a == "--bare-metal") {
+                let mut samples = 10_000;
+                let mut json_mode = false;
+                for (idx, arg) in args.iter().enumerate().skip(2) {
+                    if arg == "--samples" && idx + 1 < args.len() {
+                        if let Ok(s) = args[idx + 1].parse::<usize>() {
+                            samples = s;
+                        }
+                    } else if arg == "--json" {
+                        json_mode = true;
+                    }
+                }
+                let rep = cronc::run_bare_metal_jitter_profiler(samples);
+                if json_mode {
+                    println!("{}", rep.to_json());
+                } else {
+                    println!("{}", rep.format_ascii_hud());
+                }
+                return;
+            }
             handle_cl_compare_command(&args[2..]);
         }
         "build-native-lib" | "build-native" => {

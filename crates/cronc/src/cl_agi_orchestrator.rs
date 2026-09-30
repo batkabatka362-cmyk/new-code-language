@@ -26,6 +26,7 @@ use crate::cl_metaplasticity::{MetaplasticEngine, BcmConfig};
 use crate::cl_causal::StructuralCausalModel;
 use crate::cl_htm::{HierarchicalTemporalMemory, Sdr2048, SDR_BITS};
 use crate::cl_self_evolve::SelfEvolveOptimizer;
+use crate::cl_lyapunov::{LyapunovWatchdog, LyapunovWatchdogConfig, LyapunovStatus};
 
 /// Full Living AGI Turn Result
 #[derive(Debug, Clone)]
@@ -50,6 +51,7 @@ pub struct LivingAgiTurnResult {
     pub htm_anomaly_score: f64,
     pub self_evolve_generation: usize,
     pub self_evolve_fitness: f64,
+    pub sentry_status: LyapunovStatus,
 }
 
 /// Unified Living AGI Cognitive Mind
@@ -71,6 +73,7 @@ pub struct LivingAgiMind {
     pub scm: StructuralCausalModel,
     pub htm: HierarchicalTemporalMemory,
     pub self_evolve: SelfEvolveOptimizer,
+    pub sentry: LyapunovWatchdog,
     pub current_cycle: u64,
 }
 
@@ -196,6 +199,7 @@ impl LivingAgiMind {
             scm,
             htm,
             self_evolve,
+            sentry: LyapunovWatchdog::new(LyapunovWatchdogConfig::default()),
             current_cycle: 0,
         }
     }
@@ -381,6 +385,10 @@ impl LivingAgiMind {
             None
         };
 
+        // 11b. Brain 6 Sentry: Cascading Drift Watchdog & Lyapunov Closed-Loop Stabilization
+        let mut thought_state = query_64;
+        let sentry_status = self.sentry.stabilize(&mut thought_state);
+
         // 12. Synthesize response
         let response = if let Some(ref rec) = recalled_holo {
             format!(
@@ -420,6 +428,7 @@ impl LivingAgiMind {
             htm_anomaly_score: htm_anomaly,
             self_evolve_generation,
             self_evolve_fitness,
+            sentry_status,
         }
     }
 
@@ -479,6 +488,10 @@ impl LivingAgiMind {
 
         // Core 208 [0,0,1,3]: Autonomous Episodic Dream Replay & Memory Consolidation
         full_cl.push_str(&self.sleep.compile_to_cl(208));
+        full_cl.push_str("\n");
+
+        // Core 224 [0,0,2,3]: Brain 6 Sentry: Cascading Drift Watchdog & Lyapunov Stabilization
+        full_cl.push_str(&self.sentry.compile_to_cl(224));
         full_cl.push_str("\n");
 
         full_cl

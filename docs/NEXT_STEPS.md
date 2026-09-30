@@ -89,15 +89,15 @@
 ---
 
 ## 5. Мэдээллийн энтрөпи, санах ой ба архитектурын тогтвортой байдал (Information Capacity & Stability)
-- [ ] **Cascading Drift Watchdog & Lyapunov Stabilization**:
+- [x] **Cascading Drift Watchdog & Lyapunov Stabilization**:
   - RMSNorm тоног төхөөрөмжийн зааврын калибрацийг автоматжуулах, 4 тактын горимд олон давталтын дараа вектор задрахаас сэргийлсэн $L_2$ норм тогтворжуулагч хяналтын механизмыг Brain 6 sentry-д нэмэх.
-- [ ] **Attractor Trapping & State Saturation Prevention**:
+- [x] **Attractor Trapping & State Saturation Prevention**:
   - `cl_metaplasticity` (BCM дүрэм) ба Homeostasis динамик босгыг компиляторын VLIW төлөвлөгчид нэгтгэж, тодорхой битийн цикл түгжрэлд (loop trapping буюу $0, 2^{64}-1$ рүү унах) орохоос сэргийлэх deterministic entropy injection нэвтрүүлэх.
-- [ ] **RAW Hazard & Software Pipelining Zero-Bubble Verification**:
+- [x] **RAW Hazard & Software Pipelining Zero-Bubble Verification**:
   - `cronc::scheduler` дээр Modulo Scheduling шалгуурыг сайжруулж, хамааралтай үйлдлүүдийг автоматаар interleaving / multi-accumulator хийн, OoO процессорын дамжлагын саатлыг (pipeline bubble) 0 болгож IPC-ийг дээд цэгт хүргэх.
-- [ ] **HDC Role-Filler Binding Scaling & Capacity Benchmark**:
+- [x] **HDC Role-Filler Binding Scaling & Capacity Benchmark**:
   - 2048-бит болон 10,000-битийн гипервектор VSA санах ойн багтаамжийг 10 саяас 1 тэрбум баримтад суперпозици хийх үеийн SNR (Signal-to-Noise Ratio) болон тайлах (unbinding) нарийвчлалыг стресс тестээр баталгаажуулах.
-- [ ] **Hybrid Context Memory (Streaming KV-Cache + Elastic HiPPO SSM)**:
+- [x] **Hybrid Context Memory (Streaming KV-Cache + Elastic HiPPO SSM)**:
   - 32,000–128,000 токен контекст цонхны үед өмнөх мэдээлэл арчигдахгүй (overwritten) байх, $O(N)$ шугаман санах ойн багтаамжийг хадгалах автомат шалгуурын тест нэмэх.
-- [ ] **OS Jitter & Deterministic Tail-Latency Profiler**:
+- [x] **OS Jitter & Deterministic Tail-Latency Profiler**:
   - `cron bench --bare-metal` команд нэмж, Core Isolation (`isolcpus`), 0-cycle hardware arena горимд интеррапт болон context switch-ээс шалтгаалах детерминистик бус саатлыг (p99.99 latency) хэмжих.

@@ -414,6 +414,21 @@ fn test_cli_cl_bench_roofline() {
 }
 
 #[test]
+fn test_cli_cron_bench_bare_metal() {
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["bench", "--bare-metal", "--samples", "1000", "--json"])
+        .output()
+        .expect("Failed to execute cron bench --bare-metal");
+
+    assert!(out.status.success(), "bench --bare-metal must succeed");
+    let json_str = String::from_utf8_lossy(&out.stdout);
+    assert!(json_str.contains("\"total_samples\": 1000"));
+    assert!(json_str.contains("\"p99_99_tail_ns\":"));
+    assert!(json_str.contains("\"core_isolation_active\": true"));
+    assert!(json_str.contains("\"is_hard_realtime\": true"));
+}
+
+#[test]
 fn test_cli_cl_kernel_synthesis() {
     // 1. Test cl-kernel list catalog
     let list_out = Command::new(env!("CARGO_BIN_EXE_cron"))

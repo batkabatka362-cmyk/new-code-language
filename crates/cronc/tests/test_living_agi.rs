@@ -144,9 +144,14 @@ fn test_unified_living_agi_all_six_engines() {
     assert!(turn.energy_level < 1.0);
     assert!(mind.homeostasis.state.energy_level < 1.0);
 
+    // 6. Brain 6 Sentry Lyapunov Stability
+    assert!(turn.sentry_status.is_stable);
+    assert!((turn.sentry_status.current_l2_norm - 1.0).abs() < 0.2);
+
     // Turn 2: Long sequence streaming into SSM without memory footprint growth
     for i in 0..100 {
-        mind.process_turn(&format!("stream_token_{}", i), 0.1, false);
+        let res = mind.process_turn(&format!("stream_token_{}", i), 0.1, false);
+        assert!(res.sentry_status.is_stable, "Sentry must maintain stability across long stream");
     }
     assert_eq!(mind.ssm.total_tokens_streamed, 101);
     assert_eq!(mind.ssm.memory_footprint_bytes(), 1088); // Exactly 1088 bytes for 16x8 matrix + 8 alphas!
@@ -162,6 +167,7 @@ fn test_living_agi_compile_to_cl() {
     assert!(cl_code.contains(".core [0,0,0,1]:")); // Core 64
     assert!(cl_code.contains(".core [0,0,0,2]:")); // Core 128
     assert!(cl_code.contains(".core [0,0,0,3]:")); // Core 192
+    assert!(cl_code.contains(".core [0,0,2,3]:")); // Core 224 (Brain 6 Sentry)
 
     // Check that valid bundles are emitted with slots
     assert!(cl_code.contains("B0000:"));

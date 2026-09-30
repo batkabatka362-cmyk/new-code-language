@@ -126,3 +126,28 @@ fn test_barrier_isolation() {
     // Bundle 2 has R2 = 20
     assert_eq!(bundles[1].slots[0].raw, raw_slots[2]);
 }
+
+#[test]
+fn test_multi_accumulator_modulo_scheduling_zero_bubble() {
+    let scheduler = AOTHazardScheduler::new();
+
+    // 16-element reduction using 4 accumulators (R4, R5, R6, R7)
+    // Sequential accumulation would create 16 serialized cycles with 75% bubble rate.
+    // Multi-accumulator modulo scheduling folds this into 4 cycles steady-state with 0 bubbles!
+    let (bundles, report) = scheduler.schedule_multi_accumulator_reduction(
+        '_', "PO", 4, &[5, 6, 7], 1, 16, 1
+    );
+
+    assert_eq!(report.useful_instructions, 16 + 3); // 16 loop items + 3 epilogue folds
+    assert_eq!(report.steady_state_ipc, 4.0);
+    assert!(report.is_zero_bubble);
+
+    // Verify steady-state kernel bundles (first 4 bundles) have exactly 0 bubbles
+    let is_zero_bubble = scheduler.verify_zero_bubble_kernel(&bundles, 0, 4);
+    assert!(is_zero_bubble, "Steady-state kernel must have 0 NOP bubbles and IPC = 4.0");
+
+    // All slots in bundle 0 must be useful PO slots
+    for slot in &bundles[0].slots {
+        assert!(slot.raw.starts_with("_PO"), "Slot should be active accumulator PO: {}", slot.raw);
+    }
+}
