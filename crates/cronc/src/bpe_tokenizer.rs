@@ -272,6 +272,19 @@ impl BpeTokenizer {
         String::from_utf8_lossy(&raw_bytes).to_string()
     }
 
+    /// Returns raw bytes corresponding to token ID
+    pub fn get_token_bytes(&self, id: u32) -> Vec<u8> {
+        if let Some(special) = self.id_to_special.get(&id) {
+            special.as_bytes().to_vec()
+        } else if (id as usize) < self.id_to_token.len() {
+            self.id_to_token[id as usize].clone()
+        } else if id <= 255 {
+            vec![id as u8]
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Total vocabulary size
     #[inline]
     pub fn vocab_size(&self) -> usize {

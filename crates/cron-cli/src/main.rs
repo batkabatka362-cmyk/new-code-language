@@ -3643,15 +3643,20 @@ fn main() {
                 "prompt".to_string()
             };
 
-            let mut prompt_text = "CRON Neuromorphic".to_string();
+            let mut prompt_text = "What is CRON?".to_string();
             let mut hidden_dim = 64usize;
             let mut num_layers = 2usize;
             let mut num_heads = 4usize;
-            let mut max_tokens = 8usize;
-            let mut temperature = 0.0f64;
+            let mut max_tokens = 16usize;
+            let mut temperature = 0.7f64;
+            let mut top_p = 0.95f64;
+            let mut top_k = 40usize;
+            let mut repetition_penalty = 1.15f64;
             let mut enable_sparsity = true;
+            let mut model_path: Option<String> = None;
             let mut out_file: Option<String> = None;
             let mut emit_json = false;
+            let mut stream_tokens = true;
 
             let mut i = 2;
             while i < args.len() {
@@ -3659,9 +3664,14 @@ fn main() {
                     "--dim" if i + 1 < args.len() => { hidden_dim = args[i + 1].parse().unwrap_or(64); i += 2; }
                     "--layers" if i + 1 < args.len() => { num_layers = args[i + 1].parse().unwrap_or(2); i += 2; }
                     "--heads" if i + 1 < args.len() => { num_heads = args[i + 1].parse().unwrap_or(4); i += 2; }
-                    "--tokens" if i + 1 < args.len() => { max_tokens = args[i + 1].parse().unwrap_or(8); i += 2; }
-                    "--temp" if i + 1 < args.len() => { temperature = args[i + 1].parse().unwrap_or(0.0); i += 2; }
+                    "--tokens" if i + 1 < args.len() => { max_tokens = args[i + 1].parse().unwrap_or(16); i += 2; }
+                    "--temp" if i + 1 < args.len() => { temperature = args[i + 1].parse().unwrap_or(0.7); i += 2; }
+                    "--top-p" if i + 1 < args.len() => { top_p = args[i + 1].parse().unwrap_or(0.95); i += 2; }
+                    "--top-k" if i + 1 < args.len() => { top_k = args[i + 1].parse().unwrap_or(40); i += 2; }
+                    "--repeat-penalty" if i + 1 < args.len() => { repetition_penalty = args[i + 1].parse().unwrap_or(1.15); i += 2; }
+                    "--model" | "-m" if i + 1 < args.len() => { model_path = Some(args[i + 1].clone()); i += 2; }
                     "--no-sparse" => { enable_sparsity = false; i += 1; }
+                    "--no-stream" => { stream_tokens = false; i += 1; }
                     "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
                     "--json" => { emit_json = true; i += 1; }
                     other if !other.starts_with("--") && i >= 3 => {
@@ -3672,14 +3682,17 @@ fn main() {
                 }
             }
 
+            let tokenizer = cronc::BpeTokenizer::from_default_vocab();
+            let vocab_size = tokenizer.vocab_size().max(256);
+
             let config = cronc::TransformerConfig {
-                vocab_size: 256,
+                vocab_size,
                 hidden_dim,
                 num_layers,
                 num_heads,
                 head_dim: (hidden_dim / num_heads).max(1),
                 intermediate_dim: (hidden_dim * 8) / 3,
-                max_seq_len: 128,
+                max_seq_len: 256,
                 is_ternary_bitnet: true,
                 enable_2_4_sparsity: enable_sparsity,
             };
@@ -3697,8 +3710,107 @@ fn main() {
                         println!("{}", code);
                     }
                 }
+                "gen-weights" | "export-gguf" => {
+                    let target_path = out_file.unwrap_or_else(|| "cron_bitnet.gguf".to_string());
+                    match cronc::export_synthetic_bitnet_gguf(&target_path, &config) {
+                        Ok(bytes) => {
+                            println!("[SUCCESS] Synthesized BitNet b1.58 ternary GGUF model written to '{}' ({} bytes)", target_path, bytes);
+                        }
+                        Err(e) => {
+                            eprintln!("Error exporting GGUF model: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "chat" => {
+                    let chat_config = cron_cli::chat::ChatConfig {
+                        model_name: model_path.clone().unwrap_or_else(|| "cron-bitnet-b1.58".to_string()),
+                        num_layers,
+                        page_size_mb: 16,
+                        k_speculative: 4,
+                        grammar_mode: "unconstrained".to_string(),
+                        weights_path: model_path,
+                    };
+                    if let Err(e) = cron_cli::chat::run_interactive_chat_loop(chat_config) {
+                        eprintln!("Chat session error: {}", e);
+                        std::process::exit(1);
+                    }
+                }
                 "prompt" | "infer" | "run" => {
-                    let res = cronc::generate_tokens(&prompt_text, max_tokens, temperature, &config);
+                    use std::io::Write;
+                    let stdout = std::io::stdout();
+
+                    let gguf_prov;
+                    let safetensors_prov;
+                    let golden_prov;
+
+                    let provider_ref: &dyn cronc::LayerWeightProvider = if let Some(ref mpath) = model_path {
+                        let path_obj = std::path::Path::new(mpath);
+                        let ext = path_obj.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                        if ext == "gguf" {
+                            match cronc::GgufWeightProvider::from_file(path_obj) {
+                                Ok(p) => {
+                                    gguf_prov = p;
+                                    &gguf_prov
+                                }
+                                Err(e) => {
+                                    eprintln!("[WARN] Failed to load GGUF '{}': {}. Falling back to GoldenBitNetWeightProvider.", mpath, e);
+                                    golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                                    &golden_prov
+                                }
+                            }
+                        } else if ext == "safetensors" {
+                            match cronc::SafeTensorsWeightProvider::from_file(path_obj) {
+                                Ok(p) => {
+                                    safetensors_prov = p;
+                                    &safetensors_prov
+                                }
+                                Err(e) => {
+                                    eprintln!("[WARN] Failed to load SafeTensors '{}': {}. Falling back to GoldenBitNetWeightProvider.", mpath, e);
+                                    golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                                    &golden_prov
+                                }
+                            }
+                        } else {
+                            golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                            &golden_prov
+                        }
+                    } else {
+                        golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                        &golden_prov
+                    };
+
+                    if stream_tokens && !emit_json {
+                        println!("\n╭─────────────────── CRON BitNet Inference Stream ───────────────────╮");
+                        print!("  [Prompt] \"{}\" ──► ", prompt_text.trim());
+                        let _ = stdout.lock().flush();
+                    }
+
+                    let sampling_cfg = cronc::SamplingConfig {
+                        temperature,
+                        top_p,
+                        top_k,
+                        repetition_penalty,
+                    };
+
+                    let res = cronc::generate_tokens_autoregressive_paged_with_sampling(
+                        &prompt_text,
+                        max_tokens,
+                        &sampling_cfg,
+                        &config,
+                        &tokenizer,
+                        Some(provider_ref),
+                        |_tok_id, tok_str| {
+                            if stream_tokens && !emit_json {
+                                print!("{}", tok_str);
+                                let _ = std::io::stdout().lock().flush();
+                            }
+                        },
+                    );
+
+                    if stream_tokens && !emit_json {
+                        println!("\n╰────────────────────────────────────────────────────────────────────╯\n");
+                    }
 
                     if emit_json {
                         println!("{}", res.to_json());
@@ -3715,7 +3827,7 @@ fn main() {
                     }
                 }
                 other => {
-                    eprintln!("Unknown cl-infer action '{}'. Available: prompt, synth", other);
+                    eprintln!("Unknown cl-infer action '{}'. Available: prompt, synth, gen-weights, chat", other);
                     std::process::exit(1);
                 }
             }
