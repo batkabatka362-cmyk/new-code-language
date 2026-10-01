@@ -24,14 +24,14 @@
           "keyword.control.cron",
           "keyword.control.concurrency.cron",
           "keyword.control.cognitive.cron",
+          "keyword.control.directive.cron",
           "keyword.control.instruction.cron-cl",
           "keyword.control.directive.cron-cl",
           "keyword.control.core.cron-cl",
           "keyword.control.kernel.cron-cl"
         ],
         "settings": {
-          "foreground": "#C586C0",
-          "fontStyle": "bold"
+          "foreground": "#A28EB8"
         }
       },
       {
@@ -39,8 +39,7 @@
           "punctuation.definition.prefix.cron-cl"
         ],
         "settings": {
-          "foreground": "#FF79C6",
-          "fontStyle": "bold"
+          "foreground": "#B07C8C"
         }
       },
       {
@@ -48,8 +47,7 @@
           "keyword.operator.opcode.cron-cl"
         ],
         "settings": {
-          "foreground": "#4FC1FF",
-          "fontStyle": "bold"
+          "foreground": "#6F97B8"
         }
       },
       {
@@ -60,7 +58,7 @@
           "variable.language.self.cron"
         ],
         "settings": {
-          "foreground": "#DCDCAA"
+          "foreground": "#C2BD99"
         }
       },
       {
@@ -68,8 +66,7 @@
           "punctuation.separator.mode.cron-cl"
         ],
         "settings": {
-          "foreground": "#FF8800",
-          "fontStyle": "bold"
+          "foreground": "#BA8860"
         }
       },
       {
@@ -78,7 +75,7 @@
           "variable.other.property.cron"
         ],
         "settings": {
-          "foreground": "#9CDCFE"
+          "foreground": "#7FA2B8"
         }
       },
       {
@@ -86,8 +83,7 @@
           "constant.numeric.crc8.cron-cl"
         ],
         "settings": {
-          "foreground": "#50FA7B",
-          "fontStyle": "bold"
+          "foreground": "#6FA382"
         }
       },
       {
@@ -95,8 +91,7 @@
           "entity.name.section.bundle.cron-cl"
         ],
         "settings": {
-          "foreground": "#BD93F9",
-          "fontStyle": "bold"
+          "foreground": "#8E86AB"
         }
       },
       {
@@ -107,18 +102,19 @@
           "entity.name.function.label.cron-cl"
         ],
         "settings": {
-          "foreground": "#8BE9FD",
-          "fontStyle": "bold"
+          "foreground": "#729EBA"
         }
       },
       {
         "scope": [
           "entity.name.tag.annotation.cron",
+          "entity.name.tag.brain.cron",
+          "support.class.brain.cron",
           "storage.modifier.linear.cron",
           "storage.modifier.brain.cron"
         ],
         "settings": {
-          "foreground": "#FFB86C",
+          "foreground": "#C2996E",
           "fontStyle": "italic"
         }
       },
@@ -127,11 +123,11 @@
           "storage.type.primitive.cron",
           "entity.name.type.cron",
           "entity.name.type.declaration.cron",
+          "entity.name.type.brain.cron",
           "entity.name.type.coordinates.cron-cl"
         ],
         "settings": {
-          "foreground": "#4EC9B0",
-          "fontStyle": "bold"
+          "foreground": "#5A998B"
         }
       },
       {
@@ -139,8 +135,7 @@
           "support.function.builtin.cron"
         ],
         "settings": {
-          "foreground": "#DCDCAA",
-          "fontStyle": "bold"
+          "foreground": "#B8B08A"
         }
       },
       {
@@ -155,7 +150,7 @@
           "constant.language.null.cron"
         ],
         "settings": {
-          "foreground": "#B5CEA8"
+          "foreground": "#93AE87"
         }
       },
       {
@@ -164,7 +159,7 @@
           "string.quoted.single.cron"
         ],
         "settings": {
-          "foreground": "#CE9178"
+          "foreground": "#BA8572"
         }
       },
       {
@@ -176,7 +171,7 @@
           "keyword.operator.arithmetic.cron"
         ],
         "settings": {
-          "foreground": "#D4D4D4"
+          "foreground": "#8F96A0"
         }
       },
       {
@@ -187,7 +182,7 @@
           "comment.block.cron"
         ],
         "settings": {
-          "foreground": "#6A9955",
+          "foreground": "#607365",
           "fontStyle": "italic"
         }
       }
