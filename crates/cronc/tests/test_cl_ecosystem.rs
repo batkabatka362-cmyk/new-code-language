@@ -25,7 +25,7 @@ fn test_libcl_standard_kernels_integrity_and_execution() {
         let path = Path::new(&k.path);
         assert!(path.exists(), "Kernel file must exist: {}", k.path);
 
-        let content = fs::read_to_string(&path).expect("Must read kernel .cl");
+        let content = fs::read_to_string(path).expect("Must read kernel .cl");
         
         // 1. Audit safety
         let audit = audit_cl_source(&content, &k.name);

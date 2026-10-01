@@ -85,3 +85,30 @@ fn test_chat_session_json_constrained_mode() {
     assert!(trimmed.contains("\"response\": \"Executed in 16MB RAM\""));
     assert_eq!(telemetry.active_ram_mb, 4);
 }
+
+#[test]
+fn test_chat_session_history_accumulation_and_clear() {
+    let config = ChatConfig {
+        model_name: "cron-bitnet-7b".to_string(),
+        num_layers: 4,
+        page_size_mb: 8,
+        k_speculative: 2,
+        grammar_mode: "unconstrained".to_string(),
+        weights_path: None,
+    };
+
+    let mut session = ChatSession::new(config);
+    let mut out1 = Vec::new();
+    let _ = session.execute_turn("Hello CRON!", &mut out1).unwrap();
+    assert_eq!(session.history.len(), 1);
+    assert_eq!(session.history[0].0, "Hello CRON!");
+
+    let mut out2 = Vec::new();
+    let _ = session.execute_turn("Tell me about FlashAttention-3", &mut out2).unwrap();
+    assert_eq!(session.history.len(), 2);
+    assert_eq!(session.history[1].0, "Tell me about FlashAttention-3");
+
+    // Clear history
+    session.history.clear();
+    assert_eq!(session.history.len(), 0);
+}

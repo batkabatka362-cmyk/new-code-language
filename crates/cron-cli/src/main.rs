@@ -135,10 +135,100 @@ fn print_help() {
     println!();
 }
 
+fn print_subcommand_help(cmd: &str) {
+    match cmd {
+        "cl-memcheck" => {
+            println!("USAGE:\n    cron cl-memcheck <file.cl> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Formal verification of 16-bank conflict-free memory access across 256 cores using Galois Field GF(2^4) XOR address swizzling.\n");
+            println!("OPTIONS:\n    --json          Output structured JSON verification report\n    --no-swizzle    Disable hardware bank swizzling (demonstrates conflicts)\n    --strict        Treat any bank collision as fatal failure\n    --max-cycles N  Simulate memory trace for up to N cycles (default: 1024)\n    -h, --help      Display this help message\n");
+            println!("EXAMPLE:\n    cron cl-memcheck crates/cronc/libcl/attention.cl --strict");
+        }
+        "cl-infer" => {
+            println!("USAGE:\n    cron cl-infer [prompt|synth|gen-weights|chat] [OPTIONS]\n");
+            println!("DESCRIPTION:\n    End-to-End LLM Transformer inference engine with BitNet b1.58 ternary weights and FlashAttention-3 tiled online softmax on 256-core neuromorphic silicon.\n");
+            println!("SUBCOMMANDS:\n    prompt [text]       Run autoregressive generation on text prompt with live streaming\n    synth               Synthesize standalone .cl VLIW transformer microcode\n    gen-weights         Export structured BitNet b1.58 ternary model in standard GGUF format\n    chat                Launch interactive terminal conversation session\n");
+            println!("OPTIONS:\n    -m, --model <path>  Load model weights from GGUF (.gguf) or SafeTensors (.safetensors)\n    --tokens <n>        Maximum new tokens to generate (default: 16)\n    --temp <float>      Sampling temperature (0.0 = greedy, default: 0.7)\n    --top-p <float>     Top-p nucleus sampling probability threshold (default: 0.95)\n    --top-k <int>       Top-k candidate tokens filtering (default: 40, 0 = disabled)\n    --repeat-penalty <f> Repetition penalty factor (default: 1.15)\n    --dim <int>         Embedding hidden dimension (default: 64)\n    --layers <int>      Number of transformer layers (default: 2)\n    --heads <int>       Number of attention heads (default: 4)\n    --no-sparse         Disable 2:4 structural sparsity acceleration\n    --no-stream         Disable real-time live terminal token streaming\n    -o <path>           Output file path for microcode or exported weights\n    --json              Output generation results and telemetry in JSON\n    -h, --help          Display this help message\n");
+            println!("EXAMPLE:\n    cron cl-infer prompt \"What is CRON?\" --tokens 32 --model model.gguf");
+        }
+        "chat" => {
+            println!("USAGE:\n    cron chat [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Interactive AI Terminal with zero-VRAM paged weight streaming (<16 MB RSS) and hardware speculative decoding.\n");
+            println!("OPTIONS:\n    --model <name>      Model identifier string (default: cron-bitnet-7b)\n    --weights <path>    Load weights from .gguf or .safetensors file\n    --layers <n>        Number of transformer layers (default: 32)\n    --page-mb <n>       Resident set size limit in MB (default: 16)\n    --speculative <k>   Speculative draft tokens lookahead depth (default: 4)\n    --grammar <mode>    Sampling constraint: 'unconstrained' or 'json'\n    --eval <prompt>     Execute a single turn non-interactively and print output\n    -h, --help          Display this help message\n");
+            println!("EXAMPLE:\n    cron chat --weights model.gguf --page-mb 16");
+        }
+        "vibe-loop" => {
+            println!("USAGE:\n    cron vibe-loop <file.cl|--code '...'> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Autonomous AI Vibe-Coding loop: auto-repairs slot width & CRC-8 ATM, optimizes VLIW compaction, runs JIT, and reports telemetry in one pass.\n");
+            println!("OPTIONS:\n    --code '...'    Execute inline .cl code directly from argument\n    --no-heal       Disable automatic CRC-8 ATM and slot width repairing\n    --no-opt        Disable VLIW slot compaction super-optimizer\n    --no-jit        Disable sub-microsecond JIT execution\n    --fix-in-place  Overwrite input file with healed, canonicalized code\n    -o <out.cl>     Write healed code to specified output file\n    --json          Output structured JSON telemetry\n    -h, --help      Display this help message\n");
+            println!("EXAMPLE:\n    cron vibe-loop broken.cl --fix-in-place");
+        }
+        "cl-verify-math" => {
+            println!("USAGE:\n    cron cl-verify-math [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Formal analytical precision verifier certifying mathematical correctness of all standard silicon domains (CORDIC, MZI, Softmax, QFT, STDP, ODE, FlashAttention-3, BitNet).\n");
+            println!("OPTIONS:\n    --json      Output structured JSON verification report\n    -h, --help  Display this help message\n");
+            println!("EXAMPLE:\n    cron cl-verify-math");
+        }
+        "cl-lint" => {
+            println!("USAGE:\n    cron cl-lint <file.cl> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Deep static linter & hardware thermal/hazard analyzer for .cl machine code.\n");
+            println!("OPTIONS:\n    --json      Output linting issues and metrics in JSON format\n    -h, --help  Display this help message\n");
+            println!("EXAMPLE:\n    cron cl-lint crates/cronc/libcl/attention.cl");
+        }
+        "cl-trace" => {
+            println!("USAGE:\n    cron cl-trace <file.cl> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Dynamic Binary Trace Optimizer & 16KB L0 Trace Cache with Modulo Scheduling.\n");
+            println!("OPTIONS:\n    --opt       Enable modulo schedule loop compaction\n    --cache     Simulate 16KB L0 Trace Cache hit/miss rates\n    --hud       Render ASCII trace schedule diagram\n    --json      Output trace metrics in JSON\n    -h, --help  Display this help message\n");
+        }
+        "cl-optic" => {
+            println!("USAGE:\n    cron cl-optic <file.cl> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Heterogeneous Optical WDM Laser Power Budget & Photonic Insertion Loss Optimizer.\n");
+            println!("OPTIONS:\n    --channels <n>  Number of WDM optical wavelengths (default: 8)\n    --power <mw>    Total laser power budget in mW (default: 250)\n    --synth -o <v>  Synthesize optical power controller Verilog RTL\n    --hud           Render ASCII photonic power balance HUD\n    --json          Output optical loss breakdown in JSON\n    -h, --help      Display this help message\n");
+        }
+        "cl-balance" => {
+            println!("USAGE:\n    cron cl-balance [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Autonomous 4D-Torus Heterogeneous Workload Balancer & Partitioner across 256 cores.\n");
+            println!("OPTIONS:\n    --cores <n>     Number of allocated cores (default: 256)\n    --strategy <s>  Parallelism strategy: auto, data, model, pipeline, spatial\n    --heatmap       Render ASCII 4D-Torus temperature/utilization heatmap\n    --json          Output workload balance plan in JSON\n    -h, --help      Display this help message\n");
+        }
+        "cl-power" => {
+            println!("USAGE:\n    cron cl-power <file.cl> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Landauer Thermodynamic DVFS & Silicon Thermal Simulation.\n");
+            println!("OPTIONS:\n    --voltage <v>   Core supply voltage (default: 0.85V)\n    --freq <ghz>    Clock frequency in GHz (default: 2.5)\n    --temp <k>      Ambient temperature in Kelvin (default: 300K)\n    --hud           Render ASCII thermodynamic state HUD\n    --json          Output power metrics in JSON\n    -h, --help      Display this help message\n");
+        }
+        "cl-perf" => {
+            println!("USAGE:\n    cron cl-perf [file.cl|--all] [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Autonomous Silicon Micro-Kernel PPA Performance Profiling Suite.\n");
+            println!("OPTIONS:\n    --all       Profile all standard library kernels in libcl\n    --iters <n> Number of profiling iterations (default: 1000)\n    --hud       Render ASCII PPA Scoreboard\n    --json      Output performance metrics in JSON\n    -h, --help  Display this help message\n");
+        }
+        other => {
+            println!("CRON Command: {}\n", other);
+            println!("USAGE:\n    cron {} [OPTIONS] [ARGUMENTS]\n", other);
+            println!("Run 'cron' without arguments to see the complete list of available commands.");
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
+        print_help();
+        return;
+    }
+
+    if args[1] == "help" {
+        if args.len() >= 3 {
+            print_subcommand_help(&args[2]);
+        } else {
+            print_help();
+        }
+        return;
+    }
+
+    if args.len() >= 3 && (args[2] == "--help" || args[2] == "-h") {
+        print_subcommand_help(&args[1]);
+        return;
+    }
+
+    if args[1] == "--help" || args[1] == "-h" {
         print_help();
         return;
     }

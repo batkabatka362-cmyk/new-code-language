@@ -202,6 +202,72 @@ pub fn run_mathematical_verifications() -> MathVerificationReport {
         details: format!("Numerical ODE integration convergence = {:.4} (golden: {:.4})", x_ode, golden_ode),
     });
 
+    // 7. FlashAttention-3 Online Softmax Partition Invariant
+    let head_dim = 8;
+    let num_heads = 2;
+    let hidden_dim = head_dim * num_heads;
+    let seq_len = 6;
+    let q = vec![0.35f64; hidden_dim];
+    let k = vec![0.20f64; seq_len * hidden_dim];
+    let v = vec![0.65f64; seq_len * hidden_dim];
+    let flash3_out = crate::cl_infer::flash_attention_3_tile_forward(&q, &k, &v, head_dim, num_heads, hidden_dim, seq_len, 2, 1.0);
+
+    // Analytical standard full attention reference: O = softmax(Q K^T / sqrt(d)) V
+    let scale = 1.0 / (head_dim as f64).sqrt();
+    let mut std_out = vec![0.0f64; hidden_dim];
+    for h in 0..num_heads {
+        let h_offset = h * head_dim;
+        let mut scores = Vec::with_capacity(seq_len);
+        for t in 0..seq_len {
+            let mut dot = 0.0f64;
+            for d in 0..head_dim {
+                dot += q[h_offset + d] * k[t * hidden_dim + h_offset + d];
+            }
+            scores.push(dot * scale);
+        }
+        let max_s = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let exp_s: Vec<f64> = scores.iter().map(|&s| (s - max_s).exp()).collect();
+        let sum_s: f64 = exp_s.iter().sum();
+        for t in 0..seq_len {
+            let weight = exp_s[t] / sum_s;
+            for d in 0..head_dim {
+                std_out[h_offset + d] += weight * v[t * hidden_dim + h_offset + d];
+            }
+        }
+    }
+    let mut max_fa3_err = 0.0f64;
+    for i in 0..hidden_dim {
+        let err = (flash3_out[i] - std_out[i]).abs();
+        max_fa3_err = max_fa3_err.max(err);
+    }
+    max_residual = max_residual.max(max_fa3_err);
+    checks.push(MathKernelCheck {
+        kernel_name: "FlashAttention-3 Tiled Partition Fidelity".to_string(),
+        domain: "Attention Mathematical Physics".to_string(),
+        analytical_model: "Online Softmax Tiling vs Exact O(N^2) Softmax(QK^T/sqrt(d))V".to_string(),
+        measured_error: max_fa3_err,
+        max_allowed_tolerance: 1.0e-9,
+        passed: max_fa3_err < 1.0e-9,
+        details: format!("Block-tiled online attention max deviation = {:.3e}", max_fa3_err),
+    });
+
+    // 8. BitNet b1.58 Ternary Quantization Invariant
+    let raw_weights = [0.85f32, -0.72f32, 0.05f32, 0.99f32, -0.45f32, 0.12f32, -0.88f32, 0.01f32];
+    let (trits, params) = crate::model_importer::ternary::quantize_to_ternary(&raw_weights);
+    let all_ternary = trits.iter().all(|&t| t == -1 || t == 0 || t == 1);
+    let abs_mean: f32 = raw_weights.iter().map(|w| w.abs()).sum::<f32>() / (raw_weights.len() as f32);
+    let scale_err = ((params.scale - abs_mean) as f64).abs();
+    max_residual = max_residual.max(scale_err);
+    checks.push(MathKernelCheck {
+        kernel_name: "BitNet b1.58 Ternary Conservation Law".to_string(),
+        domain: "Sub-Byte Quantization Theory".to_string(),
+        analytical_model: "Absmean Scale gamma = (1/N)sum(|W|) & Trit Set {-1, 0, +1}".to_string(),
+        measured_error: scale_err,
+        max_allowed_tolerance: 1.0e-7,
+        passed: all_ternary && scale_err < 1.0e-7,
+        details: format!("Trit set validity: {}, scale error = {:.3e}", all_ternary, scale_err),
+    });
+
     let passed_tests = checks.iter().filter(|c| c.passed).count();
     let failed_tests = checks.len() - passed_tests;
     let all_passed = failed_tests == 0;

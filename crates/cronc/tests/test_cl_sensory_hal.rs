@@ -32,8 +32,8 @@ fn test_cochlea_tonotopic_mapping() {
     assert!(coord.w < 4);
     assert_eq!(coord.x, 42 % 4);
     assert_eq!(coord.y, (42 / 4) % 4);
-    assert_eq!(coord.z, (42 / 16) % 4);
-    assert_eq!(coord.w, (42 / 64) % 4);
+    assert_eq!(coord.z, 42 / 16);
+    assert_eq!(coord.w, 42 / 64);
 }
 
 #[test]

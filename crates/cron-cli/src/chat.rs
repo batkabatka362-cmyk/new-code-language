@@ -63,6 +63,7 @@ pub struct ChatSession {
     pub tf_config: TransformerConfig,
     pub turns_count: usize,
     pub total_tokens_emitted: usize,
+    pub history: Vec<(String, String)>,
 }
 
 impl ChatSession {
@@ -104,6 +105,7 @@ impl ChatSession {
             tf_config,
             turns_count: 0,
             total_tokens_emitted: 0,
+            history: Vec::new(),
         }
     }
 
@@ -163,9 +165,16 @@ impl ChatSession {
                 self.config.page_size_mb
             )?;
             out.flush()?;
+            let mut prompt_context = String::new();
+            for (prev_u, prev_a) in self.history.iter().rev().take(3).rev() {
+                prompt_context.push_str(&format!("{}. ", prev_u));
+                prompt_context.push_str(&format!("{} ", prev_a));
+            }
+            prompt_context.push_str(user_input.trim());
+
             let mut emitted_count = 0;
             let result = generate_tokens_autoregressive_paged(
-                user_input,
+                &prompt_context,
                 16,
                 0.7,
                 &self.tf_config,
@@ -177,6 +186,7 @@ impl ChatSession {
                     emitted_count += 1;
                 },
             );
+            self.history.push((user_input.trim().to_string(), result.generated_text.clone()));
             writeln!(out)?;
             result.telemetry.generated_tokens.max(emitted_count).max(1)
         };
@@ -237,6 +247,7 @@ pub fn run_interactive_chat_loop(config: ChatConfig) -> io::Result<()> {
             break;
         }
         if input == ":clear" {
+            session.history.clear();
             writeln!(handle, "[Chat context cleared]")?;
             continue;
         }

@@ -303,3 +303,51 @@ impl BpeTokenizer {
         self.eos_id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bpe_roundtrip_ascii_and_empty() {
+        let tok = BpeTokenizer::from_default_vocab();
+        assert_eq!(tok.encode(""), Vec::<u32>::new());
+        assert_eq!(tok.decode(&[]), "");
+
+        let text = "CRON Neuromorphic Photonic Silicon";
+        let ids = tok.encode(text);
+        assert!(!ids.is_empty());
+        let decoded = tok.decode(&ids);
+        assert_eq!(decoded, text);
+    }
+
+    #[test]
+    fn test_bpe_roundtrip_multibyte_utf8_and_emojis() {
+        let tok = BpeTokenizer::from_default_vocab();
+        let texts = [
+            "Сайн байна уу, CRON 4D-Torus!",
+            "🧠 ⚡ 🚀 AGI Silicon Wavefront",
+            "Special: <|im_start|>user\nCalculate distance<|im_end|>",
+        ];
+
+        for &t in &texts {
+            let ids = tok.encode(t);
+            let decoded = tok.decode(&ids);
+            assert_eq!(decoded, t, "Roundtrip failed for: {}", t);
+        }
+    }
+
+    #[test]
+    fn test_get_token_bytes_streaming() {
+        let tok = BpeTokenizer::from_default_vocab();
+        let ids = tok.encode("CRON");
+        let mut reconstructed = Vec::new();
+        for &id in &ids {
+            let bytes = tok.get_token_bytes(id);
+            assert!(!bytes.is_empty());
+            reconstructed.extend_from_slice(&bytes);
+        }
+        assert_eq!(String::from_utf8(reconstructed).unwrap(), "CRON");
+    }
+}
+
