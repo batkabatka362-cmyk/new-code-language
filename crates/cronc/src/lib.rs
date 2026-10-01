@@ -324,11 +324,11 @@ pub use cl_cordic::{
     run_cordic, synthesize_cordic_cl, CordicConfig, CordicMode, CordicResult,
 };
 pub use cl_infer::{
-    export_synthetic_bitnet_gguf, flash_attention_3_tile_forward, generate_tokens,
-    generate_tokens_autoregressive_paged, generate_tokens_autoregressive_paged_with_sampling,
+    export_synthetic_bitnet_gguf, flash_attention_3_tile_forward, generate_multimodal_autoregressive,
+    generate_tokens, generate_tokens_autoregressive_paged, generate_tokens_autoregressive_paged_with_sampling,
     sample_token_advanced, synthesize_transformer_cl, transformer_forward_step,
-    transformer_forward_step_paged, GenerationResult, GgufWeightProvider,
-    GoldenBitNetWeightProvider, InferenceTelemetry, KVCache, LayerWeightProvider,
+    transformer_forward_step_paged, transformer_forward_step_with_embedding, GenerationResult,
+    GgufWeightProvider, GoldenBitNetWeightProvider, InferenceTelemetry, KVCache, LayerWeightProvider,
     SafeTensorsWeightProvider, SamplingConfig, TransformerConfig,
 };
 pub use cl_snn::{

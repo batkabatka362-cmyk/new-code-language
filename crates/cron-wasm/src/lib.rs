@@ -545,7 +545,7 @@ B0001: _AD01$102> _NO00#000> _NO00#000> _HL00#000!
         let math_slice = unsafe { std::slice::from_raw_parts(math_ptr, math_len) };
         let math_json = std::str::from_utf8(math_slice).unwrap();
         assert!(math_json.contains("\"all_passed\":true"));
-        assert!(math_json.contains("\"total_tests\":6"));
+        assert!(math_json.contains("\"total_tests\":8"));
     }
 
     #[test]

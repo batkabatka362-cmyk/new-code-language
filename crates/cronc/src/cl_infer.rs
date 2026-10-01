@@ -367,21 +367,18 @@ pub fn transformer_forward_step(
     transformer_forward_step_paged(token_id, pos, config, kv_cache, None)
 }
 
-/// Performs a full forward pass of the multi-layer transformer for a single token using zero-VRAM
-/// paged streaming layer weights (or fallback pseudo-weights).
-pub fn transformer_forward_step_paged(
-    token_id: usize,
+/// Performs a full forward pass of the multi-layer transformer for an arbitrary embedding vector
+/// (e.g. text token, visual patch, or audio frame) using zero-VRAM paged streaming layer weights.
+pub fn transformer_forward_step_with_embedding(
+    embedding: &[f64],
     pos: usize,
     config: &TransformerConfig,
     kv_cache: &mut KVCache,
     weight_provider: Option<&dyn LayerWeightProvider>,
 ) -> Vec<f64> {
-    // 1. Embedding lookup: deterministic pseudo-random embedding vector
     let mut x = vec![0.0; config.hidden_dim];
-    let seed = (token_id + 1) as f64;
-    for i in 0..config.hidden_dim {
-        x[i] = (seed * (i + 1) as f64 * 0.1234).sin() * 0.5;
-    }
+    let copy_len = embedding.len().min(config.hidden_dim);
+    x[..copy_len].copy_from_slice(&embedding[..copy_len]);
 
     let gamma = vec![1.0; config.hidden_dim];
     let eps = 1.0e-5;
@@ -538,6 +535,23 @@ pub fn transformer_forward_step_paged(
     )
 }
 
+/// Performs a full forward pass of the multi-layer transformer for a single token using zero-VRAM
+/// paged streaming layer weights (or fallback pseudo-weights).
+pub fn transformer_forward_step_paged(
+    token_id: usize,
+    pos: usize,
+    config: &TransformerConfig,
+    kv_cache: &mut KVCache,
+    weight_provider: Option<&dyn LayerWeightProvider>,
+) -> Vec<f64> {
+    let mut x = vec![0.0; config.hidden_dim];
+    let seed = (token_id + 1) as f64;
+    for i in 0..config.hidden_dim {
+        x[i] = (seed * (i + 1) as f64 * 0.1234).sin() * 0.5;
+    }
+    transformer_forward_step_with_embedding(&x, pos, config, kv_cache, weight_provider)
+}
+
 /// Advanced sampling configuration for autoregressive generation
 #[derive(Debug, Clone)]
 pub struct SamplingConfig {
@@ -576,6 +590,8 @@ pub fn sample_token_advanced(
             let is_valid_char = (32..=126).contains(&v) || v == 10 || v == 9 || v >= 256;
             if !is_valid_char {
                 *logit = f64::NEG_INFINITY;
+            } else if v < 256 && v != 32 && !(v as u8).is_ascii_alphanumeric() {
+                *logit -= 4.0;
             }
         }
     }
@@ -757,13 +773,18 @@ impl GoldenBitNetWeightProvider {
         let mut vals = Vec::with_capacity(total);
 
         for v in 0..vocab_size {
-            let is_favored = (32..=126).contains(&v) || v == 10 || v == 9 || v >= 256;
+            let is_subword = v >= 256;
+            let is_favored = (32..=126).contains(&v) || v == 10 || v == 9 || is_subword;
             for d in 0..in_dim {
                 let factor = ((v + 1) as f64 * 0.173 + (d + 1) as f64 * 0.289).sin();
-                let val = if is_favored && factor > 0.05 {
+                let val = if is_subword {
+                    if factor > -0.25 {
+                        1.0f32
+                    } else {
+                        0.0f32
+                    }
+                } else if is_favored && factor > 0.10 {
                     1.0f32
-                } else if is_favored && factor < -0.40 {
-                    -1.0f32
                 } else {
                     0.0f32
                 };
@@ -940,6 +961,76 @@ impl LayerWeightProvider for GgufWeightProvider {
                     let b = &self.raw_bytes[start + i * 2..start + (i + 1) * 2];
                     let u = u16::from_le_bytes(b.try_into().unwrap());
                     v.push(crate::model_importer::safetensors::f16_to_f32(u));
+                }
+                v
+            }
+            GgufTensorType::Q8_0 => {
+                let num_blocks = num_elements / 32;
+                let bytes_needed = num_blocks * 34;
+                if start + bytes_needed > self.raw_bytes.len() {
+                    return None;
+                }
+                let mut v = Vec::with_capacity(num_elements);
+                for b_idx in 0..num_blocks {
+                    let b_start = start + b_idx * 34;
+                    let d_bytes = &self.raw_bytes[b_start..b_start + 2];
+                    let d = crate::model_importer::safetensors::f16_to_f32(u16::from_le_bytes(
+                        d_bytes.try_into().unwrap(),
+                    ));
+                    for j in 0..32 {
+                        let q = self.raw_bytes[b_start + 2 + j] as i8;
+                        v.push(q as f32 * d);
+                    }
+                }
+                v
+            }
+            GgufTensorType::Q4_0 => {
+                let num_blocks = num_elements / 32;
+                let bytes_needed = num_blocks * 18;
+                if start + bytes_needed > self.raw_bytes.len() {
+                    return None;
+                }
+                let mut v = Vec::with_capacity(num_elements);
+                for b_idx in 0..num_blocks {
+                    let b_start = start + b_idx * 18;
+                    let d_bytes = &self.raw_bytes[b_start..b_start + 2];
+                    let d = crate::model_importer::safetensors::f16_to_f32(u16::from_le_bytes(
+                        d_bytes.try_into().unwrap(),
+                    ));
+                    for j in 0..16 {
+                        let byte = self.raw_bytes[b_start + 2 + j];
+                        let x0 = (byte & 0x0F) as i8 - 8;
+                        let x1 = ((byte >> 4) & 0x0F) as i8 - 8;
+                        v.push(x0 as f32 * d);
+                        v.push(x1 as f32 * d);
+                    }
+                }
+                v
+            }
+            GgufTensorType::Q4_1 => {
+                let num_blocks = num_elements / 32;
+                let bytes_needed = num_blocks * 20;
+                if start + bytes_needed > self.raw_bytes.len() {
+                    return None;
+                }
+                let mut v = Vec::with_capacity(num_elements);
+                for b_idx in 0..num_blocks {
+                    let b_start = start + b_idx * 20;
+                    let d_bytes = &self.raw_bytes[b_start..b_start + 2];
+                    let d = crate::model_importer::safetensors::f16_to_f32(u16::from_le_bytes(
+                        d_bytes.try_into().unwrap(),
+                    ));
+                    let m_bytes = &self.raw_bytes[b_start + 2..b_start + 4];
+                    let m = crate::model_importer::safetensors::f16_to_f32(u16::from_le_bytes(
+                        m_bytes.try_into().unwrap(),
+                    ));
+                    for j in 0..16 {
+                        let byte = self.raw_bytes[b_start + 4 + j];
+                        let u0 = (byte & 0x0F) as f32;
+                        let u1 = ((byte >> 4) & 0x0F) as f32;
+                        v.push(u0 * d + m);
+                        v.push(u1 * d + m);
+                    }
                 }
                 v
             }
@@ -1308,6 +1399,167 @@ where
         synthesized_cl_kernel,
     }
 }
+
+/// Performs unified multimodal autoregressive token generation: ingests prefix multimodal sensory embeddings
+/// (e.g. Vision patches or Audio Mel frames) followed by text prompt tokens, and decodes completion tokens.
+#[allow(clippy::too_many_arguments)]
+pub fn generate_multimodal_autoregressive<F>(
+    prefix_embeddings: &[Vec<f32>],
+    prompt: &str,
+    max_new_tokens: usize,
+    sampling: &SamplingConfig,
+    config: &TransformerConfig,
+    tokenizer: &BpeTokenizer,
+    weight_provider: Option<&dyn LayerWeightProvider>,
+    mut on_token_emitted: F,
+) -> GenerationResult
+where
+    F: FnMut(u32, &str),
+{
+    let mut kv_cache = KVCache::new(config.num_layers, config.max_seq_len, config.hidden_dim);
+
+    let golden_weights;
+    let effective_provider: Option<&dyn LayerWeightProvider> = match weight_provider {
+        Some(p) => Some(p),
+        None => {
+            golden_weights = GoldenBitNetWeightProvider::new(
+                config.num_layers,
+                config.hidden_dim,
+                config.intermediate_dim,
+                config.vocab_size.max(tokenizer.vocab_size()),
+            );
+            Some(&golden_weights)
+        }
+    };
+
+    let start_instant = std::time::Instant::now();
+    let mut current_pos = 0;
+
+    // 1. Ingest prefix multimodal embeddings into KV-cache
+    for emb in prefix_embeddings {
+        if current_pos >= config.max_seq_len {
+            break;
+        }
+        let f64_emb: Vec<f64> = emb.iter().map(|&v| v as f64).collect();
+        let _ = transformer_forward_step_with_embedding(&f64_emb, current_pos, config, &mut kv_cache, effective_provider);
+        current_pos += 1;
+    }
+
+    // 2. Ingest text prompt tokens
+    let mut token_ids: Vec<usize> = tokenizer
+        .encode(prompt)
+        .into_iter()
+        .map(|id| (id as usize) % config.vocab_size)
+        .collect();
+    if token_ids.is_empty() {
+        token_ids.push((tokenizer.bos_token_id() as usize) % config.vocab_size);
+    }
+
+    let mut last_logits = Vec::new();
+    for &tok in &token_ids {
+        if current_pos >= config.max_seq_len {
+            break;
+        }
+        last_logits = transformer_forward_step_paged(tok, current_pos, config, &mut kv_cache, effective_provider);
+        current_pos += 1;
+    }
+
+    let prefill_elapsed_us = start_instant.elapsed().as_micros() as f64;
+    let ttft_us = prefill_elapsed_us.max(1.0);
+
+    // 3. Decode phase
+    let decode_start = std::time::Instant::now();
+    let mut generated_text = String::new();
+    let mut stream_bytes = Vec::new();
+    let prompt_tokens_len = token_ids.len();
+
+    for _step in 0..max_new_tokens {
+        if current_pos >= config.max_seq_len {
+            break;
+        }
+
+        let next_token = sample_token_advanced(&last_logits, &token_ids, sampling);
+        token_ids.push(next_token);
+
+        let token_bytes = tokenizer.get_token_bytes(next_token as u32);
+        stream_bytes.extend_from_slice(&token_bytes);
+
+        match std::str::from_utf8(&stream_bytes) {
+            Ok(valid_str) => {
+                let chunk = valid_str.to_string();
+                generated_text.push_str(&chunk);
+                on_token_emitted(next_token as u32, &chunk);
+                stream_bytes.clear();
+            }
+            Err(e) => {
+                let valid_up_to = e.valid_up_to();
+                if valid_up_to > 0 {
+                    let valid_str = std::str::from_utf8(&stream_bytes[..valid_up_to]).unwrap();
+                    let chunk = valid_str.to_string();
+                    generated_text.push_str(&chunk);
+                    on_token_emitted(next_token as u32, &chunk);
+                    stream_bytes.drain(..valid_up_to);
+                }
+            }
+        }
+
+        if (next_token as u32) == tokenizer.eos_token_id() {
+            break;
+        }
+
+        last_logits = transformer_forward_step_paged(next_token, current_pos, config, &mut kv_cache, effective_provider);
+        current_pos += 1;
+    }
+
+    if !stream_bytes.is_empty() {
+        let chunk = String::from_utf8_lossy(&stream_bytes).to_string();
+        generated_text.push_str(&chunk);
+        on_token_emitted(0, &chunk);
+    }
+
+    let decode_elapsed_us = decode_start.elapsed().as_micros() as f64;
+    let generated_count = token_ids.len() - prompt_tokens_len;
+    let inter_token_latency_us = if generated_count > 0 {
+        decode_elapsed_us / (generated_count as f64)
+    } else {
+        0.0
+    };
+
+    let total_tokens = prefix_embeddings.len() + token_ids.len();
+    let total_time_s = (prefill_elapsed_us + decode_elapsed_us) * 1.0e-6;
+    let tokens_per_second = if total_time_s > 0.0 {
+        (total_tokens as f64) / total_time_s
+    } else {
+        0.0
+    };
+
+    let total_cycles = (total_tokens as u64) * (config.num_layers as u64) * 8;
+    let energy_per_token_pj = (config.num_layers as f64) * 0.85;
+    let kv_cache_occupancy_pct = ((current_pos as f64) / (config.max_seq_len as f64)) * 100.0;
+
+    let telemetry = InferenceTelemetry {
+        prompt_tokens: prompt_tokens_len + prefix_embeddings.len(),
+        generated_tokens: generated_count,
+        total_tokens,
+        time_to_first_token_us: ttft_us,
+        inter_token_latency_us,
+        tokens_per_second,
+        total_cycles,
+        energy_per_token_pj,
+        kv_cache_occupancy_pct,
+    };
+
+    let synthesized_cl_kernel = synthesize_transformer_cl(config);
+
+    GenerationResult {
+        prompt: prompt.to_string(),
+        generated_text,
+        token_ids,
+        telemetry,
+        synthesized_cl_kernel,
+    }
+}
+
 
 /// Synthesizes complete, standalone multi-layer .cl transformer microcode.
 pub fn synthesize_transformer_cl(config: &TransformerConfig) -> String {

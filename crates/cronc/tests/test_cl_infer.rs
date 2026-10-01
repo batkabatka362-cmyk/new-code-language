@@ -232,3 +232,84 @@ fn test_advanced_sampling_parameters() {
     assert_eq!(penalized_pick, 3);
 }
 
+#[test]
+fn test_multimodal_vision_audio_autoregressive_inference() {
+    use cronc::{
+        generate_multimodal_autoregressive, BpeTokenizer, SamplingConfig,
+        TransformerConfig, VisionConfig, VisionPatchProcessor,
+        AudioConfig, AudioSpectrogramProcessor,
+    };
+
+    let config = TransformerConfig {
+        vocab_size: 384,
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 4,
+        head_dim: 8,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        is_ternary_bitnet: true,
+        enable_2_4_sparsity: true,
+    };
+
+    // 1. Synthesize synthetic 32x32 RGB image patches
+    let vision_cfg = VisionConfig {
+        width: 32,
+        height: 32,
+        channels: 3,
+        patch_size: 16,
+        embed_dim: 32,
+        is_ternary: true,
+    };
+    let rgb_image = vec![128u8; 32 * 32 * 3];
+    let patches = VisionPatchProcessor::extract_patches(&rgb_image, &vision_cfg);
+    let patch_embeddings = VisionPatchProcessor::project_patches(&patches, &vision_cfg);
+    assert_eq!(patch_embeddings.len(), 4);
+
+    // 2. Synthesize synthetic audio waveform (1 kHz tone)
+    let audio_cfg = AudioConfig {
+        sample_rate: 16000,
+        fft_size: 256,
+        hop_length: 128,
+        mel_bands: 16,
+        embed_dim: 32,
+    };
+    let mut audio_samples = Vec::with_capacity(1024);
+    for i in 0..1024 {
+        audio_samples.push((i as f32 * 0.1).sin());
+    }
+    let mel_frames = AudioSpectrogramProcessor::compute_mel_spectrogram(&audio_samples, &audio_cfg);
+    let audio_embeddings = AudioSpectrogramProcessor::project_audio_frames(&mel_frames, config.hidden_dim);
+    assert!(!audio_embeddings.is_empty());
+
+    // 3. Combine visual patches and audio frames as prefix multimodal context
+    let mut multimodal_prefix = Vec::new();
+    multimodal_prefix.extend(patch_embeddings);
+    multimodal_prefix.extend(audio_embeddings.into_iter().take(2));
+
+    let tokenizer = BpeTokenizer::from_default_vocab();
+    let sampling = SamplingConfig {
+        temperature: 0.0,
+        top_p: 1.0,
+        top_k: 0,
+        repetition_penalty: 1.1,
+    };
+
+    let mut emitted = Vec::new();
+    let res = generate_multimodal_autoregressive(
+        &multimodal_prefix,
+        "Sensor input:",
+        4,
+        &sampling,
+        &config,
+        &tokenizer,
+        None,
+        |_id, s| emitted.push(s.to_string()),
+    );
+
+    assert_eq!(res.telemetry.generated_tokens, 4);
+    assert!(res.telemetry.prompt_tokens >= multimodal_prefix.len());
+    assert!(!res.generated_text.contains('\u{FFFD}'));
+}
+
+

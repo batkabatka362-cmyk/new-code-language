@@ -200,8 +200,8 @@ fn test_cl_spatial_pipeline_composer() {
 fn test_cl_golden_reference_mathematical_verifications() {
     let report = cronc::cl_verify_math::run_mathematical_verifications();
     assert!(report.all_passed, "All golden reference math verifications must pass");
-    assert_eq!(report.total_tests, 6);
-    assert_eq!(report.passed_tests, 6);
+    assert_eq!(report.total_tests, 8);
+    assert_eq!(report.passed_tests, 8);
     assert_eq!(report.failed_tests, 0);
     assert!(report.max_residual < 1e-3, "Residual must be within strict numerical tolerance");
 

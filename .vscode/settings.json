@@ -1,4 +1,10 @@
 {
+  "cron": {
+    "lsp": {
+      "serverPath": "c:\\Users\\local_ybjuj27\\Desktop\\new code language\\target\\release\\cron.exe"
+    }
+  },
+  "cron.lsp.serverPath": "c:\\Users\\local_ybjuj27\\Desktop\\new code language\\target\\release\\cron.exe",
   "files.associations": {
     "*.cl": "cron-cl",
     "*.clm": "cron-cl",
