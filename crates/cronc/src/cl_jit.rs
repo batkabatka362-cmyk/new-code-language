@@ -209,7 +209,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             let b_lo = (val_b & 0xFFFF) as i16 as i32;
                             let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
                             let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
-                            let optical_mag = ((optical_dot.abs() as u32) & 0xFFFF) | 0x00FF_0000;
+                            let optical_mag = (optical_dot.unsigned_abs() & 0xFFFF) | 0x00FF_0000;
                             core.r[d] = optical_mag;
                         }
                         "FA" => {
@@ -252,7 +252,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             } else {
                                 (core.r[d], core.r[s])
                             };
-                            core.r[d] = if val2 != 0 { val1 / val2 } else { 0 };
+                            core.r[d] = val1.checked_div(val2).unwrap_or(0);
                         }
                         "EX" => {
                             let input_val = core.r[s];

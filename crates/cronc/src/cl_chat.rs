@@ -48,6 +48,12 @@ pub struct LivingAgiChatSession {
 
 pub type SagiChatSession = LivingAgiChatSession;
 
+impl Default for LivingAgiChatSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LivingAgiChatSession {
     pub fn new() -> Self {
         Self {

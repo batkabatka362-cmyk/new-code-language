@@ -51,7 +51,7 @@ pub fn export_html5_dashboard_with_meta(
             i, x, y, z, w, active_regs
         ));
     }
-    core_activations_js.push_str("]");
+    core_activations_js.push(']');
 
     format!(r#"<!DOCTYPE html>
 <html lang="en">

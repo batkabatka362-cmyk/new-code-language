@@ -78,7 +78,7 @@ pub fn format_cl_program(source: &str, options: &ClFmtOptions) -> Result<String,
         if let Some((cycle_part, slots_part)) = instruction_part.split_once(':') {
             let cycle_num = cycle_part
                 .trim()
-                .trim_start_matches(|c: char| c == 'B' || c == 'b')
+                .trim_start_matches(['B', 'b'])
                 .parse::<usize>()
                 .map_err(|e| format!("Invalid cycle header '{}': {}", cycle_part, e))?;
 

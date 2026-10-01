@@ -529,8 +529,8 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return parse_weights_directive(trimmed).map(ClDirective::Weights);
     }
 
-    if trimmed.starts_with(".clifford") {
-        let rest = trimmed[".clifford".len()..].trim();
+    if let Some(rest) = trimmed.strip_prefix(".clifford") {
+        let rest = rest.trim();
         let mut rotor = "Rotor4D".to_string();
         let mut vector = "Vector4D".to_string();
         let mut algebra = "Cl(4,0)".to_string();
@@ -547,8 +547,8 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::Clifford { rotor, vector, algebra });
     }
 
-    if trimmed.starts_with(".stage") {
-        let rest = trimmed[".stage".len()..].trim();
+    if let Some(rest) = trimmed.strip_prefix(".stage") {
+        let rest = rest.trim();
         let mut id = String::new();
         let mut params = String::new();
         let mut precision = "f32".to_string();
@@ -585,13 +585,13 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::Stage { id, params, precision, d_model, heads, kv_heads, intermediate, zero_overhead });
     }
 
-    if trimmed.starts_with(".fuse") {
-        let rest = trimmed[".fuse".len()..].trim();
+    if let Some(rest) = trimmed.strip_prefix(".fuse") {
+        let rest = rest.trim();
         return Ok(ClDirective::Fuse { chain: rest.to_string() });
     }
 
-    if trimmed.starts_with(".tensor") {
-        let rest = trimmed[".tensor".len()..].trim();
+    if let Some(rest) = trimmed.strip_prefix(".tensor") {
+        let rest = rest.trim();
         let mut dims = Vec::new();
         let name = if let Some(colon_pos) = rest.find(':') {
             let n = rest[..colon_pos].trim().to_string();
@@ -612,8 +612,8 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::Tensor { name, dims });
     }
 
-    if trimmed.starts_with(".flow") {
-        let rest = trimmed[".flow".len()..].trim();
+    if let Some(rest) = trimmed.strip_prefix(".flow") {
+        let rest = rest.trim();
         let mut route = rest.to_string();
         let mut dor = "XYZW".to_string();
         if let Some(dor_pos) = rest.find("dor=") {
@@ -625,8 +625,8 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::Flow { route, dor });
     }
 
-    if trimmed.starts_with(".layout") {
-        let rest = trimmed[".layout".len()..].trim();
+    if let Some(rest) = trimmed.strip_prefix(".layout") {
+        let rest = rest.trim();
         let mut tp = 1; let mut ep = 1; let mut cp = 1; let mut pp = 1;
         let mut dim = "4x4x4x4".to_string();
         let mut chip = "256_core_torus".to_string();
@@ -642,8 +642,8 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::Layout { tp, ep, cp, pp, dim, chip });
     }
 
-    if trimmed.starts_with(".core") {
-        let rest = trimmed[".core".len()..].trim().trim_end_matches(':').trim();
+    if let Some(rest) = trimmed.strip_prefix(".core") {
+        let rest = rest.trim().trim_end_matches(':').trim();
         let mut coords = [0usize; 4];
         if let Some(open) = rest.find('[') {
             if let Some(close) = rest.find(']') {
@@ -658,8 +658,8 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::Core { coords });
     }
 
-    if trimmed.starts_with(".circuit") {
-        let rest = trimmed[".circuit".len()..].trim();
+    if let Some(rest) = trimmed.strip_prefix(".circuit") {
+        let rest = rest.trim();
         let mut core_id = 0;
         let mut layer = "L23".to_string();
         let mut excitatory = 80;

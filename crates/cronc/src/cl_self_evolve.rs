@@ -245,7 +245,7 @@ impl SelfEvolveOptimizer {
 
         // Update champion
         if let Some(best) = self.population.first() {
-            if self.champion.as_ref().map_or(true, |c| best.fitness > c.fitness) {
+            if self.champion.as_ref().is_none_or(|c| best.fitness > c.fitness) {
                 self.champion = Some(best.clone());
             }
         }

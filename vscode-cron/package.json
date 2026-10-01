@@ -32,14 +32,14 @@
     "languages": [
       {
         "id": "cron",
-        "aliases": ["CRON", "cron"],
+        "aliases": ["CRON", "cron", "cr"],
         "extensions": [".cr"],
         "configuration": "./language-configuration.json"
       },
       {
         "id": "cron-cl",
-        "aliases": ["CRON Low-Level Machine Code", "cron-cl"],
-        "extensions": [".cl", ".clm"],
+        "aliases": ["CRON Low-Level Machine Code", "cron-cl", "cl", "vliw", "cksl", "clpack"],
+        "extensions": [".cl", ".clm", ".clpack", ".cksl"],
         "configuration": "./language-configuration-cl.json"
       }
     ],
@@ -53,6 +53,11 @@
         "language": "cron-cl",
         "scopeName": "source.cron-cl",
         "path": "./syntaxes/cron-cl.tmLanguage.json"
+      },
+      {
+        "scopeName": "markdown.cron.codeblock",
+        "path": "./syntaxes/cron.markdown.injection.json",
+        "injectTo": ["text.html.markdown"]
       }
     ],
     "snippets": [

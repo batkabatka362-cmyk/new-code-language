@@ -80,7 +80,7 @@ pub fn run_libcl_benchmarks(workspace_root: &Path, iterations: usize) -> Result<
             continue;
         }
 
-        let cl_code = fs::read_to_string(&kernel_file)
+        let cl_code = fs::read_to_string(kernel_file)
             .map_err(|e| format!("Failed to read {}: {}", k.path, e))?;
 
         let mut core = ClJitCore::new();

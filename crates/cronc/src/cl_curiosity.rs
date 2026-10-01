@@ -23,6 +23,12 @@ pub struct IntrinsicCuriosityEngine {
     pub cycle_counter: u64,
 }
 
+impl Default for IntrinsicCuriosityEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IntrinsicCuriosityEngine {
     pub fn new() -> Self {
         Self {

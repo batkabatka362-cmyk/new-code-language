@@ -167,6 +167,12 @@ pub struct HolographicMemoryBank {
     pub composite_memory: HyperVector,
 }
 
+impl Default for HolographicMemoryBank {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HolographicMemoryBank {
     pub fn new() -> Self {
         Self {

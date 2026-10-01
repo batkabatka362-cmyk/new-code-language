@@ -111,7 +111,7 @@ impl MacroCompiler {
             match stmt {
                 MacroStmt::Label(_) => {}
                 MacroStmt::AssignImm { dst, imm } => {
-                    let slot = build_valid_slot(&format!("=={:02X}", dst), &format!("#{:04X}", imm & 0xFFFF));
+                    let slot = build_valid_slot(&format!("=={:02X}", dst), &format!("#{:04X}", *imm));
                     self.emit_slot(slot);
                 }
                 MacroStmt::AssignReg { dst, src } => {
@@ -175,7 +175,7 @@ impl MacroCompiler {
 
     /// Package collected slots into 4-slot VLIW bundles
     pub fn finish(mut self) -> String {
-        while self.slots.len() % 4 != 0 {
+        while !self.slots.len().is_multiple_of(4) {
             self.emit_nop();
         }
 

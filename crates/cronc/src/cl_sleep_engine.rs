@@ -34,6 +34,12 @@ pub struct SleepReplayEngine {
     pub total_sleep_cycles: u64,
 }
 
+impl Default for SleepReplayEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SleepReplayEngine {
     pub fn new() -> Self {
         let mut weights = [[0u8; 16]; 256];
@@ -127,21 +133,21 @@ impl SleepReplayEngine {
     /// Compiles a Sleep Consolidation phase into executable `.cl` instructions
     pub fn compile_sleep_to_cl(&self, core_id: u8) -> String {
         let mut compiler = MacroCompiler::new(core_id);
-        let mut stmts = Vec::new();
+        let stmts = vec![
+            // 1. Execute STDP synaptic homeostatic downscaling on R5..R8
+            MacroStmt::AssignImm { dst: 5, imm: 0x00FF },
+            MacroStmt::AssignImm { dst: 6, imm: 0x00E0 }, // 90% scaling factor
+            MacroStmt::StdpUpdate { synapses: 5, pre: 6, post: 5 },
 
-        // 1. Execute STDP synaptic homeostatic downscaling on R5..R8
-        stmts.push(MacroStmt::AssignImm { dst: 5, imm: 0x00FF });
-        stmts.push(MacroStmt::AssignImm { dst: 6, imm: 0x00E0 }); // 90% scaling factor
-        stmts.push(MacroStmt::StdpUpdate { synapses: 5, pre: 6, post: 5 });
+            // 2. Clear volatile scratch registers R1..R4
+            MacroStmt::AssignImm { dst: 1, imm: 0 },
+            MacroStmt::AssignImm { dst: 2, imm: 0 },
+            MacroStmt::AssignImm { dst: 3, imm: 0 },
+            MacroStmt::AssignImm { dst: 4, imm: 0 },
 
-        // 2. Clear volatile scratch registers R1..R4
-        stmts.push(MacroStmt::AssignImm { dst: 1, imm: 0 });
-        stmts.push(MacroStmt::AssignImm { dst: 2, imm: 0 });
-        stmts.push(MacroStmt::AssignImm { dst: 3, imm: 0 });
-        stmts.push(MacroStmt::AssignImm { dst: 4, imm: 0 });
-
-        // 3. Global synchronization barrier
-        stmts.push(MacroStmt::Barrier);
+            // 3. Global synchronization barrier
+            MacroStmt::Barrier,
+        ];
 
         compiler.compile_stmts(&stmts);
         compiler.finish()

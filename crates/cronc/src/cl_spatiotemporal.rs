@@ -23,6 +23,12 @@ pub struct SpatiotemporalStreamer {
     pub frame_counter: u64,
 }
 
+impl Default for SpatiotemporalStreamer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpatiotemporalStreamer {
     pub fn new() -> Self {
         Self {
@@ -50,12 +56,12 @@ impl SpatiotemporalStreamer {
     /// Compiles current 4D Spatio-Temporal Tensor snapshot into `.cl` VLIW instructions
     pub fn compile_snapshot_to_cl(&self, core_id: u8) -> String {
         let mut compiler = MacroCompiler::new(core_id);
-        let mut stmts = Vec::new();
-
-        stmts.push(MacroStmt::AssignImm { dst: 1, imm: 0x0100 });
-        stmts.push(MacroStmt::AssignImm { dst: 2, imm: 0x0200 });
-        stmts.push(MacroStmt::OpticalGemm { dst: 3, src1: 1, src2: 2 });
-        stmts.push(MacroStmt::Barrier);
+        let stmts = vec![
+            MacroStmt::AssignImm { dst: 1, imm: 0x0100 },
+            MacroStmt::AssignImm { dst: 2, imm: 0x0200 },
+            MacroStmt::OpticalGemm { dst: 3, src1: 1, src2: 2 },
+            MacroStmt::Barrier,
+        ];
 
         compiler.compile_stmts(&stmts);
         compiler.finish()

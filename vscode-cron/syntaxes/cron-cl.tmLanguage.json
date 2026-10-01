@@ -7,12 +7,13 @@
     { "include": "#semantic_directives" },
     { "include": "#core_directive" },
     { "include": "#kernel_declaration" },
-    { "include": "#label_declaration" },
     { "include": "#bundle_header" },
+    { "include": "#label_declaration" },
     { "include": "#clm_macro_keywords" },
     { "include": "#registers" },
     { "include": "#numbers" },
-    { "include": "#cl2_slot" }
+    { "include": "#cl2_slot_structured" },
+    { "include": "#cl2_slot_fallback" }
   ],
   "repository": {
     "comments": {
@@ -26,7 +27,7 @@
     "semantic_directives": {
       "patterns": [
         {
-          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include|target|ipc_target|data|pgas|circuit))\\b",
+          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include|target|ipc_target|data|pgas|circuit|sync|align))\\b",
           "captures": {
             "1": { "name": "keyword.control.directive.cron-cl" }
           }
@@ -36,7 +37,7 @@
     "core_directive": {
       "patterns": [
         {
-          "match": "^\\s*(\\.core)\\s+(\\[[0-9,\\s]+\\]):?",
+          "match": "(@CORE|\\.core)\\s+(\\[[0-9,\\s\\+\\-]+\\]):?",
           "captures": {
             "1": { "name": "keyword.control.core.cron-cl" },
             "2": { "name": "entity.name.type.coordinates.cron-cl" }
@@ -55,19 +56,19 @@
         }
       ]
     },
-    "label_declaration": {
-      "patterns": [
-        {
-          "name": "entity.name.function.label.cron-cl",
-          "match": "@[A-Za-z0-9_]+:?"
-        }
-      ]
-    },
     "bundle_header": {
       "patterns": [
         {
           "name": "entity.name.section.bundle.cron-cl",
           "match": "\\b[BCLbcl][0-9A-Fa-f]{2,4}:"
+        }
+      ]
+    },
+    "label_declaration": {
+      "patterns": [
+        {
+          "name": "entity.name.function.label.cron-cl",
+          "match": "@[A-Za-z0-9_]+:?"
         }
       ]
     },
@@ -82,7 +83,7 @@
     "registers": {
       "patterns": [
         {
-          "match": "\\b(R[0-9A-Fa-f]|PC|SP|BP|RA|FLAGS)\\b",
+          "match": "\\b([RWVA][0-9A-Fa-f]{1,2}|PC|SP|BP|RA|FLAGS|CORE)\\b",
           "name": "variable.parameter.register.cron-cl"
         }
       ]
@@ -99,10 +100,10 @@
         }
       ]
     },
-    "cl2_slot": {
+    "cl2_slot_structured": {
       "patterns": [
         {
-          "match": "([_'~@%&^|$#\\\\=!:])([A-Za-z0-9=_]{2})([0-9A-Fa-f]{2})([#$M@~!=+\\-*&|^/%<>?])([A-Za-z0-9#_]{3})([\\S])",
+          "match": "([_'~@%&^|$#\\\\=!:\\-+/*?<>\\.\\(\\)])([A-Za-z0-9=_]{1,2})([0-9A-Fa-f]{2})([#$M@~!=+\\-*&|^/%<>?.:_])([A-Za-z0-9#_]{3,4})([\\S])",
           "captures": {
             "1": { "name": "punctuation.definition.prefix.cron-cl" },
             "2": { "name": "keyword.operator.opcode.cron-cl" },
@@ -110,6 +111,18 @@
             "4": { "name": "punctuation.separator.mode.cron-cl" },
             "5": { "name": "variable.other.register.src.cron-cl" },
             "6": { "name": "constant.numeric.crc8.cron-cl" }
+          }
+        }
+      ]
+    },
+    "cl2_slot_fallback": {
+      "patterns": [
+        {
+          "match": "([_'~@%&^|$#\\\\=!:\\-+/*?<>\\.\\(\\)])([A-Za-z0-9=_#$M@~!=+\\-*&|^/%<>?.:]{8})([\\S])",
+          "captures": {
+            "1": { "name": "punctuation.definition.prefix.cron-cl" },
+            "2": { "name": "keyword.operator.opcode.cron-cl" },
+            "3": { "name": "constant.numeric.crc8.cron-cl" }
           }
         }
       ]

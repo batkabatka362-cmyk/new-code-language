@@ -79,7 +79,7 @@ impl NeuralLayer {
     pub fn compile_to_cl(&self, core_id: u8, total_cores: usize) -> String {
         let mut compiler = MacroCompiler::new(core_id);
 
-        let rows_per_core = (self.out_features + total_cores - 1) / total_cores;
+        let rows_per_core = self.out_features.div_ceil(total_cores);
         let start_row = (core_id as usize) * rows_per_core;
         let end_row = (start_row + rows_per_core).min(self.out_features);
 

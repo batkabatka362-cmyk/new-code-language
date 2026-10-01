@@ -243,7 +243,7 @@ pub struct DynamicHyperVector {
 
 impl DynamicHyperVector {
     pub fn zero(bits: usize) -> Self {
-        let num_words = (bits + 63) / 64;
+        let num_words = bits.div_ceil(64);
         Self {
             bits,
             words: vec![0u64; num_words],
@@ -251,7 +251,7 @@ impl DynamicHyperVector {
     }
 
     pub fn from_symbol(symbol: &str, bits: usize) -> Self {
-        let num_words = (bits + 63) / 64;
+        let num_words = bits.div_ceil(64);
         let mut words = vec![0u64; num_words];
         for (i, word) in words.iter_mut().enumerate() {
             let mut h: u64 = 0xcbf29ce484222325 ^ (i as u64).wrapping_mul(0x9e3779b97f4a7c15);
@@ -271,7 +271,7 @@ impl DynamicHyperVector {
             }
             *word = final_word;
         }
-        if bits % 64 != 0 {
+        if !bits.is_multiple_of(64) {
             let rem = bits % 64;
             let mask = (1u64 << rem) - 1;
             if let Some(last) = words.last_mut() {
@@ -305,7 +305,7 @@ impl DynamicHyperVector {
 
         for word_idx in 0..num_words {
             let mut word = 0u64;
-            let max_bits = if word_idx == num_words - 1 && bits % 64 != 0 {
+            let max_bits = if word_idx == num_words - 1 && !bits.is_multiple_of(64) {
                 bits % 64
             } else {
                 64

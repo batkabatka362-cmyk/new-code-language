@@ -79,17 +79,17 @@ impl MultiCompartmentNeuron {
     /// Compiles Multi-Compartment Dendritic evaluation into `.cl` VLIW instructions
     pub fn compile_to_cl(&self, core_id: u8) -> String {
         let mut compiler = MacroCompiler::new(core_id);
-        let mut stmts = Vec::new();
+        let stmts = vec![
+            // R1: Feedforward, R2: Basal Context, R3: Apical Top-Down
+            MacroStmt::AssignImm { dst: 1, imm: 0x0180 },
+            MacroStmt::AssignImm { dst: 2, imm: 0x0120 },
+            MacroStmt::AssignImm { dst: 3, imm: 0x01F0 },
 
-        // R1: Feedforward, R2: Basal Context, R3: Apical Top-Down
-        stmts.push(MacroStmt::AssignImm { dst: 1, imm: 0x0180 });
-        stmts.push(MacroStmt::AssignImm { dst: 2, imm: 0x0120 });
-        stmts.push(MacroStmt::AssignImm { dst: 3, imm: 0x01F0 });
-
-        // Execute Multi-compartment non-linear dot product
-        stmts.push(MacroStmt::OpticalGemm { dst: 4, src1: 1, src2: 2 });
-        stmts.push(MacroStmt::TernaryMac { dst: 0, src: 4, weights: 3 });
-        stmts.push(MacroStmt::Barrier);
+            // Execute Multi-compartment non-linear dot product
+            MacroStmt::OpticalGemm { dst: 4, src1: 1, src2: 2 },
+            MacroStmt::TernaryMac { dst: 0, src: 4, weights: 3 },
+            MacroStmt::Barrier,
+        ];
 
         compiler.compile_stmts(&stmts);
         compiler.finish()

@@ -19,16 +19,16 @@ impl Torus4DCoord {
 
     /// Manhattan distance on a torus of shape (dim_x, dim_y, dim_z, dim_w)
     pub fn torus_distance(&self, other: &Self, dims: (u8, u8, u8, u8)) -> u32 {
-        let dx = (self.x as i32 - other.x as i32).abs() as u32;
+        let dx = (self.x as i32 - other.x as i32).unsigned_abs();
         let dx = dx.min(dims.0 as u32 - dx);
 
-        let dy = (self.y as i32 - other.y as i32).abs() as u32;
+        let dy = (self.y as i32 - other.y as i32).unsigned_abs();
         let dy = dy.min(dims.1 as u32 - dy);
 
-        let dz = (self.z as i32 - other.z as i32).abs() as u32;
+        let dz = (self.z as i32 - other.z as i32).unsigned_abs();
         let dz = dz.min(dims.2 as u32 - dz);
 
-        let dw = (self.w as i32 - other.w as i32).abs() as u32;
+        let dw = (self.w as i32 - other.w as i32).unsigned_abs();
         let dw = dw.min(dims.3 as u32 - dw);
 
         dx + dy + dz + dw

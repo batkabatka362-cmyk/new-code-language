@@ -47,6 +47,7 @@ impl Default for NeuromodulatorState {
 /// Shared Memory Mailbox Frame between .cl kernels and SAGI C-Engine
 #[repr(C)]
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub struct SagiBridgeMailbox {
     pub source_brain: u8,
     pub target_brain: u8,
@@ -57,19 +58,6 @@ pub struct SagiBridgeMailbox {
     pub acknowledged: bool,
 }
 
-impl Default for SagiBridgeMailbox {
-    fn default() -> Self {
-        Self {
-            source_brain: 0,
-            target_brain: 0,
-            command_opcode: 0,
-            payload_vector: [0; 16],
-            sequence_id: 0,
-            timestamp_cycle: 0,
-            acknowledged: false,
-        }
-    }
-}
 
 /// SAGI 6-Brain Sovereign Orchestration Bridge
 #[derive(Debug, Clone, PartialEq)]

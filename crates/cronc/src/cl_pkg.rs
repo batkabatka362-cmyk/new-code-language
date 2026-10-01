@@ -680,7 +680,7 @@ pub fn audit_cl_source(cl_source: &str, pkg_name: &str) -> ClAuditReport {
                 // 3. Pipeline hazard detection
                 if let Ok(parsed) = parse_slot(slot_str) {
                     if let Some(dest) = parsed.dest_reg {
-                        let d_idx = (dest % 16) as usize;
+                        let d_idx = dest % 16;
                         if curr_written_regs[d_idx] {
                             raw_waw_hazards += 1;
                             diagnostics.push(format!(
@@ -692,7 +692,7 @@ pub fn audit_cl_source(cl_source: &str, pkg_name: &str) -> ClAuditReport {
                     }
 
                     if let Some(src) = parsed.src_reg {
-                        let s_idx = (src % 16) as usize;
+                        let s_idx = src % 16;
                         if prev_written_regs[s_idx] && parsed.opcode != "NO" && parsed.opcode != "HL" {
                             // Inter-cycle dependency without barrier (potential RAW)
                         }

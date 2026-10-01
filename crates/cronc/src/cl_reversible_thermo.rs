@@ -65,6 +65,12 @@ pub struct ReversiblePipelineVerifier {
     pub dissipated_joules: f64,
 }
 
+impl Default for ReversiblePipelineVerifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReversiblePipelineVerifier {
     pub fn new() -> Self {
         Self {

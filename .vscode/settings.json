@@ -2,7 +2,11 @@
   "files.associations": {
     "*.cl": "cron-cl",
     "*.clm": "cron-cl",
-    "*.cr": "cron"
+    "*.clh": "cron-cl",
+    "*.clpack": "cron-cl",
+    "*.cksl": "cron-cl",
+    "*.cr": "cron",
+    "*.crh": "cron"
   },
   "workbench.iconTheme": "vs-seti",
   "editor.semanticHighlighting.enabled": true,
@@ -10,13 +14,17 @@
     "textMateRules": [
       {
         "scope": [
+          "keyword.declaration.cron",
+          "keyword.control.cron",
+          "keyword.control.concurrency.cron",
+          "keyword.control.cognitive.cron",
           "keyword.control.instruction.cron-cl",
-          "keyword.control.instruction.cl",
-          "keyword.control.cr",
-          "keyword.control.directive.cr"
+          "keyword.control.directive.cron-cl",
+          "keyword.control.core.cron-cl",
+          "keyword.control.kernel.cron-cl"
         ],
         "settings": {
-          "foreground": "#569CD6",
+          "foreground": "#C586C0",
           "fontStyle": "bold"
         }
       },
@@ -43,7 +51,7 @@
           "variable.other.register.dest.cron-cl",
           "variable.parameter.register.cron-cl",
           "variable.parameter.register.cl",
-          "variable.parameter.named.cr"
+          "variable.language.self.cron"
         ],
         "settings": {
           "foreground": "#DCDCAA"
@@ -61,7 +69,7 @@
       {
         "scope": [
           "variable.other.register.src.cron-cl",
-          "variable.other.cr"
+          "variable.other.property.cron"
         ],
         "settings": {
           "foreground": "#9CDCFE"
@@ -78,8 +86,7 @@
       },
       {
         "scope": [
-          "entity.name.section.bundle.cron-cl",
-          "entity.name.section.cycle.cl"
+          "entity.name.section.bundle.cron-cl"
         ],
         "settings": {
           "foreground": "#BD93F9",
@@ -88,19 +95,10 @@
       },
       {
         "scope": [
-          "keyword.control.directive.cron-cl",
-          "keyword.control.core.cron-cl"
-        ],
-        "settings": {
-          "foreground": "#F1FA8C",
-          "fontStyle": "italic"
-        }
-      },
-      {
-        "scope": [
+          "entity.name.function.cron",
+          "entity.name.function.call.cron",
           "entity.name.function.kernel.cron-cl",
-          "entity.name.function.label.cron-cl",
-          "entity.name.function.cr"
+          "entity.name.function.label.cron-cl"
         ],
         "settings": {
           "foreground": "#8BE9FD",
@@ -109,11 +107,46 @@
       },
       {
         "scope": [
+          "entity.name.tag.annotation.cron",
+          "storage.modifier.linear.cron",
+          "storage.modifier.brain.cron"
+        ],
+        "settings": {
+          "foreground": "#FFB86C",
+          "fontStyle": "italic"
+        }
+      },
+      {
+        "scope": [
+          "storage.type.primitive.cron",
+          "entity.name.type.cron",
+          "entity.name.type.declaration.cron",
+          "entity.name.type.coordinates.cron-cl"
+        ],
+        "settings": {
+          "foreground": "#4EC9B0",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "support.function.builtin.cron"
+        ],
+        "settings": {
+          "foreground": "#DCDCAA",
+          "fontStyle": "bold"
+        }
+      },
+      {
+        "scope": [
+          "constant.numeric.hex.cron",
+          "constant.numeric.binary.cron",
+          "constant.numeric.float.cron",
+          "constant.numeric.integer.cron",
           "constant.numeric.hex.cron-cl",
           "constant.numeric.decimal.cron-cl",
-          "constant.numeric.hex.cl",
-          "constant.numeric.cr",
-          "constant.numeric.hex.cr"
+          "constant.language.boolean.cron",
+          "constant.language.null.cron"
         ],
         "settings": {
           "foreground": "#B5CEA8"
@@ -121,21 +154,31 @@
       },
       {
         "scope": [
-          "storage.type.cr",
-          "storage.type.cognitive.cr",
-          "storage.type.primitive.cr"
+          "string.quoted.double.cron",
+          "string.quoted.single.cron"
         ],
         "settings": {
-          "foreground": "#4EC9B0"
+          "foreground": "#CE9178"
+        }
+      },
+      {
+        "scope": [
+          "keyword.operator.arrow.cron",
+          "keyword.operator.assignment.cron",
+          "keyword.operator.comparison.cron",
+          "keyword.operator.logical.cron",
+          "keyword.operator.arithmetic.cron"
+        ],
+        "settings": {
+          "foreground": "#D4D4D4"
         }
       },
       {
         "scope": [
           "comment.line.semicolon.cron-cl",
-          "comment.line.double-slash.cron-cl",
-          "comment.line.semicolon.cr",
-          "comment.line.number-sign.cr",
-          "comment.line.semicolon.cl"
+          "comment.line.double-slash.cron",
+          "comment.line.number-sign.cron",
+          "comment.block.cron"
         ],
         "settings": {
           "foreground": "#6A9955",

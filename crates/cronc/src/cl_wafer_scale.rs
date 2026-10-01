@@ -74,7 +74,7 @@ impl Coord8D {
     }
 
     fn torus_dist(a: usize, b: usize, dim: usize) -> usize {
-        let diff = if a > b { a - b } else { b - a };
+        let diff = a.abs_diff(b);
         diff.min(dim - diff)
     }
 }

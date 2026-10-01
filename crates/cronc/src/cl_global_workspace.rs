@@ -33,6 +33,12 @@ pub struct GlobalWorkspaceEngine {
     pub focus_history: Vec<String>,
 }
 
+impl Default for GlobalWorkspaceEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GlobalWorkspaceEngine {
     pub fn new() -> Self {
         Self {

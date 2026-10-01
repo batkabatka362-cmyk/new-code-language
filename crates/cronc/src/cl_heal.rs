@@ -59,11 +59,10 @@ pub fn heal_slot_crc(raw: &str) -> (String, bool) {
         "NO".to_string()
     };
 
-    if trimmed.len() == 10 {
-        if verify_token_crc8(trimmed) || trimmed.contains('#') || prefix == '\'' || op.starts_with('=') {
+    if trimmed.len() == 10
+        && (verify_token_crc8(trimmed) || trimmed.contains('#') || prefix == '\'' || op.starts_with('=')) {
             return (trimmed.to_string(), false);
         }
-    }
     let dest_hex = if chars.len() >= 5 {
         format!("{}{}", chars[3], chars[4])
     } else {

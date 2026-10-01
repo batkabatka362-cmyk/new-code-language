@@ -121,10 +121,8 @@ impl ClDebugInfo {
     pub fn extract_from_cl(cl_code: &str) -> Self {
         let mut debug = Self::new("cl_program");
         let mut current_label = "entry".to_string();
-        let mut line_num = 0;
-
-        for line in cl_code.lines() {
-            line_num += 1;
+        for (line_num, line) in cl_code.lines().enumerate() {
+            let line_num = line_num + 1; // 1-indexed
             let trimmed = line.trim();
             if trimmed.is_empty() {
                 continue;

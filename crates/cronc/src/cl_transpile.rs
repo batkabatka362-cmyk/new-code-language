@@ -16,7 +16,7 @@ pub enum TranspileTarget {
 }
 
 impl TranspileTarget {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "wgsl" | "webgpu" | "gpu" => Some(TranspileTarget::WebGpuWgsl),
             "ptx" | "cuda" | "nvidia" => Some(TranspileTarget::NvidiaPtx),
@@ -80,7 +80,7 @@ pub fn transpile_cl_to_wgsl(cl_source: &str) -> Result<String, String> {
             if let Ok(parsed) = parse_slot(slot_str) {
                 let d = parsed.dest_reg.unwrap_or(0) % 16;
                 let s = parsed.src_reg.unwrap_or(0) % 16;
-                let imm = parsed.imm_token.to_digit(16).unwrap_or(0) as u32;
+                let imm = parsed.imm_token.to_digit(16).unwrap_or(0);
 
                 match parsed.opcode.as_str() {
                     "==" => wgsl.push_str(&format!("    r[{}] = {}u;\n", d, imm)),
@@ -140,7 +140,7 @@ pub fn transpile_cl_to_ptx(cl_source: &str) -> Result<String, String> {
             if let Ok(parsed) = parse_slot(slot_str) {
                 let d = parsed.dest_reg.unwrap_or(0) % 16;
                 let s = parsed.src_reg.unwrap_or(0) % 16;
-                let imm = parsed.imm_token.to_digit(16).unwrap_or(0) as u32;
+                let imm = parsed.imm_token.to_digit(16).unwrap_or(0);
 
                 match parsed.opcode.as_str() {
                     "==" => ptx.push_str(&format!("    mov.b32 %r{}, 0x{:08X};\n", d, imm)),
@@ -182,7 +182,7 @@ pub fn transpile_cl_to_c23_simd(cl_source: &str) -> Result<String, String> {
             if let Ok(parsed) = parse_slot(slot_str) {
                 let d = parsed.dest_reg.unwrap_or(0) % 16;
                 let s = parsed.src_reg.unwrap_or(0) % 16;
-                let imm = parsed.imm_token.to_digit(16).unwrap_or(0) as u32;
+                let imm = parsed.imm_token.to_digit(16).unwrap_or(0);
 
                 match parsed.opcode.as_str() {
                     "==" => c23.push_str(&format!("    registers[{}] = 0x{:08X}u;\n", d, imm)),

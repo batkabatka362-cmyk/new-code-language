@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "markdown.cron.codeblock",
+  "injectionSelector": "L:text.html.markdown",
+  "patterns": [
+    {
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(cron|cr))\\b",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.cron" }
+      },
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$",
+      "endCaptures": {
+        "3": { "name": "punctuation.definition.markdown" }
+      },
+      "name": "markup.fenced_code.block.markdown",
+      "patterns": [
+        {
+          "begin": "(^|\\G)(\\s*)",
+          "while": "(^|\\G)(?!\\s*(`{3,}|~{3,})\\s*$)",
+          "contentName": "source.cron",
+          "patterns": [
+            { "include": "source.cron" }
+          ]
+        }
+      ]
+    },
+    {
+      "begin": "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(cron-cl|cl|vliw|cksl))\\b",
+      "beginCaptures": {
+        "3": { "name": "punctuation.definition.markdown" },
+        "4": { "name": "fenced_code.block.language.cron-cl" }
+      },
+      "end": "(^|\\G)(\\2|\\s{0,3})(\\3)\\s*$",
+      "endCaptures": {
+        "3": { "name": "punctuation.definition.markdown" }
+      },
+      "name": "markup.fenced_code.block.markdown",
+      "patterns": [
+        {
+          "begin": "(^|\\G)(\\s*)",
+          "while": "(^|\\G)(?!\\s*(`{3,}|~{3,})\\s*$)",
+          "contentName": "source.cron-cl",
+          "patterns": [
+            { "include": "source.cron-cl" }
+          ]
+        }
+      ]
+    }
+  ]
+}

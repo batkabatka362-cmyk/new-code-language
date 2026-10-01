@@ -5,11 +5,15 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#directives" },
+    { "include": "#annotations" },
+    { "include": "#function_definitions" },
+    { "include": "#function_calls" },
     { "include": "#keywords" },
     { "include": "#modifiers" },
     { "include": "#brains" },
     { "include": "#types" },
     { "include": "#builtins" },
+    { "include": "#properties" },
     { "include": "#strings" },
     { "include": "#numbers" },
     { "include": "#operators" }
@@ -20,6 +24,10 @@
         {
           "name": "comment.line.double-slash.cron",
           "match": "//.*$"
+        },
+        {
+          "name": "comment.line.number-sign.cron",
+          "match": "#.*$"
         },
         {
           "name": "comment.block.cron",
@@ -36,15 +44,49 @@
         }
       ]
     },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "entity.name.tag.annotation.cron",
+          "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        }
+      ]
+    },
+    "function_definitions": {
+      "patterns": [
+        {
+          "match": "\\b(def|fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.cron" },
+            "2": { "name": "entity.name.function.cron" }
+          }
+        },
+        {
+          "match": "\\b(struct|trait|impl|enum)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.cron" },
+            "2": { "name": "entity.name.type.declaration.cron" }
+          }
+        }
+      ]
+    },
+    "function_calls": {
+      "patterns": [
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+          "name": "entity.name.function.call.cron"
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
         {
           "name": "keyword.declaration.cron",
-          "match": "\\b(struct|trait|impl|fn|def|let|import|from|export|as)\\b"
+          "match": "\\b(struct|trait|impl|fn|def|let|import|from|export|as|pub|type|const|static)\\b"
         },
         {
           "name": "keyword.control.cron",
-          "match": "\\b(if|else|while|for|in|return|abort|match)\\b"
+          "match": "\\b(if|else|while|for|in|return|abort|match|break|continue|yield|then|with|where)\\b"
         },
         {
           "name": "keyword.control.concurrency.cron",
@@ -52,7 +94,11 @@
         },
         {
           "name": "keyword.control.cognitive.cron",
-          "match": "\\b(region|resilient|resilient_compute|fallback|superposition|proof_contract|invariant|ensures)\\b"
+          "match": "\\b(region|resilient|resilient_compute|fallback|superposition|proof_contract|invariant|ensures|comptime|inline|fuse|schedule)\\b"
+        },
+        {
+          "name": "variable.language.self.cron",
+          "match": "\\b(self|Self)\\b"
         }
       ]
     },
@@ -60,7 +106,7 @@
       "patterns": [
         {
           "name": "storage.modifier.linear.cron",
-          "match": "\\b(lin|mut|grad)\\b"
+          "match": "\\b(lin|mut|grad|affine|borrow|ref)\\b"
         }
       ]
     },
@@ -82,8 +128,12 @@
     "types": {
       "patterns": [
         {
-          "name": "storage.type.cron",
-          "match": "\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|string|void|wave_t|ext_addr_t|spk_stamp|rev_t|TorusCoord)\\b"
+          "name": "storage.type.primitive.cron",
+          "match": "\\b(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f16|f32|f64|bf16|isize|usize|bool|string|str|char|void|trit|trit_t|wave_t|ext_addr_t|spk_stamp|rev_t|complex_t|TorusCoord)\\b"
+        },
+        {
+          "name": "entity.name.type.cron",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
         }
       ]
     },
@@ -91,7 +141,17 @@
       "patterns": [
         {
           "name": "support.function.builtin.cron",
-          "match": "\\b(pack_wave|arena_alloc|create_arena|arena_reset|manhattan_distance_4d|fredkin_gate|toffoli_gate|stdp_apply_spike|collapse_optimal_decision|evaluate_thermal_safety|optical_gemm_forward)\\b"
+          "match": "\\b(pack_wave|arena_alloc|create_arena|arena_reset|manhattan_distance_4d|fredkin_gate|toffoli_gate|stdp_apply_spike|collapse_optimal_decision|evaluate_thermal_safety|optical_gemm_forward|optical_gemm|predicated_op|photonic_self_attention|ssm_selective_scan_step|step_cochlea_channel|init_cochlea_channel|accumulate_patch_dvs_event|print|println|assert|panic|consume|simd_splat|simd_fma|simd_dot|simd_reduce_sum|spawn_at|torus_send|torus_recv|torus_broadcast)\\b"
+        }
+      ]
+    },
+    "properties": {
+      "patterns": [
+        {
+          "match": "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "variable.other.property.cron" }
+          }
         }
       ]
     },
@@ -107,6 +167,17 @@
               "match": "\\\\."
             }
           ]
+        },
+        {
+          "name": "string.quoted.single.cron",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.cron",
+              "match": "\\\\."
+            }
+          ]
         }
       ]
     },
@@ -114,27 +185,51 @@
       "patterns": [
         {
           "name": "constant.numeric.hex.cron",
-          "match": "\\b0x[0-9a-fA-F]+\\b"
+          "match": "\\b0x[0-9a-fA-F_]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.cron",
+          "match": "\\b0b[01_]+\\b"
         },
         {
           "name": "constant.numeric.float.cron",
-          "match": "\\b[0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?\\b"
+          "match": "\\b[0-9_]+\\.[0-9_]+([eE][+-]?[0-9_]+)?\\b"
         },
         {
           "name": "constant.numeric.integer.cron",
-          "match": "\\b[0-9]+\\b"
+          "match": "\\b[0-9_]+\\b"
         },
         {
           "name": "constant.language.boolean.cron",
           "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.cron",
+          "match": "\\b(null|nil|None)\\b"
         }
       ]
     },
     "operators": {
       "patterns": [
         {
+          "name": "keyword.operator.arrow.cron",
+          "match": "(->|=>)"
+        },
+        {
+          "name": "keyword.operator.assignment.cron",
+          "match": "(=|\\+=|-=|\\*=|/=|%=|<<=|>>=|&=|\\|=|\\^=)"
+        },
+        {
+          "name": "keyword.operator.comparison.cron",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.logical.cron",
+          "match": "(&&|\\|\\||!)"
+        },
+        {
           "name": "keyword.operator.arithmetic.cron",
-          "match": "(\\+|-|\\*|/|%|==|!=|<=|>=|<|>|&&|\\|\\||!|&|\\||\\^|<<|>>)"
+          "match": "(\\+|-|\\*|/|%|<<|>>|&|\\||\\^|~)"
         }
       ]
     }

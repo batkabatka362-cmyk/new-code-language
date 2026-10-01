@@ -183,10 +183,10 @@ impl CognitiveBootloader {
 
         let mut core_states = Vec::with_capacity(256);
         for id in 0..=255u8 {
-            let x = (id % 4) as u8;
-            let y = ((id / 4) % 4) as u8;
-            let z = ((id / 16) % 4) as u8;
-            let w = (id / 64) as u8;
+            let x = id % 4;
+            let y = (id / 4) % 4;
+            let z = (id / 16) % 4;
+            let w = id / 64;
 
             core_states.push(CoreBootControlBlock {
                 core_id: id,

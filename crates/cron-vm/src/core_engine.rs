@@ -291,7 +291,7 @@ impl CoreEngine {
                 let b_lo = (val_b & 0xFFFF) as i16 as i32;
                 let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
                 let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
-                let optical_mag = ((optical_dot.abs() as u32) & 0xFFFF) | 0x00FF_0000;
+                let optical_mag = (optical_dot.unsigned_abs() & 0xFFFF) | 0x00FF_0000;
                 self.registers[d] = optical_mag;
             }
             "FA" => {

@@ -66,7 +66,7 @@ impl DvsEvent {
 
         let x_core = (norm_x.min(grid_w - 1)) as u8;
         let y_core = (norm_y.min(grid_h - 1)) as u8;
-        let z_core = ((self.polarity.abs() as usize) % grid_z) as u8;
+        let z_core = ((self.polarity.unsigned_abs() as usize) % grid_z) as u8;
         let w_core = ((self.timestamp_us as usize / 1000) % grid_w_dim) as u8;
 
         Torus4DCoord::new(x_core, y_core, z_core, w_core)

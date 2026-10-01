@@ -7551,7 +7551,7 @@ fn handle_cl_transpile_command(args: &[String]) {
         }
     }
 
-    let target = cronc::TranspileTarget::from_str(&target_str).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
+    let target = cronc::TranspileTarget::parse(&target_str).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
 
     match std::fs::read_to_string(input_path) {
         Ok(source) => match cronc::transpile_cl(&source, target) {

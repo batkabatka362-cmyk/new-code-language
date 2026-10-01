@@ -533,9 +533,9 @@ impl DapServer {
                                 "variablesReference": 0
                             }));
                         }
-                        4000 => {
+                        4000
                             // Disassembled Micro-Ops in Current Execution Bundle
-                            if dbg.sim.step_index < dbg.sim.instructions.len() {
+                            if dbg.sim.step_index < dbg.sim.instructions.len() => {
                                 let inst = &dbg.sim.instructions[dbg.sim.step_index];
                                 let bundle_disasm = disassemble_bundle(inst);
                                 for (idx, slot) in bundle_disasm.slots.iter().enumerate() {
@@ -547,7 +547,6 @@ impl DapServer {
                                     }));
                                 }
                             }
-                        }
                         _ => {}
                     }
                 }

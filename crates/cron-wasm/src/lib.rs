@@ -392,7 +392,7 @@ pub extern "C" fn cron_wasm_cl_transpile(
         "wgsl"
     };
 
-    let target = cronc::TranspileTarget::from_str(target_str).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
+    let target = cronc::TranspileTarget::parse(target_str).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
     match cronc::transpile_cl(cl_code, target) {
         Ok(rep) => set_result(rep.generated_code, false),
         Err(e) => set_result(format!("Transpilation Error: {}", e), true),

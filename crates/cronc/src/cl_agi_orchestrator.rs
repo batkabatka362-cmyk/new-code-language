@@ -452,47 +452,47 @@ impl LivingAgiMind {
 
         // Core 0 [0,0,0,0]: SSM Elastic Streaming Memory & Spiking Attention
         full_cl.push_str(&self.ssm.compile_to_cl(0));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 16 [0,0,1,0]: Liquid Continuous-Time Neural Network Dynamic Engine
         full_cl.push_str(&self.liquid.compile_to_cl(16));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 32 [0,0,2,0]: Hierarchical Temporal Memory & 2048-bit SDR Cortical Columns
         full_cl.push_str(&self.htm.temporal_memory.compile_to_cl(32));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 64 [0,0,0,1]: Dense Continuous Modern Hopfield Memory
         full_cl.push_str(&self.hopfield.compile_to_cl(64));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 80 [0,0,1,1]: Hyperdimensional Computing (HDC) & Vector Symbolic Memory
         full_cl.push_str(&self.hdc.compile_to_cl(80));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 96 [0,0,2,1]: Structural Causal Model & Pearl's Do-Calculus Counterfactual Engine
         full_cl.push_str(&self.scm.compile_to_cl(96));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 128 [0,0,0,2]: 4D-Torus Collective Cognitive Stigmergy Swarm Mesh
         full_cl.push_str(&self.stigmergy.compile_to_cl(128));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 144 [0,0,1,2]: 3-Factor Neuromodulated Metaplasticity Core
         full_cl.push_str(&self.metaplasticity.compile_to_cl(144));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 192 [0,0,0,3]: Active Inference & Biological Homeostasis Engine
         full_cl.push_str(&self.homeostasis.compile_to_cl(192));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 208 [0,0,1,3]: Autonomous Episodic Dream Replay & Memory Consolidation
         full_cl.push_str(&self.sleep.compile_to_cl(208));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         // Core 224 [0,0,2,3]: Brain 6 Sentry: Cascading Drift Watchdog & Lyapunov Stabilization
         full_cl.push_str(&self.sentry.compile_to_cl(224));
-        full_cl.push_str("\n");
+        full_cl.push('\n');
 
         full_cl
     }

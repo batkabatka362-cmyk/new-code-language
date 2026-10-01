@@ -130,12 +130,11 @@ impl SleepConsolidationEngine {
             let mut trits = row.unpack();
             for k in 0..64 {
                 total_synapses += 1;
-                if trits[k].abs() <= self.prune_threshold {
-                    if trits[k] != 0 {
+                if trits[k].abs() <= self.prune_threshold
+                    && trits[k] != 0 {
                         trits[k] = 0;
                         pruned_count += 1;
                     }
-                }
                 if trits[k] != 0 {
                     non_zero += 1;
                 }

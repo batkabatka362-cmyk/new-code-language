@@ -116,10 +116,10 @@ pub fn analyze_cl_file(file_name: &str, content: &str) -> ClKernelDoc {
                     slot_count += 1;
                     if let Ok(parsed) = parse_slot(slot_str) {
                         if let Some(d) = parsed.dest_reg {
-                            written_set.insert((d % 16) as usize);
+                            written_set.insert(d % 16);
                         }
                         if let Some(s) = parsed.src_reg {
-                            read_set.insert((s % 16) as usize);
+                            read_set.insert(s % 16);
                         }
 
                         match parsed.opcode.as_str() {

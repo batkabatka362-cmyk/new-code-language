@@ -98,7 +98,7 @@ pub struct NocRoutingDelay;
 impl NocRoutingDelay {
     /// Calculate wrap-around torus distance along an axis of size N (default 4 for 4x4x4x4)
     pub fn torus_axis_dist(a: usize, b: usize, dim_size: usize) -> usize {
-        let diff = if a > b { a - b } else { b - a };
+        let diff = a.abs_diff(b);
         diff.min(dim_size - diff)
     }
 
@@ -195,7 +195,7 @@ impl VerilogRtlCoreSimulator {
                     let b_lo = (val_b & 0xFFFF) as i16 as i32;
                     let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
                     let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
-                    let optical_mag = ((optical_dot.abs() as u32) & 0xFFFF) | 0x00FF_0000;
+                    let optical_mag = (optical_dot.unsigned_abs() & 0xFFFF) | 0x00FF_0000;
                     self.rf[d] = optical_mag;
                 }
                 "FA" => {
@@ -538,7 +538,7 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                             let b_lo = (val_b & 0xFFFF) as i16 as i32;
                             let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
                             let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
-                            let optical_mag = ((optical_dot.abs() as u32) & 0xFFFF) | 0x00FF_0000;
+                            let optical_mag = (optical_dot.unsigned_abs() & 0xFFFF) | 0x00FF_0000;
                             soft_core.r[d] = optical_mag;
                         }
                         "FA" => {

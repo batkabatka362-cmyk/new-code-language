@@ -51,11 +51,7 @@ impl TemporalSpikingAttention {
         for q in queries {
             for k in keys {
                 if q.channel_id == k.channel_id {
-                    let delta_t = if q.timestamp_ps >= k.timestamp_ps {
-                        q.timestamp_ps - k.timestamp_ps
-                    } else {
-                        k.timestamp_ps - q.timestamp_ps
-                    };
+                    let delta_t = q.timestamp_ps.abs_diff(k.timestamp_ps);
 
                     // Temporal coincidence check: |t_q - t_k| <= tau
                     if delta_t <= self.temporal_window_ps {

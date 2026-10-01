@@ -169,7 +169,7 @@ impl EvolutionaryMicrocodeEngine {
     fn update_best(&mut self) {
         self.population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
         if let Some(top) = self.population.first() {
-            if self.best_genome.as_ref().map_or(true, |b| top.fitness > b.fitness) {
+            if self.best_genome.as_ref().is_none_or(|b| top.fitness > b.fitness) {
                 self.best_genome = Some(top.clone());
             }
         }

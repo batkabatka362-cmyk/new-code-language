@@ -295,6 +295,7 @@ impl AOTHazardScheduler {
     /// multi-accumulators (`base_acc` and `extra_accs`).
     /// Eliminates all intra-loop RAW dependencies by interleaving reduction across K independent accumulators,
     /// generating steady-state bundles with 0 bubbles (IPC = 4.0).
+    #[allow(clippy::too_many_arguments)]
     pub fn schedule_multi_accumulator_reduction(
         &self,
         op_prefix: char,

@@ -97,7 +97,7 @@ pub fn start_cl_repl() {
             if parts.len() < 2 {
                 println!("Usage: :transpile <wgsl|ptx|c23> <.cl code>");
             } else {
-                let target = cronc::TranspileTarget::from_str(parts[0]).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
+                let target = cronc::TranspileTarget::parse(parts[0]).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
                 match cronc::transpile_cl(parts[1], target) {
                     Ok(rep) => println!("{}", rep.generated_code),
                     Err(e) => eprintln!("[TRANSPILE ERROR] {}", e),

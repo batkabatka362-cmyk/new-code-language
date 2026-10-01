@@ -49,6 +49,12 @@ pub struct NeuromodulationEngine {
     pub step_counter: u64,
 }
 
+impl Default for NeuromodulationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NeuromodulationEngine {
     pub fn new() -> Self {
         Self {

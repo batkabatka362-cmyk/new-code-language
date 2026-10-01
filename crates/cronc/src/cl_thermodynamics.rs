@@ -45,11 +45,7 @@ impl TileThermodynamicState {
 
     /// Check if tile should enter zero-power quenched sleep state
     pub fn evaluate_quench_condition(&mut self, activity_threshold: f64, recent_flux: f64) -> bool {
-        if recent_flux < activity_threshold {
-            self.is_thermally_quenched = true;
-        } else {
-            self.is_thermally_quenched = false;
-        }
+        self.is_thermally_quenched = recent_flux < activity_threshold;
         self.is_thermally_quenched
     }
 }

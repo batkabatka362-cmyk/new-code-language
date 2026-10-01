@@ -269,6 +269,29 @@ pub fn is_builtin_cognitive_fn(name: &str) -> bool {
             | "torus_send"
             | "torus_recv"
             | "torus_broadcast"
+            | "optical_gemm"
+            | "optical_gemm_forward"
+            | "predicated_op"
+            | "photonic_self_attention"
+            | "ssm_selective_scan_step"
+            | "mamba2_transformer_hybrid_forward"
+            | "step_cochlea_channel"
+            | "init_cochlea_channel"
+            | "process_audio_filterbank"
+            | "accumulate_patch_dvs_event"
+            | "init_vision_patch_tile"
+            | "patch_to_core_id"
+            | "project_patch_token_wave"
+            | "fredkin_gate"
+            | "toffoli_gate"
+            | "reversible_entangle_states"
+            | "step_forward_reversible"
+            | "step_backward_time_inversion"
+            | "evaluate_thermal_safety"
+            | "print"
+            | "println"
+            | "assert"
+            | "panic"
     )
 }
 
@@ -276,25 +299,46 @@ pub fn is_builtin_type_name(name: &str) -> bool {
     matches!(
         name,
         "wave_t"
+            | "f16"
             | "f32"
             | "f64"
+            | "bf16"
+            | "i8"
+            | "i16"
             | "i32"
             | "i64"
+            | "i128"
+            | "isize"
+            | "u8"
+            | "u16"
             | "u32"
             | "u64"
+            | "u128"
+            | "usize"
             | "tensor"
             | "bool"
             | "trit"
+            | "trit_t"
             | "complex_t"
             | "void"
             | "str"
+            | "string"
+            | "char"
+            | "ext_addr_t"
+            | "spk_stamp"
+            | "rev_t"
+            | "TorusCoord"
+            | "Option"
+            | "Result"
+            | "Tensor"
+            | "DynamicVec"
     )
 }
 
 // === Language Identification ===
 
 pub fn is_cl_document(uri: &str, text: &str) -> bool {
-    if uri.ends_with(".cl") || uri.ends_with(".clm") {
+    if uri.ends_with(".cl") || uri.ends_with(".clm") || uri.ends_with(".clpack") || uri.ends_with(".cksl") {
         return true;
     }
     text.lines().any(|l| {
@@ -302,8 +346,8 @@ pub fn is_cl_document(uri: &str, text: &str) -> bool {
         // Bundle header pattern: B#### or b#### (letter + 2 digits minimum)
         let is_bundle_header = t.len() >= 3
             && (t.starts_with('B') || t.starts_with('b'))
-            && t.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
-            && t.chars().nth(2).map_or(false, |c| c.is_ascii_digit());
+            && t.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
+            && t.chars().nth(2).is_some_and(|c| c.is_ascii_digit());
         t.starts_with("@CORE")
             || t.starts_with(".core")
             || t.starts_with("@kernel")
@@ -1316,10 +1360,11 @@ impl LspServer {
         let active_param = after_paren.chars().filter(|&c| c == ',').count() as u32;
 
         // Find the identifier immediately before '('
-        let fn_name = fn_prefix.split(|c: char| !c.is_alphanumeric() && c != '_').last().unwrap_or("");
+        let fn_name = fn_prefix.split(|c: char| !c.is_alphanumeric() && c != '_').next_back().unwrap_or("");
 
         // .cr builtin signature table
-        let sigs: &[(&str, &str, &str, &[(&str, &str)])] = &[
+        type SigEntry = (&'static str, &'static str, &'static str, &'static [(&'static str, &'static str)]);
+        let sigs: &[SigEntry] = &[
             ("pack_wave",
              "pack_wave(amp: [f32; 4], phase: [f32; 4]) -> wave_t",
              "Construct a photonic MZI wavefront packet for Brain 2 processing.",
@@ -1408,7 +1453,7 @@ impl LspServer {
                     && t[1..5].chars().all(|c| c.is_ascii_digit());
                 let is_core = t.starts_with("@CORE");
                 if is_bundle || is_core {
-                    let name = t.split(|c: char| c == ':' || c == ' ').next().unwrap_or(t).to_string();
+                    let name = t.split([':', ' ']).next().unwrap_or(t).to_string();
                     let r = Range {
                         start: Position { line: line_u32, character: 0 },
                         end: Position { line: line_u32, character: line.len() as u32 },
@@ -1434,9 +1479,9 @@ impl LspServer {
                 };
                 let len = line.len() as u32;
 
-                if t.starts_with("def ") {
+                if let Some(rest) = t.strip_prefix("def ") {
                     // def funcname(...
-                    let name = t[4..].split(|c: char| c == '(' || c == ' ').next().unwrap_or("?").to_string();
+                    let name = rest.split(['(', ' ']).next().unwrap_or("?").to_string();
                     symbols.push(DocumentSymbol {
                         name,
                         kind: 12, // Function
@@ -1445,8 +1490,18 @@ impl LspServer {
                         detail: Some("function".to_string()),
                         children: None,
                     });
-                } else if t.starts_with("struct ") {
-                    let name = t[7..].split(|c: char| c == '{' || c == ' ' || c == '<').next().unwrap_or("?").to_string();
+                } else if let Some(rest) = t.strip_prefix("fn ") {
+                    let name = rest.split(['(', ' ']).next().unwrap_or("?").to_string();
+                    symbols.push(DocumentSymbol {
+                        name,
+                        kind: 12, // Function
+                        range: make_range(line_u32, len),
+                        selection_range: make_range(line_u32, len),
+                        detail: Some("function".to_string()),
+                        children: None,
+                    });
+                } else if let Some(rest) = t.strip_prefix("struct ") {
+                    let name = rest.split(['{', ' ', '<']).next().unwrap_or("?").to_string();
                     symbols.push(DocumentSymbol {
                         name,
                         kind: 23, // Struct
@@ -1455,8 +1510,8 @@ impl LspServer {
                         detail: Some("struct".to_string()),
                         children: None,
                     });
-                } else if t.starts_with("trait ") {
-                    let name = t[6..].split(|c: char| c == '{' || c == ' ' || c == '<').next().unwrap_or("?").to_string();
+                } else if let Some(rest) = t.strip_prefix("trait ") {
+                    let name = rest.split(['{', ' ', '<']).next().unwrap_or("?").to_string();
                     symbols.push(DocumentSymbol {
                         name,
                         kind: 11, // Interface
@@ -1465,8 +1520,8 @@ impl LspServer {
                         detail: Some("trait".to_string()),
                         children: None,
                     });
-                } else if t.starts_with("brain ") {
-                    let name = t[6..].split(|c: char| c == '[' || c == ' ' || c == '{').next().unwrap_or("?").to_string();
+                } else if let Some(rest) = t.strip_prefix("brain ") {
+                    let name = rest.split(['[', ' ', '{']).next().unwrap_or("?").to_string();
                     symbols.push(DocumentSymbol {
                         name,
                         kind: 5, // Class
@@ -1475,8 +1530,8 @@ impl LspServer {
                         detail: Some("brain partition".to_string()),
                         children: None,
                     });
-                } else if t.starts_with("region ") {
-                    let name = t[7..].split(|c: char| c == '[' || c == ' ' || c == '{').next().unwrap_or("?").to_string();
+                } else if let Some(rest) = t.strip_prefix("region ") {
+                    let name = rest.split(['[', ' ', '{']).next().unwrap_or("?").to_string();
                     symbols.push(DocumentSymbol {
                         name,
                         kind: 14, // Keyword / Module
@@ -1485,8 +1540,8 @@ impl LspServer {
                         detail: Some("region".to_string()),
                         children: None,
                     });
-                } else if t.starts_with("impl ") {
-                    let name = t[5..].split('{').next().unwrap_or("?").trim().to_string();
+                } else if let Some(rest) = t.strip_prefix("impl ") {
+                    let name = rest.split('{').next().unwrap_or("?").trim().to_string();
                     symbols.push(DocumentSymbol {
                         name,
                         kind: 11, // Interface / Impl
@@ -1515,17 +1570,20 @@ impl LspServer {
         let (word, _, _) = match extract_word_at_pos(line_str, character) { Some(w) => w, None => return locations };
 
         // For .cl: look for labels like the bundle header or @CORE directive
-        // For .cr: look for `def <word>`, `struct <word>`, `trait <word>`, `brain <word>`, `impl <word>`
+        // For .cr: look for `def <word>`, `fn <word>`, `struct <word>`, `trait <word>`, `brain <word>`, `impl <word>`
         let def_patterns: Vec<String> = if is_cl_document(uri, doc) {
             // Bundle label: B0000, B0001, ...
             vec![format!("{}:", word), format!("{} ", word)]
         } else {
             vec![
                 format!("def {}", word),
+                format!("fn {}", word),
                 format!("struct {}", word),
                 format!("trait {}", word),
                 format!("brain {}", word),
                 format!("impl {}", word),
+                format!("enum {}", word),
+                format!("type {}", word),
             ]
         };
 
@@ -1703,6 +1761,8 @@ impl LspServer {
                                         (2, 8) // function, defaultLibrary
                                     } else if is_builtin_type_name(name) {
                                         (1, 8) // type, defaultLibrary
+                                    } else if name.chars().next().is_some_and(|c| c.is_uppercase()) {
+                                        (1, 0) // type, user-defined struct/trait/enum
                                     } else {
                                         (3, 0) // variable
                                     }
@@ -1957,12 +2017,12 @@ impl LspServer {
                 // Line-level fallback for live typing resilience
                 for (line_idx, line) in doc.lines().enumerate() {
                     let trimmed = line.trim();
-                    if trimmed.starts_with("let ") {
-                        let rest = trimmed[4..].trim();
-                        let (is_lin, var_part) = if rest.starts_with("lin ") {
-                            (true, rest[4..].trim())
-                        } else if rest.starts_with("mut ") {
-                            (false, rest[4..].trim())
+                    if let Some(stripped) = trimmed.strip_prefix("let ") {
+                        let rest = stripped.trim();
+                        let (is_lin, var_part) = if let Some(s) = rest.strip_prefix("lin ") {
+                            (true, s.trim())
+                        } else if let Some(s) = rest.strip_prefix("mut ") {
+                            (false, s.trim())
                         } else {
                             (false, rest)
                         };
@@ -1977,7 +2037,7 @@ impl LspServer {
                                     Some("bool")
                                 } else if rhs_trim.contains('.') && rhs_trim.chars().any(|c| c.is_ascii_digit()) {
                                     Some("f64")
-                                } else if rhs_trim.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                                } else if rhs_trim.chars().next().is_some_and(|c| c.is_ascii_digit()) {
                                     Some("i64")
                                 } else if rhs_trim.starts_with("pack_wave") {
                                     Some("wave_t")
