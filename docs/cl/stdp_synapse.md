@@ -17,8 +17,13 @@
 |---|---|---|
 | 🔮 Photonic MZI Optical GEMM | `1` | 0ns optical matrix dot-products |
 | 🛡️ Reversible Logic (Fredkin/Toffoli) | `1` | Zero-entropy state transformations |
-| 🧠 Neuromorphic Plasticity (STDP) | `6` | Spike-timing synaptic weight adaptations |
+| 🧠 Neuromorphic Plasticity (STDP) | `1` | Spike-timing synaptic weight adaptations |
 | ⚡ Dedicated AI Silicon ISA | `0` | Softmax / SSM Mamba linear scans |
+| ⏱️ Temporal Spiking Attention | `0` | Coincidence gating & pulse synchronization |
+| 🐜 Stigmergy Swarm & NoC | `0` | Pheromone diffusion & 4D-Torus spatial routing |
+| 🌿 Living Homeostasis | `3` | Neuromodulation & metabolic energy balance |
+| 🎯 Causal Do-Calculus & Counterfactuals | `0` | SCM graph mutilation & counterfactual abduction |
+| 🧠 HTM Cortical Columns & 2048-bit SDR | `1` | Sparse distributed representations & anomaly spikes |
 
 ## 💾 Register Footprint
 

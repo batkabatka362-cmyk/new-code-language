@@ -275,8 +275,7 @@ impl CBackend {
         self.emit_line("    return (cron_tuple_t){ ._0 = 0x1234, ._1 = 0x5678, ._2 = 0, ._3 = 0 };");
         self.emit_line("}");
         self.emit_line("static inline void multi_head_dispatch(uint64_t handle) { (void)handle; }");
-        self.emit_line("");
-
+        self.emit_line("static inline void region_arena_reset(void) {}");
         self.emit_line("// --- Brain 3: Thermodynamic Reversible Gates ---");
         self.emit_line("static inline void cron_fredkin_gate(int32_t c, int32_t* a, int32_t* b) {");
         self.emit_line("    if (c) { int32_t tmp = *a; *a = *b; *b = tmp; }");
@@ -572,7 +571,8 @@ impl CBackend {
         self.emit_line("    }");
         self.emit_line("    return out;");
         self.emit_line("}");
-        self.emit_line("static inline cron_tensor_f32_t tensor_transpose(cron_tensor_f32_t a) {");
+        self.emit_line("static inline uint32_t _cron_tensor_transpose_u32(uint32_t a) { return a; }");
+        self.emit_line("static inline cron_tensor_f32_t _cron_tensor_transpose_f32(cron_tensor_f32_t a) {");
         self.emit_line("    cron_tensor_f32_t out = a;");
         self.emit_line("    if (a.rank >= 2) {");
         self.emit_line("        int64_t r1 = a.rank - 2;");
@@ -593,6 +593,7 @@ impl CBackend {
         self.emit_line("    }");
         self.emit_line("    return out;");
         self.emit_line("}");
+        self.emit_line("#define tensor_transpose(a) _Generic((a), cron_tensor_f32_t: _cron_tensor_transpose_f32, default: _cron_tensor_transpose_u32)(a)");
         self.emit_line("static inline cron_tensor_f32_t tensor_add(cron_tensor_f32_t a, cron_tensor_f32_t b) {");
         self.emit_line("    cron_tensor_f32_t out = a;");
         self.emit_line("    out.data = (float*)malloc((a.total_elements > 0 ? a.total_elements : 1) * sizeof(float));");
@@ -1253,13 +1254,10 @@ impl CBackend {
             Statement::Fuse { attrs, body, .. } => {
                 let attr_str = attrs.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join(", ");
                 self.emit_line(&format!("// === CRON SINGLE-PASS FUSED STREAMING KERNEL [{}] ===", attr_str));
-                self.emit_line("{");
-                self.indent_level += 1;
                 for s in body {
                     self.emit_statement(s);
                 }
-                self.indent_level -= 1;
-                self.emit_line("} // === End Fused Streaming Kernel ===");
+                self.emit_line("// === End Fused Streaming Kernel ===");
             }
             Statement::Resilient { body, fallback, .. } => {
                 self.emit_line("{ // --- Resilient Fault-Tolerant Block ---");
@@ -1699,6 +1697,11 @@ impl CBackend {
             }
         }
 
+        self.emit_line("uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0, r4 = 0, r5 = 0, r6 = 0, r7 = 0;");
+        self.emit_line("uint32_t r8 = 0, r9 = 0, r10 = 0, r11 = 0, r12 = 0, r13 = 0, r14 = 0, r15 = 0;");
+        self.emit_line("(void)r0; (void)r1; (void)r2; (void)r3; (void)r4; (void)r5; (void)r6; (void)r7;");
+        self.emit_line("(void)r8; (void)r9; (void)r10; (void)r11; (void)r12; (void)r13; (void)r14; (void)r15;");
+        self.emit_line("");
         let has_user_main = program.functions.iter().any(|f| f.name == "main");
         if !program.main_statements.is_empty() {
             self.emit_line("// Executing Top-Level Module Statements:");

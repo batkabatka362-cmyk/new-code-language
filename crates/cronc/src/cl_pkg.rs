@@ -508,10 +508,138 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
     );
     fs::write(target_dir.join("living_homeostasis.cl"), homeostasis_code).map_err(|e| e.to_string())?;
 
+    // 25. bitnet_b158_gemv.cl
+    let bitnet_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/bitnet_b158_gemv.cl\n\
+         @kernel bitnet_b158_ternary_gemv\n\
+         .target silicon.ternary_core\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#055"), build_valid_slot("_", "PK03M200"), build_valid_slot("_", "LD04M100")]),
+        format_bundle(1, &[build_valid_slot("_", "TM05M403"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "MA08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("bitnet_b158_gemv.cl"), bitnet_code).map_err(|e| e.to_string())?;
+
+    // 26. mamba2_ssd.cl
+    let mamba2_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/mamba2_ssd.cl\n\
+         @kernel mamba2_state_space_duality\n\
+         .target silicon.elastic_ssm\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#080"), build_valid_slot("'", "==02#040"), build_valid_slot("_", "SS03M100"), build_valid_slot("_", "LD04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "ML05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "SI07M600"), build_valid_slot("_", "FA08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("mamba2_ssd.cl"), mamba2_code).map_err(|e| e.to_string())?;
+
+    // 27. kv_cache_paged.cl
+    let kv_cache_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/kv_cache_paged.cl\n\
+         @kernel kv_cache_paged_ring\n\
+         .target silicon.sparse_attention\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#200"), build_valid_slot("'", "==02#010"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "AD04M302")]),
+        format_bundle(1, &[build_valid_slot("_", "MA05M400"), build_valid_slot("_", "CP06M500"), build_valid_slot("_", "LD07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("kv_cache_paged.cl"), kv_cache_code).map_err(|e| e.to_string())?;
+
+    // 28. rope_rotary.cl
+    let rope_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/rope_rotary.cl\n\
+         @kernel rope_rotary_embedding\n\
+         .target silicon.4d_torus\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#020"), build_valid_slot("_", "CD03M102"), build_valid_slot("_", "ML04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "SB05M401"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("rope_rotary.cl"), rope_code).map_err(|e| e.to_string())?;
+
+    // 29. rmsnorm_fast.cl
+    let rmsnorm_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/rmsnorm_fast.cl\n\
+         @kernel rmsnorm_fast_simd\n\
+         .target silicon.ai_isa\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#3F8"), build_valid_slot("'", "==02#100"), build_valid_slot("_", "RM03M201"), build_valid_slot("_", "LD04M100")]),
+        format_bundle(1, &[build_valid_slot("_", "ML05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("rmsnorm_fast.cl"), rmsnorm_code).map_err(|e| e.to_string())?;
+
+    // 30. swiglu_gelu.cl
+    let swiglu_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/swiglu_gelu.cl\n\
+         @kernel fused_swiglu_gelu\n\
+         .target silicon.ai_isa\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#080"), build_valid_slot("_", "SI03M100"), build_valid_slot("_", "GE04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "ML05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("swiglu_gelu.cl"), swiglu_code).map_err(|e| e.to_string())?;
+
+    // 31. speculative_verifier.cl
+    let spec_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/speculative_verifier.cl\n\
+         @kernel speculative_draft_verifier\n\
+         .target silicon.tree_reasoning\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#004"), build_valid_slot("'", "==02#008"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "CO05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("speculative_verifier.cl"), spec_code).map_err(|e| e.to_string())?;
+
+    // 32. torus_allreduce.cl
+    let torus_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/torus_allreduce.cl\n\
+         @kernel torus_4d_allreduce\n\
+         .target silicon.4d_torus\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#0FF"), build_valid_slot("_", "TX03M100"), build_valid_slot("_", "RX04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "AD05M304"), build_valid_slot("_", "WH06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "bb09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("torus_allreduce.cl"), torus_code).map_err(|e| e.to_string())?;
+
     // Update libcl.toml
     let manifest_toml = "[package]\n\
          name = \"libcl\"\n\
-         version = \"1.5.0\"\n\
+         version = \"1.6.0\"\n\
          description = \"CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon\"\n\
          authors = [\"CRON Language Architecture Team\"]\n\
          license = \"MIT OR Apache-2.0\"\n\
@@ -540,7 +668,15 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
          elastic_ssm_stream = \"libcl/elastic_ssm_stream.cl\"\n\
          spiking_temporal_attention = \"libcl/spiking_temporal_attention.cl\"\n\
          stigmergy_reasoning = \"libcl/stigmergy_reasoning.cl\"\n\
-         living_homeostasis = \"libcl/living_homeostasis.cl\"\n";
+         living_homeostasis = \"libcl/living_homeostasis.cl\"\n\
+         bitnet_b158_gemv = \"libcl/bitnet_b158_gemv.cl\"\n\
+         mamba2_ssd = \"libcl/mamba2_ssd.cl\"\n\
+         kv_cache_paged = \"libcl/kv_cache_paged.cl\"\n\
+         rope_rotary = \"libcl/rope_rotary.cl\"\n\
+         rmsnorm_fast = \"libcl/rmsnorm_fast.cl\"\n\
+         swiglu_gelu = \"libcl/swiglu_gelu.cl\"\n\
+         speculative_verifier = \"libcl/speculative_verifier.cl\"\n\
+         torus_allreduce = \"libcl/torus_allreduce.cl\"\n";
     fs::write(target_dir.join("libcl.toml"), manifest_toml).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -558,7 +694,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
     let libcl_dir = candidates.into_iter().find(|p| p.is_dir()).unwrap_or_else(|| workspace_root.join("libcl"));
     
     // Automatically populate official kernels if not present
-    let check_p = libcl_dir.join("living_homeostasis.cl");
+    let check_p = libcl_dir.join("torus_allreduce.cl");
     if !check_p.exists() {
         let _ = generate_standard_libcl_files(&libcl_dir);
     }
@@ -590,6 +726,14 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("spiking_temporal_attention.cl", "Event-Driven Spiking Temporal Coincidence Attention (Zero-Mul Sub-pJ)", "silicon.spiking_temporal", 4.0),
         ("stigmergy_reasoning.cl", "Collective Cognitive Stigmergy & 4D-Torus Pheromone Swarm Reasoning", "silicon.stigmergy_4d", 4.0),
         ("living_homeostasis.cl", "Continuous Biological Homeostasis & Neuromodulator Chemical Diffusion", "silicon.living_homeostasis", 4.0),
+        ("bitnet_b158_gemv.cl", "BitNet 1.58-bit Ternary Multiplier-Free Matrix-Vector Unit", "silicon.ternary_core", 4.0),
+        ("mamba2_ssd.cl", "Mamba-2 State-Space Duality (SSD) 1-D Continuous Sequence Scan", "silicon.elastic_ssm", 4.0),
+        ("kv_cache_paged.cl", "Paged Attention Zero-Copy Circular Block Ring-Cache Allocator", "silicon.sparse_attention", 4.0),
+        ("rope_rotary.cl", "Rotary Position Embedding (RoPE) CORDIC Multi-Angle Rotor", "silicon.4d_torus", 4.0),
+        ("rmsnorm_fast.cl", "Fast Root-Mean-Square Normalization with SIMD Reciprocal Sqrt", "silicon.ai_isa", 4.0),
+        ("swiglu_gelu.cl", "Fused Non-Linear SwiGLU / GeLU Multi-Gated Channel Activation", "silicon.ai_isa", 4.0),
+        ("speculative_verifier.cl", "Speculative Parallel Draft Token Verification & KV Rollback", "silicon.tree_reasoning", 4.0),
+        ("torus_allreduce.cl", "256-Core 4D-Torus Dimension-Order Collective Ring AllReduce", "silicon.4d_torus", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
@@ -771,3 +915,35 @@ pub fn render_audit_report(report: &ClAuditReport) -> String {
 
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_standard_libcl_generation_and_count() {
+        let temp_dir = std::env::temp_dir().join("cron_test_libcl");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let res = generate_standard_libcl_files(&temp_dir);
+        assert!(res.is_ok(), "Failed to generate standard libcl: {:?}", res.err());
+
+        // Verify key AI kernels exist in generated files
+        assert!(temp_dir.join("bitnet_b158_gemv.cl").exists());
+        assert!(temp_dir.join("mamba2_ssd.cl").exists());
+        assert!(temp_dir.join("kv_cache_paged.cl").exists());
+        assert!(temp_dir.join("rope_rotary.cl").exists());
+        assert!(temp_dir.join("rmsnorm_fast.cl").exists());
+        assert!(temp_dir.join("swiglu_gelu.cl").exists());
+        assert!(temp_dir.join("speculative_verifier.cl").exists());
+        assert!(temp_dir.join("torus_allreduce.cl").exists());
+        assert!(temp_dir.join("libcl.toml").exists());
+
+        // Audit the generated bitnet kernel
+        let bitnet_src = std::fs::read_to_string(temp_dir.join("bitnet_b158_gemv.cl")).unwrap();
+        let audit = audit_cl_source(&bitnet_src, "libcl/bitnet_b158_gemv.cl");
+        assert!(audit.passed, "BitNet kernel should pass silicon safety audit: {:?}", audit.diagnostics);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}
+

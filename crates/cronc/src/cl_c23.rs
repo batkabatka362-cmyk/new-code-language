@@ -59,6 +59,10 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    size_t fused_ops_count;\n");
     out.push_str("    size_t hbm_bytes_saved;\n");
     out.push_str("    bool is_halted;\n");
+    out.push_str("    // Scratchpad SRAM & Return Address Stack\n");
+    out.push_str("    uint32_t dmem[16384];\n");
+    out.push_str("    size_t ras[64];\n");
+    out.push_str("    size_t ras_sp;\n");
     out.push_str("    // Milestone #029: Dedicated AI Silicon ISA Extensions\n");
     out.push_str("    float softmax_max;\n");
     out.push_str("    float softmax_sum;\n");
@@ -170,6 +174,8 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
 
         if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
             bundle_count += 1;
+            let cycle_num = cycle_part.trim().trim_start_matches('B').parse::<usize>().unwrap_or(bundle_count);
+            out.push_str(&format!("  bundle_{}:\n", cycle_num));
             out.push_str(&format!("    // Cycle {}\n", cycle_part.trim()));
             out.push_str("    core->cycle_count++;\n");
 
@@ -301,6 +307,15 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         "bb" => {
                             out.push_str("    core->barrier_count++;\n");
                         }
+                        "PR" => {
+                            if slot.raw.contains('#') {
+                                let hex_str: String = slot.raw.chars().skip(6).take(2).filter(|c| c.is_ascii_hexdigit()).collect();
+                                let val = u8::from_str_radix(&hex_str, 16).unwrap_or(0);
+                                out.push_str(&format!("    putchar((char)0x{:02X}); fflush(stdout);\n", val));
+                            } else {
+                                out.push_str(&format!("    putchar((char)(core->r[{}] & 0xFF)); fflush(stdout);\n", s));
+                            }
+                        }
                         "RS" | "88" => {
                             out.push_str("    core->r[1] = 0;\n");
                         }
@@ -421,9 +436,48 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str(&format!("        core->r[{}] = cron_f32_to_u32(y);\n", d));
                             out.push_str("    }\n");
                         }
+                        "JP" => {
+                            out.push_str(&format!("    goto bundle_{};\n", imm_val));
+                        }
+                        "BZ" => {
+                            let reg = if d > 0 { d } else { s };
+                            out.push_str(&format!("    if (core->r[{}] == 0) goto bundle_{};\n", reg, imm_val));
+                        }
+                        "BN" => {
+                            let reg = if d > 0 { d } else { s };
+                            out.push_str(&format!("    if (core->r[{}] != 0) goto bundle_{};\n", reg, imm_val));
+                        }
+                        "BL" | "LT" => {
+                            let reg = if d > 0 { d } else { s };
+                            out.push_str(&format!("    if ((int32_t)core->r[{}] < 0) goto bundle_{};\n", reg, imm_val));
+                        }
+                        "BG" => {
+                            let reg = if d > 0 { d } else { s };
+                            out.push_str(&format!("    if ((int32_t)core->r[{}] > 0) goto bundle_{};\n", reg, imm_val));
+                        }
+                        "JS" => {
+                            out.push_str(&format!("    if (core->ras_sp < 64) core->ras[core->ras_sp++] = {};\n", cycle_num + 1));
+                            out.push_str(&format!("    goto bundle_{};\n", imm_val));
+                        }
+                        "LD" => {
+                            out.push_str(&format!("    core->r[{}] = core->dmem[((size_t)core->r[{}] + {}) % 16384];\n", d, s, imm_val));
+                        }
+                        "SR" => {
+                            let src_r = if d > 0 { d } else { s };
+                            let base_r = if s > 0 && d > 0 { s } else { 0 };
+                            out.push_str(&format!("    core->dmem[((size_t)core->r[{}] + {}) % 16384] = core->r[{}];\n", base_r, imm_val, src_r));
+                        }
+                        "LB" => {
+                            out.push_str(&format!("    core->r[{}] = (uint32_t)(((uint8_t*)core->dmem)[((size_t)core->r[{}] + {}) % 65536]);\n", d, s, imm_val));
+                        }
+                        "BY" => {
+                            let src_r = if d > 0 { d } else { s };
+                            let base_r = if s > 0 && d > 0 { s } else { 0 };
+                            out.push_str(&format!("    ((uint8_t*)core->dmem)[((size_t)core->r[{}] + {}) % 65536] = (uint8_t)(core->r[{}]);\n", base_r, imm_val, src_r));
+                        }
                         "HL" => {
                             out.push_str("    core->is_halted = true;\n");
-                            out.push_str("    return;\n");
+                            out.push_str("    goto bundle_exit;\n");
                         }
                         _ => {}
                     }
@@ -436,6 +490,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
         return Err("No valid VLIW bundles found in .cl code to transpile to C23".to_string());
     }
 
+    out.push_str("  bundle_exit:;\n");
     out.push_str("}\n\n");
 
     out.push_str("int main(int argc, char** argv) {\n");

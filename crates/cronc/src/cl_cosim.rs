@@ -393,7 +393,7 @@ impl VerilogRtlCoreSimulator {
                         crate::cl_esoteric::TritWord(self.rf[s]),
                     ) as u32;
                 }
-                "TI" | "TD" | "TR" | "TW" | "ZL" => {}
+                "TI" | "TD" | "TR" | "TW" | "ZL" | "PR" => {}
                 "UN" => {
                     let match_found = (self.rf[d] & 0xFFFF) == (self.rf[s] & 0xFFFF);
                     self.rf[d] = if match_found { 1 } else { 0 };
@@ -739,7 +739,7 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                                 crate::cl_esoteric::TritWord(soft_core.r[s]),
                             ) as u32;
                         }
-                        "TI" | "TD" | "TR" | "TW" | "ZL" => {}
+                        "TI" | "TD" | "TR" | "TW" | "ZL" | "PR" => {}
                         "UN" => {
                             let match_found = (soft_core.r[d] & 0xFFFF) == (soft_core.r[s] & 0xFFFF);
                             soft_core.r[d] = if match_found { 1 } else { 0 };

@@ -81,6 +81,14 @@ pub struct CoreEngine {
     pub photonic_pumps: usize,      // 11: Photonic Laser Pump Strobe
     pub arena_resets: usize,        // 88: Region Arena 0-cycle Reset
     pub sentry_trips: usize,        // 99: Global Hardware Sentry Watchdog Trip
+
+    // === Branching, Control Flow & Call Stack ===
+    pub branch_target: Option<usize>,
+    pub ras: Vec<usize>,             // Return Address Stack (Hardware Call Stack)
+    pub zohl_counter: usize,         // Zero-Overhead Hardware Loop Counter
+
+    // === 64KB Scratchpad SRAM Data Memory (16,384 words x 32-bit = 64KB) ===
+    pub dmem: Vec<u32>,
 }
 
 impl CoreEngine {
@@ -133,6 +141,11 @@ impl CoreEngine {
             photonic_pumps: 0,
             arena_resets: 0,
             sentry_trips: 0,
+            // Control Flow & Memory
+            branch_target: None,
+            ras: Vec::new(),
+            zohl_counter: 0,
+            dmem: vec![0u32; 16384],
         }
     }
 
@@ -180,7 +193,21 @@ impl CoreEngine {
 
         (op, dest_bank, dest_reg, src, imm, mode)
     }
+}
 
+fn parse_target_or_offset(slot: &str, fallback: usize) -> usize {
+    if let Some(hash_pos) = slot.find('#') {
+        let hex_str: String = slot[hash_pos + 1..]
+            .chars()
+            .take_while(|c| c.is_ascii_hexdigit())
+            .collect();
+        usize::from_str_radix(&hex_str, 16).unwrap_or(fallback)
+    } else {
+        fallback
+    }
+}
+
+impl CoreEngine {
     pub fn execute_slot(&mut self, slot: &str) -> Option<u32> {
         if self.is_halted || slot.len() < 3 {
             return None;
@@ -456,10 +483,18 @@ impl CoreEngine {
                 self.registers[d] = val ^ 0xFFFF_FFFF; // Inverted mapping
             }
             "BL" => {
-                // Blend staged halo
-                let d = if dest > 0 { dest } else { 10 };
-                let s = if src > 0 { src } else { 3 };
-                self.registers[d] = self.registers[s] | 0x8000;
+                if mode == '<' || mode == '#' {
+                    let reg_to_test = if dest > 0 { dest } else { src };
+                    if (self.registers[reg_to_test] as i32) < 0 {
+                        let target = parse_target_or_offset(slot, imm);
+                        self.branch_target = Some(target);
+                    }
+                } else {
+                    // Blend staged halo
+                    let d = if dest > 0 { dest } else { 10 };
+                    let s = if src > 0 { src } else { 3 };
+                    self.registers[d] = self.registers[s] | 0x8000;
+                }
             }
             "RF" => {
                 // Reversible Fredkin Gate Swap (Brain 3)
@@ -543,9 +578,14 @@ impl CoreEngine {
                 }
             }
             "RT" => {
-                // Return from trap (MRET): restore PC to mepc + 1 and clear trap state
-                self.in_trap = false;
-                self.mcause = 0;
+                // Return from subroutine (Hardware RAS) or trap (MRET)
+                if let Some(ret_addr) = self.ras.pop() {
+                    self.branch_target = Some(ret_addr);
+                } else if self.in_trap {
+                    self.in_trap = false;
+                    self.mcause = 0;
+                    self.branch_target = Some(self.mepc + 1);
+                }
             }
             "RN" => {
                 // 32-bit Galois LFSR PRNG (Milestone #042)
@@ -866,10 +906,113 @@ impl CoreEngine {
                 let addr = (self.registers[d] & 0xF) as usize;
                 self.registers[addr] = self.registers[s];
             }
+            "PR" => {
+                // Hardware Console / UART Character Print Output (Core 0 Host UART)
+                if self.id == 0 {
+                    let ch = if mode == '#' {
+                        let hex_str: String = slot.chars().skip(6).take(2).filter(|c| c.is_ascii_hexdigit()).collect();
+                        if let Ok(val) = u8::from_str_radix(&hex_str, 16) {
+                            val as char
+                        } else {
+                            (imm as u8) as char
+                        }
+                    } else {
+                        let s = if src > 0 { src } else { dest };
+                        (self.registers[s] & 0xFF) as u8 as char
+                    };
+                    print!("{}", ch);
+                    use std::io::Write;
+                    let _ = std::io::stdout().flush();
+                }
+            }
+            "JP" => {
+                // Unconditional Jump to target bundle address
+                let target = parse_target_or_offset(slot, imm);
+                self.branch_target = Some(target);
+            }
+            "BZ" => {
+                // Branch if Zero: test register R[dest] (or R[src])
+                let reg_to_test = if dest > 0 { dest } else { src };
+                if self.registers[reg_to_test] == 0 {
+                    let target = parse_target_or_offset(slot, imm);
+                    self.branch_target = Some(target);
+                }
+            }
+            "BN" => {
+                // Branch if Non-Zero: test register R[dest] (or R[src])
+                let reg_to_test = if dest > 0 { dest } else { src };
+                if self.registers[reg_to_test] != 0 {
+                    let target = parse_target_or_offset(slot, imm);
+                    self.branch_target = Some(target);
+                }
+            }
+            "LT" => {
+                // Branch if Less than Zero / Signed Negative
+                let reg_to_test = if dest > 0 { dest } else { src };
+                if (self.registers[reg_to_test] as i32) < 0 {
+                    let target = parse_target_or_offset(slot, imm);
+                    self.branch_target = Some(target);
+                }
+            }
+            "BG" => {
+                // Branch if Greater than Zero / Signed Positive
+                let reg_to_test = if dest > 0 { dest } else { src };
+                if (self.registers[reg_to_test] as i32) > 0 {
+                    let target = parse_target_or_offset(slot, imm);
+                    self.branch_target = Some(target);
+                }
+            }
+            "JS" => {
+                // Jump to Subroutine (Call): push return address to hardware RAS, jump to target
+                let target = parse_target_or_offset(slot, imm);
+                self.ras.push(self.cycle_count + 1);
+                self.branch_target = Some(target);
+            }
             "ZL" => {
                 // Zero-Overhead Hardware Loop Counter Set
+                let cnt = parse_target_or_offset(slot, if imm > 0 { imm } else { 16 });
+                self.zohl_counter = cnt;
                 let d = if dest > 0 { dest } else { 15 };
-                self.registers[d] = if imm > 0 { imm as u32 } else { 16 };
+                self.registers[d] = cnt as u32;
+            }
+            "LD" => {
+                // Load 32-bit Word from 64KB Scratchpad SRAM
+                let d = if dest > 0 { dest } else { 0 };
+                let base = if src > 0 { self.registers[src] as usize } else { 0 };
+                let offset = parse_target_or_offset(slot, imm);
+                let addr = (base.wrapping_add(offset)) % 16384;
+                self.registers[d] = self.dmem[addr];
+            }
+            "SR" => {
+                // Store 32-bit Word from Register to 64KB Scratchpad SRAM
+                let s = if dest > 0 { dest } else { src };
+                let base = if src > 0 && dest > 0 { self.registers[src] as usize } else { 0 };
+                let offset = parse_target_or_offset(slot, imm);
+                let addr = (base.wrapping_add(offset)) % 16384;
+                self.dmem[addr] = self.registers[s];
+            }
+            "LB" => {
+                // Load 8-bit Byte from 64KB Scratchpad SRAM into Register
+                let d = if dest > 0 { dest } else { 0 };
+                let base = if src > 0 { self.registers[src] as usize } else { 0 };
+                let offset = parse_target_or_offset(slot, imm);
+                let byte_addr = (base.wrapping_add(offset)) % 65536;
+                let word_idx = byte_addr / 4;
+                let byte_shift = (byte_addr % 4) * 8;
+                let word = self.dmem[word_idx];
+                self.registers[d] = (word >> byte_shift) & 0xFF;
+            }
+            "BY" => {
+                // Store 8-bit Byte from Register to 64KB Scratchpad SRAM
+                let s = if dest > 0 { dest } else { src };
+                let base = if src > 0 && dest > 0 { self.registers[src] as usize } else { 0 };
+                let offset = parse_target_or_offset(slot, imm);
+                let byte_addr = (base.wrapping_add(offset)) % 65536;
+                let word_idx = byte_addr / 4;
+                let byte_shift = (byte_addr % 4) * 8;
+                let byte_val = (self.registers[s] & 0xFF) as u32;
+                let mask = !(0xFF << byte_shift);
+                self.dmem[word_idx] = (self.dmem[word_idx] & mask) | (byte_val << byte_shift);
             }
             "CC" => {
                 // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation (Homopolymer CC)

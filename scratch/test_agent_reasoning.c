@@ -176,7 +176,7 @@ static inline cron_tuple_t compute_attention_head(cron_wave_t q, cron_wave_t k, 
     return (cron_tuple_t){ ._0 = 0x1234, ._1 = 0x5678, ._2 = 0, ._3 = 0 };
 }
 static inline void multi_head_dispatch(uint64_t handle) { (void)handle; }
-
+static inline void region_arena_reset(void) {}
 // --- Brain 3: Thermodynamic Reversible Gates ---
 static inline void cron_fredkin_gate(int32_t c, int32_t* a, int32_t* b) {
     if (c) { int32_t tmp = *a; *a = *b; *b = tmp; }
@@ -468,7 +468,8 @@ static inline cron_tensor_f32_t tensor_matmul(cron_tensor_f32_t a, cron_tensor_f
     }
     return out;
 }
-static inline cron_tensor_f32_t tensor_transpose(cron_tensor_f32_t a) {
+static inline uint32_t _cron_tensor_transpose_u32(uint32_t a) { return a; }
+static inline cron_tensor_f32_t _cron_tensor_transpose_f32(cron_tensor_f32_t a) {
     cron_tensor_f32_t out = a;
     if (a.rank >= 2) {
         int64_t r1 = a.rank - 2;
@@ -489,6 +490,7 @@ static inline cron_tensor_f32_t tensor_transpose(cron_tensor_f32_t a) {
     }
     return out;
 }
+#define tensor_transpose(a) _Generic((a), cron_tensor_f32_t: _cron_tensor_transpose_f32, default: _cron_tensor_transpose_u32)(a)
 static inline cron_tensor_f32_t tensor_add(cron_tensor_f32_t a, cron_tensor_f32_t b) {
     cron_tensor_f32_t out = a;
     out.data = (float*)malloc((a.total_elements > 0 ? a.total_elements : 1) * sizeof(float));
@@ -841,6 +843,11 @@ int main(int argc, char** argv) {
     (void)argc; (void)argv;
     printf("[CRON Native C23 Engine] Initializing 256-Core 4D-Torus Processor...\n");
     clock_t _start_time = clock();
+    
+    uint32_t r0 = 0, r1 = 0, r2 = 0, r3 = 0, r4 = 0, r5 = 0, r6 = 0, r7 = 0;
+    uint32_t r8 = 0, r9 = 0, r10 = 0, r11 = 0, r12 = 0, r13 = 0, r14 = 0, r15 = 0;
+    (void)r0; (void)r1; (void)r2; (void)r3; (void)r4; (void)r5; (void)r6; (void)r7;
+    (void)r8; (void)r9; (void)r10; (void)r11; (void)r12; (void)r13; (void)r14; (void)r15;
     
     int64_t _user_ret = (int64_t)_cron_user_main();
     printf("[CRON Native C23 Engine] User Main Returned: %lld\n", (long long)_user_ret);

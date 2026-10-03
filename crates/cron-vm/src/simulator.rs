@@ -405,6 +405,13 @@ impl Simulator {
     }
 
     pub fn step(&mut self) -> bool {
+        if self.cores[0].is_halted || self.cores.iter().all(|c| c.is_halted) {
+            return false;
+        }
+        if self.stats.total_cycles >= 10_000_000 {
+            return false;
+        }
+
         let is_multicore = self.core_instructions.iter().any(|s| !s.is_empty());
 
         if is_multicore {
@@ -516,6 +523,10 @@ impl Simulator {
                 return false;
             }
             self.stats.total_cycles += 1;
+
+            if let Some(target) = self.cores[0].branch_target.take() {
+                self.step_index = target;
+            }
         } else {
             if self.step_index >= self.instructions.len() {
                 return false;
@@ -675,6 +686,14 @@ impl Simulator {
                     core.reversible_stack.clear();
                     core.arena_resets += 1;
                 }
+            }
+
+            // Dynamic Branching & Jump Target Resolution
+            if let Some(target) = self.cores[0].branch_target.take() {
+                let target_idx = self.instructions.iter()
+                    .position(|i| i.cycle == target)
+                    .unwrap_or(target);
+                self.step_index = target_idx;
             }
         }
 

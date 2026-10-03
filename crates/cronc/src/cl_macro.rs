@@ -31,6 +31,20 @@ pub enum MacroStmt {
     RecvNoc { dst_reg: u8 },
     /// Synchronize Core: `barrier`
     Barrier,
+    /// RMSNorm Normalization: `rmsnorm R_dst, R_src, R_scale`
+    RmsNorm { dst: u8, src: u8, scale_reg: u8 },
+    /// Streaming Flash Softmax: `flash_softmax R_dst, R_src`
+    FlashSoftmax { dst: u8, src: u8 },
+    /// Non-linear SiLU (Swish) Activation: `silu R_dst, R_src`
+    SiLU { dst: u8, src: u8 },
+    /// GELU Activation: `gelu R_dst, R_src`
+    GeLU { dst: u8, src: u8 },
+    /// State-Space Model Selective Scan: `ssm_scan R_dst, R_src, R_dt`
+    SsmScan { dst: u8, src: u8, dt_reg: u8 },
+    /// CORDIC Trigonometric Rotation: `cordic_rot R_dst, R_angle`
+    CordicRot { dst: u8, angle_reg: u8 },
+    /// Hardware Halt: `halt`
+    Halt,
     /// Loop block: `loop N { ... }`
     Loop { count: usize, body: Vec<MacroStmt> },
 }
@@ -164,6 +178,34 @@ impl MacroCompiler {
                     let slot = build_valid_slot("_SY", &format!("{:02X}0000", self.core_id));
                     self.emit_slot(slot);
                 }
+                MacroStmt::RmsNorm { dst, src, scale_reg } => {
+                    let slot = build_valid_slot("_RM", &format!("{:02X}{:02X}{:02X}", dst, src, scale_reg));
+                    self.emit_slot(slot);
+                }
+                MacroStmt::FlashSoftmax { dst, src } => {
+                    let slot = build_valid_slot("_SM", &format!("{:02X}{:02X}00", dst, src));
+                    self.emit_slot(slot);
+                }
+                MacroStmt::SiLU { dst, src } => {
+                    let slot = build_valid_slot("_SI", &format!("{:02X}{:02X}00", dst, src));
+                    self.emit_slot(slot);
+                }
+                MacroStmt::GeLU { dst, src } => {
+                    let slot = build_valid_slot("_GE", &format!("{:02X}{:02X}00", dst, src));
+                    self.emit_slot(slot);
+                }
+                MacroStmt::SsmScan { dst, src, dt_reg } => {
+                    let slot = build_valid_slot("_SS", &format!("{:02X}{:02X}{:02X}", dst, src, dt_reg));
+                    self.emit_slot(slot);
+                }
+                MacroStmt::CordicRot { dst, angle_reg } => {
+                    let slot = build_valid_slot("_CD", &format!("{:02X}{:02X}00", dst, angle_reg));
+                    self.emit_slot(slot);
+                }
+                MacroStmt::Halt => {
+                    let slot = build_valid_slot("!", "HL00#000");
+                    self.emit_slot(slot);
+                }
                 MacroStmt::Loop { count, body } => {
                     for _ in 0..*count {
                         self.compile_stmts(body);
@@ -260,6 +302,57 @@ pub fn parse_clm(source: &str) -> Result<Vec<MacroStmt>, String> {
             "barrier" | "sync" => {
                 stmts.push(MacroStmt::Barrier);
             }
+            "rmsnorm" => {
+                if tokens.len() >= 4 {
+                    let dst = parse_reg(tokens[1])?;
+                    let src = parse_reg(tokens[2])?;
+                    let scale_reg = parse_reg(tokens[3])?;
+                    stmts.push(MacroStmt::RmsNorm { dst, src, scale_reg });
+                } else if tokens.len() >= 3 {
+                    let dst = parse_reg(tokens[1])?;
+                    let src = parse_reg(tokens[2])?;
+                    stmts.push(MacroStmt::RmsNorm { dst, src, scale_reg: 0 });
+                }
+            }
+            "softmax" | "flash_softmax" => {
+                if tokens.len() >= 3 {
+                    let dst = parse_reg(tokens[1])?;
+                    let src = parse_reg(tokens[2])?;
+                    stmts.push(MacroStmt::FlashSoftmax { dst, src });
+                }
+            }
+            "silu" => {
+                if tokens.len() >= 3 {
+                    let dst = parse_reg(tokens[1])?;
+                    let src = parse_reg(tokens[2])?;
+                    stmts.push(MacroStmt::SiLU { dst, src });
+                }
+            }
+            "gelu" => {
+                if tokens.len() >= 3 {
+                    let dst = parse_reg(tokens[1])?;
+                    let src = parse_reg(tokens[2])?;
+                    stmts.push(MacroStmt::GeLU { dst, src });
+                }
+            }
+            "ssm_scan" | "mamba_step" => {
+                if tokens.len() >= 4 {
+                    let dst = parse_reg(tokens[1])?;
+                    let src = parse_reg(tokens[2])?;
+                    let dt_reg = parse_reg(tokens[3])?;
+                    stmts.push(MacroStmt::SsmScan { dst, src, dt_reg });
+                }
+            }
+            "cordic" | "cordic_rot" => {
+                if tokens.len() >= 3 {
+                    let dst = parse_reg(tokens[1])?;
+                    let angle_reg = parse_reg(tokens[2])?;
+                    stmts.push(MacroStmt::CordicRot { dst, angle_reg });
+                }
+            }
+            "halt" => {
+                stmts.push(MacroStmt::Halt);
+            }
             _ => {
                 // Check for R0 = R1 + R2
                 if tokens.len() >= 5 && tokens[1] == "=" {
@@ -289,3 +382,40 @@ fn parse_imm(token: &str) -> Result<u16, String> {
         t.parse::<u16>().map_err(|_| format!("Invalid decimal imm: {}", token))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ai_macro_compilation() {
+        let clm_source = "
+            let R1 = 0x100
+            let R2 = 0x200
+            rmsnorm R3, R1, R2
+            flash_softmax R4, R3
+            silu R5, R4
+            gelu R6, R5
+            ssm_scan R7, R6, R2
+            cordic_rot R8, R1
+            halt
+        ";
+
+        let stmts = parse_clm(clm_source).expect("Failed to parse AI macro DSL");
+        assert_eq!(stmts.len(), 9);
+
+        let mut compiler = MacroCompiler::new(0);
+        compiler.compile_stmts(&stmts);
+        let bundle_output = compiler.finish();
+
+        assert!(bundle_output.contains("B0000:"), "Should generate valid B0000 bundle");
+        assert!(bundle_output.contains("_RM"), "Should emit RMSNorm opcode slot");
+        assert!(bundle_output.contains("_SM"), "Should emit Softmax opcode slot");
+        assert!(bundle_output.contains("_SI"), "Should emit SiLU opcode slot");
+        assert!(bundle_output.contains("_GE"), "Should emit GeLU opcode slot");
+        assert!(bundle_output.contains("_SS"), "Should emit SSM scan opcode slot");
+        assert!(bundle_output.contains("_CD"), "Should emit CORDIC opcode slot");
+        assert!(bundle_output.contains("!HL"), "Should emit Halt opcode slot");
+    }
+}
+

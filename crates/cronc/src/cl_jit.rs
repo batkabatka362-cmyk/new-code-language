@@ -39,6 +39,10 @@ pub struct ClJitCore {
     pub softmax_sum: f32,
     pub ssm_state: [f32; 16],
     pub ai_isa_ops_count: usize,
+    // Branching & Scratchpad SRAM
+    pub branch_target: Option<usize>,
+    pub ras: Vec<usize>,
+    pub dmem: Vec<u32>,
 }
 
 impl ClJitCore {
@@ -72,6 +76,9 @@ impl ClJitCore {
             softmax_sum: 0.0f32,
             ssm_state: [0.0f32; 16],
             ai_isa_ops_count: 0,
+            branch_target: None,
+            ras: Vec::new(),
+            dmem: vec![0u32; 16384],
         }
     }
 
@@ -98,12 +105,26 @@ impl Default for ClJitCore {
 fn parse_imm_val(slot: &str) -> Option<u32> {
     if slot.len() == 10 {
         if let Some(hash_pos) = slot.find('#') {
-            let hex_part: String = slot[hash_pos + 1..]
+            let part3: String = slot[hash_pos + 1..]
                 .chars()
                 .take(3)
                 .take_while(|c| c.is_ascii_hexdigit())
                 .collect();
-            u32::from_str_radix(&hex_part, 16).ok()
+            let v3 = u32::from_str_radix(&part3, 16).ok();
+
+            // If v3 is Some(0) or empty, but 4 characters exist and parse to non-zero,
+            // support 4-hex-digit immediate/targets like #0003 or #0001
+            let part4: String = slot[hash_pos + 1..]
+                .chars()
+                .take(4)
+                .take_while(|c| c.is_ascii_hexdigit())
+                .collect();
+            if let Ok(v4) = u32::from_str_radix(&part4, 16) {
+                if v3 == Some(0) && v4 > 0 {
+                    return Some(v4);
+                }
+            }
+            v3
         } else {
             let chars: Vec<char> = slot.chars().collect();
             chars[8].to_digit(16)
@@ -152,13 +173,9 @@ pub fn run_cl_jit(cl_code: &str) -> Result<ClJitCore, String> {
 }
 
 pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), String> {
-    let mut bundle_count = 0;
+    let mut bundles: Vec<(usize, Vec<String>)> = Vec::new();
 
     for line in cl_code.lines() {
-        if core.is_halted {
-            break;
-        }
-
         let trimmed = line.trim();
         if trimmed.starts_with(".weights") {
             if let Ok(binding) = crate::cl_lang::parse_weights_directive(trimmed) {
@@ -177,21 +194,42 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
             continue;
         }
 
-        if let Some((_cycle_part, slots_part)) = trimmed.split_once(':') {
-            bundle_count += 1;
-            core.cycle_count += 1;
+        if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
+            let cycle_num = cycle_part.trim().trim_start_matches('B').parse::<usize>().unwrap_or(bundles.len() + 1);
+            let slots: Vec<String> = slots_part.split_whitespace().map(|s| s.to_string()).collect();
+            bundles.push((cycle_num, slots));
+        }
+    }
 
-            for slot_str in slots_part.split_whitespace() {
-                if core.is_halted {
-                    break;
-                }
+    if bundles.is_empty() {
+        return Err("No valid VLIW bundles found in .cl code to execute".to_string());
+    }
+
+    let mut pc = 0;
+    let mut total_cycles = 0;
+
+    while pc < bundles.len() && !core.is_halted && total_cycles < 10_000_000 {
+        total_cycles += 1;
+        core.cycle_count += 1;
+        let (cycle_num, ref slots) = bundles[pc];
+
+        for slot_str in slots {
+            if core.is_halted {
+                break;
+            }
 
                 if let Ok(slot) = parse_slot(slot_str) {
                     if slot.opcode == "NO" {
                         continue;
                     }
 
-                    let d = slot.dest_reg.unwrap_or(0) % 16;
+                    let d = slot.dest_reg.unwrap_or_else(|| {
+                        if slot_str.len() >= 5 {
+                            usize::from_str_radix(&slot_str[3..5], 16).unwrap_or(0)
+                        } else {
+                            0
+                        }
+                    }) % 16;
                     let s = slot.src_reg.unwrap_or(0) % 16;
                     let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
                     let imm_val = parse_imm_val(slot_str).unwrap_or(imm_nibble as u32);
@@ -267,10 +305,15 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             core.r[d] = (core.r[s] << 8) | (imm_val & 0xFF);
                         }
                         "LD" => {
-                            let bank = s % 16;
-                            let offset = imm_nibble % 16;
-                            let b_val = core.bank_r[bank][offset];
-                            core.r[d] = if b_val != 0 { b_val } else { core.r[s] ^ (imm_val & 0xFFFF) };
+                            if slot.mode == '@' || slot.mode == ':' {
+                                let bank = s % 16;
+                                let offset = imm_nibble % 16;
+                                let b_val = core.bank_r[bank][offset];
+                                core.r[d] = if b_val != 0 { b_val } else { core.r[s] ^ (imm_val & 0xFFFF) };
+                            } else {
+                                let addr = (core.r[s].wrapping_add(imm_val) as usize) % 16384;
+                                core.r[d] = core.dmem[addr];
+                            }
                         }
                         "CP" => {
                             core.r[d] = core.r[s];
@@ -475,6 +518,21 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         "ZL" => {
                             core.zohl_counter = imm_val as usize;
                         }
+                        "PR" => {
+                            let ch = if slot.mode == '#' {
+                                let hex_str: String = slot.raw.chars().skip(6).take(2).filter(|c| c.is_ascii_hexdigit()).collect();
+                                if let Ok(val) = u8::from_str_radix(&hex_str, 16) {
+                                    val as char
+                                } else {
+                                    (imm_val as u8) as char
+                                }
+                            } else {
+                                (core.r[s] & 0xFF) as u8 as char
+                            };
+                            print!("{}", ch);
+                            use std::io::Write;
+                            let _ = std::io::stdout().flush();
+                        }
                         "TC" => {
                             core.trit_macs_count += 1;
                             core.esoteric_energy_pj += 0.05;
@@ -592,6 +650,64 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             let y = next_h + 0.05f32 * x;
                             core.r[d] = y.to_bits();
                         }
+                        "JP" => {
+                            core.branch_target = Some(imm_val as usize);
+                        }
+                        "BZ" => {
+                            let reg = if d > 0 { d } else { s };
+                            if core.r[reg] == 0 {
+                                core.branch_target = Some(imm_val as usize);
+                            }
+                        }
+                        "BN" => {
+                            let reg = if d > 0 { d } else { s };
+                            if core.r[reg] != 0 {
+                                core.branch_target = Some(imm_val as usize);
+                            }
+                        }
+                        "BL" | "LT" => {
+                            let reg = if d > 0 { d } else { s };
+                            if (core.r[reg] as i32) < 0 {
+                                core.branch_target = Some(imm_val as usize);
+                            }
+                        }
+                        "BG" => {
+                            let reg = if d > 0 { d } else { s };
+                            if (core.r[reg] as i32) > 0 {
+                                core.branch_target = Some(imm_val as usize);
+                            }
+                        }
+                        "JS" => {
+                            core.ras.push(cycle_num + 1);
+                            core.branch_target = Some(imm_val as usize);
+                        }
+                        "RT" => {
+                            if let Some(ret) = core.ras.pop() {
+                                core.branch_target = Some(ret);
+                            }
+                        }
+                        "SR" => {
+                            let src_r = if d > 0 { d } else { s };
+                            let base_r = if s > 0 && d > 0 { s } else { 0 };
+                            let addr = (core.r[base_r].wrapping_add(imm_val) as usize) % 16384;
+                            core.dmem[addr] = core.r[src_r];
+                        }
+                        "LB" => {
+                            let byte_addr = (core.r[s].wrapping_add(imm_val) as usize) % 65536;
+                            let word_idx = byte_addr / 4;
+                            let byte_shift = (byte_addr % 4) * 8;
+                            core.r[d] = (core.dmem[word_idx] >> byte_shift) & 0xFF;
+                        }
+                        "BY" => {
+                            let src_r = if d > 0 { d } else { s };
+                            let base_r = if s > 0 && d > 0 { s } else { 0 };
+                            let byte_addr = (core.r[base_r].wrapping_add(imm_val) as usize) % 65536;
+                            let word_idx = byte_addr / 4;
+                            let byte_shift = (byte_addr % 4) * 8;
+                            let mask = !(0xFF << byte_shift);
+                            let b_val = (core.r[src_r] & 0xFF) << byte_shift;
+                            core.dmem[word_idx] = (core.dmem[word_idx] & mask) | b_val;
+                        }
                         "HL" => {
                             core.is_halted = true;
                             return Ok(());
@@ -600,11 +716,13 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                     }
                 }
             }
-        }
-    }
 
-    if bundle_count == 0 {
-        return Err("No valid VLIW bundles found in .cl code to execute".to_string());
+        if let Some(target) = core.branch_target.take() {
+            let tgt_idx = bundles.iter().position(|(c, _)| *c == target).unwrap_or(target);
+            pc = tgt_idx;
+        } else {
+            pc += 1;
+        }
     }
 
     Ok(())
@@ -632,6 +750,28 @@ mod tests {
         assert_eq!(core.r[4], 0x20, "R4 (SB R1 - R2) should equal 0x20 (32)");
         assert_eq!(core.r[5], 0x60 * 0x20, "R5 (ML R3 * R4) should equal 96 * 32 = 3072");
         assert_eq!(core.r[6], core.r[5], "R6 (CP R5) should equal R5");
+    }
+
+    #[test]
+    fn test_cl_jit_branching_and_sram_loop() {
+        // Initialize R1 = 5, R2 = 1, R3 = 0
+        // Loop: R3 += R1, R1 -= 1, SRAM[0] = R3. Branch to B0003 if R1 == 0, else jump to B0001.
+        let code = r#"
+            B0000: '==01#0050 '==02#0010 '==03#0000 _NO00M0000
+            B0001: _AD03M3010 _SB01M1020 _SR03#0000 !BZ01#0003
+            B0002: !JP00#0001 _NO00M0000 _NO00M0000 _NO00M0000
+            B0003: _LD04#0000 !HL00#0000 _NO00M0000 _NO00M0000
+        "#;
+
+        let res = run_cl_jit(code);
+        assert!(res.is_ok(), "JIT loop execution failed: {:?}", res.err());
+        let core = res.unwrap();
+        assert!(core.is_halted, "Core should be halted");
+        assert_eq!(core.r[1], 0, "Counter R1 should reach 0");
+        // Sum 5 + 4 + 3 + 2 + 1 = 15
+        assert_eq!(core.r[3], 15, "Accumulator R3 should equal 15");
+        assert_eq!(core.dmem[0], 15, "SRAM[0] should store final accumulator 15");
+        assert_eq!(core.r[4], 15, "R4 loaded from SRAM[0] should equal 15");
     }
 }
 

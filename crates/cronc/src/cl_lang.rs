@@ -212,9 +212,15 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "SE", // Serotonin Neuromodulator Tap
     "NE", // Norepinephrine Neuromodulator Tap
     "RV", // Reversible Vector Transform
-    "LD", // Local PGAS Bank Load
+    "LD", // Local PGAS Bank Load / 64KB Scratchpad SRAM Load Word
+    "SR", // 64KB Scratchpad SRAM Store Register Word
+    "LB", // 64KB Scratchpad SRAM Load Byte
+    "BY", // 64KB Scratchpad SRAM Store Byte
+    "JS", // Jump to Subroutine (Call)
+    "LT", // Branch if Less Than Zero
     "CI", // Causal Intervention do(X = x) (Brain 1)
     "CF", // Counterfactual Abduction & Evaluation (Brain 1)
+    "PR", // Hardware Console / UART Character Print Output
     "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7",
     "M8", "M9", "MB", "MC", "ME", "MF", // Matrix Macro Opcodes
     // Accumulator & Activation Bank Macro Opcodes
@@ -362,9 +368,10 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
     let is_writer = opcode != "SH" && opcode != "RS" 
                  && opcode != "HL" && opcode != "DW" && opcode != "YD" && opcode != "NO"
                  && opcode != "JP" && opcode != "BZ" && opcode != "BN" && opcode != "BL" && opcode != "BG"
+                 && opcode != "LT" && opcode != "JS" && opcode != "SR" && opcode != "BY"
                  && opcode != "TI" && opcode != "TD" && opcode != "TW" && opcode != "ZL"
                  && opcode != "DE" && opcode != "DW" && opcode != "DN" && opcode != "DS"
-                 && opcode != "bb" && opcode != "BB" && opcode != "RT" && opcode != "FE";
+                 && opcode != "bb" && opcode != "BB" && opcode != "RT" && opcode != "FE" && opcode != "PR";
     let dest_reg = if is_writer {
         usize::from_str_radix(&dest_str, 16).ok()
     } else {

@@ -408,15 +408,16 @@ pub fn compile_source(source: &str) -> Result<String, String> {
     compile_source_with_name(source, None)
 }
 
-pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Result<String, String> {
+pub fn compile_source_with_color(source: &str, file_label: Option<&str>, use_color: bool) -> Result<String, String> {
     let mut lexer = Lexer::new(source);
     let tokens = match lexer.tokenize() {
         Ok(t) => t,
         Err(e) => {
-            let diag = Diagnostic::new("E0001", &e, 1, 1)
+            let (l, c) = extract_line_col_from_err(&e);
+            let diag = Diagnostic::new("E0001", &e, l, c)
                 .with_source(source)
                 .with_help("Check EBNF grammar syntax rules in docs/cron_spec.md");
-            return Err(diag.render(file_label));
+            return Err(diag.render_colored(file_label, use_color));
         }
     };
 
@@ -424,10 +425,17 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
     let mut program = match parser.parse_program() {
         Ok(p) => p,
         Err(e) => {
-            let diag = Diagnostic::new("E0001", &e, 1, 1)
+            let (l, c) = extract_line_col_from_err(&e);
+            let mut diag = Diagnostic::new("E0001", &e, l, c)
                 .with_source(source)
                 .with_help("Verify module declaration, matching braces and parentheses");
-            return Err(diag.render(file_label));
+            for word in e.split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() >= 2) {
+                if let Some(sug) = crate::diagnostic::did_you_mean(word, crate::diagnostic::CRON_KEYWORDS) {
+                    diag = diag.with_suggestion(sug, format!("did you mean keyword '{}'?", sug));
+                    break;
+                }
+            }
+            return Err(diag.render_colored(file_label, use_color));
         }
     };
 
@@ -446,7 +454,7 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
         if let Some(help) = type_err.help {
             diag = diag.with_help(help);
         }
-        return Err(diag.render(file_label));
+        return Err(diag.render_colored(file_label, use_color));
     }
 
     // SSS+ Optimization Pipeline (runs after validation)
@@ -457,6 +465,10 @@ pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Resul
     let machine_code = codegen.generate(&program);
 
     Ok(machine_code)
+}
+
+pub fn compile_source_with_name(source: &str, file_label: Option<&str>) -> Result<String, String> {
+    compile_source_with_color(source, file_label, false)
 }
 
 /// Compile source code, then apply FDO-guided recompilation using the given profile.

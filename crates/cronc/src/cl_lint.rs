@@ -208,7 +208,10 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
                 match parsed.opcode.as_str() {
                     "OP" | "MD" | "TT" => bundle_power += 25.0, // High-TDP matrix/optical
                     "WD" | "SM" | "CD" => bundle_power += 18.0,
+                    "RM" | "SS" | "SI" | "GE" => bundle_power += 12.0, // Dedicated AI Silicon ISA
+                    "TM" | "TC" => bundle_power += 3.0, // Multiplier-free ternary MAC
                     "ST" | "LF" | "LI" => bundle_power += 8.0,
+                    "TX" | "WH" | "bb" => bundle_power += 10.0, // NoC 4D-Torus packet routing
                     "NO" => bundle_power += 0.5,
                     _ => bundle_power += 4.0,
                 }
