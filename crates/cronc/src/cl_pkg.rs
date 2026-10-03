@@ -636,6 +636,118 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
     );
     fs::write(target_dir.join("torus_allreduce.cl"), torus_code).map_err(|e| e.to_string())?;
 
+    // 33. backprop_gemm.cl
+    let backprop_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/backprop_gemm.cl\n\
+         @kernel backprop_gradient_gemm\n\
+         .target silicon.ai_training\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#040"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "MD05M304"), build_valid_slot("_", "GU06M305"), build_valid_slot("_", "SR06M100"), build_valid_slot("_", "OP07M403")]),
+        format_bundle(2, &[build_valid_slot("~", "RM08M700"), build_valid_slot("_", "ST09M800"), build_valid_slot("_", "TX0AM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("backprop_gemm.cl"), backprop_code).map_err(|e| e.to_string())?;
+
+    // 34. stdp_online_learning.cl
+    let stdp_online_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/stdp_online_learning.cl\n\
+         @kernel stdp_synaptic_plasticity_growth\n\
+         .target silicon.neuromorphic_core\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#00A"), build_valid_slot("'", "==02#014"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "SB04M201")]),
+        format_bundle(1, &[build_valid_slot("_", "ST05M304"), build_valid_slot("_", "DA06M500"), build_valid_slot("_", "SR05M100"), build_valid_slot("_", "LI07M500")]),
+        format_bundle(2, &[build_valid_slot("_", "LF08M700"), build_valid_slot("~", "RM09M800"), build_valid_slot("_", "TX0AM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("stdp_online_learning.cl"), stdp_online_code).map_err(|e| e.to_string())?;
+
+    // 35. adam_momentum_step.cl
+    let adam_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/adam_momentum_step.cl\n\
+         @kernel in_silicon_adam_momentum\n\
+         .target silicon.ai_training\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#005"), build_valid_slot("'", "==02#100"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
+        format_bundle(1, &[build_valid_slot("_", "PO05M301"), build_valid_slot("_", "ML06M101"), build_valid_slot("_", "SR05M100"), build_valid_slot("_", "SR06M200")]),
+        format_bundle(2, &[build_valid_slot("_", "SQ07M600"), build_valid_slot("_", "GU08M405"), build_valid_slot("_", "SR08M000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("adam_momentum_step.cl"), adam_code).map_err(|e| e.to_string())?;
+
+    // 36. zero_dram_reversible_backprop.cl
+    let zero_dram_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/zero_dram_reversible_backprop.cl\n\
+         @kernel zero_dram_reversible_autodiff\n\
+         .target silicon.reversible_logic\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#3F8"), build_valid_slot("'", "==02#100"), build_valid_slot("~", "RF03M102"), build_valid_slot("~", "TO04M300")]),
+        format_bundle(1, &[build_valid_slot("~", "BK05M400"), build_valid_slot("_", "GU06M501"), build_valid_slot("~", "RV07M600"), build_valid_slot("_", "RS08M000")]),
+        format_bundle(2, &[build_valid_slot("~", "RM09M700"), build_valid_slot("_", "ST0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("zero_dram_reversible_backprop.cl"), zero_dram_code).map_err(|e| e.to_string())?;
+
+    // 37. fast_packet_router.cl
+    let packet_router_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/fast_packet_router.cl\n\
+         @kernel zero_copy_packet_router\n\
+         .target silicon.4d_torus\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#000"), build_valid_slot("'", "==02#0FF"), build_valid_slot("_", "LB03M100"), build_valid_slot("_", "LB04M101")]),
+        format_bundle(1, &[build_valid_slot("_", "MA05M302"), build_valid_slot("_", "CO06M504"), build_valid_slot("_", "WH07M600"), build_valid_slot("_", "BY08M702")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("fast_packet_router.cl"), packet_router_code).map_err(|e| e.to_string())?;
+
+    // 38. dma_ring_buffer.cl
+    let dma_ring_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/dma_ring_buffer.cl\n\
+         @kernel lockfree_pcie_dma_ring\n\
+         .target silicon.hard_backend\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#000"), build_valid_slot("'", "==02#040"), build_valid_slot("'", "==03#03F"), build_valid_slot("'", "==04#010")]),
+        format_bundle(1, &[build_valid_slot("_", "CS05M204"), build_valid_slot("_", "SR05M100"), build_valid_slot("_", "LD06M500"), build_valid_slot("_", "SB07M600")]),
+        format_bundle(2, &[build_valid_slot("_", "bb08M700"), build_valid_slot("~", "RM09M800"), build_valid_slot("_", "TX0AM102"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("dma_ring_buffer.cl"), dma_ring_code).map_err(|e| e.to_string())?;
+
+    // 39. autonomous_agi_mind.cl
+    let agi_mind_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/autonomous_agi_mind.cl\n\
+         @kernel autonomous_cognitive_mind_loop\n\
+         .target silicon.autonomous_mind\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("_", "RX02M100"), build_valid_slot("_", "XO03M200"), build_valid_slot("_", "UN04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "OP05M400"), build_valid_slot("_", "CA06M500"), build_valid_slot("_", "DA07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("autonomous_agi_mind.cl"), agi_mind_code).map_err(|e| e.to_string())?;
+
     // Update libcl.toml
     let manifest_toml = "[package]\n\
          name = \"libcl\"\n\
@@ -676,7 +788,14 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
          rmsnorm_fast = \"libcl/rmsnorm_fast.cl\"\n\
          swiglu_gelu = \"libcl/swiglu_gelu.cl\"\n\
          speculative_verifier = \"libcl/speculative_verifier.cl\"\n\
-         torus_allreduce = \"libcl/torus_allreduce.cl\"\n";
+         torus_allreduce = \"libcl/torus_allreduce.cl\"\n\
+         backprop_gemm = \"libcl/backprop_gemm.cl\"\n\
+         stdp_online_learning = \"libcl/stdp_online_learning.cl\"\n\
+         adam_momentum_step = \"libcl/adam_momentum_step.cl\"\n\
+         zero_dram_reversible_backprop = \"libcl/zero_dram_reversible_backprop.cl\"\n\
+         fast_packet_router = \"libcl/fast_packet_router.cl\"\n\
+         dma_ring_buffer = \"libcl/dma_ring_buffer.cl\"\n\
+         autonomous_agi_mind = \"libcl/autonomous_agi_mind.cl\"\n";
     fs::write(target_dir.join("libcl.toml"), manifest_toml).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -694,7 +813,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
     let libcl_dir = candidates.into_iter().find(|p| p.is_dir()).unwrap_or_else(|| workspace_root.join("libcl"));
     
     // Automatically populate official kernels if not present
-    let check_p = libcl_dir.join("torus_allreduce.cl");
+    let check_p = libcl_dir.join("autonomous_agi_mind.cl");
     if !check_p.exists() {
         let _ = generate_standard_libcl_files(&libcl_dir);
     }
@@ -734,6 +853,13 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("swiglu_gelu.cl", "Fused Non-Linear SwiGLU / GeLU Multi-Gated Channel Activation", "silicon.ai_isa", 4.0),
         ("speculative_verifier.cl", "Speculative Parallel Draft Token Verification & KV Rollback", "silicon.tree_reasoning", 4.0),
         ("torus_allreduce.cl", "256-Core 4D-Torus Dimension-Order Collective Ring AllReduce", "silicon.4d_torus", 4.0),
+        ("backprop_gemm.cl", "Reverse-Mode Matrix Contraction & Weight Gradient Step", "silicon.ai_training", 4.0),
+        ("stdp_online_learning.cl", "Living Spike-Timing-Dependent Plasticity Synaptic Weight Growth", "silicon.neuromorphic_core", 4.0),
+        ("adam_momentum_step.cl", "In-Silicon Fused Adam 1st/2nd Moment Vector Optimization", "silicon.ai_training", 4.0),
+        ("zero_dram_reversible_backprop.cl", "Zero-Entropy Reversible Activation Recomputation Backprop", "silicon.reversible_logic", 4.0),
+        ("fast_packet_router.cl", "Zero-Copy Network Packet Parser & 4D-Torus Wormhole Dispatcher", "silicon.4d_torus", 4.0),
+        ("dma_ring_buffer.cl", "Host PCIe to Scratchpad SRAM Lock-Free Asynchronous DMA Ring", "silicon.hard_backend", 4.0),
+        ("autonomous_agi_mind.cl", "Full Unified 6-Brain Autonomous Cognitive Mind Reasoning Loop", "silicon.autonomous_mind", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
@@ -936,12 +1062,23 @@ mod tests {
         assert!(temp_dir.join("swiglu_gelu.cl").exists());
         assert!(temp_dir.join("speculative_verifier.cl").exists());
         assert!(temp_dir.join("torus_allreduce.cl").exists());
+        assert!(temp_dir.join("backprop_gemm.cl").exists());
+        assert!(temp_dir.join("stdp_online_learning.cl").exists());
+        assert!(temp_dir.join("adam_momentum_step.cl").exists());
+        assert!(temp_dir.join("zero_dram_reversible_backprop.cl").exists());
+        assert!(temp_dir.join("fast_packet_router.cl").exists());
+        assert!(temp_dir.join("dma_ring_buffer.cl").exists());
+        assert!(temp_dir.join("autonomous_agi_mind.cl").exists());
         assert!(temp_dir.join("libcl.toml").exists());
 
-        // Audit the generated bitnet kernel
+        // Audit the generated bitnet and AGI mind kernels
         let bitnet_src = std::fs::read_to_string(temp_dir.join("bitnet_b158_gemv.cl")).unwrap();
         let audit = audit_cl_source(&bitnet_src, "libcl/bitnet_b158_gemv.cl");
         assert!(audit.passed, "BitNet kernel should pass silicon safety audit: {:?}", audit.diagnostics);
+
+        let agi_src = std::fs::read_to_string(temp_dir.join("autonomous_agi_mind.cl")).unwrap();
+        let agi_audit = audit_cl_source(&agi_src, "libcl/autonomous_agi_mind.cl");
+        assert!(agi_audit.passed, "Autonomous AGI Mind kernel should pass silicon safety audit: {:?}", agi_audit.diagnostics);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
