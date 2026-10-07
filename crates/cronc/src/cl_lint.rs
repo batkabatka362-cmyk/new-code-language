@@ -218,20 +218,6 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
 
                 // Intra-bundle RAW / WAW Register Contention
                 if parsed.opcode != "NO" && parsed.opcode != "HL" {
-                    if let Some(dest) = parsed.dest_reg {
-                        if bundle_writes.contains(&dest) {
-                            issues.push(ClLintIssue {
-                                cycle,
-                                slot_index: Some(s_idx),
-                                rule_id: "L005_INTRA_BUNDLE_WAW".to_string(),
-                                severity: LintSeverity::Error,
-                                message: format!("Multiple concurrent writes to Register R{:X} in same cycle", dest),
-                                recommendation: "Re-allocate target destination register".to_string(),
-                            });
-                        }
-                        bundle_writes.push(dest);
-                    }
-
                     if let Some(src) = parsed.src_reg {
                         if bundle_writes.contains(&src) && parsed.opcode != "==" {
                             issues.push(ClLintIssue {
@@ -244,6 +230,20 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
                             });
                         }
                         bundle_reads.push(src);
+                    }
+
+                    if let Some(dest) = parsed.dest_reg {
+                        if bundle_writes.contains(&dest) {
+                            issues.push(ClLintIssue {
+                                cycle,
+                                slot_index: Some(s_idx),
+                                rule_id: "L005_INTRA_BUNDLE_WAW".to_string(),
+                                severity: LintSeverity::Error,
+                                message: format!("Multiple concurrent writes to Register R{:X} in same cycle", dest),
+                                recommendation: "Re-allocate target destination register".to_string(),
+                            });
+                        }
+                        bundle_writes.push(dest);
                     }
                 }
             }

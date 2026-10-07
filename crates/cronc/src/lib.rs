@@ -141,7 +141,20 @@ pub mod cl_causal;
 pub mod cl_htm;
 pub mod cl_self_evolve;
 pub mod cl_lyapunov;
+pub mod cl_vectorizer;
+pub mod cl_rtl_export;
+pub mod cl_jit_accel;
 pub mod docgen;
+
+pub use cl_vectorizer::{
+    vectorize_pattern, pack_slots_into_vliw_bundles, VectorPattern, VectorizerConfig, VectorizerReport,
+};
+pub use cl_rtl_export::{
+    export_cl_to_rtl, RtlExportConfig, RtlExportPackage, RtlResourceEstimates, TargetFpgaPlatform,
+};
+pub use cl_jit_accel::{
+    run_accelerated_batch_jit, run_fast_jit, BatchJitReport,
+};
 
 pub use cl_compose::{
     compose_pipeline, render_composition_ascii_hud, CompositionStage,
