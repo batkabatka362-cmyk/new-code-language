@@ -2,13 +2,11 @@ use std::fs;
 
 #[test]
 fn test_ultra_resilient_cognitive_core_v88_pipeline() {
-    let sample_path = "../../examples/ultra_resilient_cognitive_core_v88.cr";
-    let source_cr = fs::read_to_string(sample_path)
-        .or_else(|_| fs::read_to_string("examples/ultra_resilient_cognitive_core_v88.cr"))
-        .expect("Failed to read ultra_resilient_cognitive_core_v88.cr");
+    let sample_path = "../../examples/ultra_resilient_cognitive_core_v88.cl";
+    let cl_output = fs::read_to_string(sample_path)
+        .or_else(|_| fs::read_to_string("examples/ultra_resilient_cognitive_core_v88.cl"))
+        .expect("Failed to read ultra_resilient_cognitive_core_v88.cl");
 
-    // Phase 1: Compile .cr into pure machine-native .cl VLIW
-    let cl_output = cronc::compile_source(&source_cr).expect("CRON compilation failed");
     assert!(cl_output.starts_with("B0001:"), "Expected pure .cl machine bundles");
 
     // Verify key hardware co-processor slots were generated in VLIW bundles

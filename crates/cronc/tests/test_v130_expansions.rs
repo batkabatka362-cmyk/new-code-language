@@ -9,8 +9,6 @@
 
 use std::fs;
 use std::path::PathBuf;
-use cronc::lexer::Lexer;
-use cronc::parser::Parser;
 use cronc::cl_pkg::audit_cl_source;
 use cronc::cl_jit::run_cl_jit;
 

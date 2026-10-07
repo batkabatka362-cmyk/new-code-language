@@ -748,10 +748,170 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
     );
     fs::write(target_dir.join("autonomous_agi_mind.cl"), agi_mind_code).map_err(|e| e.to_string())?;
 
+    // 40. sagi_cognitive_cycle.cl
+    let sagi_cycle_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/sagi_cognitive_cycle.cl\n\
+         @kernel sagi_neocortical_cycle\n\
+         .target silicon.sagi_cortex\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#080"), build_valid_slot("_", "RX02M100"), build_valid_slot("_", "XO03M200"), build_valid_slot("_", "UN04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "OP05M400"), build_valid_slot("_", "CA06M500"), build_valid_slot("_", "DA07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("sagi_cognitive_cycle.cl"), sagi_cycle_code).map_err(|e| e.to_string())?;
+
+    // 41. causal_graph_engine.cl
+    let causal_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/causal_graph_engine.cl\n\
+         @kernel pearl_do_calculus_engine\n\
+         .target silicon.causal_graph\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("_", "LB02M100"), build_valid_slot("_", "DO03M200"), build_valid_slot("_", "CF04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "MA05M400"), build_valid_slot("_", "CO06M500"), build_valid_slot("_", "WH07M600"), build_valid_slot("_", "BY08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("causal_graph_engine.cl"), causal_code).map_err(|e| e.to_string())?;
+
+    // 42. agentic_tool_reasoning.cl
+    let agentic_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/agentic_tool_reasoning.cl\n\
+         @kernel reflective_tool_dispatch\n\
+         .target silicon.agentic_core\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#020"), build_valid_slot("_", "TL02M100"), build_valid_slot("_", "AC03M200"), build_valid_slot("_", "EV04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "DS05M400"), build_valid_slot("_", "EX06M500"), build_valid_slot("_", "RF07M600"), build_valid_slot("_", "RT08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("agentic_tool_reasoning.cl"), agentic_code).map_err(|e| e.to_string())?;
+
+    // 43. tensor_shape_verifier.cl
+    let shape_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/tensor_shape_verifier.cl\n\
+         @kernel dynamic_shape_contract_verifier\n\
+         .target silicon.tensor_verifier\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("_", "SH02M100"), build_valid_slot("_", "DM03M200"), build_valid_slot("_", "RN04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "CK05M400"), build_valid_slot("_", "AS06M500"), build_valid_slot("_", "VL07M600"), build_valid_slot("_", "FL08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("tensor_shape_verifier.cl"), shape_code).map_err(|e| e.to_string())?;
+
+    // 44. epigenetic_memory_sleep.cl
+    let epi_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/epigenetic_memory_sleep.cl\n\
+         @kernel methylation_sleep_replay\n\
+         .target silicon.epigenetic_memory\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#008"), build_valid_slot("_", "ME02M100"), build_valid_slot("_", "TG03M200"), build_valid_slot("_", "SL04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "RP05M400"), build_valid_slot("_", "CN06M500"), build_valid_slot("_", "MY07M600"), build_valid_slot("_", "SY08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("epigenetic_memory_sleep.cl"), epi_code).map_err(|e| e.to_string())?;
+
+    // 45. autodiff_grad_descent.cl
+    let autodiff_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/autodiff_grad_descent.cl\n\
+         @kernel hardware_autodiff_step\n\
+         .target silicon.autodiff_gradient\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#005"), build_valid_slot("_", "GD02M100"), build_valid_slot("_", "PR03M200"), build_valid_slot("_", "LS04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "BK05M400"), build_valid_slot("_", "UP06M500"), build_valid_slot("_", "ST07M600"), build_valid_slot("_", "LR08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("autodiff_grad_descent.cl"), autodiff_code).map_err(|e| e.to_string())?;
+
+    // 46. neural_packet_router.cl
+    let router_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/neural_packet_router.cl\n\
+         @kernel torus_adt_packet_router\n\
+         .target silicon.4d_torus_router\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#064"), build_valid_slot("_", "RT02M100"), build_valid_slot("_", "PK03M200"), build_valid_slot("_", "PR04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "FL05M400"), build_valid_slot("_", "SW06M500"), build_valid_slot("_", "TX07M600"), build_valid_slot("_", "SP08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("neural_packet_router.cl"), router_code).map_err(|e| e.to_string())?;
+
+    // 47. baremetal_pgas_boot.cl
+    let pgas_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/baremetal_pgas_boot.cl\n\
+         @kernel baremetal_pgas_bootstrap\n\
+         .target silicon.baremetal_pgas\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("_", "BT02M100"), build_valid_slot("_", "PG03M200"), build_valid_slot("_", "BK04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "PW05M400"), build_valid_slot("_", "BS06M500"), build_valid_slot("_", "EN07M600"), build_valid_slot("_", "ST08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("baremetal_pgas_boot.cl"), pgas_code).map_err(|e| e.to_string())?;
+
+    // 48. metaplastic_bcm_adaptation.cl
+    let meta_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/metaplastic_bcm_adaptation.cl\n\
+         @kernel bcm_metaplastic_onsager\n\
+         .target silicon.alife_metabolism\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#200"), build_valid_slot("_", "BC02M100"), build_valid_slot("_", "TH03M200"), build_valid_slot("_", "ON04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "QN05M400"), build_valid_slot("_", "DP06M500"), build_valid_slot("_", "ST07M600"), build_valid_slot("_", "AD08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("metaplastic_bcm_adaptation.cl"), meta_code).map_err(|e| e.to_string())?;
+
+    // 49. time_reversible_rewind.cl
+    let rewind_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/time_reversible_rewind.cl\n\
+         @kernel zero_entropy_physics_rewind\n\
+         .target silicon.reversible_physics\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#000"), build_valid_slot("_", "RW02M100"), build_valid_slot("_", "ET03M200"), build_valid_slot("_", "DS04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "IV05M400"), build_valid_slot("_", "ST06M500"), build_valid_slot("_", "RC07M600"), build_valid_slot("_", "ZR08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("time_reversible_rewind.cl"), rewind_code).map_err(|e| e.to_string())?;
+
     // Update libcl.toml
     let manifest_toml = "[package]\n\
          name = \"libcl\"\n\
-         version = \"1.6.0\"\n\
+         version = \"1.7.0\"\n\
          description = \"CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon\"\n\
          authors = [\"CRON Language Architecture Team\"]\n\
          license = \"MIT OR Apache-2.0\"\n\
@@ -795,7 +955,17 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
          zero_dram_reversible_backprop = \"libcl/zero_dram_reversible_backprop.cl\"\n\
          fast_packet_router = \"libcl/fast_packet_router.cl\"\n\
          dma_ring_buffer = \"libcl/dma_ring_buffer.cl\"\n\
-         autonomous_agi_mind = \"libcl/autonomous_agi_mind.cl\"\n";
+         autonomous_agi_mind = \"libcl/autonomous_agi_mind.cl\"\n\
+         sagi_cognitive_cycle = \"libcl/sagi_cognitive_cycle.cl\"\n\
+         causal_graph_engine = \"libcl/causal_graph_engine.cl\"\n\
+         agentic_tool_reasoning = \"libcl/agentic_tool_reasoning.cl\"\n\
+         tensor_shape_verifier = \"libcl/tensor_shape_verifier.cl\"\n\
+         epigenetic_memory_sleep = \"libcl/epigenetic_memory_sleep.cl\"\n\
+         autodiff_grad_descent = \"libcl/autodiff_grad_descent.cl\"\n\
+         neural_packet_router = \"libcl/neural_packet_router.cl\"\n\
+         baremetal_pgas_boot = \"libcl/baremetal_pgas_boot.cl\"\n\
+         metaplastic_bcm_adaptation = \"libcl/metaplastic_bcm_adaptation.cl\"\n\
+         time_reversible_rewind = \"libcl/time_reversible_rewind.cl\"\n";
     fs::write(target_dir.join("libcl.toml"), manifest_toml).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -860,6 +1030,11 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("fast_packet_router.cl", "Zero-Copy Network Packet Parser & 4D-Torus Wormhole Dispatcher", "silicon.4d_torus", 4.0),
         ("dma_ring_buffer.cl", "Host PCIe to Scratchpad SRAM Lock-Free Asynchronous DMA Ring", "silicon.hard_backend", 4.0),
         ("autonomous_agi_mind.cl", "Full Unified 6-Brain Autonomous Cognitive Mind Reasoning Loop", "silicon.autonomous_mind", 4.0),
+        ("sagi_cognitive_cycle.cl", "SAGI Autonomous Neocortical Cognitive Cycle & Working Memory", "silicon.sagi_cortex", 4.0),
+        ("causal_graph_engine.cl", "Pearl Do-Calculus & Causal Knowledge Tensor Contraction", "silicon.causal_graph", 4.0),
+        ("agentic_tool_reasoning.cl", "Self-Reflective Agentic Tool Dispatch & Action Router", "silicon.agentic_core", 4.0),
+        ("tensor_shape_verifier.cl", "Static Tensor Dimension Verification & In-Silicon Bounds Checking", "silicon.tensor_verifier", 4.0),
+        ("epigenetic_memory_sleep.cl", "Epigenetic Methylation Tags & Offline Sleep Consolidation Replay", "silicon.epigenetic_memory", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
@@ -1069,6 +1244,11 @@ mod tests {
         assert!(temp_dir.join("fast_packet_router.cl").exists());
         assert!(temp_dir.join("dma_ring_buffer.cl").exists());
         assert!(temp_dir.join("autonomous_agi_mind.cl").exists());
+        assert!(temp_dir.join("sagi_cognitive_cycle.cl").exists());
+        assert!(temp_dir.join("causal_graph_engine.cl").exists());
+        assert!(temp_dir.join("agentic_tool_reasoning.cl").exists());
+        assert!(temp_dir.join("tensor_shape_verifier.cl").exists());
+        assert!(temp_dir.join("epigenetic_memory_sleep.cl").exists());
         assert!(temp_dir.join("libcl.toml").exists());
 
         // Audit the generated bitnet and AGI mind kernels

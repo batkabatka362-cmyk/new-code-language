@@ -335,3 +335,29 @@ fn test_cl_hard_backend_network() {
     assert_eq!(status_inf, 200);
     assert!(body_inf.contains("CRON_SILICON_SUCCESS"));
 }
+
+#[test]
+fn test_cl_standard_library_synthesis_and_expansion() {
+    let libcl_dir = std::path::Path::new("libcl");
+    let res = cronc::cl_pkg::generate_standard_libcl_files(libcl_dir);
+    assert!(res.is_ok(), "Failed to generate libcl standard files: {:?}", res.err());
+
+    let new_kernels = [
+        "sagi_cognitive_cycle.cl",
+        "causal_graph_engine.cl",
+        "agentic_tool_reasoning.cl",
+        "tensor_shape_verifier.cl",
+        "epigenetic_memory_sleep.cl",
+    ];
+
+    for name in &new_kernels {
+        let path = libcl_dir.join(name);
+        assert!(path.exists(), "Kernel '{}' must exist in libcl/", name);
+        let src = std::fs::read_to_string(&path).unwrap();
+        let audit = cronc::cl_pkg::audit_cl_source(&src, name);
+        assert!(audit.passed, "Kernel '{}' must pass audit: {:?}", name, audit.diagnostics);
+        let core = cronc::cl_jit::run_cl_jit(&src).unwrap();
+        assert!(core.cycle_count > 0);
+        assert!(core.is_halted);
+    }
+}

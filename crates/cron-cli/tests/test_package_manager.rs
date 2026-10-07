@@ -11,7 +11,6 @@ use cron_cli::pkg::{
     add_dependency_to_project, install_project_dependencies, remove_dependency_from_project,
     verify_project_integrity,
 };
-use cronc::compile_source;
 use std::fs;
 use std::path::Path;
 

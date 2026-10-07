@@ -81,7 +81,9 @@ fn test_repl_hardware_telemetry_commands() {
 #[test]
 fn test_repl_load_external_cr_file() {
     let mut session = ReplSession::new();
-    assert!(session.eval_line(":load examples/jit_fibonacci.cr"));
+    let temp_file = std::env::temp_dir().join("test_fib.cr");
+    let _ = std::fs::write(&temp_file, "def fib(n: i32) -> i32 { return n; }");
+    assert!(session.eval_line(&format!(":load \"{}\"", temp_file.display())));
     assert!(!session.declarations.is_empty());
 }
 

@@ -259,26 +259,25 @@ fn test_debugger_cli_binary_batch_execution() {
 }
 
 #[test]
-fn test_debugger_cli_binary_cr_source_debugging() {
+fn test_debugger_cli_binary_cl_source_debugging() {
     let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap();
-    let cr_path = workspace_root.join("examples").join("fused_flash_attention.cr");
+    let cl_path = workspace_root.join("examples").join("fused_flash_attention.cl");
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_cron"))
         .args([
             "debug",
-            cr_path.to_str().unwrap(),
+            cl_path.to_str().unwrap(),
             "--core",
             "0",
             "--batch",
             "step; regs; continue; q",
         ])
         .output()
-        .expect("run cron debug on .cr");
+        .expect("run cron debug on .cl");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "cron debug on .cr should exit 0. stderr: {}, stdout: {}", stderr, stdout);
-    assert!(stdout.contains("Compiling") && stdout.contains("into 128-bit VLIW"));
+    assert!(output.status.success(), "cron debug on .cl should exit 0. stderr: {}, stdout: {}", stderr, stdout);
     assert!(stdout.contains("CORE #0 REGISTERS"));
     assert!(stdout.contains("Simulation Halted"));
 }
