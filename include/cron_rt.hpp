@@ -555,6 +555,151 @@ public:
     }
 };
 
+// ----------------------------------------------------------------------------
+// 9. BitNet b1.58 Ternary GEMM & Dot Engine (Grade SSS+ Multiplier-Free)
+// ----------------------------------------------------------------------------
+
+class BitNet {
+public:
+    struct PackedMatrix {
+        std::vector<uint8_t> data;
+        float scale{1.0f};
+        int K{0};
+        int N{0};
+
+        size_t memory_bytes() const noexcept {
+            return data.size() * sizeof(uint8_t);
+        }
+
+        size_t fp32_equivalent_bytes() const noexcept {
+            return static_cast<size_t>(K) * static_cast<size_t>(N) * sizeof(float);
+        }
+
+        double compression_ratio() const noexcept {
+            size_t m = memory_bytes();
+            return m > 0 ? static_cast<double>(fp32_equivalent_bytes()) / static_cast<double>(m) : 0.0;
+        }
+
+        int bytes_per_row() const noexcept {
+            return (K + 3) / 4;
+        }
+
+        std::span<const uint8_t> row_bytes(int row_idx) const {
+            if (row_idx < 0 || row_idx >= N) {
+                throw std::out_of_range("BitNet: row_idx out of range");
+            }
+            size_t bpr = static_cast<size_t>(bytes_per_row());
+            return {data.data() + row_idx * bpr, bpr};
+        }
+
+        float forward_dot(std::span<const float> x_row, int row_idx) const {
+            if (row_idx < 0 || row_idx >= N) {
+                throw std::out_of_range("BitNet: row_idx out of range");
+            }
+            if (static_cast<int>(x_row.size()) < K) {
+                throw std::invalid_argument("BitNet: x_row buffer smaller than K");
+            }
+            auto r = row_bytes(row_idx);
+            return cron_bitnet_dot_f32(x_row.data(), r.data(), K, scale);
+        }
+
+        void forward_gemm(
+            std::span<const float> X,
+            std::span<float> Y,
+            int M,
+            const float* bias = nullptr
+        ) const {
+            if (static_cast<int>(X.size()) < M * K) {
+                throw std::invalid_argument("BitNet: X buffer size smaller than M * K");
+            }
+            if (static_cast<int>(Y.size()) < M * N) {
+                throw std::invalid_argument("BitNet: Y output buffer size smaller than M * N");
+            }
+            cron_bitnet_gemm_f32(X.data(), data.data(), bias, Y.data(), M, K, N, scale);
+        }
+
+        // Dequantize ternary weights back to FP32 for numerical comparison & verification
+        std::vector<float> dequantize() const {
+            std::vector<float> out(static_cast<size_t>(K) * static_cast<size_t>(N), 0.0f);
+            int bpr = bytes_per_row();
+            for (int n = 0; n < N; ++n) {
+                const uint8_t* r = data.data() + static_cast<size_t>(n) * bpr;
+                int k = 0;
+                int b_idx = 0;
+                while (k < K) {
+                    uint8_t byte_val = r[b_idx++];
+                    for (int b = 0; b < 4 && k < K; ++b, ++k) {
+                        uint8_t trit = (byte_val >> (b * 2)) & 3;
+                        float val = 0.0f;
+                        if (trit == 1) val = scale;
+                        else if (trit == 3) val = -scale;
+                        out[static_cast<size_t>(n) * K + k] = val;
+                    }
+                }
+            }
+            return out;
+        }
+    };
+
+    static PackedMatrix pack(std::span<const float> weights, int K, int N) {
+        if (K <= 0 || N <= 0) {
+            throw std::invalid_argument("BitNet::pack: dimensions K and N must be positive");
+        }
+        if (static_cast<int>(weights.size()) < K * N) {
+            throw std::invalid_argument("BitNet::pack: input weights buffer too small");
+        }
+        PackedMatrix matrix;
+        matrix.K = K;
+        matrix.N = N;
+        int bpr = (K + 3) / 4;
+        matrix.data.resize(static_cast<size_t>(N) * static_cast<size_t>(bpr), 0);
+
+        cron_pack_trits_b158(weights.data(), matrix.data.data(), &matrix.scale, K, N);
+        return matrix;
+    }
+
+    static void gemm(
+        std::span<const float> X,
+        std::span<const uint8_t> W_packed,
+        std::span<float> Y,
+        int M, int K, int N,
+        float scale,
+        const float* bias = nullptr
+    ) {
+        if (M <= 0 || K <= 0 || N <= 0) {
+            throw std::invalid_argument("BitNet::gemm: dimensions M, K, N must be positive");
+        }
+        if (static_cast<int>(X.size()) < M * K) {
+            throw std::invalid_argument("BitNet::gemm: X buffer size smaller than M * K");
+        }
+        size_t min_w = static_cast<size_t>(N) * static_cast<size_t>((K + 3) / 4);
+        if (W_packed.size() < min_w) {
+            throw std::invalid_argument("BitNet::gemm: W_packed buffer smaller than required");
+        }
+        if (static_cast<int>(Y.size()) < M * N) {
+            throw std::invalid_argument("BitNet::gemm: Y output buffer smaller than M * N");
+        }
+        cron_bitnet_gemm_f32(X.data(), W_packed.data(), bias, Y.data(), M, K, N, scale);
+    }
+
+    static float dot(
+        std::span<const float> X,
+        std::span<const uint8_t> W_packed_row,
+        int K,
+        float scale
+    ) {
+        if (K <= 0) return 0.0f;
+        if (static_cast<int>(X.size()) < K) {
+            throw std::invalid_argument("BitNet::dot: X vector size smaller than K");
+        }
+        size_t min_bytes = static_cast<size_t>((K + 3) / 4);
+        if (W_packed_row.size() < min_bytes) {
+            throw std::invalid_argument("BitNet::dot: W_packed_row buffer smaller than required");
+        }
+        return cron_bitnet_dot_f32(X.data(), W_packed_row.data(), K, scale);
+    }
+};
+
 } // namespace cron
 
 #endif /* CRON_RT_HPP */

@@ -92,7 +92,7 @@ CRON_EXPORT void cron_pack_trits_b158(
 ) {
     init_bitnet_tables();
     int total_elements = K * N;
-    if (total_elements <= 0) {
+    if (total_elements <= 0 || K <= 0 || N <= 0) {
         if (scale_out) *scale_out = 1.0f;
         return;
     }
@@ -106,26 +106,28 @@ CRON_EXPORT void cron_pack_trits_b158(
     if (scale_out) *scale_out = scale;
 
     float threshold = scale * 0.5f;
+    const int bytes_per_row = (K + 3) / 4;
 
-    int packed_idx = 0;
-    int i = 0;
-    while (i < total_elements) {
-        uint8_t byte_val = 0;
-        for (int b = 0; b < 4; ++b) {
-            int idx = i + b;
-            uint8_t trit_code = 0;
-            if (idx < total_elements) {
-                float val = W[idx];
+    for (int n = 0; n < N; ++n) {
+        const float* row_in = W + (size_t)n * K;
+        uint8_t* row_out = W_packed + (size_t)n * bytes_per_row;
+        int k = 0;
+        int b_idx = 0;
+        while (k < K) {
+            uint8_t byte_val = 0;
+            for (int b = 0; b < 4 && (k + b) < K; ++b) {
+                float val = row_in[k + b];
+                uint8_t trit_code = 0;
                 if (val > threshold) {
                     trit_code = 1; // +1
                 } else if (val < -threshold) {
                     trit_code = 3; // -1 (0b11)
                 }
+                byte_val |= (uint8_t)(trit_code << (b * 2));
             }
-            byte_val |= (uint8_t)(trit_code << (b * 2));
+            row_out[b_idx++] = byte_val;
+            k += 4;
         }
-        W_packed[packed_idx++] = byte_val;
-        i += 4;
     }
 }
 
@@ -240,6 +242,17 @@ CRON_EXPORT void cron_bitnet_gemm_f32(
             Y[(size_t)m * N + n] = acc;
         }
     }
+}
+
+CRON_EXPORT float cron_bitnet_dot_f32(
+    const float* X,
+    const uint8_t* W_packed_row,
+    int K,
+    float scale
+) {
+    if (!X || !W_packed_row || K <= 0) return 0.0f;
+    init_bitnet_tables();
+    return compute_dot_row_avx2(X, W_packed_row, K) * scale;
 }
 
 // ----------------------------------------------------------------------------

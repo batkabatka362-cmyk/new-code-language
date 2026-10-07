@@ -65,6 +65,24 @@ CRON_EXPORT void cron_bitnet_gemm_f32(
 );
 
 /**
+ * Single-vector multiplier-free BitNet b1.58 Ternary Dot Product:
+ * Computes dot(X, W_row) * scale
+ * Ideal for ultra-low-latency single-token autoregressive decoding.
+ * 
+ * @param X              Input activations vector of length K (FP32)
+ * @param W_packed_row   Packed ternary weights for one row of length (K + 3) / 4 bytes
+ * @param K              Number of elements
+ * @param scale          Ternary dequantization scale factor
+ * @return               Resulting scalar float
+ */
+CRON_EXPORT float cron_bitnet_dot_f32(
+    const float* X,
+    const uint8_t* W_packed_row,
+    int K,
+    float scale
+);
+
+/**
  * RingTape O(1) Streaming FlashAttention Kernel:
  * Circular sliding-window multi-head attention without dynamic heap reallocation.
  * 
