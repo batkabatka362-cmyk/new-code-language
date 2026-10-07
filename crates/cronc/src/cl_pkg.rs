@@ -908,10 +908,58 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
     );
     fs::write(target_dir.join("time_reversible_rewind.cl"), rewind_code).map_err(|e| e.to_string())?;
 
+    // 50. cognitive_transformer_snn.cl
+    let trans_snn_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/cognitive_transformer_snn.cl\n\
+         @kernel hybrid_transformer_snn_autograd\n\
+         .target silicon.hybrid_transformer_snn\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("_", "AT02M100"), build_valid_slot("_", "SN03M200"), build_valid_slot("_", "SG04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "RM05M400"), build_valid_slot("_", "LF06M500"), build_valid_slot("_", "SP07M600"), build_valid_slot("_", "GD08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("cognitive_transformer_snn.cl"), trans_snn_code).map_err(|e| e.to_string())?;
+
+    // 51. torus_csp_pipeline.cl
+    let torus_csp_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/torus_csp_pipeline.cl\n\
+         @kernel torus_csp_stream_pipeline\n\
+         .target silicon.torus_csp_pipeline\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#050"), build_valid_slot("_", "CS02M100"), build_valid_slot("_", "CH03M200"), build_valid_slot("_", "TR04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "PR05M400"), build_valid_slot("_", "CN06M500"), build_valid_slot("_", "AW07M600"), build_valid_slot("_", "MH08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("torus_csp_pipeline.cl"), torus_csp_code).map_err(|e| e.to_string())?;
+
+    // 52. sagi_superintelligence_e2e.cl
+    let sagi_e2e_code = format!(
+        "; CRON Standard Microcode Kernel: libcl/sagi_superintelligence_e2e.cl\n\
+         @kernel sovereign_sagi_superintelligence\n\
+         .target silicon.sagi_superintelligence\n\
+         .ipc_target 4.0\n\
+         \n\
+         {}\n\
+         {}\n\
+         {}\n",
+        format_bundle(0, &[build_valid_slot("'", "==01#999"), build_valid_slot("_", "SG02M100"), build_valid_slot("_", "BC03M200"), build_valid_slot("_", "TH04M300")]),
+        format_bundle(1, &[build_valid_slot("_", "MZ05M400"), build_valid_slot("_", "DC06M500"), build_valid_slot("_", "OP07M600"), build_valid_slot("_", "UN08M700")]),
+        format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
+    );
+    fs::write(target_dir.join("sagi_superintelligence_e2e.cl"), sagi_e2e_code).map_err(|e| e.to_string())?;
+
     // Update libcl.toml
     let manifest_toml = "[package]\n\
          name = \"libcl\"\n\
-         version = \"1.7.0\"\n\
+         version = \"1.8.0\"\n\
          description = \"CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon\"\n\
          authors = [\"CRON Language Architecture Team\"]\n\
          license = \"MIT OR Apache-2.0\"\n\
@@ -965,7 +1013,10 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
          neural_packet_router = \"libcl/neural_packet_router.cl\"\n\
          baremetal_pgas_boot = \"libcl/baremetal_pgas_boot.cl\"\n\
          metaplastic_bcm_adaptation = \"libcl/metaplastic_bcm_adaptation.cl\"\n\
-         time_reversible_rewind = \"libcl/time_reversible_rewind.cl\"\n";
+         time_reversible_rewind = \"libcl/time_reversible_rewind.cl\"\n\
+         cognitive_transformer_snn = \"libcl/cognitive_transformer_snn.cl\"\n\
+         torus_csp_pipeline = \"libcl/torus_csp_pipeline.cl\"\n\
+         sagi_superintelligence_e2e = \"libcl/sagi_superintelligence_e2e.cl\"\n";
     fs::write(target_dir.join("libcl.toml"), manifest_toml).map_err(|e| e.to_string())?;
 
     Ok(())

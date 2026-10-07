@@ -13,7 +13,6 @@ use cronc::{
     ImportOptions, LoweringOptions,
 };
 use std::fs;
-use std::path::Path;
 
 #[test]
 fn test_safetensors_parser_and_quantization() {
@@ -227,12 +226,9 @@ fn test_generate_example_imported_model() {
         &[("q_act", &[1, 4])],
     );
 
-    // Attempt writing to examples if running from workspace root or crate root
-    let (target_onnx, target_cr) = if Path::new("examples").exists() {
-        (Path::new("examples/sample_transformer.onnx").to_path_buf(), Path::new("examples/imported_transformer_cell.cr").to_path_buf())
-    } else {
-        (Path::new("../../examples/sample_transformer.onnx").to_path_buf(), Path::new("../../examples/imported_transformer_cell.cr").to_path_buf())
-    };
+    let temp_dir = std::env::temp_dir();
+    let target_onnx = temp_dir.join("sample_transformer.onnx");
+    let target_cr = temp_dir.join("imported_transformer_cell.cr");
 
     let _ = fs::write(&target_onnx, &onnx_bytes);
 

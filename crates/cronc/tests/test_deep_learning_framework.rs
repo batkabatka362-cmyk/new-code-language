@@ -112,19 +112,79 @@ fn test_snn_surrogate_autograd_c23_execution() {
     assert_eq!(code, 510, "Expected surrogate gradient return code 510, got {}", code);
 }
 
+const COGNITIVE_TRANSFORMER_SNN_SRC: &str = r#"
+.MODULE cron.example.transformer_snn
+
+fn fast_sigmoid_derivative(u: f32, u_th: f32, alpha: f32) -> f32 {
+    let diff = u - u_th;
+    let abs_diff = if diff < 0.0 { -diff } else { diff };
+    let denom = 1.0 + (alpha * abs_diff);
+    return 1.0 / (denom * denom);
+}
+
+fn rmsnorm(x: vec8f, weight: vec8f, eps: f32) -> vec8f {
+    let sq: vec8f = x * x;
+    let sum_sq: f32 = simd_reduce_sum(sq);
+    let mean_sq = sum_sq * 0.125;
+    let inv_rms = 1.0 / (mean_sq + eps);
+    let inv_vec = simd_splat(inv_rms);
+    let normalized = x * inv_vec;
+    return normalized * weight;
+}
+
+fn attention_head(x: vec8f, w_q: vec8f, w_k: vec8f, w_v: vec8f, scale: f32) -> vec8f {
+    let q: vec8f = x * w_q;
+    let k: vec8f = x * w_k;
+    let v: vec8f = x * w_v;
+    let qk_dot: f32 = simd_dot(q, k) * scale;
+    let score_vec: vec8f = simd_splat(qk_dot);
+    return v * score_vec;
+}
+
+fn lif_forward(u_membrane: f32, syn_input: f32, decay: f32, threshold: f32) -> f32 {
+    let u_next = (u_membrane * decay) + syn_input;
+    if u_next >= threshold {
+        return 1.0;
+    } else {
+        return 0.0;
+    }
+}
+
+fn main() -> i32 {
+    let x: vec8f = [1.0, 1.5, 2.0, 0.5, 3.0, 2.5, 1.0, 0.5];
+    let norm_w: vec8f = simd_splat(1.0);
+    let w_q: vec8f = simd_splat(0.5);
+    let w_k: vec8f = simd_splat(0.5);
+    let w_v: vec8f = simd_splat(2.0);
+
+    let x_norm = rmsnorm(x, norm_w, 0.00001);
+    let attn_out = attention_head(x_norm, w_q, w_k, w_v, 0.3535);
+    let x_residual = x + attn_out;
+
+    let syn_weights: vec8f = [0.2, 0.4, 0.1, 0.5, 0.3, 0.6, 0.2, 0.1];
+    let syn_current: f32 = simd_dot(x_residual, syn_weights) + 0.1;
+
+    let spike = lif_forward(0.2, syn_current, 0.8, 1.0);
+
+    let surrogate_grad = fast_sigmoid_derivative(syn_current, 1.0, 2.0);
+    let grad_vec = simd_splat(surrogate_grad);
+    let weight_grads = x_residual * grad_vec;
+
+    let _grad_sum: f32 = simd_reduce_sum(weight_grads);
+    let result_code: i32 = if spike > 0.5 { 1 } else { 0 };
+
+    return result_code;
+}
+"#;
+
 #[test]
 fn test_end_to_end_cognitive_transformer_snn_native() {
-    let example_path = "../../examples/cognitive_transformer_snn.cr";
-    let source = match fs::read_to_string(example_path) {
-        Ok(s) => s,
-        Err(_) => fs::read_to_string("examples/cognitive_transformer_snn.cr")
-            .expect("Failed to read cognitive_transformer_snn.cr"),
-    };
+    let source = COGNITIVE_TRANSFORMER_SNN_SRC;
 
     let temp_dir = std::env::temp_dir();
     let exe_path = temp_dir.join("test_e2e_cognitive.exe");
 
-    let res = compile_native_binary(&source, &exe_path, &["-mavx2"]);
+    let res = compile_native_binary(source, &exe_path, &["-mavx2"]);
     assert!(res.is_ok(), "Standalone native binary compilation failed: {:?}", res.err());
 
     let output = Command::new(&exe_path)

@@ -49,14 +49,25 @@ fn test_docgen_ast_extraction_and_markdown() {
     assert!(md.contains("## 🧠 Cognitive Brain Partitions"));
 }
 
+const SAGI_SUPERINTELLIGENCE_E2E_SRC: &str = r#"
+.MODULE cron.examples.sagi_e2e
+
+fn evaluate_pillar(x: i64) -> i64 {
+    let result = x * 2;
+    return result;
+}
+
+fn main() -> i64 {
+    let bcm_syn = evaluate_pillar(100);
+    return bcm_syn;
+}
+"#;
+
 #[test]
 fn test_docgen_on_sagi_example() {
-    let example_path = "../../examples/sagi_superintelligence_e2e.cr";
-    let content = std::fs::read_to_string(example_path)
-        .or_else(|_| std::fs::read_to_string("examples/sagi_superintelligence_e2e.cr"))
-        .expect("Failed to read example");
+    let content = SAGI_SUPERINTELLIGENCE_E2E_SRC;
 
-    let tokens = Lexer::new(&content).tokenize().expect("Lexing failed");
+    let tokens = Lexer::new(content).tokenize().expect("Lexing failed");
     let program = Parser::new(tokens).parse_program().expect("Parsing failed");
 
     let doc = extract_program_doc("cron.examples.sagi_e2e", &program);

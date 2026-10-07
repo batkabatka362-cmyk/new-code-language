@@ -1,6 +1,6 @@
 [package]
 name = "libcl"
-version = "1.7.0"
+version = "1.8.0"
 description = "CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon"
 authors = ["CRON Language Architecture Team"]
 license = "MIT OR Apache-2.0"
@@ -55,3 +55,6 @@ neural_packet_router = "libcl/neural_packet_router.cl"
 baremetal_pgas_boot = "libcl/baremetal_pgas_boot.cl"
 metaplastic_bcm_adaptation = "libcl/metaplastic_bcm_adaptation.cl"
 time_reversible_rewind = "libcl/time_reversible_rewind.cl"
+cognitive_transformer_snn = "libcl/cognitive_transformer_snn.cl"
+torus_csp_pipeline = "libcl/torus_csp_pipeline.cl"
+sagi_superintelligence_e2e = "libcl/sagi_superintelligence_e2e.cl"
