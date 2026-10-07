@@ -1,4 +1,8 @@
 {
+  "python.defaultInterpreterPath": "C:/Users/local_ybjuj27/AppData/Local/Programs/Python/Python311/python.exe",
+  "python.analysis.extraPaths": [
+    "C:/Users/local_ybjuj27/AppData/Local/Programs/Python/Python311/Lib/site-packages"
+  ],
   "cron": {
     "lsp": {
       "serverPath": "c:\\Users\\local_ybjuj27\\Desktop\\new code language\\target\\release\\cron.exe"
