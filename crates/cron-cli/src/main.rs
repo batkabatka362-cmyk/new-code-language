@@ -8335,6 +8335,15 @@ fn handle_cl_transpile_command(args: &[String]) {
         if args[i] == "--target" && i + 1 < args.len() {
             target_str = args[i + 1].clone();
             i += 2;
+        } else if args[i] == "--c23" {
+            target_str = "c23".to_string();
+            i += 1;
+        } else if args[i] == "--wgsl" {
+            target_str = "wgsl".to_string();
+            i += 1;
+        } else if args[i] == "--ptx" {
+            target_str = "ptx".to_string();
+            i += 1;
         } else if args[i] == "-o" && i + 1 < args.len() {
             out_file = Some(args[i + 1].clone());
             i += 2;

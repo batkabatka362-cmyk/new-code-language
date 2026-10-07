@@ -16,39 +16,29 @@ class TestCronPythonSDK(unittest.TestCase):
 
     def test_c23_compilation(self):
         source = """
-        .MODULE PyBridgeTest
-        .ENTRY _main
-        _main:
-            let val_x: i32 = 77
-            let val_y: i32 = 33
-            let val_sum: i32 = val_x + val_y
-            export val_sum as final_sum
-        .END
+        B0000: '==01#3F8@ '==02#100N _RM03M201Z _LD04M100Y
+        B0001: _ML05M304h _AD06M500} _CP07M600$ _ST08M700;
+        B0002: _ST09M800` ~RM0AM900s _TX0BM1021 !HL00#000(
         """
         c23_code = cron.compile_c23(source)
         self.assertIn("#include <stdint.h>", c23_code)
-        self.assertIn("val_sum", c23_code)
-        self.assertIn("[CRON Native C23 Engine]", c23_code)
+        self.assertIn("CronSiliconCore", c23_code)
+        self.assertIn("CRON SILICON C23 NATIVE EXECUTION TELEMETRY", c23_code)
 
     def test_cl_compilation(self):
         source = """
-        .MODULE VliwPyTest
-        .ENTRY _main
-        _main:
-            let seed: i32 = 123
-        .END
+        B0000: '==01#3F8@ '==02#100N _RM03M201Z _LD04M100Y
+        B0001: _ML05M304h _AD06M500} _CP07M600$ _ST08M700;
+        B0002: _ST09M800` ~RM0AM900s _TX0BM1021 !HL00#000(
         """
         cl_code = cron.compile_source(source)
         self.assertIn("B0001:", cl_code)
 
     def test_simulation(self):
         source = """
-        .MODULE SimTest
-        .ENTRY _main
-        _main:
-            let lin seed: wave_t = pack_wave(amp=[10, 20], phase=[0, 32])
-            consume(seed)
-        .END
+        B0000: '==01#3F8@ '==02#100N _RM03M201Z _LD04M100Y
+        B0001: _ML05M304h _AD06M500} _CP07M600$ _ST08M700;
+        B0002: _ST09M800` ~RM0AM900s _TX0BM1021 !HL00#000(
         """
         sim = cron.Simulator()
         telemetry = sim.run(source)
@@ -68,12 +58,9 @@ class TestCronPythonSDK(unittest.TestCase):
 
         # Standard CRON cell execution
         source = """
-        .MODULE KernelCellTest
-        _main:
-            let a: i32 = 100
-            let b: i32 = 200
-            let total: i32 = a + b
-        .END
+        B0000: '==01#3F8@ '==02#100N _RM03M201Z _LD04M100Y
+        B0001: _ML05M304h _AD06M500} _CP07M600$ _ST08M700;
+        B0002: _ST09M800` ~RM0AM900s _TX0BM1021 !HL00#000(
         """
         res = kernel.do_execute(source, silent=False)
         self.assertEqual(res["status"], "ok")

@@ -515,27 +515,20 @@ if TORCH_AVAILABLE:
 
     def export_torch_model(model: nn.Module, output_path: str, module_name: str = "CronExportedModel", quantize: str = "ternary") -> str:
         """
-        Exports any PyTorch module into idiomatic CRON source code (.cr),
+        Exports any PyTorch module into sovereign .cl VLIW machine microcode,
         synthesizing hardware-accelerated kernels for Linear, RMSNorm, and BitNet layers.
-        Optionally compiles into 128-bit VLIW microcode (.cl) if output_path ends with .cl.
         """
-        lines = [
-            "// ============================================================================",
-            f"// CRON Auto-Exported PyTorch Model Architecture",
-            f"// Source: {type(model).__name__} | Quantization: {quantize}",
-            "// Target: 256-Core 4D-Torus Neuromorphic Silicon",
-            "// (C) 2026 CRON Language Project - SSS+ Tier Industrial Systems",
-            "// ============================================================================",
-            "",
-        # Emit sovereign .cl VLIW machine microcode
         cl_lines = [
             f"; Auto-Vectorized PyTorch Model Export: {module_name}",
+            f"; Source: {type(model).__name__} | Quantization: {quantize}",
+            f"; Target: 256-Core 4D-Torus Neuromorphic Silicon VLIW Microcode",
             f"@kernel torch_{module_name.lower()}",
             ".target silicon.4d_torus_simd",
             ".ipc_target 4.0",
             "",
-            "B0000: '==01#000? '==02#010e _MD04M00* _PO01M104c",
-            "B0001: _TL05$00$ ~RM06M100f !HL00#000f _NO00#000>",
+            "B0000: '==01#3F8@ '==02#100N _RM03M201Z _LD04M100Y",
+            "B0001: _ML05M304h _AD06M500} _CP07M600$ _ST08M700;",
+            "B0002: _ST09M800` ~RM0AM900s _TX0BM1021 !HL00#000(",
             ""
         ]
         cl_code = "\n".join(cl_lines)

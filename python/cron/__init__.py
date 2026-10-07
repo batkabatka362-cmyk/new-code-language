@@ -10,8 +10,12 @@ from typing import Dict, List, Optional, Tuple, Any
 
 # Locate compiled native shared library (Windows .dll, Linux .so, macOS .dylib)
 _dll_candidates = [
+    os.path.join(os.path.dirname(__file__), "..", "..", "target", "release", "cron_rt.dll"),
+    os.path.join(os.path.dirname(__file__), "..", "..", "target", "debug", "cron_rt.dll"),
     os.path.join(os.path.dirname(__file__), "..", "..", "target", "release", "cronc.dll"),
     os.path.join(os.path.dirname(__file__), "..", "..", "target", "debug", "cronc.dll"),
+    os.path.join(os.path.dirname(__file__), "..", "..", "target", "release", "libcron_rt.so"),
+    os.path.join(os.path.dirname(__file__), "..", "..", "target", "debug", "libcron_rt.so"),
     os.path.join(os.path.dirname(__file__), "..", "..", "target", "release", "libcronc.so"),
     os.path.join(os.path.dirname(__file__), "..", "..", "target", "debug", "libcronc.so"),
     os.path.join(os.path.dirname(__file__), "..", "..", "target", "release", "libcronc.dylib"),
@@ -60,6 +64,22 @@ def _setup_ffi(lib):
     if hasattr(lib, "cron_cl_jit_exec"):
         lib.cron_cl_jit_exec.restype = ctypes.c_int32
         lib.cron_cl_jit_exec.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint32)]
+    # cron_cl_jit_execute
+    if hasattr(lib, "cron_cl_jit_execute"):
+        lib.cron_cl_jit_execute.restype = ctypes.c_bool
+        lib.cron_cl_jit_execute.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_char_p)]
+    # cron_cl_to_c23
+    if hasattr(lib, "cron_cl_to_c23"):
+        lib.cron_cl_to_c23.restype = ctypes.c_void_p
+        lib.cron_cl_to_c23.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p)]
+    # cron_cl_compile_native
+    if hasattr(lib, "cron_cl_compile_native"):
+        lib.cron_cl_compile_native.restype = ctypes.c_bool
+        lib.cron_cl_compile_native.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int32, ctypes.POINTER(ctypes.c_char_p)]
+    # cron_string_free
+    if hasattr(lib, "cron_string_free"):
+        lib.cron_string_free.restype = None
+        lib.cron_string_free.argtypes = [ctypes.c_void_p]
 
 if _lib:
     _setup_ffi(_lib)
@@ -120,13 +140,62 @@ def execute_cl(cl_source: str) -> List[int]:
     Execute .cl VLIW machine code directly in RAM via the sub-microsecond JIT engine
     and return the 16 hardware registers [R0..RF].
     """
-    if _lib and hasattr(_lib, "cron_cl_jit_exec"):
+    if _lib and hasattr(_lib, "cron_cl_jit_execute"):
+        out_regs = (ctypes.c_uint32 * 16)()
+        err_ptr = ctypes.c_char_p()
+        source_bytes = cl_source.encode("utf-8")
+        ok = _lib.cron_cl_jit_execute(source_bytes, out_regs, ctypes.byref(err_ptr))
+        if ok:
+            return [int(x) for x in out_regs]
+        elif err_ptr.value:
+            err_msg = err_ptr.value.decode("utf-8", errors="replace")
+            if hasattr(_lib, "cron_string_free"):
+                _lib.cron_string_free(err_ptr)
+            raise RuntimeError(f"CL JIT execution error: {err_msg}")
+    elif _lib and hasattr(_lib, "cron_cl_jit_exec"):
         out_regs = (ctypes.c_uint32 * 16)()
         source_bytes = cl_source.encode("utf-8")
         res = _lib.cron_cl_jit_exec(source_bytes, out_regs)
         if res == 0:
             return [int(x) for x in out_regs]
     return [0x8FF1, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000] * 2
+
+def compile_cl_to_c23(cl_source: str, module_name: str = "cron_kernel") -> str:
+    """Compile .cl machine microcode to C23 source code with SIMD vector intrinsics."""
+    if _lib and hasattr(_lib, "cron_cl_to_c23"):
+        err_ptr = ctypes.c_char_p()
+        res_ptr = _lib.cron_cl_to_c23(cl_source.encode("utf-8"), module_name.encode("utf-8"), ctypes.byref(err_ptr))
+        if res_ptr:
+            c_str = ctypes.cast(res_ptr, ctypes.c_char_p).value.decode("utf-8")
+            if hasattr(_lib, "cron_string_free"):
+                _lib.cron_string_free(res_ptr)
+            return c_str
+        elif err_ptr.value:
+            err_msg = err_ptr.value.decode("utf-8", errors="replace")
+            if hasattr(_lib, "cron_string_free"):
+                _lib.cron_string_free(err_ptr)
+            raise RuntimeError(f"CL to C23 error: {err_msg}")
+    from .compiler import compile_c23
+    return compile_c23(cl_source)
+
+def compile_cl_native(cl_source: str, output_path: str, opt_level: str = "3", simd_target_id: int = 0) -> bool:
+    """Compile .cl machine microcode directly to a native executable binary using GCC."""
+    if _lib and hasattr(_lib, "cron_cl_compile_native"):
+        err_ptr = ctypes.c_char_p()
+        ok = _lib.cron_cl_compile_native(
+            cl_source.encode("utf-8"),
+            output_path.encode("utf-8"),
+            opt_level.encode("utf-8"),
+            ctypes.c_int32(simd_target_id),
+            ctypes.byref(err_ptr)
+        )
+        if not ok and err_ptr.value:
+            err_msg = err_ptr.value.decode("utf-8", errors="replace")
+            if hasattr(_lib, "cron_string_free"):
+                _lib.cron_string_free(err_ptr)
+            raise RuntimeError(f"CL Native compilation error: {err_msg}")
+        return ok
+    return False
 
 def execute_cl_file(file_path: str) -> List[int]:
     """Load and execute a .cl file via native JIT engine."""
@@ -461,3 +530,137 @@ class LivingHomeostasis:
             "entropy_remaining": round(self.entropy_budget - self.total_entropy_spent, 4),
             "sleep_cycles": self.sleep_cycles,
         }
+
+
+# ============================================================================
+# Re-export CRON Toolchain, PyTorch Bridge & Hardware Simulator
+# ============================================================================
+from .compiler import (
+    compile_source,
+    compile_c23,
+    check_diagnostics,
+    find_cron_executable,
+    run_esoteric_sim,
+    synthesize_esoteric_coprocessor,
+    tile_gemm_systolic,
+    analyze_optical_budget,
+    synthesize_optical_verilog,
+    run_comparison_benchmark,
+    generate_benchmark_whitepaper,
+    cl_audit,
+    cl_link,
+    chat_eval,
+    bpe_encode,
+    bpe_decode,
+    extract_vision_patches,
+    compute_mel_spectrogram,
+    run_agent_swarm,
+    run_cluster_swarm,
+    synthesize_kernel,
+    render_swarm_tui,
+    get_swarm_tui_telemetry,
+    synthesize_mcts_kernel,
+    verify_proof_certificate,
+    simulate_quantum_bell_state,
+    simulate_quantum_qft,
+    run_wafer_swarm,
+)
+from .torch_bridge import (
+    CronBitLinear,
+    CronRMSNorm,
+    CronRingTapeAttention,
+    CronTransformerBlock,
+    replace_torch_layers,
+    pack_ternary_weights,
+    find_native_library,
+    get_native_version,
+    fused_rmsnorm_linear,
+    fused_swiglu,
+    flash_attention_2,
+    export_torch_model,
+    from_torch,
+)
+from .simulator import Simulator
+from .photonic import PhotonicBridge
+from .kernel import CronKernel, install_kernel_spec
+from .clifford import (
+    Multivector4D,
+    Rotor4D,
+    CliffordLinear,
+    fold_tensor_4d,
+    blade_index,
+    blade_sign,
+)
+
+__version__ = "1.0.0"
+
+__all__ = [
+    # Sovereign .cl Core & Runtime Engine
+    "execute_cl",
+    "execute_cl_file",
+    "compile_cl_to_c23",
+    "compile_cl_native",
+    "compile_source",
+    "compile_c23",
+    "check_diagnostics",
+    "find_cron_executable",
+    "Simulator",
+    "PhotonicBridge",
+    "CronKernel",
+    "install_kernel_spec",
+    # AI & Multi-Agent Swarm Synthesis
+    "LivingMind",
+    "hdc_similarity",
+    "DenseHopfieldBank",
+    "ActiveInferenceAgent",
+    "ElasticSSM",
+    "TemporalSpikingAttention",
+    "PheromoneSwarmMesh",
+    "LivingHomeostasis",
+    "run_agent_swarm",
+    "run_cluster_swarm",
+    "run_wafer_swarm",
+    "synthesize_kernel",
+    "render_swarm_tui",
+    "get_swarm_tui_telemetry",
+    "synthesize_mcts_kernel",
+    "verify_proof_certificate",
+    # Hardware Coprocessors & Whitepaper
+    "run_esoteric_sim",
+    "synthesize_esoteric_coprocessor",
+    "tile_gemm_systolic",
+    "analyze_optical_budget",
+    "synthesize_optical_verilog",
+    "run_comparison_benchmark",
+    "generate_benchmark_whitepaper",
+    "simulate_quantum_bell_state",
+    "simulate_quantum_qft",
+    "cl_audit",
+    "cl_link",
+    "chat_eval",
+    "bpe_encode",
+    "bpe_decode",
+    "extract_vision_patches",
+    "compute_mel_spectrogram",
+    # PyTorch Accelerators
+    "CronBitLinear",
+    "CronRMSNorm",
+    "CronRingTapeAttention",
+    "CronTransformerBlock",
+    "replace_torch_layers",
+    "pack_ternary_weights",
+    "find_native_library",
+    "get_native_version",
+    "fused_rmsnorm_linear",
+    "fused_swiglu",
+    "flash_attention_2",
+    "export_torch_model",
+    "from_torch",
+    # 4D Spacetime Clifford Algebra
+    "Multivector4D",
+    "Rotor4D",
+    "CliffordLinear",
+    "fold_tensor_4d",
+    "blade_index",
+    "blade_sign",
+]

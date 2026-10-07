@@ -613,6 +613,148 @@ pub unsafe extern "C" fn cron_cl_audit(
 }
 
 // ----------------------------------------------------------------------------
+// 10.5. Sovereign .cl Machine Microcode C-ABI & Native SIMD Acceleration
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cl_to_c23(
+    cl_source: *const c_char,
+    module_name: *const c_char,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    if cl_source.is_null() {
+        return std::ptr::null_mut();
+    }
+    let src = match CStr::from_ptr(cl_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    let mod_name = if !module_name.is_null() {
+        CStr::from_ptr(module_name).to_str().unwrap_or("cron_kernel")
+    } else {
+        "cron_kernel"
+    };
+
+    match cronc::cl_c23::compile_cl_to_c23(src, mod_name) {
+        Ok(c_code) => {
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            CString::new(c_code).unwrap().into_raw()
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cl_compile_native(
+    cl_source: *const c_char,
+    output_binary_path: *const c_char,
+    opt_level: *const c_char,
+    simd_target_id: i32,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if cl_source.is_null() || output_binary_path.is_null() {
+        return false;
+    }
+    let src = match CStr::from_ptr(cl_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+    let out_bin = match CStr::from_ptr(output_binary_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Path UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+    let opt = if !opt_level.is_null() {
+        CStr::from_ptr(opt_level).to_str().unwrap_or("3")
+    } else {
+        "3"
+    };
+
+    let target = match simd_target_id {
+        1 => cronc::cl_c23::SimdTarget::Avx512,
+        2 => cronc::cl_c23::SimdTarget::Avx2,
+        3 => cronc::cl_c23::SimdTarget::Neon,
+        4 => cronc::cl_c23::SimdTarget::Generic,
+        _ => cronc::cl_c23::SimdTarget::Auto,
+    };
+
+    match cronc::cl_c23::compile_cl_to_native_binary_with_target(src, out_bin, opt, target) {
+        Ok(()) => {
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cl_jit_execute(
+    cl_source: *const c_char,
+    out_registers: *mut u32,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if cl_source.is_null() {
+        return false;
+    }
+    let src = match CStr::from_ptr(cl_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    match cronc::run_cl_jit(src) {
+        Ok(core) => {
+            if !out_registers.is_null() {
+                let slice = slice::from_raw_parts_mut(out_registers, 16);
+                slice.copy_from_slice(&core.r);
+            }
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
 

@@ -66,10 +66,13 @@ def compile_c23(source_code: str) -> str:
 
     out_c = in_path.replace(".cl", ".c")
     try:
-        cmd = [cron_exe, "cl-transpile", in_path, "--c23", "-o", out_c]
+        cmd = [cron_exe, "cl-c23", in_path, "-o", out_c]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
         if res.returncode != 0:
-            raise RuntimeError(f"CRON C23 transpilation error:\n{res.stderr or res.stdout}")
+            cmd = [cron_exe, "cl-transpile", in_path, "--target", "c23", "-o", out_c]
+            res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+            if res.returncode != 0:
+                raise RuntimeError(f"CRON C23 transpilation error:\n{res.stderr or res.stdout}")
         
         with open(out_c, "r", encoding="utf-8") as f_out:
             return f_out.read()

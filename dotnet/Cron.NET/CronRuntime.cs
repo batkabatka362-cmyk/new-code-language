@@ -126,6 +126,31 @@ namespace Cron.NET
         );
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr cron_cl_to_c23(
+            string clSource,
+            string moduleName,
+            out IntPtr outError
+        );
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_cl_compile_native(
+            string clSource,
+            string outputBinaryPath,
+            string optLevel,
+            int simdTargetId,
+            out IntPtr outError
+        );
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool cron_cl_jit_execute(
+            string clSource,
+            [Out] uint[] outRegisters,
+            out IntPtr outError
+        );
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr cron_bpe_create_default();
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -712,6 +737,45 @@ namespace Cron.NET
             string result = Marshal.PtrToStringAnsi(jsonPtr) ?? string.Empty;
             NativeMethods.cron_string_free(jsonPtr);
             return result;
+        }
+
+        public static string CompileClToC23(string clSource, string moduleName = "cron_kernel")
+        {
+            var ptr = NativeMethods.cron_cl_to_c23(clSource, moduleName, out var errPtr);
+            if (ptr == IntPtr.Zero)
+            {
+                string err = Marshal.PtrToStringAnsi(errPtr) ?? "CL to C23 compilation error";
+                NativeMethods.cron_string_free(errPtr);
+                throw new InvalidOperationException(err);
+            }
+            string result = Marshal.PtrToStringAnsi(ptr) ?? string.Empty;
+            NativeMethods.cron_string_free(ptr);
+            return result;
+        }
+
+        public static bool CompileClNative(string clSource, string outputPath, string optLevel = "3", int simdTarget = 0)
+        {
+            bool ok = NativeMethods.cron_cl_compile_native(clSource, outputPath, optLevel, simdTarget, out var errPtr);
+            if (!ok)
+            {
+                string err = Marshal.PtrToStringAnsi(errPtr) ?? "CL Native binary compilation error";
+                NativeMethods.cron_string_free(errPtr);
+                throw new InvalidOperationException(err);
+            }
+            return true;
+        }
+
+        public static uint[] ExecuteClJit(string clSource)
+        {
+            uint[] registers = new uint[16];
+            bool ok = NativeMethods.cron_cl_jit_execute(clSource, registers, out var errPtr);
+            if (!ok)
+            {
+                string err = Marshal.PtrToStringAnsi(errPtr) ?? "CL JIT execution error";
+                NativeMethods.cron_string_free(errPtr);
+                throw new InvalidOperationException(err);
+            }
+            return registers;
         }
     }
 

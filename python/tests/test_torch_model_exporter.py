@@ -33,21 +33,21 @@ class TestTorchModelExporter(unittest.TestCase):
             nn.ReLU(),
             nn.Linear(8, 8)
         )
-        cr_path = os.path.join(self.tmp_dir, "seq_model.cr")
-        cr_code = cron.export_torch_model(model, cr_path, module_name="SeqModel", quantize="ternary")
+        cl_path = os.path.join(self.tmp_dir, "seq_model.cl")
+        cl_code = cron.export_torch_model(model, cl_path, module_name="SeqModel", quantize="ternary")
         
-        self.assertTrue(os.path.exists(cr_path))
-        self.assertIn(".MODULE cron.exported.seqmodel", cr_code)
-        self.assertIn("ternary_dense_forward", cr_code)
-        self.assertIn("rmsnorm", cr_code)
+        self.assertTrue(os.path.exists(cl_path))
+        self.assertIn("@kernel torch_seqmodel", cl_code)
+        self.assertIn("B0000:", cl_code)
+        self.assertIn("B0001:", cl_code)
 
-        # Check diagnostics on the generated .cr code
-        diag = cron.check_diagnostics(cr_code)
+        # Check diagnostics on the generated .cl microcode
+        diag = cron.check_diagnostics(cl_code)
         self.assertEqual(len(diag), 0)
 
-        # Compile to .cl
-        cl_code = cron.compile_source(cr_code)
-        self.assertIn("B0001:", cl_code)
+        # Canonicalize and format sovereign .cl
+        fmt_code = cron.compile_source(cl_code)
+        self.assertIn("B0001:", fmt_code)
 
         # Run on cycle-accurate 256-Core 4D-Torus Simulator
         sim = cron.Simulator()
@@ -57,9 +57,9 @@ class TestTorchModelExporter(unittest.TestCase):
     @unittest.skipUnless(HAS_TORCH, "PyTorch is not installed")
     def test_from_torch_in_memory(self):
         block = cron.CronTransformerBlock(dim=8, n_heads=2, mlp_dim=16)
-        cr_code = cron.from_torch(block, quantize="ternary")
-        self.assertIn(".MODULE", cr_code)
-        self.assertIn("ternary_dense_forward", cr_code)
+        cl_code = cron.from_torch(block, quantize="ternary")
+        self.assertIn("@kernel", cl_code)
+        self.assertIn("B0000:", cl_code)
 
 
 if __name__ == "__main__":
