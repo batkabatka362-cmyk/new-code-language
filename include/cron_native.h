@@ -287,6 +287,40 @@ CRON_EXPORT size_t cron_packet_router_burst(
     float* throughput_gbps_out
 );
 
+// ============================================================================
+// 6D Multi-Chip Cluster Fabric (4,096 Distributed Cores)
+// Architecture: 16 Chips x 256 Cores in 2D Inter-Chip Mesh + 4D Intra-Chip NoC
+// ============================================================================
+
+typedef struct {
+    uint8_t chip_x; // 0..3
+    uint8_t chip_y; // 0..3
+    uint8_t core_x; // 0..3
+    uint8_t core_y; // 0..3
+    uint8_t core_z; // 0..3
+    uint8_t core_w; // 0..3
+} cron_cluster_coord_t;
+
+CRON_EXPORT cron_cluster_coord_t cron_cluster_coord_from_id(uint16_t global_core_id);
+CRON_EXPORT uint16_t cron_cluster_coord_to_id(cron_cluster_coord_t coord);
+CRON_EXPORT int cron_cluster_distance(uint16_t core_a, uint16_t core_b);
+
+CRON_EXPORT void cron_cluster_allreduce_f32(
+    float* data,
+    size_t count_per_chip,
+    size_t num_chips
+);
+
+CRON_EXPORT void cron_cluster_distributed_gemm_f32(
+    const float* A,
+    const float* B,
+    float* C,
+    int M,
+    int N,
+    int K,
+    int num_chips
+);
+
 #ifdef __cplusplus
 }
 #endif

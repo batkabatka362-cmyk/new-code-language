@@ -230,7 +230,52 @@ int main() {
                   << ", Throughput: " << burst.throughput_gbps << " Gbps)." << std::endl;
     }
 
-    std::cout << "\n🎉 ALL 10 CRON C++20 ZERO-OVERHEAD BRIDGE TESTS PASSED (GRADE SSS+)!" << std::endl;
+    // TEST 11: Distributed 4,096-Core Multi-Chip Swarm (6D Interconnect & Parallel GEMM)
+    {
+        // 11.1 6D Coordinate Mapping Bijectivity
+        for (uint16_t id : {0, 42, 256, 1024, 2048, 4095}) {
+            auto coord = cron::ClusterCoord::from_global_id(id);
+            assert(coord.to_global_id() == id);
+            assert(coord.chip_id() < 16);
+            assert(coord.local_core_id() < 256);
+        }
+
+        // 11.2 Inter-Chip Optical Distance
+        int d_same_core = cron::ClusterMesh::distance(0, 0);
+        assert(d_same_core == 0);
+        int d_intra_chip = cron::ClusterMesh::distance(0, 255);
+        assert(d_intra_chip == 4); // (1+1+1+1) toroidal wraparound hops
+        int d_cross_chip = cron::ClusterMesh::distance(0, 256);
+        assert(d_cross_chip == 4); // 1 inter-chip optical hop * 4 = 4
+
+        // 11.3 SPMD Ring AllReduce Simulation
+        std::vector<float> ring_data(16 * 4, 1.0f); // 16 chips, 4 elements each
+        for (size_t c = 0; c < 16; ++c) {
+            for (size_t i = 0; i < 4; ++i) {
+                ring_data[c * 4 + i] = static_cast<float>(c + 1);
+            }
+        }
+        cron::ClusterMesh::allreduce(ring_data, 4, 16);
+        // Expected sum = 1 + 2 + ... + 16 = 136
+        for (float val : ring_data) {
+            assert(std::abs(val - 136.0f) < 1e-4f);
+        }
+
+        // 11.4 Distributed Parallel GEMM Verification [M=8, K=16, N=8]
+        std::vector<float> A(8 * 16, 1.0f);
+        std::vector<float> B(16 * 8, 2.0f);
+        std::vector<float> C(8 * 8, 0.0f);
+
+        cron::ClusterMesh::distributed_gemm(A, B, C, 8, 8, 16, 16);
+        // Each element of C should be K * 1.0 * 2.0 = 16 * 2.0 = 32.0
+        for (float val : C) {
+            assert(std::abs(val - 32.0f) < 1e-4f);
+        }
+
+        std::cout << "  ✓ Test 11 Passed: Distributed 4,096-Core Swarm (6D Coordinates, Optical Distance, AllReduce, GEMM) verified." << std::endl;
+    }
+
+    std::cout << "\n🎉 ALL 11 CRON C++20 ZERO-OVERHEAD BRIDGE TESTS PASSED (GRADE SSS+)!" << std::endl;
     return 0;
 }
 

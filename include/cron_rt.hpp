@@ -498,6 +498,63 @@ public:
     }
 };
 
+// ----------------------------------------------------------------------------
+// 8. 6D Multi-Chip Cluster Fabric (4,096 Distributed Cores)
+// ----------------------------------------------------------------------------
+
+struct ClusterCoord {
+    cron_cluster_coord_t raw{};
+
+    ClusterCoord() = default;
+    ClusterCoord(uint8_t cx, uint8_t cy, uint8_t x, uint8_t y, uint8_t z, uint8_t w) {
+        raw.chip_x = cx % 4;
+        raw.chip_y = cy % 4;
+        raw.core_x = x % 4;
+        raw.core_y = y % 4;
+        raw.core_z = z % 4;
+        raw.core_w = w % 4;
+    }
+
+    static ClusterCoord from_global_id(uint16_t global_id) {
+        ClusterCoord c;
+        c.raw = cron_cluster_coord_from_id(global_id);
+        return c;
+    }
+
+    uint16_t to_global_id() const noexcept {
+        return cron_cluster_coord_to_id(raw);
+    }
+
+    uint8_t chip_id() const noexcept {
+        return raw.chip_x + 4 * raw.chip_y;
+    }
+
+    uint8_t local_core_id() const noexcept {
+        return raw.core_x + 4 * raw.core_y + 16 * raw.core_z + 64 * raw.core_w;
+    }
+};
+
+class ClusterMesh {
+public:
+    static int distance(uint16_t core_a, uint16_t core_b) noexcept {
+        return cron_cluster_distance(core_a, core_b);
+    }
+
+    static void allreduce(std::span<float> data, size_t count_per_chip, size_t num_chips = 16) {
+        cron_cluster_allreduce_f32(data.data(), count_per_chip, num_chips);
+    }
+
+    static void distributed_gemm(
+        std::span<const float> A,
+        std::span<const float> B,
+        std::span<float> C,
+        int M, int N, int K,
+        int num_chips = 16
+    ) {
+        cron_cluster_distributed_gemm_f32(A.data(), B.data(), C.data(), M, N, K, num_chips);
+    }
+};
+
 } // namespace cron
 
 #endif /* CRON_RT_HPP */

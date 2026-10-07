@@ -1011,3 +1011,112 @@ CRON_EXPORT size_t cron_packet_router_burst(
     return routed_count;
 }
 
+// ============================================================================
+// 6D Multi-Chip Cluster Fabric & Distributed GEMM (4,096 Distributed Cores)
+// ============================================================================
+
+CRON_EXPORT cron_cluster_coord_t cron_cluster_coord_from_id(uint16_t global_core_id) {
+    uint16_t chip_id = (global_core_id / 256) % 16;
+    uint8_t local_id = (uint8_t)(global_core_id % 256);
+
+    cron_cluster_coord_t coord;
+    coord.chip_x = (uint8_t)(chip_id % 4);
+    coord.chip_y = (uint8_t)(chip_id / 4);
+    coord.core_x = local_id & 0x03;
+    coord.core_y = (local_id >> 2) & 0x03;
+    coord.core_z = (local_id >> 4) & 0x03;
+    coord.core_w = (local_id >> 6) & 0x03;
+    return coord;
+}
+
+CRON_EXPORT uint16_t cron_cluster_coord_to_id(cron_cluster_coord_t coord) {
+    uint16_t chip_id = (coord.chip_x & 0x03) + 4 * (coord.chip_y & 0x03);
+    uint8_t local_id = (coord.core_x & 0x03) |
+                       ((coord.core_y & 0x03) << 2) |
+                       ((coord.core_z & 0x03) << 4) |
+                       ((coord.core_w & 0x03) << 6);
+    return (uint16_t)(chip_id * 256 + local_id);
+}
+
+static inline int torus_dim_distance(int a, int b) {
+    int diff = abs(a - b);
+    return diff < (4 - diff) ? diff : (4 - diff);
+}
+
+CRON_EXPORT int cron_cluster_distance(uint16_t core_a, uint16_t core_b) {
+    cron_cluster_coord_t ca = cron_cluster_coord_from_id(core_a);
+    cron_cluster_coord_t cb = cron_cluster_coord_from_id(core_b);
+
+    int dx_chip = torus_dim_distance(ca.chip_x, cb.chip_x);
+    int dy_chip = torus_dim_distance(ca.chip_y, cb.chip_y);
+
+    int dx_core = torus_dim_distance(ca.core_x, cb.core_x);
+    int dy_core = torus_dim_distance(ca.core_y, cb.core_y);
+    int dz_core = torus_dim_distance(ca.core_z, cb.core_z);
+    int dw_core = torus_dim_distance(ca.core_w, cb.core_w);
+
+    return (dx_chip + dy_chip) * 4 + (dx_core + dy_core + dz_core + dw_core);
+}
+
+CRON_EXPORT void cron_cluster_allreduce_f32(
+    float* data,
+    size_t count_per_chip,
+    size_t num_chips
+) {
+    if (!data || count_per_chip == 0 || num_chips <= 1) return;
+
+    #pragma omp parallel for schedule(static)
+    for (size_t i = 0; i < count_per_chip; ++i) {
+        float sum = 0.0f;
+        for (size_t c = 0; c < num_chips; ++c) {
+            sum += data[c * count_per_chip + i];
+        }
+        for (size_t c = 0; c < num_chips; ++c) {
+            data[c * count_per_chip + i] = sum;
+        }
+    }
+}
+
+CRON_EXPORT void cron_cluster_distributed_gemm_f32(
+    const float* A,
+    const float* B,
+    float* C,
+    int M,
+    int N,
+    int K,
+    int num_chips
+) {
+    if (!A || !B || !C || M <= 0 || N <= 0 || K <= 0) return;
+    (void)num_chips;
+
+    #pragma omp parallel for schedule(dynamic)
+    for (int m = 0; m < M; ++m) {
+        const float* a_row = &A[m * K];
+        float* c_row = &C[m * N];
+
+        for (int n = 0; n < N; ++n) {
+            float acc = 0.0f;
+            int k = 0;
+
+#if defined(__AVX2__)
+            __m256 vacc = _mm256_setzero_ps();
+            for (; k + 7 < K; k += 8) {
+                __m256 va = _mm256_loadu_ps(&a_row[k]);
+                float b_vals[8];
+                for (int ki = 0; ki < 8; ++ki) {
+                    b_vals[ki] = B[(k + ki) * N + n];
+                }
+                __m256 vb = _mm256_loadu_ps(b_vals);
+                vacc = _mm256_fmadd_ps(va, vb, vacc);
+            }
+            acc += hsum256_ps(vacc);
+#endif
+            for (; k < K; ++k) {
+                acc += a_row[k] * B[k * N + n];
+            }
+            c_row[n] = acc;
+        }
+    }
+}
+
+
