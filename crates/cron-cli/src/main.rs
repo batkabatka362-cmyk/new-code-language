@@ -108,6 +108,8 @@ fn print_help() {
     println!("    cl-audit <file.cl>             Audit 94-char alphabet coverage, entropy & hardware hazards");
     println!("    cl-fix <file.cl> [--in-place]  Resolve all intra-bundle RAW/WAW hazards via VLIW scheduler");
     println!("    cl-train [--epochs N] [--lr F] Train neural model in-silicon with .cl autograd & AdamW");
+    println!("    cl-serve [--port P] [--host H] Zero-copy in-silicon hardware HTTP server");
+    println!("    cl-net [--packets N] [--json]  4D-Torus Dimension-Order Routing & DMA benchmark");
     println!("    decompile <file.cl> [-o <out>] Decompile machine-native .cl into .cr Blueprint");
     println!("    check <file.cr>                Verify linear types, region safety, and syntax");
     println!("    bench-host                     Run live PyTorch vs CRON C23 benchmarks on this machine");
@@ -842,6 +844,12 @@ fn main() {
         }
         "cl-train" | "train-cl" => {
             handle_cl_train_command(&args[2..]);
+        }
+        "cl-serve" | "serve-cl" => {
+            handle_cl_serve_command(&args[2..]);
+        }
+        "cl-net" | "net-cl" => {
+            handle_cl_net_command(&args[2..]);
         }
         "cl-forge" | "forge" => {
             handle_cl_forge_command(&args[2..]);
@@ -4554,35 +4562,38 @@ fn main() {
             println!();
         }
         "test" => {
-            let target_dir = if args.len() >= 3 { &args[2] } else { "examples" };
-            println!("[CRON TEST RUNNER] Scanning directory '{}' for .cr test suites...\n", target_dir);
+            let default_dir = if Path::new("libcl").exists() { "libcl" } else { "examples" };
+            let target_dir = if args.len() >= 3 { &args[2] } else { default_dir };
+            println!("[CRON TEST RUNNER] Scanning directory '{}' for .cl and .cr test suites...\n", target_dir);
 
-            fn collect_cr_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
+            fn collect_test_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
                 if let Ok(entries) = fs::read_dir(dir) {
                     for entry in entries.flatten() {
                         let path = entry.path();
                         if path.is_dir() {
-                            collect_cr_files(&path, files);
-                        } else if path.extension().and_then(|s| s.to_str()) == Some("cr") {
-                            files.push(path);
+                            collect_test_files(&path, files);
+                        } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                            if ext == "cl" || ext == "cr" {
+                                files.push(path);
+                            }
                         }
                     }
                 }
             }
 
-            let mut cr_files = Vec::new();
-            collect_cr_files(Path::new(target_dir), &mut cr_files);
-            cr_files.sort();
+            let mut test_files = Vec::new();
+            collect_test_files(Path::new(target_dir), &mut test_files);
+            test_files.sort();
 
-            if cr_files.is_empty() {
-                println!("No .cr files found in '{}'", target_dir);
+            if test_files.is_empty() {
+                println!("No .cl or .cr test files found in '{}'", target_dir);
                 return;
             }
 
             let mut passed = 0;
             let mut failed = 0;
 
-            for file in &cr_files {
+            for file in &test_files {
                 let rel = file.to_string_lossy();
                 let src = match fs::read_to_string(file) {
                     Ok(s) => s,
@@ -4593,24 +4604,41 @@ fn main() {
                     }
                 };
 
-                match cronc::compile_source_with_name(&src, Some(&rel)) {
-                    Ok(cl_code) => {
-                        let telemetry = cron_vm::run_cl(&cl_code);
-                        println!(
-                            "  [PASS] {:<45} ({} cycles, {} GEMM, {} rev)",
-                            rel, telemetry.total_cycles, telemetry.optical_gemm_ops, telemetry.reversible_gate_ops
-                        );
-                        passed += 1;
-                    }
-                    Err(e) => {
-                        println!("  [FAIL] {} — compilation error:\n{}", rel, e);
+                let is_cl = file.extension().map(|e| e == "cl").unwrap_or(false);
+
+                if is_cl {
+                    let lint = cronc::cl_lint::lint_cl_source(&src, &rel);
+                    if lint.error_count > 0 {
+                        println!("  [FAIL] {} — {} lint errors", rel, lint.error_count);
                         failed += 1;
+                        continue;
+                    }
+                    let telemetry = cron_vm::run_cl(&src);
+                    println!(
+                        "  [PASS] {:<45} ({} cycles, {} GEMM, {} rev) [.CL SILICON]",
+                        rel, telemetry.total_cycles, telemetry.optical_gemm_ops, telemetry.reversible_gate_ops
+                    );
+                    passed += 1;
+                } else {
+                    match cronc::compile_source_with_name(&src, Some(&rel)) {
+                        Ok(cl_code) => {
+                            let telemetry = cron_vm::run_cl(&cl_code);
+                            println!(
+                                "  [PASS] {:<45} ({} cycles, {} GEMM, {} rev)",
+                                rel, telemetry.total_cycles, telemetry.optical_gemm_ops, telemetry.reversible_gate_ops
+                            );
+                            passed += 1;
+                        }
+                        Err(e) => {
+                            println!("  [FAIL] {} — compilation error:\n{}", rel, e);
+                            failed += 1;
+                        }
                     }
                 }
             }
 
             println!("\n============================================================");
-            println!("  TEST RESULTS: {} passed, {} failed, {} total", passed, failed, cr_files.len());
+            println!("  TEST RESULTS: {} passed, {} failed, {} total", passed, failed, test_files.len());
             println!("============================================================\n");
             if failed > 0 {
                 std::process::exit(1);
@@ -8019,6 +8047,57 @@ fn handle_cl_train_command(args: &[String]) {
         );
     } else {
         print!("{}", report.render_ascii_hud());
+    }
+}
+
+fn handle_cl_serve_command(args: &[String]) {
+    let mut port: u16 = 8080;
+    let mut host = "127.0.0.1".to_string();
+
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--port" && i + 1 < args.len() {
+            if let Ok(p) = args[i + 1].parse::<u16>() { port = p; }
+            i += 2;
+        } else if args[i] == "--host" && i + 1 < args.len() {
+            host = args[i + 1].clone();
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    if let Err(e) = cronc::cl_net::serve_cl_http(&host, port) {
+        eprintln!("[CL-SERVE ERROR] {}", e);
+        std::process::exit(1);
+    }
+}
+
+fn handle_cl_net_command(args: &[String]) {
+    let mut packets: usize = 1000;
+    let mut emit_json = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        if (args[i] == "--packets" || args[i] == "-n") && i + 1 < args.len() {
+            if let Ok(p) = args[i + 1].parse::<usize>() { packets = p; }
+            i += 2;
+        } else if args[i] == "--json" {
+            emit_json = true;
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    let hud = cronc::cl_net::run_cl_hardware_benchmark(packets);
+    if emit_json {
+        println!(
+            "{{\"total_packets\":{},\"avg_hops\":{:.2},\"dma_mb\":{:.2},\"peak_gbps\":{:.2},\"reqs_per_sec\":{:.0}}}",
+            hud.total_packets, hud.avg_hops, hud.dma_mb_transferred, hud.peak_gbps, hud.requests_per_sec
+        );
+    } else {
+        print!("{}", hud.render_ascii());
     }
 }
 

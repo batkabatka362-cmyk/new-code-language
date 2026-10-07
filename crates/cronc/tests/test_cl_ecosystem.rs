@@ -305,3 +305,33 @@ fn test_cl_in_silicon_autograd_training() {
     let audit = cronc::cl_pkg::audit_cl_source(&microcode, "autograd_grad_step.cl");
     assert!(audit.passed, "Synthesized autograd kernel must pass silicon audit: {:?}", audit.diagnostics);
 }
+
+#[test]
+fn test_cl_hard_backend_network() {
+    // 1. Packet integrity and DOR routing
+    let mut router = cronc::cl_net::ClPacketRouter::new();
+    let payload = b"CROSS_CORE_SYNC_IN_SILICON";
+    let pkt = cronc::cl_net::ClPacket::new(12, 180, 0, payload);
+    assert!(pkt.is_valid());
+    let hops = router.route_packet(&pkt).expect("Routing must succeed");
+    assert!(hops > 0);
+
+    // 2. Hardware benchmark & HUD
+    let hud = cronc::cl_net::run_cl_hardware_benchmark(200);
+    assert_eq!(hud.total_packets, 200);
+    assert!(hud.avg_hops > 0.0);
+    assert!(hud.dma_mb_transferred > 0.0);
+    let hud_text = hud.render_ascii();
+    assert!(hud_text.contains("CRON .CL ZERO-COPY HARD BACKEND"));
+
+    // 3. HTTP Gateway zero-copy responses
+    let mut gateway = cronc::cl_net::ClHttpGateway::new();
+    let (status, content_type, body) = gateway.handle_raw_request(b"GET /health HTTP/1.1\r\n\r\n");
+    assert_eq!(status, 200);
+    assert_eq!(content_type, "application/json");
+    assert!(body.contains("CRON_CL_HARD_BACKEND"));
+
+    let (status_inf, _, body_inf) = gateway.handle_raw_request(b"POST /infer HTTP/1.1\r\n\r\n");
+    assert_eq!(status_inf, 200);
+    assert!(body_inf.contains("CRON_SILICON_SUCCESS"));
+}
