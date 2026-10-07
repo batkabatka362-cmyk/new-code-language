@@ -17,21 +17,8 @@ class Simulator:
         self.cron_exe = cron_exe or find_cron_executable()
 
     def run(self, source_code: str) -> Dict[str, Any]:
-        """Runs a .cr program and parses hardware telemetry output."""
-        with tempfile.NamedTemporaryFile(suffix=".cr", mode="w", delete=False, encoding="utf-8") as f_in:
-            f_in.write(source_code)
-            in_path = f_in.name
-
-        try:
-            cmd = [self.cron_exe, "run", in_path]
-            res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
-            if res.returncode != 0:
-                raise RuntimeError(f"Simulation execution failed:\n{res.stderr or res.stdout}")
-            
-            return self._parse_telemetry(res.stdout)
-        finally:
-            if os.path.exists(in_path):
-                os.remove(in_path)
+        """Runs a .cl program on the 256-Core Neuromorphic Processor and parses telemetry."""
+        return self.run_cl(source_code)
 
     def run_cl(self, cl_code: str) -> Dict[str, Any]:
         """Directly runs .cl machine bytecode and parses hardware telemetry."""

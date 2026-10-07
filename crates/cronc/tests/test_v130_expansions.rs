@@ -1,9 +1,9 @@
 // ============================================================================
 // CRON v1.3.0 Standard Library & Kernel Expansion Test Suite
 // Verifies:
-// 1. Mamba-2 Structured State Space + Attention Hybrid Layer (libcr/neuro/mamba2_hybrid.cr)
-// 2. Neuromorphic Spiking Cochlea Filterbank (libcr/sensory/neuromorphic_cochlea.cr)
-// 3. Spatial Vision Patch 4D-Torus Projector (libcr/sensory/spatial_vision_patch.cr)
+// 1. Mamba-2 Structured State Space + Attention Hybrid Layer (libcl/mamba2_ssd.cl)
+// 2. Neuromorphic Spiking Cochlea Filterbank (libcl/audio_dsp.cl)
+// 3. Spatial Vision Patch 4D-Torus Projector (libcl/vision_patch.cl)
 // 4. FlashAttention-3 Microcode Kernel (libcl/flash_attn_v3.cl)
 // ============================================================================
 

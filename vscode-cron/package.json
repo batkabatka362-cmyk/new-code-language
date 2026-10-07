@@ -1,7 +1,7 @@
 {
   "name": "cron-lang",
   "displayName": "CRON Cognitive Language Support",
-  "description": "Language support, LSP 3.17, DAP Hardware Debugger, and 4D-Torus & Wafer-65536 Silicon Visualizer for CRON (.cr) & CRON Low-Level (.cl)",
+  "description": "Language support, LSP 3.17, DAP Hardware Debugger, and 4D-Torus & Wafer-65536 Silicon Visualizer for CRON Silicon Machine Language (.cl)",
   "version": "1.3.0",
   "publisher": "cron-ai",
   "engines": {
@@ -25,17 +25,10 @@
   ],
   "main": "./src/extension.js",
   "activationEvents": [
-    "onLanguage:cron",
     "onLanguage:cron-cl"
   ],
   "contributes": {
     "languages": [
-      {
-        "id": "cron",
-        "aliases": ["CRON", "cron", "cr"],
-        "extensions": [".cr"],
-        "configuration": "./language-configuration.json"
-      },
       {
         "id": "cron-cl",
         "aliases": ["CRON Low-Level Machine Code", "cron-cl", "cl", "vliw", "cksl", "clpack"],

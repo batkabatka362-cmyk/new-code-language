@@ -55,7 +55,7 @@ impl Default for Manifest {
                 version: "0.1.0".to_string(),
                 authors: vec!["CRON Cognitive Developer <dev@cron-lang.org>".to_string()],
                 edition: "2026".to_string(),
-                entry: "src/main.cr".to_string(),
+                entry: "src/main.cl".to_string(),
                 description: "Cognitive Neural Application for 4D-Torus Silicon".to_string(),
             },
             hardware: HardwareSection {

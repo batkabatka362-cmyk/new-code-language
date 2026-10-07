@@ -37,7 +37,7 @@ fn test_manifest_parsing_and_serialization() {
 name = "torus_agent_app"
 version = "1.0.0"
 edition = "2026"
-entry = "src/main.cr"
+entry = "src/main.cl"
 description = "High-performance SNN on 4D-Torus"
 authors = ["Dev One <dev1@cron.org>", "Dev Two <dev2@cron.org>"]
 

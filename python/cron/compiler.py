@@ -1,7 +1,7 @@
 """
-CRON Python Compiler Interface
-Provides seamless compilation of .cr (high-level) and verification of .cl (low-level)
-directly from Python scripts, Jupyter Notebooks, and PyTorch pipelines.
+CRON Python Compiler & Silicon Machine Interface
+Provides verification, linting, auto-vectorization, and JIT simulation of sovereign
+.cl (Silicon Microcode Machine Language) directly from Python and PyTorch.
 """
 
 import subprocess
@@ -33,18 +33,21 @@ def find_cron_executable() -> str:
     return "cron"
 
 def compile_source(source_code: str) -> str:
-    """Compiles .cr source code into machine-native .cl VLIW bytecode."""
+    """Canonicalizes and formats sovereign .cl VLIW machine microcode with CRC-8 validation."""
     cron_exe = find_cron_executable()
-    with tempfile.NamedTemporaryFile(suffix=".cr", mode="w", delete=False, encoding="utf-8") as f_in:
+    with tempfile.NamedTemporaryFile(suffix=".cl", mode="w", delete=False, encoding="utf-8") as f_in:
         f_in.write(source_code)
         in_path = f_in.name
 
-    out_cl = in_path.replace(".cr", ".cl")
+    out_cl = in_path.replace(".cl", ".opt.cl")
     try:
-        cmd = [cron_exe, "build", in_path, "-o", out_cl]
+        cmd = [cron_exe, "cl-fmt", in_path, "-o", out_cl]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
         if res.returncode != 0:
-            raise RuntimeError(f"CRON compilation error:\n{res.stderr or res.stdout}")
+            cmd_fix = [cron_exe, "cl-fix", in_path, "-o", out_cl]
+            res_fix = subprocess.run(cmd_fix, capture_output=True, text=True, encoding="utf-8")
+            if res_fix.returncode != 0:
+                raise RuntimeError(f"CRON .cl format error:\n{res.stderr or res.stdout}")
         
         with open(out_cl, "r", encoding="utf-8") as f_out:
             return f_out.read()
@@ -55,15 +58,15 @@ def compile_source(source_code: str) -> str:
             os.remove(out_cl)
 
 def compile_c23(source_code: str) -> str:
-    """Transpiles .cr source code into high-performance C23 native source code."""
+    """Transpiles .cl machine code into high-performance C23 native source code."""
     cron_exe = find_cron_executable()
-    with tempfile.NamedTemporaryFile(suffix=".cr", mode="w", delete=False, encoding="utf-8") as f_in:
+    with tempfile.NamedTemporaryFile(suffix=".cl", mode="w", delete=False, encoding="utf-8") as f_in:
         f_in.write(source_code)
         in_path = f_in.name
 
-    out_c = in_path.replace(".cr", ".c")
+    out_c = in_path.replace(".cl", ".c")
     try:
-        cmd = [cron_exe, "c23", in_path, "-o", out_c]
+        cmd = [cron_exe, "cl-transpile", in_path, "--c23", "-o", out_c]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
         if res.returncode != 0:
             raise RuntimeError(f"CRON C23 transpilation error:\n{res.stderr or res.stdout}")
@@ -77,14 +80,14 @@ def compile_c23(source_code: str) -> str:
             os.remove(out_c)
 
 def check_diagnostics(source_code: str) -> List[str]:
-    """Verifies linear type safety, region boundaries, and grammar syntax."""
+    """Verifies .cl slot width, CRC-8 ATM tokens, and pipeline hazards via cl-lint."""
     cron_exe = find_cron_executable()
-    with tempfile.NamedTemporaryFile(suffix=".cr", mode="w", delete=False, encoding="utf-8") as f_in:
+    with tempfile.NamedTemporaryFile(suffix=".cl", mode="w", delete=False, encoding="utf-8") as f_in:
         f_in.write(source_code)
         in_path = f_in.name
 
     try:
-        cmd = [cron_exe, "check", in_path]
+        cmd = [cron_exe, "cl-lint", in_path, "--json"]
         res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
         if res.returncode != 0:
             return [res.stderr.strip() or res.stdout.strip()]

@@ -151,9 +151,9 @@ new code language/
 │   ├── cron-lsp/               # IDE Language Server Protocol (Hover, Auto-complete, Diagnostics)
 │   ├── cron-decompile/         # .cl -> .cr Буцаан хөрвүүлэгч (Decompiler)
 │   └── cron-wasm/              # WebAssembly браузерын симулятор
-├── libcr/                      # CRON Стандарт Сан (26 дэд сан: nn, optical, reversible, neuro, etc.)
+├── libcl/                      # CRON Silicon Стандарт Сан (53 баталгаажсан AI & NoC цөм)
 ├── docs/                       # Техникийн дэлгэрэнгүй баримт бичгүүд (70+ файл)
-└── examples/                   # Төгсгөл хоорондын бүрэн жишээнүүд (.cr ба .cl)
+└── examples/                   # Төгсгөл хоорондын жишээнүүд (.cl Silicon VLIW)
 ```
 
 ---

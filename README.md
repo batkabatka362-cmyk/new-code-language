@@ -271,11 +271,11 @@ cargo test --workspace
 ### B. Өргөтгөсөн Стандарт Сан (Standard Library Extensions)
 1. **FlashAttention-3 (`libcl/flash_attn_v3.cl`)**:
    - Асинхрон Tile-MMA, онлайн Softmax, FP8/Q4 масштаб үржвэр, 100% CRC-8 ATM Silicon хамгаалалт.
-2. **Mamba-2 SSM & Photonic Attention Hybrid (`libcr/neuro/mamba2_hybrid.cr`)**:
+2. **Mamba-2 SSM & Photonic Attention Hybrid (`libcl/mamba2_ssd.cl`)**:
    - Structured State Space Duality (SSD) шугаман санах ой $O(N)$ ба MZI фотоник attention-ийн нэгдэл.
-3. **Нейроморф Кохлеа Шүүлтүүр (`libcr/sensory/neuromorphic_cochlea.cr`)**:
+3. **Нейроморф Кохлеа Шүүлтүүр (`libcl/audio_dsp.cl`)**:
    - Тасралтгүй аудио долгионыг Гринвүүдийн давтамжийн бүсээр ялгаж, Leaky Integrate-and-Fire спайк үүсгэн 4D-Torus сонсголын кортекс цөм рүү 0-latency дамжуулна.
-4. **Орон Зайн Харааны Патч (`libcr/sensory/spatial_vision_patch.cr`)**:
+4. **Орон Зайн Харааны Патч (`libcl/vision_patch.cl`)**:
    - ViT патч болон DVS динамик харааны мэдрэгчийн спайк урсгалыг 4D-Torus координатад $(x, y, z, w)$ шууд буулгаж VLA загварын токен үүсгэнэ.
 
 ### C. Бодит Гүйцэтгэлийн Харьцуулалт (Scoreboard vs H100 & Mojo)

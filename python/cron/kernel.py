@@ -34,11 +34,11 @@ class CronKernel(Kernel):
     language = "cron"
     language_version = "1.0.0"
     language_info = {
-        "name": "cron",
-        "mimetype": "text/x-cron",
-        "file_extension": ".cr",
-        "pygments_lexer": "rust",
-        "codemirror_mode": "rust",
+        "name": "cron-cl",
+        "mimetype": "text/x-cron-cl",
+        "file_extension": ".cl",
+        "pygments_lexer": "assembly",
+        "codemirror_mode": "text",
     }
     banner = "CRON Cognitive Kernel — 256-Core 4D-Torus Neuromorphic Architecture v1.0"
 
@@ -129,12 +129,12 @@ class CronKernel(Kernel):
             import subprocess
             import tempfile
             cron_exe = find_cron_executable()
-            with tempfile.NamedTemporaryFile(suffix=".cr", mode="w", delete=False, encoding="utf-8") as f_in:
+            with tempfile.NamedTemporaryFile(suffix=".cl", mode="w", delete=False, encoding="utf-8") as f_in:
                 f_in.write(code)
                 in_path = f_in.name
-            out_ll = in_path.replace(".cr", ".ll")
+            out_ll = in_path.replace(".cl", ".ll")
             try:
-                cmd = [cron_exe, "emit-llvm", in_path, "-o", out_ll]
+                cmd = [cron_exe, "cl-llvm", in_path, "-o", out_ll]
                 res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
                 if res.returncode != 0:
                     self._send_error(res.stderr or res.stdout)

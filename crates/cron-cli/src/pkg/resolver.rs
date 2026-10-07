@@ -132,7 +132,7 @@ impl<'a> DependencyResolver<'a> {
             DependencySource::Builtin { version: v } => {
                 source_str = "builtin".to_string();
                 version = v;
-                checksum = sha256_hex(format!("libcr-{}", name).as_bytes());
+                checksum = sha256_hex(format!("libcl-{}", name).as_bytes());
                 hardware_target = "4d-torus-256-core".to_string();
             }
         }

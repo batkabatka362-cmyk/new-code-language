@@ -101,42 +101,32 @@ fn print_help() {
     println!("    cl-lint <file.cl> [--json]     Deep static linter & hardware thermal/hazard analyzer");
     println!("    cl-forge <prompt> [-o file.cl] Autonomous golden microcode kernel synthesis engine");
     println!("    cl-transpile <file.cl> [opts]  Cross-transpile .cl to WebGPU (WGSL), PTX, or C23 SIMD");
-    println!("    debug <file.cl|.cr> [--core N] [--batch \"...\"] Interactive Photonic & Torus Debugger TUI");
+    println!("    debug <file.cl> [--core N] [--batch \"...\"] Interactive Photonic & Torus Debugger TUI");
     println!("    asm <file.cl> [-o <out.clb>]   Assemble .cl into 128-bit binary bytecode (.clb)");
     println!("    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl");
     println!("    cl-alphabet                    Display complete 94-character .cl specification table");
     println!("    cl-audit <file.cl>             Audit 94-char alphabet coverage, entropy & hardware hazards");
     println!("    cl-fix <file.cl> [--in-place]  Resolve all intra-bundle RAW/WAW hazards via VLIW scheduler");
+    println!("    cl-vectorize <pattern>         Auto-vectorize mathematical patterns into 4.0 IPC .cl microcode");
+    println!("    cl-export-rtl <file.cl>        Export complete synthesizable Verilog RTL package & Vivado scripts");
+    println!("    cl-jit-batch <file.cl> [cores] Accelerated parallel multi-core batch JIT execution runner");
     println!("    cl-train [--epochs N] [--lr F] Train neural model in-silicon with .cl autograd & AdamW");
     println!("    cl-serve [--port P] [--host H] Zero-copy in-silicon hardware HTTP server");
     println!("    cl-net [--packets N] [--json]  4D-Torus Dimension-Order Routing & DMA benchmark");
-    println!("    decompile <file.cl> [-o <out>] Decompile machine-native .cl into .cr Blueprint");
-    println!("    check <file.cr>                Verify linear types, region safety, and syntax");
     println!("    bench-host                     Run live PyTorch vs CRON C23 benchmarks on this machine");
-    println!("    explain [code]                 Explain compiler error code (e.g. E0002) with fix examples");
-    println!("    test [dir]                     Compile and run all .cr files in a directory");
-    println!("    fmt <file.cr>                  Auto-format .cr source code with standard style");
-    println!("    fdo-profile <file.cr>          Profile-guided optimization: execute, profile, re-schedule");
-    println!("    profile <file.cr>              Generate .prof execution trace for FDO analysis");
-    println!("    dashboard <file.cr>            Real-time 6-Brain + 4D-Torus live terminal HUD");
+    println!("    explain [code]                 Explain compiler error code with fix examples");
+    println!("    test [dir]                     Run all .cl test suites in directory");
     println!("    abi                            Display CRON Application Binary Interface (ABI)");
     println!("    lib                            Inspect and verify CRON Silicon Standard Library (libcl)");
     println!("    repl                           Start interactive CRON Cognitive REPL session");
-    println!("    init [name]                    Initialize a new CRON project in current directory");
-    println!("    new <name>                     Create a new CRON project directory with cron.toml");
+    println!("    init [name]                    Initialize a new CRON .cl project in current directory");
+    println!("    new <name>                     Create a new CRON .cl project directory with cron.toml");
     println!("    lsp                            Start Language Server Protocol (LSP 3.17) server");
-    println!("    c23 <file.cr> [-o <out.c>]     Transpile high-level .cr into high-performance C23");
-    println!("    emit-llvm <file.cr> [-o <.ll>] Transpile .cr into LLVM Intermediate Representation");
-    println!("    llvm <file.cr> [-o <out>]      Compile .cr into native binary via Clang/LLVM -O3");
-    println!("    jit <file.cr>                  Execute dynamically in RAM via native x86_64 JIT engine");
-    println!("    native <file.cr> [-o <out>]    Compile .cr into native x86_64/ARM64 binary via host C compiler");
+    println!("    jit <file.cl>                  Execute dynamically in RAM via native JIT engine");
     println!("    build-native-lib [-o lib.dll]  Compile high-performance C23 native accelerator shared library");
-    println!("    flash <file.cr> [--target t]   Deploy to FPGA/ASIC (U280, Stratix10, ASIC) & generate PCIe DMA");
-    println!("    verify <file.cr> [--temp K]    Formal Deadlock-Freedom proof & Landauer Thermodynamic audit");
-    println!("    synth <file.cr> [-t tool]      Synthesize bitstream with Vivado or Yosys");
-    println!("    verilog-sim <file.cl|file.cr>  Simulate & verify synthesized Verilog RTL testbench");
+    println!("    verilog-sim <file.cl>          Simulate & verify synthesized Verilog RTL testbench");
     println!("    bench-host [--json]            Run empirical local hardware benchmarks against PyTorch CPU");
-    println!("    cluster run <file> [--chips N] Execute on distributed 4,096-core multi-chip cluster");
+    println!("    cluster run <file.cl> [--chips N] Execute on distributed 4,096-core multi-chip cluster");
     println!("    cluster info [--chips N]       Display multi-chip cluster topology, 6D map & PPA metrics");
     println!("    cluster bench [--chips N]      Run distributed 4,096-core parallel GEMM benchmark");
     println!("    info                           Display 4D-Torus architecture specifications");
@@ -300,7 +290,7 @@ fn main() {
             }
         }
         "doc" => {
-            let mut target_path = "libcr".to_string();
+            let mut target_path = "libcl".to_string();
             let mut out_dir = "docs".to_string();
             let mut i = 2;
             while i < args.len() {
@@ -329,13 +319,13 @@ fn main() {
                 if let Ok(entries) = fs::read_dir(path) {
                     for entry in entries.flatten() {
                         let p = entry.path();
-                        if p.extension().map(|e| e == "cr").unwrap_or(false) {
+                        if p.extension().map(|e| e == "cl").unwrap_or(false) {
                             files_to_doc.push(p);
                         } else if p.is_dir() {
                             if let Ok(sub_entries) = fs::read_dir(&p) {
                                 for sub_entry in sub_entries.flatten() {
                                     let sp = sub_entry.path();
-                                    if sp.extension().map(|e| e == "cr").unwrap_or(false) {
+                                    if sp.extension().map(|e| e == "cl").unwrap_or(false) {
                                         files_to_doc.push(sp);
                                     }
                                 }
@@ -2095,6 +2085,149 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("[LLVM TRANSPILATION ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        "cl-vectorize" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing pattern. Usage: cron cl-vectorize <pattern> [-o <out.cl>] [--len N] [--ternary]");
+                eprintln!("Patterns: dot-product | rmsnorm | rope | swiglu | gelu | silu | projection");
+                std::process::exit(1);
+            }
+            let pat_str = args[2].to_lowercase();
+            let mut out_path = None;
+            let mut len = 32usize;
+            let mut is_ternary = false;
+
+            let mut i = 3;
+            while i < args.len() {
+                if args[i] == "-o" && i + 1 < args.len() {
+                    out_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "--len" && i + 1 < args.len() {
+                    if let Ok(l) = args[i + 1].parse::<usize>() { len = l; }
+                    i += 2;
+                } else if args[i] == "--ternary" {
+                    is_ternary = true;
+                    i += 1;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let pattern = match pat_str.as_str() {
+                "dot-product" | "gemv" | "dot" => cronc::VectorPattern::DotProduct { len, is_ternary },
+                "swiglu" | "silu" => cronc::VectorPattern::Elementwise { op: "swiglu".to_string(), len },
+                "gelu" => cronc::VectorPattern::Elementwise { op: "gelu".to_string(), len },
+                "rmsnorm" | "norm" => cronc::VectorPattern::RMSNorm { len },
+                "rope" => cronc::VectorPattern::RoPE { dim: len },
+                "projection" | "linear" => cronc::VectorPattern::LinearProjection { in_dim: len, out_dim: len },
+                other => {
+                    eprintln!("Error: Unknown pattern '{}'. Supported: dot-product, rmsnorm, rope, swiglu, gelu, projection", other);
+                    std::process::exit(1);
+                }
+            };
+
+            let kernel_name = format!("vec_{}", pat_str.replace('-', "_"));
+            let cfg = cronc::VectorizerConfig::default();
+            match cronc::vectorize_pattern(&kernel_name, &pattern, &cfg) {
+                Ok(rep) => {
+                    if let Some(path) = out_path {
+                        if let Err(e) = fs::write(&path, &rep.cl_source) {
+                            eprintln!("Error writing vectorized .cl to '{}': {}", path, e);
+                            std::process::exit(1);
+                        }
+                        println!("[SUCCESS] Auto-vectorized pattern '{}' to '{}' ({} bundles, Effective IPC: {:.2})", pat_str, path, rep.bundles_generated, rep.effective_ipc);
+                    } else {
+                        println!("{}", rep.cl_source);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[AUTO-VECTORIZER ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        "cl-export-rtl" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing input file. Usage: cron cl-export-rtl <file.cl> [-o <out_dir>]");
+                std::process::exit(1);
+            }
+            let input_path = &args[2];
+            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
+                eprintln!("Error reading '{}': {}", input_path, e);
+                std::process::exit(1);
+            });
+
+            let mut out_dir = "rtl_export".to_string();
+            if args.len() >= 5 && args[3] == "-o" {
+                out_dir = args[4].clone();
+            }
+
+            let kernel_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+            let cfg = cronc::RtlExportConfig::default();
+
+            match cronc::export_cl_to_rtl(&cl_code, kernel_name, &cfg) {
+                Ok(pkg) => {
+                    let out_path = Path::new(&out_dir);
+                    if let Err(e) = pkg.write_to_directory(out_path) {
+                        eprintln!("Error writing RTL package to '{}': {}", out_dir, e);
+                        std::process::exit(1);
+                    }
+                    println!("[SUCCESS] Exported complete synthesizable RTL package to '{}' (7 files, estimated LUTs: {}, Fmax: {:.1} MHz)",
+                        out_dir, pkg.resources.estimated_luts, pkg.resources.target_clock_mhz);
+                }
+                Err(e) => {
+                    eprintln!("[RTL EXPORT ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        "cl-jit-batch" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing input file. Usage: cron cl-jit-batch <file.cl> [--cores N] [--json]");
+                std::process::exit(1);
+            }
+            let input_path = &args[2];
+            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
+                eprintln!("Error reading '{}': {}", input_path, e);
+                std::process::exit(1);
+            });
+
+            let mut cores = 16usize;
+            let is_json = args.iter().any(|a| a == "--json");
+            let mut i = 3;
+            while i < args.len() {
+                if args[i] == "--cores" && i + 1 < args.len() {
+                    if let Ok(c) = args[i + 1].parse::<usize>() { cores = c; }
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let kernel_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+            match cronc::run_accelerated_batch_jit(&cl_code, kernel_name, cores) {
+                Ok(rep) => {
+                    if is_json {
+                        println!("{}", rep.to_json());
+                    } else {
+                        println!("============================================================");
+                        println!("  CRON ACCELERATED BATCH JIT PARALLEL SIMULATION RUNNER     ");
+                        println!("============================================================");
+                        println!("  Kernel Name:          {}", rep.kernel_name);
+                        println!("  Cores Simulated:      {} virtual silicon cores", rep.cores_simulated);
+                        println!("  Total Cycles:         {} cycles", rep.total_cycles);
+                        println!("  Average IPC:          {:.2}", rep.average_ipc);
+                        println!("  Simulated Speed:      {:.2} MIPS", rep.million_instructions_per_sec);
+                        println!("  Effective Throughput: {:.2} GFLOPS", rep.giga_flops);
+                        println!("  All Cores Halted:     {}", rep.is_all_halted);
+                        println!("============================================================");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[BATCH JIT ERROR] {}", e);
                     std::process::exit(1);
                 }
             }
@@ -4564,7 +4697,7 @@ fn main() {
         "test" => {
             let default_dir = if Path::new("libcl").exists() { "libcl" } else { "examples" };
             let target_dir = if args.len() >= 3 { &args[2] } else { default_dir };
-            println!("[CRON TEST RUNNER] Scanning directory '{}' for .cl and .cr test suites...\n", target_dir);
+            println!("[CRON TEST RUNNER] Scanning directory '{}' for .cl test suites...\n", target_dir);
 
             fn collect_test_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
                 if let Ok(entries) = fs::read_dir(dir) {
@@ -4573,7 +4706,7 @@ fn main() {
                         if path.is_dir() {
                             collect_test_files(&path, files);
                         } else if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                            if ext == "cl" || ext == "cr" {
+                            if ext == "cl" {
                                 files.push(path);
                             }
                         }
@@ -4586,7 +4719,7 @@ fn main() {
             test_files.sort();
 
             if test_files.is_empty() {
-                println!("No .cl or .cr test files found in '{}'", target_dir);
+                println!("No .cl test files found in '{}'", target_dir);
                 return;
             }
 
@@ -5013,10 +5146,10 @@ fn main() {
                 Ok(()) => {
                     println!("[SUCCESS] Initialized CRON package '{}' in '{:?}'", name, curr_dir);
                     println!("  - cron.toml");
-                    println!("  - src/main.cr");
-                    println!("  - tests/test_sanity.cr");
+                    println!("  - src/main.cl");
+                    println!("  - tests/test_sanity.cl");
                     println!("  - .gitignore");
-                    println!("\nRun 'cron run src/main.cr' to compile & execute on 4D-Torus!");
+                    println!("\nRun 'cron sim src/main.cl' to execute on 4D-Torus Silicon!");
                 }
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -5040,10 +5173,10 @@ fn main() {
                 Ok(()) => {
                     println!("[SUCCESS] Created package '{}'", name);
                     println!("  - {}/cron.toml", name);
-                    println!("  - {}/src/main.cr", name);
-                    println!("  - {}/tests/test_sanity.cr", name);
+                    println!("  - {}/src/main.cl", name);
+                    println!("  - {}/tests/test_sanity.cl", name);
                     println!("  - {}/.gitignore", name);
-                    println!("\nNext steps:\n  cd {}\n  cron run src/main.cr", name);
+                    println!("\nNext steps:\n  cd {}\n  cron sim src/main.cl", name);
                 }
                 Err(e) => {
                     eprintln!("Error: {}", e);
