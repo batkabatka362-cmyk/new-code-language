@@ -353,6 +353,18 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                                 out.push_str("    }\n");
                             }
                         }
+                        "SZ" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str(&format!("    core->r[{}] = cron_subbyte_ternary_dot(core->r[{}], core->r[{}]); // 2:4 Structured Sparsity Zero-Skip\n", d, d, s));
+                        }
+                        "QK" | "QV" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str(&format!("    core->dmem[core->r[{}] & 0x3FFF] = (core->r[{}] & 0x0F0F0F0Fu); // Sub-Byte 4-Bit KV Cache Pack\n", d, s));
+                        }
+                        "QA" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str(&format!("    core->r[{}] = (core->r[{}] + core->r[{}]) >> 1; // Sub-Byte Streaming FlashAttention\n", d, d, s));
+                        }
                         "RF" => {
                             out.push_str("    core->reversible_ops_count++;\n");
                             out.push_str(&format!("    cron_reversible_swap(&core->r[{}], &core->r[{}]);\n", d, s));

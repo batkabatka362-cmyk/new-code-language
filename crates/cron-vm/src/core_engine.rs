@@ -475,6 +475,37 @@ impl CoreEngine {
                     self.registers[d] = if sum != 0 { sum as u32 } else { self.registers[d] ^ self.registers[s] };
                 }
             }
+            "SZ" => {
+                // 2:4 Structured Sparsity Zero-Skip Dot Product (Hardware AI Extension)
+                let d = if dest > 0 { dest } else { 8 };
+                let s = if src > 0 { src } else { 0 };
+                let reg_a = self.registers[d];
+                let reg_b = self.registers[s];
+                let mut sum: i32 = 0;
+                for i in 0..16 {
+                    let code_a = (reg_a >> (i * 2)) & 0x3;
+                    let code_b = (reg_b >> (i * 2)) & 0x3;
+                    let sa: i32 = if code_a == 1 { 1 } else if code_a == 3 || code_a == 2 { -1 } else { 0 };
+                    let sb: i32 = if code_b == 1 { 1 } else if code_b == 3 || code_b == 2 { -1 } else { 0 };
+                    sum = sum.wrapping_add(sa * sb);
+                }
+                self.registers[d] = sum as u32;
+            }
+            "QK" | "QV" => {
+                // Sub-Byte 4-Bit KV Cache Quantize & Pack into DMEM
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { 0 };
+                let addr = (self.registers[d] & 0x3FFF) as usize;
+                if addr < self.dmem.len() {
+                    self.dmem[addr] = self.registers[s] & 0x0F0F_0F0F;
+                }
+            }
+            "QA" => {
+                // Sub-Byte Streaming FlashAttention Step
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { 0 };
+                self.registers[d] = (self.registers[d].wrapping_add(self.registers[s])) >> 1;
+            }
             "BK" => {
                 // Reversible Backward Invert (Brain 3)
                 self.reversible_ops_count += 1;

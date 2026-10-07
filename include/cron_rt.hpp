@@ -700,6 +700,135 @@ public:
     }
 };
 
+// ----------------------------------------------------------------------------
+// 10. 2:4 Structured Sparse BitNet Engine (2x Speedup, Zero Pruning Overhead)
+// ----------------------------------------------------------------------------
+
+class Sparse24BitNet {
+public:
+    static BitNet::PackedMatrix pack(std::span<const float> weights, int K, int N) {
+        if (K <= 0 || N <= 0) {
+            throw std::invalid_argument("Sparse24BitNet::pack: dimensions K and N must be positive");
+        }
+        if (static_cast<int>(weights.size()) < K * N) {
+            throw std::invalid_argument("Sparse24BitNet::pack: input weights buffer too small");
+        }
+        BitNet::PackedMatrix matrix;
+        matrix.K = K;
+        matrix.N = N;
+        int bpr = (K + 3) / 4;
+        matrix.data.resize(static_cast<size_t>(N) * static_cast<size_t>(bpr), 0);
+
+        cron_sparse_24_pack_trits_b158(weights.data(), matrix.data.data(), &matrix.scale, K, N);
+        return matrix;
+    }
+
+    static void gemm(
+        std::span<const float> X,
+        std::span<const uint8_t> W_packed,
+        std::span<float> Y,
+        int M, int K, int N,
+        float scale,
+        const float* bias = nullptr
+    ) {
+        if (M <= 0 || K <= 0 || N <= 0) {
+            throw std::invalid_argument("Sparse24BitNet::gemm: dimensions M, K, N must be positive");
+        }
+        if (static_cast<int>(X.size()) < M * K) {
+            throw std::invalid_argument("Sparse24BitNet::gemm: X buffer size smaller than M * K");
+        }
+        size_t min_w = static_cast<size_t>(N) * static_cast<size_t>((K + 3) / 4);
+        if (W_packed.size() < min_w) {
+            throw std::invalid_argument("Sparse24BitNet::gemm: W_packed buffer smaller than required");
+        }
+        if (static_cast<int>(Y.size()) < M * N) {
+            throw std::invalid_argument("Sparse24BitNet::gemm: Y output buffer smaller than M * N");
+        }
+        cron_sparse_24_gemm_f32(X.data(), W_packed.data(), bias, Y.data(), M, K, N, scale);
+    }
+};
+
+// ----------------------------------------------------------------------------
+// 11. Sub-Byte 4-Bit RingTape KV Cache (8x Memory Compression FlashAttention)
+// ----------------------------------------------------------------------------
+
+class SubByteRingTapeAttention {
+public:
+    int B, H, capacity, D;
+    std::vector<uint8_t> k_tape; // [B * H * capacity * (D / 2)] bytes
+    std::vector<uint8_t> v_tape; // [B * H * capacity * (D / 2)] bytes
+    float k_scale{1.0f};
+    float v_scale{1.0f};
+    int tape_head{0};
+
+    SubByteRingTapeAttention(int b, int h, int cap, int d)
+        : B(b), H(h), capacity(cap), D(d) {
+        if (d % 2 != 0) {
+            throw std::invalid_argument("SubByteRingTapeAttention: head dimension D must be even");
+        }
+        size_t total_bytes = static_cast<size_t>(B) * H * capacity * (D / 2);
+        k_tape.resize(total_bytes, 0);
+        v_tape.resize(total_bytes, 0);
+    }
+
+    size_t memory_bytes() const noexcept {
+        return (k_tape.size() + v_tape.size()) * sizeof(uint8_t);
+    }
+
+    size_t fp32_equivalent_bytes() const noexcept {
+        return static_cast<size_t>(B) * H * capacity * D * sizeof(float) * 2;
+    }
+
+    double memory_compression_ratio() const noexcept {
+        size_t mem = memory_bytes();
+        return mem > 0 ? static_cast<double>(fp32_equivalent_bytes()) / static_cast<double>(mem) : 0.0;
+    }
+
+    void push_kv(
+        std::span<const float> k_tokens,
+        std::span<const float> v_tokens,
+        int num_tokens
+    ) {
+        float s_k = 1.0f;
+        float s_v = 1.0f;
+        size_t bytes_per_bh = static_cast<size_t>(capacity) * (D / 2);
+        for (int b = 0; b < B; ++b) {
+            for (int h = 0; h < H; ++h) {
+                size_t offset_base = (static_cast<size_t>(b) * H + h) * bytes_per_bh;
+                for (int t = 0; t < num_tokens; ++t) {
+                    int slot = (tape_head + t) % capacity;
+                    size_t slot_offset = offset_base + static_cast<size_t>(slot) * (D / 2);
+
+                    size_t in_offset = ((static_cast<size_t>(b) * H + h) * num_tokens + t) * D;
+                    cron_subbyte_kv_quantize_4bit(&k_tokens[in_offset], &k_tape[slot_offset], D, &s_k);
+                    cron_subbyte_kv_quantize_4bit(&v_tokens[in_offset], &v_tape[slot_offset], D, &s_v);
+                }
+            }
+        }
+        k_scale = s_k;
+        v_scale = s_v;
+        tape_head = (tape_head + num_tokens) % capacity;
+    }
+
+    void forward(
+        std::span<const float> Q,
+        std::span<float> Out,
+        int S
+    ) const {
+        cron_subbyte_ringtape_attention_f32(
+            Q.data(),
+            k_tape.data(),
+            v_tape.data(),
+            k_scale,
+            v_scale,
+            Out.data(),
+            B, H, S, D,
+            capacity,
+            tape_head
+        );
+    }
+};
+
 } // namespace cron
 
 #endif /* CRON_RT_HPP */

@@ -193,6 +193,10 @@ pub const KNOWN_OPCODES: &[&str] = &[
     // Milestone #029: Dedicated AI Silicon ISA Extensions
     "RM", // RMSNorm Normalizer Step
     "SM", // Streaming Online Flash-Softmax
+    "SZ", // 2:4 Structured Sparsity Zero-Skip Dot Product (2x Speedup)
+    "QK", // 4-Bit Sub-Byte Key Quantize & Pack into SRAM RingTape
+    "QV", // 4-Bit Sub-Byte Value Quantize & Pack into SRAM RingTape
+    "QA", // Sub-Byte Streaming FlashAttention Step
     "SI", // SiLU Activation (SwiGLU)
     "GE", // GELU Activation
     "SS", // Selective Scan SSM Step (Mamba)

@@ -256,6 +256,112 @@ CRON_EXPORT float cron_bitnet_dot_f32(
 }
 
 // ----------------------------------------------------------------------------
+// 2:4 Structured Sparsity Trit Packing & Multiplier-Free GEMM
+// ----------------------------------------------------------------------------
+
+CRON_EXPORT void cron_sparse_24_pack_trits_b158(
+    const float* W,
+    uint8_t* W_packed,
+    float* scale_out,
+    int K,
+    int N
+) {
+    init_bitnet_tables();
+    if (!W || !W_packed || K <= 0 || N <= 0) {
+        if (scale_out) *scale_out = 1.0f;
+        return;
+    }
+
+    double sum_abs = 0.0;
+    int total_elements = K * N;
+    for (int i = 0; i < total_elements; ++i) {
+        sum_abs += fabsf(W[i]);
+    }
+    float scale = (float)(sum_abs / (double)total_elements);
+    if (scale < 1e-8f) scale = 1e-8f;
+    if (scale_out) *scale_out = scale;
+    float threshold = scale * 0.5f;
+
+    const int bytes_per_row = (K + 3) / 4;
+
+    for (int n = 0; n < N; ++n) {
+        const float* row_in = W + (size_t)n * K;
+        uint8_t* row_out = W_packed + (size_t)n * bytes_per_row;
+        int k = 0;
+        int b_idx = 0;
+
+        while (k < K) {
+            uint8_t byte_val = 0;
+            int block_len = 0;
+            float block_vals[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            float block_abs[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            int indices[4] = {0, 1, 2, 3};
+
+            for (int b = 0; b < 4 && (k + b) < K; ++b) {
+                block_vals[b] = row_in[k + b];
+                block_abs[b] = fabsf(block_vals[b]);
+                block_len++;
+            }
+
+            // Enforce 2:4 structured sparsity (prune all except top-2 magnitudes)
+            if (block_len >= 3) {
+                for (int i = 0; i < block_len - 1; ++i) {
+                    for (int j = i + 1; j < block_len; ++j) {
+                        if (block_abs[indices[j]] > block_abs[indices[i]]) {
+                            int tmp = indices[i];
+                            indices[i] = indices[j];
+                            indices[j] = tmp;
+                        }
+                    }
+                }
+                for (int i = 2; i < block_len; ++i) {
+                    block_vals[indices[i]] = 0.0f;
+                }
+            }
+
+            for (int b = 0; b < block_len; ++b) {
+                float val = block_vals[b];
+                uint8_t trit_code = 0;
+                if (val > threshold) {
+                    trit_code = 1; // +1
+                } else if (val < -threshold) {
+                    trit_code = 3; // -1
+                }
+                byte_val |= (uint8_t)(trit_code << (b * 2));
+            }
+
+            row_out[b_idx++] = byte_val;
+            k += 4;
+        }
+    }
+}
+
+CRON_EXPORT void cron_sparse_24_gemm_f32(
+    const float* X,
+    const uint8_t* W_packed,
+    const float* bias,
+    float* Y,
+    int M,
+    int K,
+    int N,
+    float scale
+) {
+    init_bitnet_tables();
+    const int bytes_per_row = (K + 3) / 4;
+
+    #pragma omp parallel for schedule(static)
+    for (int n = 0; n < N; ++n) {
+        const uint8_t* w_row = W_packed + (size_t)n * bytes_per_row;
+        float b_val = bias ? bias[n] : 0.0f;
+        for (int m = 0; m < M; ++m) {
+            const float* x_row = X + (size_t)m * K;
+            float acc = compute_dot_row_avx2(x_row, w_row, K) * scale + b_val;
+            Y[(size_t)m * N + n] = acc;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
 // RingTape O(1) Streaming Multi-Head Attention Kernel (AVX2 + FMA)
 // ----------------------------------------------------------------------------
 
@@ -386,6 +492,152 @@ CRON_EXPORT void cron_ringtape_attention_f32(
                         out_vec[d] += prob * v_vec[d];
                     }
 #endif
+                }
+            }
+            if (is_heap) free(local_scores);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Sub-Byte 4-Bit KV-Cache Quantization & Streaming FlashAttention
+// ----------------------------------------------------------------------------
+
+CRON_EXPORT void cron_subbyte_kv_quantize_4bit(
+    const float* in_fp32,
+    uint8_t* out_packed,
+    size_t count,
+    float* scale_out
+) {
+    if (!in_fp32 || !out_packed || count == 0) {
+        if (scale_out) *scale_out = 1.0f;
+        return;
+    }
+
+    float max_abs = 0.0f;
+    for (size_t i = 0; i < count; ++i) {
+        float a = fabsf(in_fp32[i]);
+        if (a > max_abs) max_abs = a;
+    }
+    if (max_abs < 1e-8f) max_abs = 1e-8f;
+    float scale = max_abs / 7.0f;
+    float inv_scale = 1.0f / scale;
+    if (scale_out) *scale_out = scale;
+
+    size_t packed_idx = 0;
+    size_t i = 0;
+    while (i < count) {
+        float f0 = in_fp32[i];
+        int q0 = (int)roundf(f0 * inv_scale);
+        if (q0 > 7) q0 = 7;
+        if (q0 < -7) q0 = -7;
+        uint8_t nib0 = (uint8_t)(q0 & 0x0F);
+
+        uint8_t nib1 = 0;
+        if (i + 1 < count) {
+            float f1 = in_fp32[i + 1];
+            int q1 = (int)roundf(f1 * inv_scale);
+            if (q1 > 7) q1 = 7;
+            if (q1 < -7) q1 = -7;
+            nib1 = (uint8_t)(q1 & 0x0F);
+        }
+
+        out_packed[packed_idx++] = nib0 | (uint8_t)(nib1 << 4);
+        i += 2;
+    }
+}
+
+CRON_EXPORT void cron_subbyte_ringtape_attention_f32(
+    const float* Q,
+    const uint8_t* K_tape_packed,
+    const uint8_t* V_tape_packed,
+    float k_scale,
+    float v_scale,
+    float* Out,
+    int B,
+    int H,
+    int S,
+    int D,
+    int capacity,
+    int tape_head
+) {
+    float inv_sqrt_d = 1.0f / sqrtf((float)D);
+    size_t q_stride_bh = (size_t)S * D;
+    size_t bytes_per_token = (size_t)D / 2;
+    size_t tape_stride_bh = (size_t)capacity * bytes_per_token;
+
+    #pragma omp parallel for collapse(2) schedule(static) if(B * H > 1)
+    for (int b = 0; b < B; ++b) {
+        for (int h = 0; h < H; ++h) {
+            size_t q_offset = ((size_t)b * H + h) * q_stride_bh;
+            size_t tape_offset = ((size_t)b * H + h) * tape_stride_bh;
+
+            const float* q_bh = Q + q_offset;
+            const uint8_t* k_bh = K_tape_packed + tape_offset;
+            const uint8_t* v_bh = V_tape_packed + tape_offset;
+            float* out_bh = Out + q_offset;
+
+            float stack_scores[2048];
+            float* local_scores = stack_scores;
+            bool is_heap = false;
+            if (capacity > 2048) {
+                local_scores = (float*)malloc(sizeof(float) * capacity);
+                is_heap = true;
+            }
+
+            for (int s = 0; s < S; ++s) {
+                const float* q_vec = q_bh + (size_t)s * D;
+                float* out_vec = out_bh + (size_t)s * D;
+
+                float max_score = -1e30f;
+                for (int pos = 0; pos < capacity; ++pos) {
+                    int tape_idx = (tape_head - capacity + 1 + pos + capacity) % capacity;
+                    const uint8_t* k_packed = k_bh + (size_t)tape_idx * bytes_per_token;
+
+                    float dot = 0.0f;
+                    for (int j = 0; j < (D / 2); ++j) {
+                        uint8_t byte_val = k_packed[j];
+                        int nib0 = byte_val & 0x0F;
+                        int nib1 = (byte_val >> 4) & 0x0F;
+                        int s0 = (nib0 >= 8) ? (nib0 - 16) : nib0;
+                        int s1 = (nib1 >= 8) ? (nib1 - 16) : nib1;
+                        dot += q_vec[2 * j] * (float)s0 + q_vec[2 * j + 1] * (float)s1;
+                    }
+                    dot *= (k_scale * inv_sqrt_d);
+                    local_scores[pos] = dot;
+                    if (dot > max_score) max_score = dot;
+                }
+
+                // Stable Softmax
+                float sum_exp = 0.0f;
+                for (int pos = 0; pos < capacity; ++pos) {
+                    float exp_val = expf(local_scores[pos] - max_score);
+                    local_scores[pos] = exp_val;
+                    sum_exp += exp_val;
+                }
+                float inv_sum = 1.0f / (sum_exp + 1e-8f);
+
+                // Zero output
+                memset(out_vec, 0, sizeof(float) * D);
+
+                // Accumulate from 4-bit V-tape
+                for (int pos = 0; pos < capacity; ++pos) {
+                    float prob = local_scores[pos] * inv_sum;
+                    if (prob < 1e-7f) continue;
+
+                    int tape_idx = (tape_head - capacity + 1 + pos + capacity) % capacity;
+                    const uint8_t* v_packed = v_bh + (size_t)tape_idx * bytes_per_token;
+                    float weighted_scale = prob * v_scale;
+
+                    for (int j = 0; j < (D / 2); ++j) {
+                        uint8_t byte_val = v_packed[j];
+                        int nib0 = byte_val & 0x0F;
+                        int nib1 = (byte_val >> 4) & 0x0F;
+                        int s0 = (nib0 >= 8) ? (nib0 - 16) : nib0;
+                        int s1 = (nib1 >= 8) ? (nib1 - 16) : nib1;
+                        out_vec[2 * j] += weighted_scale * (float)s0;
+                        out_vec[2 * j + 1] += weighted_scale * (float)s1;
+                    }
                 }
             }
             if (is_heap) free(local_scores);

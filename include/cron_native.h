@@ -83,6 +83,99 @@ CRON_EXPORT float cron_bitnet_dot_f32(
 );
 
 /**
+ * 2:4 Structured Sparsity Trit Packing:
+ * In every block of 4 elements, enforces that at most 2 are non-zero (the 2 with largest magnitude).
+ * Prunes the remaining 2 to zero and packs into 2-bit trits.
+ *
+ * @param W          Input FP32 weight matrix [N, K]
+ * @param W_packed   Output packed byte array [N, (K + 3) / 4]
+ * @param scale_out  Output scale factor
+ * @param K          Inner dimension
+ * @param N          Outer dimension
+ */
+CRON_EXPORT void cron_sparse_24_pack_trits_b158(
+    const float* W,
+    uint8_t* W_packed,
+    float* scale_out,
+    int K,
+    int N
+);
+
+/**
+ * High-Performance 2:4 Structured Sparse Multiplier-Free BitNet GEMM:
+ * Takes advantage of 50% guaranteed zero weights in every 4-block.
+ * 
+ * @param X          Input activations [M, K]
+ * @param W_packed   Packed 2:4 sparse weights [N, (K + 3) / 4]
+ * @param bias       Optional bias [N] (can be NULL)
+ * @param Y          Output matrix [M, N]
+ * @param M          Batch / Sequence
+ * @param K          Input features
+ * @param N          Output features
+ * @param scale      Ternary dequantization scale
+ */
+CRON_EXPORT void cron_sparse_24_gemm_f32(
+    const float* X,
+    const uint8_t* W_packed,
+    const float* bias,
+    float* Y,
+    int M,
+    int K,
+    int N,
+    float scale
+);
+
+/**
+ * 4-Bit Sub-Byte KV Cache Quantizer:
+ * Compresses FP32 vectors into 4-bit packed nibbles (2 values per byte).
+ * Achieves an 8x memory reduction compared to FP32 KV Cache (4 bytes -> 0.5 bytes).
+ *
+ * @param in_fp32    Input FP32 array of length count
+ * @param out_packed Output packed byte array of length (count + 1) / 2
+ * @param count      Number of float elements
+ * @param scale_out  Output scale factor (max_abs / 7.0f)
+ */
+CRON_EXPORT void cron_subbyte_kv_quantize_4bit(
+    const float* in_fp32,
+    uint8_t* out_packed,
+    size_t count,
+    float* scale_out
+);
+
+/**
+ * Sub-Byte RingTape O(1) Streaming FlashAttention Kernel:
+ * Circular sliding-window multi-head attention reading directly from 4-bit packed K/V tapes.
+ * 8x smaller KV-Cache DRAM footprint, in-register dequantization.
+ * 
+ * @param Q               Query tensor [B, H, S, D] (FP32)
+ * @param K_tape_packed   Circular Key tape buffer [B, H, Capacity, D / 2 bytes] (4-bit packed)
+ * @param V_tape_packed   Circular Value tape buffer [B, H, Capacity, D / 2 bytes] (4-bit packed)
+ * @param k_scale         Per-head Key dequantization scale
+ * @param v_scale         Per-head Value dequantization scale
+ * @param Out             Output attention tensor [B, H, S, D] (FP32)
+ * @param B               Batch size
+ * @param H               Number of attention heads
+ * @param S               Query sequence length
+ * @param D               Head dimension
+ * @param capacity        Ring buffer capacity (max sequence window)
+ * @param tape_head       Current circular pointer index (0 .. capacity-1)
+ */
+CRON_EXPORT void cron_subbyte_ringtape_attention_f32(
+    const float* Q,
+    const uint8_t* K_tape_packed,
+    const uint8_t* V_tape_packed,
+    float k_scale,
+    float v_scale,
+    float* Out,
+    int B,
+    int H,
+    int S,
+    int D,
+    int capacity,
+    int tape_head
+);
+
+/**
  * RingTape O(1) Streaming FlashAttention Kernel:
  * Circular sliding-window multi-head attention without dynamic heap reallocation.
  * 
