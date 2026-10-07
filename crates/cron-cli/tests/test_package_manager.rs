@@ -211,35 +211,32 @@ fn test_cli_add_remove_install_tree_workflow() {
 }
 
 #[test]
-fn test_libcr_vision_audio_collectives_compilation() {
-    let (dvs_path, cochlea_path, coll_path) = if Path::new("libcr").exists() {
+fn test_libcl_vision_audio_collectives_integrity() {
+    let (dvs_path, audio_path, coll_path) = if Path::new("libcl").exists() {
         (
-            Path::new("libcr/vision/dvs_stream.cr").to_path_buf(),
-            Path::new("libcr/audio/cochlea.cr").to_path_buf(),
-            Path::new("libcr/distributed/collectives.cr").to_path_buf(),
+            Path::new("libcl/vision_patch.cl").to_path_buf(),
+            Path::new("libcl/audio_dsp.cl").to_path_buf(),
+            Path::new("libcl/torus_allreduce.cl").to_path_buf(),
         )
     } else {
         (
-            Path::new("../../libcr/vision/dvs_stream.cr").to_path_buf(),
-            Path::new("../../libcr/audio/cochlea.cr").to_path_buf(),
-            Path::new("../../libcr/distributed/collectives.cr").to_path_buf(),
+            Path::new("../../libcl/vision_patch.cl").to_path_buf(),
+            Path::new("../../libcl/audio_dsp.cl").to_path_buf(),
+            Path::new("../../libcl/torus_allreduce.cl").to_path_buf(),
         )
     };
 
-    let dvs_code = fs::read_to_string(&dvs_path)
-        .expect("Read dvs_stream.cr");
-    let vliw_dvs = compile_source(&dvs_code);
-    assert!(vliw_dvs.is_ok(), "dvs_stream.cr must compile cleanly: {:?}", vliw_dvs.err());
+    let dvs_code = fs::read_to_string(&dvs_path).expect("Read vision_patch.cl");
+    let rep_dvs = cronc::cl_pkg::audit_cl_source(&dvs_code, "vision_patch.cl");
+    assert!(rep_dvs.passed, "vision_patch.cl must pass audit: {:?}", rep_dvs.diagnostics);
 
-    let cochlea_code = fs::read_to_string(&cochlea_path)
-        .expect("Read cochlea.cr");
-    let vliw_cochlea = compile_source(&cochlea_code);
-    assert!(vliw_cochlea.is_ok(), "cochlea.cr must compile cleanly: {:?}", vliw_cochlea.err());
+    let audio_code = fs::read_to_string(&audio_path).expect("Read audio_dsp.cl");
+    let rep_audio = cronc::cl_pkg::audit_cl_source(&audio_code, "audio_dsp.cl");
+    assert!(rep_audio.passed, "audio_dsp.cl must pass audit: {:?}", rep_audio.diagnostics);
 
-    let collectives_code = fs::read_to_string(&coll_path)
-        .expect("Read collectives.cr");
-    let vliw_coll = compile_source(&collectives_code);
-    assert!(vliw_coll.is_ok(), "collectives.cr must compile cleanly: {:?}", vliw_coll.err());
+    let coll_code = fs::read_to_string(&coll_path).expect("Read torus_allreduce.cl");
+    let rep_coll = cronc::cl_pkg::audit_cl_source(&coll_code, "torus_allreduce.cl");
+    assert!(rep_coll.passed, "torus_allreduce.cl must pass audit: {:?}", rep_coll.diagnostics);
 }
 
 #[test]
@@ -260,24 +257,24 @@ fn test_package_search_and_new_libs() {
     let all = registry.search_packages("");
     assert!(all.len() >= 7);
 
-    // 4. Verify compilation of new libraries
-    let (math_path, kv_path) = if Path::new("libcr").exists() {
+    // 4. Verify compilation/audit of standard silicon libraries
+    let (math_path, kv_path) = if Path::new("libcl").exists() {
         (
-            Path::new("libcr/math/math.cr").to_path_buf(),
-            Path::new("libcr/kv/kv_cache.cr").to_path_buf(),
+            Path::new("libcl/math.cl").to_path_buf(),
+            Path::new("libcl/kv_cache_paged.cl").to_path_buf(),
         )
     } else {
         (
-            Path::new("../../libcr/math/math.cr").to_path_buf(),
-            Path::new("../../libcr/kv/kv_cache.cr").to_path_buf(),
+            Path::new("../../libcl/math.cl").to_path_buf(),
+            Path::new("../../libcl/kv_cache_paged.cl").to_path_buf(),
         )
     };
 
-    let math_code = fs::read_to_string(&math_path).expect("Read math.cr");
-    let vliw_math = compile_source(&math_code);
-    assert!(vliw_math.is_ok(), "math.cr must compile cleanly: {:?}", vliw_math.err());
+    let math_code = fs::read_to_string(&math_path).expect("Read math.cl");
+    let rep_math = cronc::cl_pkg::audit_cl_source(&math_code, "math.cl");
+    assert!(rep_math.passed, "math.cl must pass audit: {:?}", rep_math.diagnostics);
 
-    let kv_code = fs::read_to_string(&kv_path).expect("Read kv_cache.cr");
-    let vliw_kv = compile_source(&kv_code);
-    assert!(vliw_kv.is_ok(), "kv_cache.cr must compile cleanly: {:?}", vliw_kv.err());
+    let kv_code = fs::read_to_string(&kv_path).expect("Read kv_cache_paged.cl");
+    let rep_kv = cronc::cl_pkg::audit_cl_source(&kv_code, "kv_cache_paged.cl");
+    assert!(rep_kv.passed, "kv_cache_paged.cl must pass audit: {:?}", rep_kv.diagnostics);
 }

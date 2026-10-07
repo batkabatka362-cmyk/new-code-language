@@ -29,53 +29,45 @@ fn find_path(rel: &str) -> PathBuf {
 }
 
 #[test]
-fn test_mamba2_hybrid_layer_syntax_and_ast() {
-    let path = find_path("libcr/neuro/mamba2_hybrid.cr");
-    assert!(path.exists(), "Mamba-2 hybrid source file must exist: {:?}", path);
+fn test_mamba2_hybrid_layer_kernel_audit() {
+    let path = find_path("libcl/mamba2_ssd.cl");
+    assert!(path.exists(), "Mamba-2 SSD kernel must exist: {:?}", path);
 
-    let content = fs::read_to_string(path).expect("Failed to read mamba2_hybrid.cr");
-    let mut lexer = Lexer::new(&content);
-    let tokens = lexer.tokenize().expect("Lexing mamba2_hybrid.cr failed");
-    
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse_program().expect("Parsing mamba2_hybrid.cr failed");
-    
-    // Check that mamba2 functions and structs are parsed
-    assert!(!program.structs.is_empty(), "Mamba-2 module must declare structs");
-    assert!(!program.functions.is_empty(), "Mamba-2 module must declare functions");
-    assert_eq!(program.module_name, "cron.neuro.mamba2_hybrid");
+    let content = fs::read_to_string(path).expect("Failed to read mamba2_ssd.cl");
+    let audit = audit_cl_source(&content, "mamba2_ssd.cl");
+    assert!(audit.passed, "Mamba-2 SSD must pass safety audit: {:?}", audit.diagnostics);
+
+    let core = run_cl_jit(&content).expect("Mamba-2 SSD JIT execution must succeed");
+    assert!(core.cycle_count > 0);
+    assert!(core.is_halted);
 }
 
 #[test]
 fn test_neuromorphic_cochlea_sensory_module() {
-    let path = find_path("libcr/sensory/neuromorphic_cochlea.cr");
-    assert!(path.exists(), "Cochlea module must exist: {:?}", path);
+    let path = find_path("libcl/audio_dsp.cl");
+    assert!(path.exists(), "Audio DSP kernel must exist: {:?}", path);
 
-    let content = fs::read_to_string(path).expect("Failed to read neuromorphic_cochlea.cr");
-    let mut lexer = Lexer::new(&content);
-    let tokens = lexer.tokenize().expect("Lexing neuromorphic_cochlea.cr failed");
-    
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse_program().expect("Parsing neuromorphic_cochlea.cr failed");
-    assert!(!program.structs.is_empty(), "Cochlea module must declare structs");
-    assert!(!program.functions.is_empty(), "Cochlea module must declare functions");
-    assert_eq!(program.module_name, "cron.sensory.neuromorphic_cochlea");
+    let content = fs::read_to_string(path).expect("Failed to read audio_dsp.cl");
+    let audit = audit_cl_source(&content, "audio_dsp.cl");
+    assert!(audit.passed, "Audio DSP kernel must pass safety audit: {:?}", audit.diagnostics);
+
+    let core = run_cl_jit(&content).expect("Audio DSP JIT execution must succeed");
+    assert!(core.cycle_count > 0);
+    assert!(core.is_halted);
 }
 
 #[test]
 fn test_spatial_vision_patch_sensory_module() {
-    let path = find_path("libcr/sensory/spatial_vision_patch.cr");
+    let path = find_path("libcl/vision_patch.cl");
     assert!(path.exists(), "Spatial vision module must exist: {:?}", path);
 
-    let content = fs::read_to_string(path).expect("Failed to read spatial_vision_patch.cr");
-    let mut lexer = Lexer::new(&content);
-    let tokens = lexer.tokenize().expect("Lexing spatial_vision_patch.cr failed");
-    
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse_program().expect("Parsing spatial_vision_patch.cr failed");
-    assert!(!program.structs.is_empty(), "Spatial vision module must declare structs");
-    assert!(!program.functions.is_empty(), "Spatial vision module must declare functions");
-    assert_eq!(program.module_name, "cron.sensory.spatial_vision_patch");
+    let content = fs::read_to_string(path).expect("Failed to read vision_patch.cl");
+    let audit = audit_cl_source(&content, "vision_patch.cl");
+    assert!(audit.passed, "Spatial vision module must pass safety audit: {:?}", audit.diagnostics);
+
+    let core = run_cl_jit(&content).expect("Vision patch JIT execution must succeed");
+    assert!(core.cycle_count > 0);
+    assert!(core.is_halted);
 }
 
 #[test]

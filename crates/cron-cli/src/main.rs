@@ -120,7 +120,7 @@ fn print_help() {
     println!("    profile <file.cr>              Generate .prof execution trace for FDO analysis");
     println!("    dashboard <file.cr>            Real-time 6-Brain + 4D-Torus live terminal HUD");
     println!("    abi                            Display CRON Application Binary Interface (ABI)");
-    println!("    lib                            Inspect and verify CRON Standard Library (libcr)");
+    println!("    lib                            Inspect and verify CRON Silicon Standard Library (libcl)");
     println!("    repl                           Start interactive CRON Cognitive REPL session");
     println!("    init [name]                    Initialize a new CRON project in current directory");
     println!("    new <name>                     Create a new CRON project directory with cron.toml");
@@ -4489,23 +4489,23 @@ fn main() {
             if !emit_json {
                 print_banner();
                 println!("============================================================");
-                println!("             CRON STANDARD LIBRARY (libcr)                 ");
+                println!("             CRON SILICON MICROCODE LIBRARY (libcl)         ");
                 println!("============================================================");
-                println!("  Root: libcr/");
+                println!("  Root: libcl/");
                 println!();
             }
 
-            let libcr_dir = Path::new("libcr");
+            let libcl_dir = Path::new("libcl");
             let mut found_modules: Vec<(String, usize, bool)> = Vec::new();
 
-            if libcr_dir.is_dir() {
-                fn collect_cr_files(dir: &Path, base: &Path, list: &mut Vec<(String, usize, bool)>) {
+            if libcl_dir.is_dir() {
+                fn collect_cl_files(dir: &Path, base: &Path, list: &mut Vec<(String, usize, bool)>) {
                     if let Ok(entries) = fs::read_dir(dir) {
                         for entry in entries.flatten() {
                             let p = entry.path();
                             if p.is_dir() {
-                                collect_cr_files(&p, base, list);
-                            } else if p.extension().map(|e| e == "cr").unwrap_or(false) {
+                                collect_cl_files(&p, base, list);
+                            } else if p.extension().map(|e| e == "cl").unwrap_or(false) {
                                 let rel = p.strip_prefix(base).unwrap_or(&p).to_string_lossy().replace('\\', "/");
                                 let line_count = fs::read_to_string(&p).map(|s| s.lines().count()).unwrap_or(0);
                                 list.push((rel, line_count, true));
@@ -4513,7 +4513,7 @@ fn main() {
                         }
                     }
                 }
-                collect_cr_files(libcr_dir, libcr_dir, &mut found_modules);
+                collect_cl_files(libcl_dir, libcl_dir, &mut found_modules);
             }
 
             found_modules.sort_by(|a, b| a.0.cmp(&b.0));
