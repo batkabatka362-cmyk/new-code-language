@@ -8,6 +8,8 @@ CompileFlags:
     - "-Isynth"
     - "-Ibenchmarks"
     - "-isystem"
+    - "C:/Users/local_ybjuj27/AppData/Roaming/Antigravity IDE/User/globalStorage/llvm-vs-code-extensions.vscode-clangd/install/22.1.6/clangd_22.1.6/lib/clang/22/include"
+    - "-isystem"
     - "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include/c++/16.1.0"
     - "-isystem"
     - "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include/c++/16.1.0/x86_64-w64-mingw32"
@@ -26,3 +28,4 @@ Diagnostics:
   Suppress:
     - "-Wunknown-pragmas"
     - "drv_unknown_argument"
+    - "builtin_definition"
