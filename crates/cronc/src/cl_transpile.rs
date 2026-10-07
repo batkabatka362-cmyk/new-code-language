@@ -163,41 +163,7 @@ pub fn transpile_cl_to_ptx(cl_source: &str) -> Result<String, String> {
 
 /// Transpiles `.cl` microcode to ISO C23 + AVX-512 SIMD native code
 pub fn transpile_cl_to_c23_simd(cl_source: &str) -> Result<String, String> {
-    let mut c23 = String::new();
-    c23.push_str("// ============================================================================\n");
-    c23.push_str("// CRON ISO C23 + AVX-512 Native Accelerator Transpiled from .cl Microcode\n");
-    c23.push_str("// ============================================================================\n\n");
-    c23.push_str("#include <stdint.h>\n");
-    c23.push_str("#include <stdbool.h>\n");
-    c23.push_str("#include <immintrin.h>\n\n");
-    c23.push_str("void cron_cl_c23_execute(uint32_t registers[16], uint32_t pgas[4096]) {\n");
-
-    for line in cl_source.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('B') || !trimmed.contains(':') {
-            continue;
-        }
-        let (_, slots_part) = trimmed.split_once(':').unwrap();
-        for slot_str in slots_part.split_whitespace() {
-            if let Ok(parsed) = parse_slot(slot_str) {
-                let d = parsed.dest_reg.unwrap_or(0) % 16;
-                let s = parsed.src_reg.unwrap_or(0) % 16;
-                let imm = parsed.imm_token.to_digit(16).unwrap_or(0);
-
-                match parsed.opcode.as_str() {
-                    "==" => c23.push_str(&format!("    registers[{}] = 0x{:08X}u;\n", d, imm)),
-                    "AD" => c23.push_str(&format!("    registers[{}] += registers[{}];\n", d, s)),
-                    "SB" => c23.push_str(&format!("    registers[{}] -= registers[{}];\n", d, s)),
-                    "ML" => c23.push_str(&format!("    registers[{}] *= registers[{}];\n", d, s)),
-                    "HL" => c23.push_str("    return;\n"),
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    c23.push_str("}\n");
-    Ok(c23)
+    crate::cl_c23::compile_cl_to_c23(cl_source, "cron_cl_kernel")
 }
 
 /// Universal `.cl` cross-transpiler entry point

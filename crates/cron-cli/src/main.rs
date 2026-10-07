@@ -38,17 +38,18 @@ fn print_help() {
     println!("    remove <package>               Remove dependency from cron.toml and lockfile");
     println!("    install                        Resolve dependencies and verify cryptographic lockfile");
     println!("    pkg <tree|list|publish|verify> Package manager inspection, publishing & verification");
-    println!("    import <model.onnx|weights.safetensors> [-o out.cr] Ingest AI graph & synthesize CRON");
-    println!("    build <file.cr> [--target <t>] Compile into target (cl, native, ptx, metal)");
-    println!("    ptx <file.cr> [-o <out.ptx>]   Compile .cr into NVIDIA CUDA PTX v7.5+ GPU kernel");
-    println!("    metal <file.cr> [-o <out.metal>] Compile .cr into Apple Metal Shading Language (MSL)");
-    println!("    verilog <file.cr> [-o <out.v>] Synthesize IEEE 1364-2001 Verilog RTL core");
-    println!("    run <file.cr>                  Compile and execute on 256-Core 4D-Torus Simulator");
+    println!("    import <model.onnx|weights.safetensors> [-o out.cl] Ingest AI graph & synthesize CRON .cl");
+    println!("    build <file.cl> [--target <t>] Compile into target (cl, native, ptx, metal)");
+    println!("    ptx <file.cl> [-o <out.ptx>]   Compile .cl into NVIDIA CUDA PTX v7.5+ GPU kernel");
+    println!("    metal <file.cl> [-o <out.metal>] Compile .cl into Apple Metal Shading Language (MSL)");
+    println!("    verilog <file.cl> [-o <out.v>] Synthesize IEEE 1364-2001 Verilog RTL core");
+    println!("    run <file.cl>                  Compile and execute on 256-Core 4D-Torus Simulator");
     println!("    sim <file.cl|.clb>             Directly run .cl machine code or .clb binary in 4D-Torus VM");
     println!("    cl-run <file.cl>               Execute .cl machine code in RAM via sub-microsecond JIT engine");
     println!("    cl-llvm <file.cl> [-o out.ll]  Transpile .cl directly into SSA LLVM Intermediate Representation");
     println!("    cl-verilog <file.cl> [-o out.v] Synthesize standalone Verilog RTL hardware core from .cl");
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
+    println!("    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench");
     println!("    cl-macro <file.clm> [-o out.cl] High-Level Macro Assembler (.clm) to VLIW 10-char bundles");
     println!("    cl-import [options]            Neural Model & Tensor Importer (BitNet 1.58b ternary quantization)");
     println!("    cl-lsp <file.cl>               Real-time Language Server Protocol & CRC/Hazard diagnostic linter");
@@ -2464,7 +2465,7 @@ fn main() {
         }
         "c23" | "cl-c23" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron c23 <file.cl|file.cr> [-o <out>] [-c|--compile] [-r|--run] [--opt <O0|O1|O2|O3>]");
+                eprintln!("Error: Missing input file. Usage: cron cl-c23 <file.cl> [-o <out>] [-c|--compile] [-r|--run] [--simd <avx512|avx2|auto|neon|generic>] [--bench [iters]] [-O3]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -2476,7 +2477,9 @@ fn main() {
             let mut out_path = None;
             let mut do_compile = false;
             let mut do_run = false;
+            let mut bench_iters: Option<usize> = None;
             let mut opt_level = "3".to_string();
+            let mut simd_target = cronc::cl_c23::SimdTarget::Auto;
 
             let mut i = 3;
             while i < args.len() {
@@ -2489,6 +2492,20 @@ fn main() {
                 } else if args[i] == "-r" || args[i] == "--run" {
                     do_run = true;
                     i += 1;
+                } else if args[i] == "--bench" {
+                    do_run = true;
+                    if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                        bench_iters = args[i + 1].parse::<usize>().ok();
+                        i += 2;
+                    } else {
+                        bench_iters = Some(100000);
+                        i += 1;
+                    }
+                } else if args[i] == "--simd" && i + 1 < args.len() {
+                    if let Some(target) = cronc::cl_c23::SimdTarget::from_str_opt(&args[i + 1]) {
+                        simd_target = target;
+                    }
+                    i += 2;
                 } else if (args[i] == "--opt" || args[i] == "-O") && i + 1 < args.len() {
                     opt_level = args[i + 1].trim_start_matches("-O").to_string();
                     i += 2;
@@ -2531,7 +2548,7 @@ fn main() {
                 let temp_bin = temp_dir.join(&exe_name);
 
                 let comp_res = if is_cl {
-                    cronc::cl_c23::compile_cl_to_native_binary(&content, temp_bin.to_str().unwrap(), &opt_level)
+                    cronc::cl_c23::compile_cl_to_native_binary_with_target(&content, temp_bin.to_str().unwrap(), &opt_level, simd_target)
                 } else {
                     cronc::compile_native_binary(&content, &temp_bin, &[])
                 };
@@ -2541,7 +2558,11 @@ fn main() {
                     std::process::exit(1);
                 }
 
-                let run_status = std::process::Command::new(&temp_bin).status();
+                let mut cmd = std::process::Command::new(&temp_bin);
+                if let Some(iters) = bench_iters {
+                    cmd.arg("--bench").arg(iters.to_string());
+                }
+                let run_status = cmd.status();
                 let _ = fs::remove_file(&temp_bin);
 
                 match run_status {
@@ -2564,14 +2585,14 @@ fn main() {
                 let bin_path = out_path.unwrap_or(default_bin);
 
                 let comp_res = if is_cl {
-                    cronc::cl_c23::compile_cl_to_native_binary(&content, &bin_path, &opt_level)
+                    cronc::cl_c23::compile_cl_to_native_binary_with_target(&content, &bin_path, &opt_level, simd_target)
                 } else {
                     cronc::compile_native_binary(&content, Path::new(&bin_path), &[])
                 };
 
                 match comp_res {
                     Ok(()) => {
-                        println!("[SUCCESS] Compiled to Native Host C23 Executable: '{}' (Opt: -O{})", bin_path, opt_level);
+                        println!("[SUCCESS] Compiled to Native Host C23 Executable: '{}' (Opt: -O{}, SIMD: {:?})", bin_path, opt_level, simd_target);
                     }
                     Err(e) => {
                         eprintln!("[NATIVE COMPILATION ERROR] {}", e);
@@ -3661,7 +3682,7 @@ fn main() {
         }
         "cl-native" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron cl-native <file.cl> [-o <out.exe>] [--opt O3] [--run]");
+                eprintln!("Error: Missing input file. Usage: cron cl-native <file.cl> [-o <out.exe>] [--opt O3] [--simd <avx512|avx2|auto|neon|generic>] [--run] [--bench [iters]]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -3676,16 +3697,35 @@ fn main() {
             let mut out_path = None;
             let mut opt_level = "3".to_string();
             let mut run_after = false;
+            let mut bench_iters: Option<usize> = None;
+            let mut simd_target = cronc::cl_c23::SimdTarget::Auto;
 
             let mut i = 3;
             while i < args.len() {
                 if args[i] == "-o" && i + 1 < args.len() {
                     out_path = Some(args[i + 1].clone());
                     i += 2;
-                } else if args[i] == "--opt" && i + 1 < args.len() {
-                    opt_level = args[i + 1].clone();
+                } else if (args[i] == "--opt" || args[i] == "-O") && i + 1 < args.len() {
+                    opt_level = args[i + 1].trim_start_matches("-O").to_string();
                     i += 2;
-                } else if args[i] == "--run" {
+                } else if args[i].starts_with("-O") {
+                    opt_level = args[i].trim_start_matches("-O").to_string();
+                    i += 1;
+                } else if args[i] == "--simd" && i + 1 < args.len() {
+                    if let Some(target) = cronc::cl_c23::SimdTarget::from_str_opt(&args[i + 1]) {
+                        simd_target = target;
+                    }
+                    i += 2;
+                } else if args[i] == "--bench" {
+                    run_after = true;
+                    if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                        bench_iters = args[i + 1].parse::<usize>().ok();
+                        i += 2;
+                    } else {
+                        bench_iters = Some(100000);
+                        i += 1;
+                    }
+                } else if args[i] == "--run" || args[i] == "-r" {
                     run_after = true;
                     i += 1;
                 } else {
@@ -3710,10 +3750,11 @@ fn main() {
             println!("  Source Input:         {}", input_path);
             println!("  Target Native Binary: {}", bin_path);
             println!("  Optimization Level:   -O{}", opt_level);
+            println!("  SIMD Target:          {:?}", simd_target);
             println!("  Compilation Pipeline: .cl -> Transpiled C23 -> Host Native C -> Executable\n");
 
             let start = std::time::Instant::now();
-            match cronc::compile_cl_to_native_binary(&content, &bin_path, &opt_level) {
+            match cronc::cl_c23::compile_cl_to_native_binary_with_target(&content, &bin_path, &opt_level, simd_target) {
                 Ok(()) => {
                     let elapsed = start.elapsed();
                     println!("[SUCCESS] Native standalone executable built in {:.2?}", elapsed);
@@ -3730,8 +3771,11 @@ fn main() {
                 } else {
                     bin_path.clone()
                 };
-                let exec_status = std::process::Command::new(&launch_path)
-                    .status();
+                let mut cmd = std::process::Command::new(&launch_path);
+                if let Some(iters) = bench_iters {
+                    cmd.arg("--bench").arg(iters.to_string());
+                }
+                let exec_status = cmd.status();
                 match exec_status {
                     Ok(s) => {
                         if !s.success() {
