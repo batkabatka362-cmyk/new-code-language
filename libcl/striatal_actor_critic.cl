@@ -1,0 +1,11 @@
+; Auto-Vectorized VLIW Microcode Kernel: striatal_actor_critic
+@kernel striatal_actor_critic
+.target silicon.4d_torus_simd
+.ipc_target 4.0
+
+B0000: '==01#050( '==02#014N '==03#010Z '==04#07ES
+B0001: _ML05M304h _AD06M205r _NO00#000L _NO00#000L
+B0002: _SB07M603x _NO00#000L _NO00#000L _NO00#000L
+B0003: _DA08M700N _NO00#000L _NO00#000L _NO00#000L
+B0004: _ML09M801) _NO00#000L _NO00#000L _NO00#000L
+B0005: _AD0AM9002 !HL00#000( _NO00#000L _NO00#000L

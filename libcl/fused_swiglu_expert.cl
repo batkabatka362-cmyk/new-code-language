@@ -1,0 +1,11 @@
+; Auto-Vectorized VLIW Microcode Kernel: fused_swiglu_expert
+@kernel fused_swiglu_expert
+.target silicon.4d_torus_simd
+.ipc_target 4.0
+
+B0000: '==01#080O '==02#030" '==03#055} '==04#0AAO
+B0001: _TM05M203{ _TM06M204, _NO00#000L _NO00#000L
+B0002: _SI07M5002 _NO00#000L _NO00#000L _NO00#000L
+B0003: _ML08M706Y _NO00#000L _NO00#000L _NO00#000L
+B0004: _ML09M801) _NO00#000L _NO00#000L _NO00#000L
+B0005: ~RM0AM900s !HL00#000( _NO00#000L _NO00#000L
