@@ -1,4 +1,7 @@
-; CRON Standard Microcode Kernel: libcl/crypto_rev.cl
+; ============================================================================
+; CRON Standard Microcode Kernel Library: libcl/crypto_rev.cl
+; Zero-Entropy Reversible Landauer Cryptographic Feistel & Permutation Kernel
+; ============================================================================
 @kernel reversible_crypto_hash
 .target silicon.reversible_logic
 .ipc_target 4.0

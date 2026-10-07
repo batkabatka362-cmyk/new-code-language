@@ -1,4 +1,7 @@
-; CRON Standard Microcode Kernel: libcl/stdp_synapse.cl
+; ============================================================================
+; CRON Standard Microcode Kernel Library: libcl/stdp_synapse.cl
+; Neuromorphic Spike-Timing-Dependent Plasticity & Astrocytic Modulator
+; ============================================================================
 @kernel neuromorphic_stdp
 .target silicon.neuromorphic_core
 .ipc_target 4.0

@@ -1,6 +1,6 @@
 """
 CRON 4D-Torus Simulator Interface for Python
-Allows running .cr or .cl on the 256-Core Neuromorphic Processor and returning telemetry dicts.
+Allows running .cl on the 256-Core Neuromorphic Processor and returning telemetry dicts.
 """
 
 import subprocess

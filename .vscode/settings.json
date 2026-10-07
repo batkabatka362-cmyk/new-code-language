@@ -10,9 +10,7 @@
     "*.clm": "cron-cl",
     "*.clh": "cron-cl",
     "*.clpack": "cron-cl",
-    "*.cksl": "cron-cl",
-    "*.cr": "cron",
-    "*.crh": "cron"
+    "*.cksl": "cron-cl"
   },
   "workbench.iconTheme": "vs-seti",
   "editor.semanticHighlighting.enabled": true,

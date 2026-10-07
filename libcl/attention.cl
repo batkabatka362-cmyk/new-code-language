@@ -1,4 +1,7 @@
-; CRON Standard Microcode Kernel: libcl/attention.cl
+; ============================================================================
+; CRON Standard Microcode Kernel Library: libcl/attention.cl
+; Silicon FlashAttention Softmax + SSM Mamba State-Space Linear Scan Kernel
+; ============================================================================
 @kernel flash_attention_ssm
 .target silicon.ai_isa
 .ipc_target 4.0

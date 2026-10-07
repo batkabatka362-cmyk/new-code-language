@@ -99,11 +99,6 @@ def check_diagnostics(source_code: str) -> List[str]:
         if os.path.exists(in_path):
             os.remove(in_path)
 
-def run_esoteric_sim(mode: str = "demo") -> Dict[str, Any]:
-    """Runs the Esolang-inspired AI Silicon Coprocessor simulation (Brainfuck, Malbolge, Befunge, Prolog)."""
-    cron_exe = find_cron_executable()
-    cmd = [cron_exe, "cl-esoteric", mode, "--json"]
-    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
 def _extract_json(text: str) -> Dict[str, Any]:
     import json
     raw = text.strip()
@@ -159,7 +154,7 @@ def analyze_optical_budget(file_or_code: str, mesh_dim: int = 16, wdm_channels: 
     target_path = file_or_code
     temp_f = None
     if not is_file:
-        suffix = ".cl" if ("B0" in file_or_code or "_" in file_or_code) else ".cr"
+        suffix = ".cl"
         temp_f = tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False, encoding="utf-8")
         temp_f.write(file_or_code)
         temp_f.close()
@@ -191,7 +186,7 @@ def synthesize_optical_verilog(file_or_code: str, mesh_dim: int = 16, wdm_channe
     target_path = file_or_code
     temp_f = None
     if not is_file:
-        suffix = ".cl" if ("B0" in file_or_code or "_" in file_or_code) else ".cr"
+        suffix = ".cl"
         temp_f = tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False, encoding="utf-8")
         temp_f.write(file_or_code)
         temp_f.close()

@@ -127,29 +127,35 @@ function activate(context) {
                 vscode.window.showErrorMessage('No active file open.');
                 return;
             }
-            runCronInTerminal('CRON Check', `"${serverExe}" check "${editor.document.fileName}"`);
+            const isCl = editor.document.fileName.endsWith('.cl');
+            const subCmd = isCl ? 'cl-lint' : 'check';
+            runCronInTerminal('CRON Check', `"${serverExe}" ${subCmd} "${editor.document.fileName}"`);
         })
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('cron.buildC23', async () => {
             const editor = vscode.window.activeTextEditor;
-            if (!editor || !editor.document.fileName.endsWith('.cr')) {
-                vscode.window.showErrorMessage('Please open a .cr file to compile.');
+            if (!editor) {
+                vscode.window.showErrorMessage('Please open a file to compile.');
                 return;
             }
-            runCronInTerminal('CRON Build', `"${serverExe}" c23 "${editor.document.fileName}"`);
+            const isCl = editor.document.fileName.endsWith('.cl');
+            const subCmd = isCl ? 'cl-c23' : 'c23';
+            runCronInTerminal('CRON Build', `"${serverExe}" ${subCmd} "${editor.document.fileName}"`);
         })
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('cron.runNative', async () => {
             const editor = vscode.window.activeTextEditor;
-            if (!editor || !editor.document.fileName.endsWith('.cr')) {
-                vscode.window.showErrorMessage('Please open a .cr file to run.');
+            if (!editor) {
+                vscode.window.showErrorMessage('Please open a file to run.');
                 return;
             }
-            runCronInTerminal('CRON Native Run', `"${serverExe}" native "${editor.document.fileName}"`);
+            const isCl = editor.document.fileName.endsWith('.cl');
+            const cmd = isCl ? `"${serverExe}" cl-native "${editor.document.fileName}" -r` : `"${serverExe}" native "${editor.document.fileName}"`;
+            runCronInTerminal('CRON Native Run', cmd);
         })
     );
 
@@ -260,7 +266,7 @@ function activate(context) {
         vscode.commands.registerCommand('cron.startDebugging', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
-                vscode.window.showErrorMessage('Please open a .cr or .cl file to debug.');
+                vscode.window.showErrorMessage('Please open a .cl file to debug.');
                 return;
             }
             vscode.debug.startDebugging(undefined, {

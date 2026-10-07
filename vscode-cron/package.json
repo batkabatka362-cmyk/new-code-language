@@ -74,7 +74,7 @@
       },
       {
         "command": "cron.buildC23",
-        "title": "CRON: Compile .cr to C23"
+        "title": "CRON: Compile .cl to C23"
       },
       {
         "command": "cron.runNative",
@@ -132,7 +132,7 @@
             "properties": {
               "program": {
                 "type": "string",
-                "description": "Absolute or workspace-relative path to .cr or .cl file to debug",
+                "description": "Absolute or workspace-relative path to .cl file to debug",
                 "default": "${file}"
               },
               "stopOnEntry": {
@@ -164,17 +164,17 @@
       "editor/context": [
         {
           "command": "cron.check",
-          "when": "editorLangId == cron",
+          "when": "editorLangId == cron || editorLangId == cron-cl",
           "group": "cron_group@1"
         },
         {
           "command": "cron.runNative",
-          "when": "editorLangId == cron",
+          "when": "editorLangId == cron || editorLangId == cron-cl",
           "group": "cron_group@2"
         },
         {
           "command": "cron.buildC23",
-          "when": "editorLangId == cron",
+          "when": "editorLangId == cron || editorLangId == cron-cl",
           "group": "cron_group@3"
         },
         {

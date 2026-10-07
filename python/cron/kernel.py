@@ -1,6 +1,6 @@
 """
 CRON Interactive Jupyter Notebook Kernel (cron-kernel)
-Allows execution of CRON (.cr and .cl) code cells directly in Jupyter Notebooks and JupyterLab.
+Allows execution of CRON (.cl) code cells directly in Jupyter Notebooks and JupyterLab.
 
 Features:
 - Native 256-Core 4D-Torus hardware simulation
@@ -80,7 +80,7 @@ class CronKernel(Kernel):
             prefix_len = 6 if code_str.startswith("%bench") else 8
             return self._handle_bench_magic(code_str[prefix_len:].strip())
 
-        # 2. Standard .cr Execution
+        # 2. Standard .cl Execution
         try:
             # Check diagnostics first
             diags = check_diagnostics(code_str)

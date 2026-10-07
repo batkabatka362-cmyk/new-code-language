@@ -65,12 +65,15 @@ public:
         if (vm_) cron_vm_reset(vm_);
     }
 
-    Telemetry run(std::string_view cr_source) {
-        std::string null_terminated(cr_source);
+    Telemetry run(std::string_view source) {
+        if (source.find("B0") != std::string_view::npos || source.find("NOP.") != std::string_view::npos) {
+            return run_cl(source);
+        }
+        std::string null_terminated(source);
         Telemetry t{};
         bool ok = cron_vm_run_cr(vm_, null_terminated.c_str(), &t);
         if (!ok) {
-            throw std::runtime_error("CRON .cr execution failed on 4D-Torus simulator.");
+            throw std::runtime_error("CRON execution failed on 4D-Torus simulator.");
         }
         return t;
     }
