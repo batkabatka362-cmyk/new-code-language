@@ -1,12 +1,12 @@
 # CRON Language Support for Visual Studio Code & Antigravity IDE
 
-Official language extension for **CRON (`.cr`)** and **CRON Low-Level Machine Code (`.cl`)**, targeted at the 256-Core 4D-Torus Neuromorphic Photonic Processor.
+Official language extension for **CRON Silicon Machine Language (`.cl`)**, targeted at the 256-Core 4D-Torus Neuromorphic Photonic Processor.
 
 ## Features
 
 - **Rich Syntax Highlighting**:
-  - Full support for `.cr` high-level cognitive DSLs (Linear types, Brain primitives, Regions, Superposition).
   - VLIW bundle & slot syntax highlighting for `.cl` machine instructions.
+  - Opcodes, CRC-8 tokens, 4D-Torus NoC coordinates, and hardware register files (`R0..R15`).
 - **Language Server Protocol (LSP 3.17)**:
   - Powered by native Rust `cron lsp`.
   - Real-time compiler diagnostics:

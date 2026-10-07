@@ -48,7 +48,7 @@ impl ReplSession {
         println!("  \x1b[1;33m:ast <expr>\x1b[0m       Inspect AST structure for expression, statement, or declaration");
         println!("  \x1b[1;33m:tokens <expr>\x1b[0m    Inspect Lexer token stream with line:column spans");
         println!("  \x1b[1;33m:type <expr>\x1b[0m      Infer static type, linear status, and tensor rank");
-        println!("  \x1b[1;33m:load <file.cr>\x1b[0m   Load external .cr file and import declarations into session");
+        println!("  \x1b[1;33m:load <file.cl>\x1b[0m   Load external file and import declarations into session");
         println!("  \x1b[1;33m:reset\x1b[0m            Clear all definitions and reset 4D-Torus simulator");
         println!("  \x1b[1;33m:history\x1b[0m          List all expressions evaluated in this session");
         println!("  \x1b[1;33m:quit\x1b[0m, \x1b[1;33m:exit\x1b[0m     Exit the REPL session");
@@ -410,7 +410,7 @@ impl ReplSession {
                 }
                 "load" => {
                     if arg.is_empty() {
-                        eprintln!("\x1b[33mUsage: :load <path/to/file.cr>\x1b[0m");
+                        eprintln!("\x1b[33mUsage: :load <path/to/file.cl>\x1b[0m");
                     } else {
                         self.load_file(arg);
                     }

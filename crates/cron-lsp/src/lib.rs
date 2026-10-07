@@ -994,7 +994,7 @@ pub fn get_completion_items() -> Vec<CompletionItem> {
         ("spawn", "spawn background_task()", "Spawn hardware fiber on torus"),
         ("await", "await handle", "Await async fiber handle"),
         ("export", "export item as alias", "Export symbol from region or module"),
-        ("import", "import { Symbol } from \"path.cr\"", "Import module symbol"),
+        ("import", "import { Symbol } from \"path.cl\"", "Import module symbol"),
         ("struct", "struct Name { field: type }", "Declare struct data type"),
         ("trait", "trait Name { def method(self); }", "Declare trait interface"),
         ("impl", "impl Trait for Struct { }", "Implement trait for struct"),

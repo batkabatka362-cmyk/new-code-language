@@ -167,7 +167,7 @@ mod tests {
         [package]
         name = "test_agent"
         version = "0.2.1"
-        entry = "src/agent.cr"
+        entry = "src/agent.cl"
 
         [hardware]
         target = "4d-torus-512-core"
@@ -176,7 +176,7 @@ mod tests {
         let m = ProjectManifest::parse(toml).unwrap();
         assert_eq!(m.name, "test_agent");
         assert_eq!(m.version, "0.2.1");
-        assert_eq!(m.entry, "src/agent.cr");
+        assert_eq!(m.entry, "src/agent.cl");
         assert_eq!(m.target_arch, "4d-torus-512-core");
     }
 }

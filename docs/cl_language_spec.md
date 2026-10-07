@@ -11,8 +11,8 @@
 
 `.cl` (Cognitive Low-level) бол зүгээр нэг компиляторын завсрын хоёртын файл бус, харин **биет цахиур (RTL Silicon) болон хиймэл оюун ухаанд (AI Agent / Autonomous Cognitive Unit) шууд зориулагдсан бие даасан машин-түвшний програмчлалын хэл** юм.
 
-* **Хүмүүст зориулсан `.cr`:** Өндөр түвшний сэтгэхүй, шугаман төрөл (`lin`), амьдралын хугацааны бүсчлэл (`region`), логик дүрмүүд.
-* **AI болон машинд зориулсан `.cl` (CL 2.0):** Ямар ч хоёрдмол утгагүй (Zero Ambiguity), хувьсах өргөнтэй (1..4 слот), алдаа илрүүлэх CRC-8 ATM / Parity хамгаалалттай, хоосон NOP зай үрэхгүй VLIW хэл.
+* **Бүрэн бие даасан машин хэл:** Илүү дутуу завсрын хэлний хамааралгүй, AI/AGI болон hard backend-ийг хамгийн бага нөөцөөр, хамгийн өндөр хурдаар ажиллуулах цэвэр цахиурын хэл.
+* **AI болон машинд зориулсан .cl (CL 2.0):** Ямар ч хоёрдмол утгагүй (Zero Ambiguity), хувьсах өргөнтэй (1..4 слот), алдаа илрүүлэх CRC-8 ATM / Parity хамгаалалттай, хоосон NOP зай үрэхгүй VLIW хэл.
 * **94 Тэмдэгтийн Бүрэн Цагаан Толгой (Full 94-Character Alphabet):** ASCII 33 (`!`) -аас 126 (`~`) хүртэлх хэвлэгдэх бүх 94 тэмдэгтийг функциональ үүргүүдэд хуваарилан, мэдээллийн нягтралыг (Shannon Entropy $H \approx 5.1036$ bits/char) дээд зэргээр хангасан.
 * **Семантик AI Директивүүд (Zero Comment Waste):** Хэрэгцээгүй тайлбар комментуудыг бүрэн халж, компилятор өөрөө баталгаажуулдаг `.stage`, `.tensor`, `.fuse`, `.flow`, `.layout`, `.weights` бүтцийг ашигладаг.
 
@@ -214,8 +214,8 @@ cron cl-audit examples/pure_machine_agent.cl
 # 3. 256-цөмт 4D-Torus симулятор дээр шууд ажиллуулах
 cron sim examples/pure_machine_agent.cl
 
-# 4. .cl машинаас .cr дээд хэл рүү декомпил хийх
-cron decompile examples/pure_machine_agent.cl -o blueprint.cr
+# 4. .cl машины кодыг C23 эх код руу шууд хөрвүүлэх
+cron cl-c23 examples/pure_machine_agent.cl -o agent.c
 
 # 5. .cl машины кодыг автоматаар форматлах ба CRC-8 алдааг нөхөх
 cron cl-fmt examples/cl/clifford_rotate4d.cl -o formatted.cl
@@ -264,11 +264,10 @@ CRON-ийн $Cl(4,0)$ Spacetime Algebra нь стандарт $W \cdot x$ ерө
 `.cl` машин хэл нь бүтэн циклтэй автоматжуулалтын хэрэгслүүдээр тоноглогдсон:
 
 ```
-[.cr Өндөр хэл] ──(cron build)──> [.cl Машин код] ──(cron cl-opt)──> [Super-Optimized .cl]
-      ▲                                   │                                 │
-      │                               (cron cl-fmt)                    (cron cl-cosim)
-(cron decompile)                          │                                 │
-      │                             [Canonical .cl]                   [Verilog RTL Parity]
-      └───────────────────────────────────┴─────────────────────────────────┘
+[Эх .cl Машин код] ──(cron cl-opt)──> [Super-Optimized .cl] ──(cron cl-c23 / cl-native)──> [Host Binary / C23]
+        │                                     │                                              │
+  (cron cl-fmt)                         (cron cl-cosim)                                (cron cl-run)
+        │                                     │                                              │
+  [Canonical .cl]                       [Verilog RTL Parity]                           [Bit-Exact Silicon JIT]
 ```
 

@@ -605,7 +605,7 @@ impl CBackend {
         self.emit_line("    return out;");
         self.emit_line("}");
         self.emit_line("");
-        self.emit_line("// --- Dynamic Vector Allocator (core/vec.cr) ---");
+        self.emit_line("// --- Dynamic Vector Allocator (core/vec.cl) ---");
         self.emit_line("static inline uint64_t vec_new(uint32_t cap, uint32_t elem_size) { (void)cap; (void)elem_size; return 0x1000; }");
         self.emit_line("static inline uint64_t vec_push_back(uint64_t vec, uint32_t elem) { (void)elem; return vec; }");
         self.emit_line("static inline cron_tuple_t vec_pop(uint64_t vec) { return (cron_tuple_t){ ._0 = vec, ._1 = 42, ._2 = 0, ._3 = 0 }; }");

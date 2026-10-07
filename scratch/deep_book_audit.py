@@ -27,7 +27,7 @@ def main():
         "fredkin", "toffoli", "reversible",
         "driver", "host driver", "pcie", "axi", "dma",
         "verilator", "rtl", "verilog",
-        ".cl", ".cr", "vliw", "bundle", "parity",
+        ".cl", "vliw", "bundle", "parity",
         "proof_contract", "invariant", "ensures"
     ]
     

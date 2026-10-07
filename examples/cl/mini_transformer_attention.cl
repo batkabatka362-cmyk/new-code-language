@@ -1,6 +1,6 @@
 ; ============================================================================
 ; CRON AI VIBE-CODING BENCHMARK: Mini Transformer FlashAttention Kernel
-; Pure Machine-Native .cl VLIW Microcode (Zero .cr dependencies)
+; Pure Machine-Native .cl Sovereign VLIW Microcode
 ; Target: 256-Core 4D-Torus Hybrid Photonic Neuromorphic Silicon
 ; 100% Hazard-Free: Zero RAW, Zero WAW, Zero Structural Conflicts
 ; ============================================================================

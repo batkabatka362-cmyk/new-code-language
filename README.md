@@ -16,42 +16,37 @@
 
 CRON бол уламжлалт von Neumann архитектур (CPU/GPU, санах ойн түгжрэл, өндөр дулаан ялгаруулалт)-ын хязгаарлалтыг даван туулах зорилгоор бүтээгдсэн, **Hardware-Software Co-Design** зарчимтай цоо шинэ програмчлалын хэл юм.
 
-### Хоёр Ихэр Хэлний Загвар (Dual-Language Architecture):
+### Бүрэн Бие Даасан Силикон Машин Хэл (.cl Architecture):
 
 <div align="center">
 
-| **.cl (Cognitive Low-level)** | **.cr (Cognitive Representation)** |
-|:---:|:---:|
-| <img src="docs/assets/cl_icon.svg" width="160" alt=".cl Language Icon"/> | <img src="docs/assets/cr_icon.svg" width="160" alt=".cr Language Icon"/> |
-| **Machine-Native VLIW** | **Human-Facing Cognitive Blueprint** |
-| `Electric Neon Gold / Amber` | `Holographic Cyan / Violet` |
-| 128-бит VLIW, 10 тэмдэгттэй үүрүүд | Шугаман төрөл (`lin`), Бүсийн Арена |
-| [docs/cl_language_spec.md](docs/cl_language_spec.md) | [docs/cron_spec.md](docs/cron_spec.md) |
+| **.cl (Silicon Microcode Machine Language)** |
+|:---:|
+| <img src="docs/assets/cl_icon.svg" width="180" alt=".cl Language Icon"/> |
+| **Machine-Native 128-bit 4-Wide VLIW** |
+| `Electric Neon Gold / Amber` |
+| 128-бит VLIW, 10 тэмдэгттэй үүрүүд, CRC-8 ATM бүрэн бүтэн байдал |
+| [docs/cl_language_spec.md](docs/cl_language_spec.md) |
 
 </div>
 
-1. **`.cl` (Machine-Native VLIW / AI Co-Pilot Format)**:
-   - 1 такт = 4 зааврын үүр (Slot 0, 1, 2, 3) бүхий 128 битийн VLIW багц.
-   - Үүр бүр 10 тэмдэгттэй хатуу бүтэцтэй, 8 дахь тэмдэгт нь Parity хамгаалалттай.
-   - 256 цөмт 4D-Torus чипийн RTL удирдлагын утсуудтай 1:1 шууд бууна.
-2. **`.cr` (CRON High-Level Blueprint / Human Interface)**:
-   - Python/Rust-ийн хослол шиг тунгалаг, цэвэрхэн бүтэц.
-   - **Linear Types (`let lin ...`)**: Санах ойн цоорхой (memory leak)-г компиляторын түвшинд 100% хаана.
-   - **Scoped Arena Regions (`region { ... }`)**: Гарахад 0-тактад санах ойг цэвэрлэнэ (0 Garbage Collection).
-   - **6 Тархины примитивүүд**: Фотоник MZI, буцах логик, STDP синапс, учир шалтгааны бэлгэдэл дүрэм.
+- **1 такт = 4 зааврын үүр (Slot 0, 1, 2, 3)** бүхий 128 битийн VLIW багц (4.0 Peak IPC).
+- **10 тэмдэгттэй хатуу бүтэц**: Үүр бүр 10 тэмдэгттэй бөгөөд 10 дахь тэмдэгт нь CRC-8 ATM токен хамгаалалттай.
+- **AI/AGI ба Hard Backend-д зориулсан 0-overhead**: Илүү дутуу хийсвэрлэлгүйгээр 256-4,096 цөмт 4D/6D-Torus болон Wafer-65536 чипийн RTL удирдлагын утсуудтай 1:1 шууд бууна.
+- **Zero Memory Leaks & Zero Garbage Collection**: Регистрийн түвшний deterministic амьдралын мөчлөг.
 
 ---
 
-## 2. 6 Тархины Төрөлх Примитивүүд (The 6-Brain Primitives)
+## 2. 6 Тархины Төрөлх Зааврууд (The 6-Brain Hardware ISA)
 
-| Тархи | Нэршил | .cr Примитивүүд | Техник хангамжийн нэгж | .cl Заавар |
+| Тархи | Нэршил | Техник хангамжийн нэгж | .cl Үйлдлүүд | Тайлбар |
 |---|---|---|---|---|
-| **Brain 1** | Symbolic & Causal Graph | `ground_and_unify()`, `ground_to_symbol()` | Causal Graph Accelerator | `_UN`, `_SY` |
-| **Brain 2** | Photonic Latent Engine | `optical_gemm(wave=...)`, `pack_wave()` | MZI Photonic Mesh | `_OP`, `_FA` |
-| **Brain 3** | Reversible Memory | `backward()`, `reversible_entangle()` | Fredkin/Toffoli Reversible ALU | `_BK`, `_RF` |
-| **Brain 4** | Neuromorphic STDP | `step_synaptic_plasticity()`, `subbyte_dot()` | STDP Plasticity Array | `_ST`, `_GU` |
-| **Brain 5** | Superposition Planner | `quantum_collapse_eval()` | Decision Superposition Tree | `_QP`, `_CO` |
-| **Brain 6** | Metacognitive Sentry | `resilient_compute`, `assert_homotopy` | Thermal Sentry Watchdog Fiber | `_SH`, `_PTC` |
+| **Brain 1** | Symbolic & Causal Graph | Causal Graph Accelerator | `_UN`, `_SY`, `_XO` | Hyper-edge graph unification & logic binding |
+| **Brain 2** | Photonic Latent Engine | MZI Photonic Mesh | `_OP`, `_FA`, `_WD` | BitNet 1.58b photonic matrix multiplication |
+| **Brain 3** | Reversible Memory | Fredkin/Toffoli Reversible ALU | `_BK`, `_RF`, `_RV` | 0-entropy thermodynamic reversible computation |
+| **Brain 4** | Neuromorphic STDP | STDP Plasticity Array | `_ST`, `_GU`, `_LI` | Spiking neural network (SNN) LIF integration |
+| **Brain 5** | Superposition Planner | Decision Superposition Tree | `_QP`, `_CO`, `_PK` | Multi-path tree search & state collapse |
+| **Brain 6** | Metacognitive Sentry | Thermal Sentry Watchdog Fiber | `_SH`, `_PT`, `_bb` | Hardware thermal limit & deadlock prevention |
 
 ---
 
@@ -61,16 +56,16 @@ CRON бол уламжлалт von Neumann архитектур (CPU/GPU, сан
 new code language/
 ├── Cargo.toml                       # Root Rust Workspace
 ├── docs/
-│   ├── cron_spec.md                 # CRON хэлний албан ёсны дүрэм, EBNF грамматик
+│   ├── cl_language_spec.md          # .cl машины хэлний албан ёсны дүрэм ба бүтэц
 │   └── isa_spec.md                  # 4D-Torus ба .cl VLIW зааврын архитектур
 ├── examples/
-│   ├── unified_six_brain_agi.cr     # 6 Тархи бүхий жинхэнэ CRON код
-│   ├── unified_six_brain_agi.cl     # Хөрвүүлэгдсэн VLIW машины код
-│   └── unified_six_brain_agi_roundtrip.cr # Декомпилятороор буцааж гаргасан код
+│   ├── cl/                          # Жинхэнэ .cl VLIW машины код (FlashAttn, BitNet, etc.)
+│   └── vibe_attention_kernel.cl     # 100% verified AI microcode kernel
+├── libcl/                           # Төрөлх стандарт микрокод сангууд (math, optical, etc.)
 └── crates/
-    ├── cronc/                       # CRON Compiler (Lexer, Parser, Checker, Codegen)
+    ├── cronc/                       # CRON Compiler (Linter, Optimizer, C23/LLVM/Verilog)
     ├── cron-vm/                     # 256-Core 4D-Torus Cycle-Accurate Simulator
-    ├── cron-decompile/              # Machine-to-Blueprint Reverse Decompiler (.cl -> .cr)
+    ├── cron-rt/                     # C++20 / C-ABI Native Runtime Bridge
     └── cron-cli/                    # Нэгдсэн CLI хэрэгсэл (`cron`)
 ```
 
@@ -79,22 +74,25 @@ new code language/
 ## 4. Хэрэглэх Заавар (CLI Usage)
 
 ```bash
-# 1. Синтакс болон Linear type алдааг шалгах
-cargo run --bin cron -- check examples/unified_six_brain_agi.cr
+# 1. .cl машины кодын бүтэц, CRC-8, RAW/WAW hazard шалгах (Lint)
+cargo run --bin cron -- cl-lint examples/cl/mini_transformer_attention.cl
 
-# 2. .cr эх кодыг .cl VLIW машины код руу хөрвүүлэх (Compile)
-cargo run --bin cron -- build examples/unified_six_brain_agi.cr -o output.cl
+# 2. .cl машины кодыг шууд симулятор дээр ажиллуулах (JIT Simulator)
+cargo run --bin cron -- cl-run examples/cl/mini_transformer_attention.cl
 
-# 3. 256-цөмт 4D-Torus Симулятор дээр бүтэн ажиллуулах (Run & Telemetry)
-cargo run --bin cron -- run examples/unified_six_brain_agi.cr
+# 3. .cl кодыг өндөр хурдны эх системийн C23 код руу хөрвүүлэх (Transpile)
+cargo run --bin cron -- cl-c23 examples/cl/mini_transformer_attention.cl -o out.c
 
-# 4. .cl машины кодыг буцаан .cr хэл рүү хөрвүүлэх (Decompile)
-cargo run --bin cron -- decompile output.cl -o decompiled.cr
+# 4. Standalone Host Бинар болгон компилдож шууд ажиллуулах (Native AOT)
+cargo run --bin cron -- cl-native examples/cl/mini_transformer_attention.cl -r
 
-# 5. Бодит AI загвар (ONNX / SafeTensors) татан авч Sub-byte / BitNet 1.58b болгон буулгах (Import)
-cargo run --bin cron -- import examples/sample_transformer.onnx -o imported.cr --quantize ternary --compile cl
+# 5. AI Vibe-Coding Өөрийгөө Эдгээгч ба CRC-8 Засагч (Heal)
+cargo run --bin cron -- cl-heal examples/cl/mini_transformer_attention.cl -o healed.cl
 
-# 6. Төсөлд шинэ хараат сан нэмэх (cron add) ба багц мод харах (cron pkg tree)
+# 6. VLIW Слотыг нягтруулагч Супер-Оптимайзер (DAG Compaction, IPC -> 4.0)
+cargo run --bin cron -- cl-opt examples/cl/mini_transformer_attention.cl --level 2
+
+# 7. Төсөлд шинэ хараат сан нэмэх (cron add) ба багц мод харах (cron pkg tree)
 cargo run --bin cron -- add cron/distributed
 cargo run --bin cron -- pkg tree
 cargo run --bin cron -- install
@@ -181,7 +179,7 @@ cargo run --bin cron -- cl-infer prompt "CRON" --tokens 8 --dim 64 --layers 2
 cargo run --bin cron -- cl-infer synth --dim 64 --layers 2 -o transformer_kernel.cl
 cargo run --bin cron -- cl-infer prompt "AI" --dim 32 --tokens 4 --json
 
-# 30. Language Server Protocol (LSP 3.17) Сервер (.cl болон .cr бодит цагийн алдаа, Hover, QuickFix)
+# 30. Language Server Protocol (LSP 3.17) Сервер (.cl бодит цагийн алдаа, Hover, QuickFix)
 cargo run --bin cron -- lsp --version
 cargo run --bin cron -- lsp
 
@@ -231,10 +229,11 @@ cargo run --bin cron -- cl-esoteric unify
 cargo run --bin cron -- cl-esoteric synth -o esoteric_coprocessor.v
 cargo run --bin cron -- cl-esoteric demo --json
 
-# 38. Esolang-Accelerated .cr Language Compiler & C23 Native Lowering (Tape, Wavefront, VLIW Asm, Rules)
-cargo run --bin cron -- check examples/esoteric_transformer_bitnet.cr
-cargo run --bin cron -- build examples/esoteric_transformer_bitnet.cr
-cargo run --bin cron -- c23 examples/esoteric_transformer_bitnet.cr -o esoteric_transformer_bitnet.c
+# 38. Esolang-Accelerated Microcode Compiler & C23 Native Lowering (Tape, Wavefront, VLIW Asm, Rules)
+cargo run --bin cron -- check examples/cl/mini_transformer_attention.cl
+cargo run --bin cron -- build examples/cl/mini_transformer_attention.cl
+cargo run --bin cron -- c23 examples/cl/mini_transformer_attention.cl -o mini_transformer_attention.c
+cargo run --bin cron -- cl-run examples/cl/mini_transformer_attention.cl
 cargo run --bin cron -- cl-run esoteric_transformer_bitnet.cl
 
 # 39. AI Vibe-Coding Тодорхойлолт ба JSON Schema / System Prompt үүсгэгч

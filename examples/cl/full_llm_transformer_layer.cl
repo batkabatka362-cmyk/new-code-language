@@ -1,6 +1,6 @@
 ; ============================================================================
 ; CRON AI VIBE-CODING CANONICAL MODEL: Full LLM Transformer Block
-; Pure Machine-Native .cl VLIW Microcode (Zero .cr dependencies)
+; Pure Machine-Native .cl Sovereign VLIW Microcode
 ; Target: 256-Core 4D-Torus Hybrid Optical/Neuromorphic Silicon
 ; Features:
 ;   - Zero-Copy Multi-Bank Weights Directives (.weights)

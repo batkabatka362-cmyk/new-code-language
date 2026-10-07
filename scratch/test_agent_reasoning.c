@@ -502,7 +502,7 @@ static inline cron_tensor_f32_t tensor_add(cron_tensor_f32_t a, cron_tensor_f32_
     return out;
 }
 
-// --- Dynamic Vector Allocator (core/vec.cr) ---
+// --- Dynamic Vector Allocator (core/vec.cl) ---
 static inline uint64_t vec_new(uint32_t cap, uint32_t elem_size) { (void)cap; (void)elem_size; return 0x1000; }
 static inline uint64_t vec_push_back(uint64_t vec, uint32_t elem) { (void)elem; return vec; }
 static inline cron_tuple_t vec_pop(uint64_t vec) { return (cron_tuple_t){ ._0 = vec, ._1 = 42, ._2 = 0, ._3 = 0 }; }

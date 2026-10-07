@@ -66,7 +66,7 @@ function activate(context) {
                 { scheme: 'file', language: 'cron-cl' }
             ],
             synchronize: {
-                fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{cr,cl,toml}')
+                fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{cl,toml}')
             },
             outputChannel: outputChannel
         };

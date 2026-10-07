@@ -10,20 +10,20 @@ CRON систем нь уламжлалт фон Нейман (von Neumann) ар
 
 ```
 +-----------------------------------------------------------------------------------+
-|                           CRON DUAL-LANGUAGE TOOLCHAIN                            |
+|                        CRON SILICON MACHINE TOOLCHAIN (.cl)                       |
 |                                                                                   |
-|  [ .cr High-Level Blueprint ]                    [ .cl Machine-Native VLIW ]      |
-|  - Linear Types & Arena Regions                  - 128-bit 4-Slot VLIW Bundles    |
-|  - Neural, Photonic & SNN Primitives             - 94-char Compact Alphabet       |
-|  - Zero-Cost Comptime & Generics                 - Atmospheric CRC-8 Self-Healing |
+|  [ .cl Machine-Native VLIW ]                     [ Hardware Co-Design Matrix ]    |
+|  - 128-bit 4-Slot VLIW Bundles                   - 256-to-4,096-Core 4D/6D-Torus  |
+|  - 94-char Compact Alphabet                      - Heterogeneous 6-Brain Silicon  |
+|  - Atmospheric CRC-8 Self-Healing                - Zero Heap / Direct Registers   |
 +-----------------------------------------------------------------------------------+
                                          │
                          ┌───────────────┴───────────────┐
                          ▼                               ▼
 +----------------------------------+   +--------------------------------------------+
 |      cronc COMPILER PIPELINE     |   |          BACKEND TARGET ENGINES            |
-|  - AST & Strict Checker (E0001)  |   |  - Machine-Native .cl / .clb Bytecode       |
-|  - DAG Optimizer & Involution    |   |  - ISO C23 Native GCC (Sub-microsecond JIT)|
+|  - VLIW Linter & Hazard Matrix   |   |  - Machine-Native .cl / .clb Bytecode       |
+|  - DAG Optimizer & Compaction    |   |  - ISO C23 Native GCC (Sub-microsecond JIT)|
 |  - MCTS Super-Optimizer Engine   |   |  - SSA LLVM IR Generation                  |
 |  - Bank Conflict-Free Swizzler   |   |  - NVIDIA CUDA PTX & Apple Metal Shaders   |
 |  - Hardware Hazard Bypass Matrix |   |  - Synthesizable IEEE Verilog RTL Core     |
@@ -51,23 +51,17 @@ CRON систем нь уламжлалт фон Нейман (von Neumann) ар
 
 ---
 
-## 2. Хоёр Түвшний Хэлний Загвар (Dual-Language Paradigm)
+## 2. Силикон Машин Хэлний Загвар (.cl Machine Language)
 
-### 2.1. Өндөр түвшний `.cr` (Cognitive Representation)
-Хүний уншиж бичихэд зориулагдсан орчин үеийн, аюулгүй хэл:
-- **Шугаман Төрөл (`let lin x = ...`)**: Санах ойн нөөцийг давхар чөлөөлөх эсвэл хаях (leak)-аас компиляторын шатанд 100% сэргийлнэ.
-- **Бүсийн Арена (`region { ... }`)**: Гарахад 0-тактад санах ойг цэвэрлэж, Garbage Collection (GC)-ийн саатлыг бүрэн арилгана.
-- **Төрөлх 6 Тархины функцууд**: `optical_gemm()`, `simd_ternary_dot()`, `step_synaptic_plasticity()`, `clifford_rotor()`.
-
-### 2.2. Нам түвшний `.cl` (Cognitive Machine Language)
-256-цөмт чипийн техник хангамжийн утас (RTL control lines)-тай 1:1 буудаг машины код:
+256-цөмт чипийн техник хангамжийн утас (RTL control lines)-тай 1:1 буудаг, AI/AGI болон hard backend-ийн хэт өндөр хурдны машин код:
 - **128-бит VLIW Багц**: 1 тактад 4 үүр (Slot 0..3) зэрэг гүйцэтгэгдэнэ.
 - **10 Тэмдэгтийн Хатуу Бүтэц**:
   - `Slot 0` (Control / Jump): `_HL......>` (Halt), `_BR=04...>` (Branch)
   - `Slot 1` (ALU / Ternary): `'==01#000>` (Load Imm), `_AD=030102>` (Add)
   - `Slot 2` (Photonic / Reversible): `_OP=0102..>` (Optical MZI GEMM), `_RF=0102..>` (Fredkin)
   - `Slot 3` (Memory / NoC): `_SB=0100..>` (Store Bank), `_TX=0501..>` (Spatial NoC TX)
-- **CRC-8 Atmospheric Parity**: Үүр бүрийн 8 дахь тэмдэгт нь өгөгдлийн бүрэн бүтэн байдлыг шалгаж, эвдэрсэн зааврыг өөрөө автоматаар эдгээнэ (`cl-heal`).
+- **CRC-8 Atmospheric Parity**: Үүр бүрийн 10 дахь тэмдэгт нь өгөгдлийн бүрэн бүтэн байдлыг шалгаж, эвдэрсэн зааврыг өөрөө автоматаар эдгээнэ (`cl-heal`).
+- **Төрөлх 6 Тархины техник зааврууд**: `_OP` (MZI optical GEMM), `_MD` (sub-byte dot), `_ST` (STDP synapse), `_CD` (CORDIC rotor).
 
 ---
 
@@ -117,25 +111,24 @@ CRON систем нь уламжлалт фон Нейман (von Neumann) ар
 
 | Команд | Тайлбар ба Хэрэглээ |
 |---|---|
-| `cron check <file.cr>` | `.cr` кодын синтакс, бүс, шугаман төрлийн алдааг шалгах |
-| `cron build <file.cr> -o out.cl` | `.cr` кодыг машин түвшний `.cl` VLIW файл болгон хөрвүүлэх |
-| `cron run <file.cr>` | `.cr` эх кодыг хөрвүүлж 256-цөмт симулятор дээр шууд ажиллуулах |
+| `cron cl-lint <file.cl>` | `.cl` кодын бүтэц, CRC-8, RAW/WAW hazard шалгах |
+| `cron cl-c23 <file.cl> -o out.c` | `.cl` кодыг өндөр хурдны ISO C23 эх код руу хөрвүүлэх |
+| `cron cl-run <file.cl>` | `.cl` машины кодыг 256-цөмт симулятор дээр шууд ажиллуулах |
 | `cron sim <file.cl>` | Машин түвшний `.cl` кодыг 256-цөмт 4D-Torus VM дээр ажиллуулах |
 | `cron cl-kernel <name> -o out.cl` | 12 Golden AI карнелаас сонгон `.cl` код үүсгэх |
 | `cron cl-opt <in.cl> -o out.cl` | `.cl` файлын VLIW үүрүүдийг шахаж, NOP-ийг арилгах |
 | `cron cl-heal <in.cl> -o out.cl` | Эвдэрсэн `.cl` кодын CRC-8 болон бүтцийг өөрөө эдгээх |
 | `cron cl-memcheck <file.cl>` | 16-Bank SRAM санах ойн мөргөлдөөнийг шалгаж баталгаажуулах |
 | `cron cl-cosim <file.cl>` | Симулятор болон Verilog RTL-ийн үр дүнг 1:1 шалгах |
-| `cron cl-c23 <in.cl> -o out.c` | `.cl` машины кодыг өндөр хурдны C23 эх код руу хөрвүүлэх |
+| `cron cl-native <file.cl> -r` | `.cl` машины кодоос шууд host binary үүсгэж ажиллуулах |
 | `cron cl-llvm <in.cl> -o out.ll` | `.cl` кодыг шууд LLVM IR болгон хөрвүүлэх |
 | `cron cl-verilog <in.cl> -o out.v` | `.cl` кодоос бие даасан Verilog RTL чип синтезлэх |
 | `cron vibe-loop <file.cl>` | AI кодод зориулсан нэгдсэн Heal + Opt + JIT + Telemetry циклийг ажиллуулах |
 | `cron swarm --task "..."` | 256/4,096 цөмт олон агентын автоном сургалт ба симуляци хийх |
 | `cron stream-infer` | 64MB RAM-аас бага санах ой ашиглах Paged Streaming Inference |
 | `cron chat` | Интерактив AI терминал ба чат |
-| `cron ptx <file.cr>` | NVIDIA GPU CUDA PTX v7.5+ ассемблер үүсгэх |
-| `cron metal <file.cr>` | Apple Silicon Metal Shading Language код үүсгэх |
-| `cron decompile <in.cl> -o out.cr` | Машины `.cl` кодыг дээд түвшний `.cr` код руу декомпил хийх |
+| `cron cl-ptx <file.cl>` | NVIDIA GPU CUDA PTX v7.5+ ассемблер үүсгэх |
+| `cron cl-metal <file.cl>` | Apple Silicon Metal Shading Language код үүсгэх |
 
 ---
 
@@ -149,7 +142,7 @@ new code language/
 │   ├── cron-cli/               # Нэгдсэн CLI хэрэгсэл (`cron`)
 │   ├── cron-rt/                # Runtime C FFI & Fiber Channels
 │   ├── cron-lsp/               # IDE Language Server Protocol (Hover, Auto-complete, Diagnostics)
-│   ├── cron-decompile/         # .cl -> .cr Буцаан хөрвүүлэгч (Decompiler)
+│   ├── cron-decompile/         # Machine Disassembler & Inspection Engine
 │   └── cron-wasm/              # WebAssembly браузерын симулятор
 ├── libcl/                      # CRON Silicon Стандарт Сан (53 баталгаажсан AI & NoC цөм)
 ├── docs/                       # Техникийн дэлгэрэнгүй баримт бичгүүд (70+ файл)

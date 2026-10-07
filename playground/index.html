@@ -33,7 +33,7 @@
       <span class="separator"></span>
 
       <button id="btn-sound-toggle" class="btn btn-sound" title="Toggle Procedural Audio FX">🔊 SFX: ON</button>
-      <button id="btn-export-cr" class="btn" title="Download .cr source code">💾 Save .cr</button>
+      <button id="btn-export-cr" class="btn" title="Download .cl microcode">💾 Save .cl</button>
 
       <div class="status">
         <div class="pulse"></div>
@@ -47,8 +47,8 @@
       <!-- Panel 1: Code Editor (spans 2 rows) -->
       <div class="panel editor-panel">
         <div class="panel-header">
-          <div class="label"><span class="dot" style="background:#00ff88"></span> Source Code (.cr)</div>
-          <span style="color:#64748b;font-size:10px;">CRON Lang v1.0</span>
+          <div class="label"><span class="dot" style="background:#00ff88"></span> Source Microcode (.cl)</div>
+          <span style="color:#64748b;font-size:10px;">CRON Silicon v2.0</span>
         </div>
         <div class="editor-wrapper">
           <pre class="line-numbers" id="line-numbers">1</pre>
@@ -177,13 +177,13 @@
           </div>
           <div class="register-grid" id="register-grid"></div>
 
-          <!-- Tabbed Inspector: Machine Code (.cl) | Synthesized Verilog (.v) | Decompiler (.cr) | Silicon Telemetry | AGI Benchmarks -->
+          <!-- Tabbed Inspector: Machine Code (.cl) | Synthesized Verilog (.v) | Disassembler (.cl) | Silicon Telemetry | AGI Benchmarks -->
           <div class="panel-tabs-container">
             <div class="panel-tabs-header">
               <button class="tab-btn active" id="tab-btn-cl" data-target="tab-pane-cl">💎 Machine Code (.cl)</button>
               <button class="tab-btn" id="tab-btn-waveform" data-target="tab-pane-waveform">🌊 Waveform HUD</button>
               <button class="tab-btn" id="tab-btn-verilog" data-target="tab-pane-verilog">⚡ Verilog RTL (.v)</button>
-              <button class="tab-btn" id="tab-btn-decompile" data-target="tab-pane-decompile">🔄 Decompiler (.cr)</button>
+              <button class="tab-btn" id="tab-btn-decompile" data-target="tab-pane-decompile">🔄 Disassembler (.cl)</button>
               <button class="tab-btn" id="tab-btn-telemetry" data-target="tab-pane-telemetry">📊 Silicon Telemetry</button>
               <button class="tab-btn" id="tab-btn-benchmarks" data-target="tab-pane-benchmarks">🏆 AGI Benchmarks</button>
               <div class="tab-actions">
@@ -236,10 +236,10 @@
               </div>
             </div>
 
-            <!-- Tab Pane 3: Reverse Decompiler -->
+            <!-- Tab Pane 3: Disassembler / Inspection -->
             <div class="tab-pane" id="tab-pane-decompile">
               <div class="decompile-viewer" id="decompile-viewer">
-                <div style="padding:10px;color:#64748b;font-style:italic;">Run or Step code to inspect reverse-decompiled .cr blueprint from machine VLIW bundles.</div>
+                <div style="padding:10px;color:#64748b;font-style:italic;">Run or Step code to inspect disassembled VLIW microcode bundles and cycle timing.</div>
               </div>
             </div>
 

@@ -563,8 +563,8 @@ _main:
     code: `.MODULE CognitiveAgent
 .ENTRY _main
 
-import { compute_attention_head } from "neuro/transformer.cr"
-import { init_kg_partition, assert_triple } from "symbolic/knowledge_graph.cr"
+import { compute_attention_head } from "neuro/transformer.cl"
+import { init_kg_partition, assert_triple } from "symbolic/knowledge_graph.cl"
 
 _main:
     let lin query = pack_wave(amp=[64, 32, 16, 8], phase=[32, 32, 64, 64])
@@ -1191,7 +1191,7 @@ class CRONPlayground {
       });
     }
 
-    // Export .cr
+    // Export .cl
     if (this.btnExportCr) {
       this.btnExportCr.addEventListener('click', () => {
         this.sound.playClick();
@@ -1199,7 +1199,7 @@ class CRONPlayground {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'program.cr';
+        a.download = 'program.cl';
         a.click();
         URL.revokeObjectURL(url);
       });
@@ -1256,7 +1256,7 @@ class CRONPlayground {
           filename = 'cksl_core.v';
         } else if (this.currentTab === 'tab-pane-decompile') {
           content = this.decompiledCode || '';
-          filename = 'decompiled.cr';
+          filename = 'decompiled.cl';
         } else if (this.currentTab === 'tab-pane-benchmarks') {
           content = JSON.stringify({
             system: 'CRON 256-Core 4D-Torus Neuromorphic Photonic Processor',
@@ -1725,7 +1725,7 @@ class CRONPlayground {
       this.verilogViewer.innerHTML = '<div style="padding:10px;color:#64748b;font-style:italic;">Synthesize code to inspect IEEE 1364-2001 Verilog RTL.</div>';
     }
     if (this.decompileViewer) {
-      this.decompileViewer.innerHTML = '<div style="padding:10px;color:#64748b;font-style:italic;">Run or Step code to inspect reverse-decompiled .cr blueprint from machine VLIW bundles.</div>';
+      this.decompileViewer.innerHTML = '<div style="padding:10px;color:#64748b;font-style:italic;">Run or Step code to inspect disassembled VLIW microcode bundles and cycle timing.</div>';
     }
     this._updateUI();
     this._renderCL();

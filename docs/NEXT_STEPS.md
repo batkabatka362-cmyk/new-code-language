@@ -11,17 +11,14 @@
   - `(` болон `,` тэмдэгтүүдээр автоматаар ажилладаг.
   - 10 суулгагдсан когнитив функцуудын (`pack_wave`, `compute_attention_head`, `step_synaptic_plasticity`, `ground_and_unify`, `assert_triple`, `consume` гэх мэт) параметр, тайлбар, идэвхтэй параметрийн байрлалыг тодорхойлно.
 - [x] **DocumentSymbol Provider (`textDocument/documentSymbol`)**:
-  - `.cr`: `def`, `struct`, `trait`, `brain`, `region`, `impl` блокуудыг Outline модонд гаргана.
-  - `.cl`: `@CORE` заавар болон `B0000:` VLIW bundle шошгуудыг бүрэн таньж харуулна.
+  - `@CORE` заавар болон `B0000:` VLIW bundle шошгуудыг Outline модонд бүрэн таньж харуулна.
 - [x] **GoToDefinition Provider (`textDocument/definition`)**:
-  - Функц, бүтэц, төлөв, brain, impl тодорхойлолт болон `.cl` шошгуудын эх үүсвэр рүү (`F12`) үсрэх чадвар.
+  - Тодорхойлолт болон `.cl` шошгуудын эх үүсвэр рүү (`F12`) үсрэх чадвар.
 - [x] **Semantic Tokens Provider (`textDocument/semanticTokens/full`)**:
   - LSP 3.17 delta-encoding стандартаар AST түвшний өнгө ялгалт хийсэн:
-    - Linear Affine `lin` хувьсагчдыг `readonly` горимоор тодотгох.
-    - Когнитив блокууд (`brain`, `resilient_compute`, `region`).
     - Тоног төхөөрөмжийн регистрүүд (`R0..R15`, `V0..V7`, `A0..A3`), micro-op командууд (`ADD`, `FMA`, `SWIZZLE`, `ROUTE_DOR`, `SEND`, `RECV`).
 - [x] **`is_cl_document` засав**:
-  - `.cr` дотор `brain` блок байх үед алдаатайгаар `.cl` гэж таньдаг байсан алдааг `B####` толгой загварын шалгалтаар засав.
+  - `B####` толгой загварын шалгалтаар VLIW багцуудыг алдаагүй таньдаг болов.
 - [x] **VSCode Extension v1.2.0 & VSIX багцлалт**:
   - `vscode-cron/cron-lang-1.2.0.vsix` багцыг бүрэн хамаарлуудтай нь (`vscode-languageclient` 9.0+) хамт бүтээв.
   - Нийт **15/15 LSP тест** (`cargo test -p cron-lsp`) 100% ногоон.
@@ -58,13 +55,11 @@
 
 ## 2. LSP & Developer Tooling (`cron-lsp`, `vscode-cron`)
 - [x] **Inlay Hints Provider (`textDocument/inlayHint`)**:
-  - `.cr`: Хувьсагчийн далд төрлийг (`: i64`, `: f64`, `: wave_t [linear]`) тооцоолж редактор дээр шууд харуулна. Live editing үед синтакс дутуу байсан ч line-level fallback scanner-аар тасралтгүй ажиллана.
   - `.cl`: VLIW bundle-ийн такт (`[C#1]`) болон функциональ нэгжийн портуудыг (`[ALU]`, `[FMA]`, `[MEM]`, `[NOC]`) micro-op бүрийн өмнө тодорхой харуулна.
 - [x] **Code Action / Auto-Fix интеграци**:
-  - `E0002`/`E0003` (Unconsumed linear type leak) гарсан үед шууд `consume(<var_name>)` автоматаар код дотор нэмэх Quick-Fix санал болгодог болов.
   - `CL001..CL005` VLIW slot зөрчлийг `Autonomous Vibe-Loop Heal`-ээр нэг товшилтоор засах Quick-Fix бэлэн.
 - [x] **Debug Adapter Protocol (DAP)**:
-  - `.cr` болон `.cl` програмыг bundle-by-bundle алхам алхмаар trace хийх, регистр (`R0..R15`), фотоник долгион (`W0..W3`), STDP синапсын жин, техник хангамжийн CSR телеметр шалгах бүрэн стандартын DAP сервер (`cron dap`, `cron_lsp::dap`).
+  - `.cl` машины кодыг bundle-by-bundle алхам алхмаар trace хийх, регистр (`R0..R15`), фотоник долгион (`W0..W3`), STDP синапсын жин, техник хангамжийн CSR телеметр шалгах бүрэн стандартын DAP сервер (`cron dap`, `cron_lsp::dap`).
   - Нөхцөлт breakpoint (`R0 == 42`, `temp >= 105`, `trap`, `OP`), Step Over (`next`), Step In (`stepIn`), Step Back (`stepBack`), хувьсагч засварлах (`setVariable`) болон VS Code-ийн төрөлхийн дибаг интерфейс (`launch.json` provider)-тэй бүрэн холбогдов.
 - [x] **VS Code 4D-Torus Mesh Visualizer**:
   - VS Code дотор 256/65,536 core wafer mesh-ийн температур, пакетын урсгал, виртуал сувгуудыг (`VC0..VC3`) харуулах интерактив Webview самбар (`cron.openMeshVisualizer`).
@@ -84,14 +79,14 @@
 ---
 
 ## 4. Transpilers & Hardware Backends
-- [x] **C23 Transpiler (`cron c23`)**:
+- [x] **C23 Transpiler (`cron cl-c23`)**:
   - GCC -O3 болон Clang 18+ дээр BitNet ternary GEMM (`MD` sub-byte dot product-ийг branchless bitwise popcount-аар хурдасгасан) болон photonic SIMD (`OP`, `WD`) үйлдлүүдийг C23/C2x native SIMD код болгов.
-  - `cron c23 <file.cl|file.cr> [-o <out>] [-c|--compile] [-r|--run] [--opt <O0..O3>]` командыг бүтээж, хостын GCC/Clang компилятороор шууд машин код болгон compile болон run хийх боломжтой болгов.
-- [x] **LLVM JIT Backend (`cron jit`)**:
-  - `.cl` (256-core 4D-Torus silicon JIT) болон `.cr` (x86_64 machine JIT)-ийг санах ойд дискний I/O-гүй шууд биелүүлдэг `cron jit` командыг нэгтгэв.
+  - `cron cl-c23 <file.cl> [-o <out>]` командыг бүтээж, хостын GCC/Clang компилятороор шууд машин код болгон compile болон run хийх боломжтой болгов.
+- [x] **Silicon JIT Simulator (`cron cl-run`)**:
+  - `.cl` (256-core 4D-Torus silicon JIT)-ийг санах ойд дискний I/O-гүй шууд биелүүлдэг `cron cl-run` командыг нэгтгэв.
   - Машин унших боломжтой бүрэн бүтэн JSON телеметр тайлан (`--json`) дэмжүүлж, тест болон автоматжуулалтын системүүдэд зориулсан 0-latency горимыг баталгаажуулав.
-- [x] **Verilog RTL Synthesis (`cron verilog`)**:
-  - Силикон FPGA / ASIC синтезийн `cron verilog <file.cl|file.cr> [-o <core.v>] [--tb <tb.v>]` командыг нэвтрүүлж, IEEE 1364-2001 стандартад нийцсэн өөрийгөө шалгагч автомат testbench үүсгэдэг болов.
+- [x] **Verilog RTL Synthesis (`cron cl-verilog`)**:
+  - Силикон FPGA / ASIC синтезийн `cron cl-verilog <file.cl> [-o <core.v>] [--tb <tb.v>]` командыг нэвтрүүлж, IEEE 1364-2001 стандартад нийцсэн өөрийгөө шалгагч автомат testbench үүсгэдэг болов.
 
 ---
 

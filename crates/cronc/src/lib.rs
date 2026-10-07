@@ -1029,7 +1029,7 @@ mod tests {
     fn test_import_and_type_alias() {
         let code = r#"
         .MODULE ImportTest
-        import { SpatialTensor, RoutingMatrix } from "core/spatial.cr"
+        import { SpatialTensor, RoutingMatrix } from "core/spatial.cl"
         type Angle = f64
         type Matrix4x4 = [[f64; 4]; 4]
         _main:

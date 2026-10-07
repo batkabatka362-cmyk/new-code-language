@@ -990,7 +990,7 @@ fn main() {
         "import" => {
             if args.len() < 3 {
                 eprintln!("Error: Missing input model file.");
-                eprintln!("Usage: cron import <model.onnx|weights.safetensors> [-o <out.cr>] [--quantize <none|ternary|int4>] [--fuse] [--compile <cl|c23|native>]");
+                eprintln!("Usage: cron import <model.onnx|weights.safetensors> [-o <out.cl>] [--quantize <none|ternary|int4>] [--fuse] [--compile <cl|c23|native>]");
                 std::process::exit(1);
             }
             let input_file = &args[2];
@@ -1121,7 +1121,7 @@ fn main() {
         }
         "build" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron build <file.cr> [-o <out.cl>]");
+                eprintln!("Error: Missing input file. Usage: cron build <file.cl> [-o <out.cl>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1232,7 +1232,7 @@ fn main() {
         }
         "ptx" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron ptx <file.cr> [-o <out.ptx>]");
+                eprintln!("Error: Missing input file. Usage: cron ptx <file.cl> [-o <out.ptx>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1268,7 +1268,7 @@ fn main() {
         }
         "metal" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron metal <file.cr> [-o <out.metal>]");
+                eprintln!("Error: Missing input file. Usage: cron metal <file.cl> [-o <out.metal>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1304,7 +1304,7 @@ fn main() {
         }
         "check" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron check <file.cr|file.cl>");
+                eprintln!("Error: Missing input file. Usage: cron check <file.cl>");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1338,7 +1338,7 @@ fn main() {
             } else {
                 match cronc::compile_source_with_color(&content, Some(input_path), true) {
                     Ok(_) => {
-                        println!("\x1b[1;32m[PASS]\x1b[0m '{}' passed all .cr checks:", input_path);
+                        println!("\x1b[1;32m[PASS]\x1b[0m '{}' passed all checks:", input_path);
                         println!("  ✓ EBNF Syntax & Lexical structure verified");
                         println!("  ✓ Linear ownership types verified (0 memory leaks)");
                         println!("  ✓ Region lifetimes & Arena escape analysis verified");
@@ -1459,7 +1459,7 @@ fn main() {
         }
         "run" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron run <file.cr>");
+                eprintln!("Error: Missing input file. Usage: cron run <file.cl>");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1620,7 +1620,7 @@ fn main() {
         }
         "debug" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron debug <file.cl|.cr> [--core N] [--batch \"...\"]");
+                eprintln!("Error: Missing input file. Usage: cron debug <file.cl> [--core N] [--batch \"...\"]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1943,7 +1943,7 @@ fn main() {
         }
         "jit" | "cl-run" | "cl-jit" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron jit <file.cl|file.cr> [--json] [--native]");
+                eprintln!("Error: Missing input file. Usage: cron jit <file.cl> [--json] [--native]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1964,18 +1964,18 @@ fn main() {
                         } else {
                             print_banner();
                             println!("============================================================");
-                            println!("     CRON .cr DIRECT IN-MEMORY JIT EXECUTION (x86_64)       ");
+                            println!("     CRON DIRECT IN-MEMORY JIT EXECUTION (x86_64)           ");
                             println!("============================================================\n");
                             println!("  Execution Result:             {}", result);
                             println!("============================================================");
-                            println!("  STATUS: .cr JIT EXECUTED SUCCESSFULLY\n");
+                            println!("  STATUS: JIT EXECUTED SUCCESSFULLY\n");
                         }
                     }
                     Err(e) => {
                         if is_json {
                             println!("{{\"backend\":\"x86_64-llvm-jit\",\"error\":\"{}\",\"status\":\"error\"}}", e.replace('"', "\\\""));
                         } else {
-                            eprintln!("[.cr JIT ERROR] {}", e);
+                            eprintln!("[JIT ERROR] {}", e);
                         }
                         std::process::exit(1);
                     }
@@ -2235,7 +2235,7 @@ fn main() {
         }
         "verilog" | "cl-verilog" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron verilog <file.cl|file.cr> [-o <out.v>] [--tb <tb.v>]");
+                eprintln!("Error: Missing input file. Usage: cron verilog <file.cl> [-o <out.v>] [--tb <tb.v>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -2306,7 +2306,7 @@ fn main() {
         }
         "verilog-sim" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron verilog-sim <file.cl|file.cr> [--cycles N] [--trace] [--strict] [--json] [-o <dir>]");
+                eprintln!("Error: Missing input file. Usage: cron verilog-sim <file.cl> [--cycles N] [--trace] [--strict] [--json] [-o <dir>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -4618,7 +4618,7 @@ fn main() {
         }
         "decompile" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron decompile <file.cl> [-o <out.cr>]");
+                eprintln!("Error: Missing input file. Usage: cron decompile <file.cl> [-o <out.cl>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -4628,12 +4628,12 @@ fn main() {
             });
 
             let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let mut out_path = format!("{}_decompiled.cr", stem);
+            let mut out_path = format!("{}_decompiled.cl", stem);
             if args.len() >= 5 && args[3] == "-o" {
                 out_path = args[4].clone();
             }
 
-            println!("[CRON DECOMPILER] Reverse decompiling Silicon Machine Language '{}' (.cl -> .cr)...", input_path);
+            println!("[CRON DECOMPILER] Reverse decompiling Silicon Machine Language '{}'...", input_path);
             match cron_decompile::decompile_cl_with_name(&cl_code, &format!("Decompiled_{}", stem)) {
                 Ok(decompiled) => {
                     if let Err(e) = fs::write(&out_path, &decompiled) {
@@ -4643,14 +4643,14 @@ fn main() {
                     let line_count = decompiled.lines().count();
                     println!("[SUCCESS] Decompiled machine-native VLIW to CRON Blueprint: '{}' ({} lines)", out_path, line_count);
                     println!("============================================================");
-                    println!("      REVERSE SEMANTIC DECOMPILATION SUMMARY (.cl -> .cr)   ");
+                    println!("      REVERSE SEMANTIC DECOMPILATION SUMMARY                ");
                     println!("============================================================");
                     println!("  Source Input:         {} (128-bit VLIW Machine Language)", input_path);
                     println!("  Target Output:        {} (Human Cognitive Projection)", out_path);
                     println!("  Linear Types:         100% Affine Soundness Verified");
                     println!("  Silicon Brains Mapped:Photonic, Reversible, STDP, 4D Torus NoC");
                     println!("============================================================\n");
-                    println!("Preview of decompiled .cr blueprint:");
+                    println!("Preview of decompiled blueprint:");
                     for line in decompiled.lines().take(18) {
                         println!("  {}", line);
                     }
@@ -4823,7 +4823,7 @@ fn main() {
         }
         "fmt" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing file to format. Usage: cron fmt <file.cr>");
+                eprintln!("Error: Missing file to format. Usage: cron fmt <file.cl>");
                 std::process::exit(1);
             }
             let file_path = &args[2];
@@ -4872,7 +4872,7 @@ fn main() {
         "profile" => {
             // Generate .prof execution trace for FDO analysis
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron profile <file.cr>");
+                eprintln!("Error: Missing input file. Usage: cron profile <file.cl>");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -4929,7 +4929,7 @@ fn main() {
         "fdo-profile" => {
             // Full FDO Pipeline: Profile -> Analyze -> Re-schedule -> Emit optimized .cl
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron fdo-profile <file.cr>");
+                eprintln!("Error: Missing input file. Usage: cron fdo-profile <file.cl>");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5060,7 +5060,7 @@ fn main() {
         }
         "dashboard" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing file. Usage: cron dashboard <file.cr|.cl>");
+                eprintln!("Error: Missing file. Usage: cron dashboard <file.cl>");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5230,7 +5230,7 @@ fn main() {
         }
         "synth" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron synth <file.cr> [-t vivado|yosys]");
+                eprintln!("Error: Missing input file. Usage: cron synth <file.cl> [-t vivado|yosys]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5283,7 +5283,7 @@ fn main() {
         }
         "native" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron native <file.cr> [-o <out>]");
+                eprintln!("Error: Missing input file. Usage: cron native <file.cl> [-o <out>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5339,7 +5339,7 @@ fn main() {
         }
         "emit-llvm" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron emit-llvm <file.cr> [-o <out.ll>]");
+                eprintln!("Error: Missing input file. Usage: cron emit-llvm <file.cl> [-o <out.ll>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5372,7 +5372,7 @@ fn main() {
         }
         "llvm" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron llvm <file.cr> [-o <out>]");
+                eprintln!("Error: Missing input file. Usage: cron llvm <file.cl> [-o <out>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5459,7 +5459,7 @@ fn main() {
         }
         "_jit_legacy" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron jit <file.cr>");
+                eprintln!("Error: Missing input file. Usage: cron jit <file.cl>");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5492,7 +5492,7 @@ fn main() {
         }
         "flash" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron flash <file.cr> [--target <t>] [--interface <i>] [--out-dir <dir>] [--dry-run]");
+                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--target <t>] [--interface <i>] [--out-dir <dir>] [--dry-run]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5589,7 +5589,7 @@ fn main() {
         }
         "verify" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron verify <file.cr|.cl> [--temp <Kelvin>] [--freq <GHz>]");
+                eprintln!("Error: Missing input file. Usage: cron verify <file.cl> [--temp <Kelvin>] [--freq <GHz>]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5697,7 +5697,7 @@ fn handle_cluster_command(args: &[String]) {
         println!("CRON Multi-Chip Cluster Management Tool");
         println!("Usage: cron cluster <action> [options]");
         println!("\nActions:");
-        println!("    run <file> [--chips <N>]   Execute .cl, .clb, or .cr on distributed cluster (default 16 chips = 4,096 cores)");
+        println!("    run <file> [--chips <N>]   Execute .cl or .clb on distributed cluster (default 16 chips = 4,096 cores)");
         println!("    info [--chips <N>]         Display cluster topology, 6D coordinates, and PPA metrics");
         println!("    bench [--chips <N>]        Run distributed 4,096-core GEMM & NoC benchmark");
         return;
@@ -6764,7 +6764,7 @@ fn handle_cl_esoteric_command(args: &[String]) {
 fn handle_cl_optic_command(args: &[String]) {
     if args.is_empty() {
         println!("CRON Heterogeneous Optical WDM Laser Power Budget & Photonic Insertion Loss Optimizer");
-        println!("Usage: cron cl-optic <file.cl|.cr> [options]");
+        println!("Usage: cron cl-optic <file.cl> [options]");
         println!("\nOptions:");
         println!("    --mesh <N>          MZI array dimension (NxN, default: 16)");
         println!("    --lambda <N>        Number of WDM lambda channels (1..16, default: 8)");
@@ -6838,7 +6838,7 @@ fn handle_cl_optic_command(args: &[String]) {
     let file_path = match input_file {
         Some(f) => f,
         None => {
-            eprintln!("Error: Missing input file. Usage: cron cl-optic <file.cl|.cr>");
+            eprintln!("Error: Missing input file. Usage: cron cl-optic <file.cl>");
             std::process::exit(1);
         }
     };

@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Modern computing faces two existential walls: the *von Neumann memory wall* (interconnect energy and bandwidth limits) and the *thermodynamic Landauer dissipation limit*. The **CRON System** is a unified hardware-software co-designed architecture engineered from first principles to overcome these bottlenecks. It integrates a high-level cognitive language (`.cr`), a deterministic 128-bit 4-slot Very Long Instruction Word (VLIW) machine language (`.cl`), a 5-pass AST optimization framework, a Profile-Guided Feedback-Directed Optimization (FDO) pipeline, and a 256-to-4,096-core 4D-Torus hybrid silicon processor combining silicon photonics, reversible thermodynamic logic, and spiking neuromorphic plasticity. Empirical benchmarks show that CRON achieves a **3,850.2× cluster parallel speedup** across 16 chips (4,096 physical cores), sustained issue rates exceeding **9.82 Million VLIW ops/sec** per core simulator, and a peak theoretical compute density of **65.536 POps/s** within a 1,166.4 W system power envelope.
+Modern computing faces two existential walls: the *von Neumann memory wall* (interconnect energy and bandwidth limits) and the *thermodynamic Landauer dissipation limit*. The **CRON System** is a unified hardware-software co-designed architecture engineered from first principles to overcome these bottlenecks. It centers upon a deterministic 128-bit 4-slot Very Long Instruction Word (VLIW) silicon microcode machine language (`.cl`), an automated DAG compaction and hazard-mitigation framework, a Profile-Guided Feedback-Directed Optimization (FDO) pipeline, and a 256-to-4,096-core 4D-Torus hybrid silicon processor combining silicon photonics, reversible thermodynamic logic, and spiking neuromorphic plasticity. Empirical benchmarks show that CRON achieves a **3,850.2× cluster parallel speedup** across 16 chips (4,096 physical cores), sustained issue rates exceeding **9.82 Million VLIW ops/sec** per core simulator, and a peak theoretical compute density of **65.536 POps/s** within a 1,166.4 W system power envelope.
 
 ---
 
@@ -20,13 +20,13 @@ Classical Von Neumann           CRON Cognitive Torus
 Instruction Fetch Bottleneck -> Zero-Overhead Deterministic VLIW (128-bit)
 Irreversible Bit Erasure     -> Reversible Fredkin/Toffoli Thermodynamic Logic
 Von Neumann DRAM Latency     -> Direct Optical DWDM Mesh + 0-cycle Region Arenas
-Static Heuristic Compilers   -> 5-Pass AST Optimizer + FDO Hardware Profiling Loop
+Static Heuristic Compilers   -> Automated DAG Optimizer + FDO Hardware Profiling Loop
 Opaque Monolithic GPUs       -> 6-Brain Hardware Co-Processors + Native Multi-Target
 ```
 
 ### 1.1 Landauer-Reversible Computing
 Under Landauer's Principle, erasing a single bit of information dissipates a minimum entropy of $k_B T \ln 2$ joules. CRON addresses this at both the language and ISA levels:
-- **Linear Type System (`lin` / `consume`):** Every variable with physical resource tracking must be explicitly consumed or transformed, preventing memory leaks and avoiding garbage collection pauses.
+- **Direct Register Resource Tracking:** Every variable and intermediate state tracks physical register allocation deterministically, preventing memory leaks and avoiding garbage collection pauses.
 - **Reversible Logic Units (Brain 3):** Hardware opcodes `_RF` (Fredkin gate) and `_TO` (Toffoli gate) allow full backward inversion without thermodynamic loss, enabling zero-memory reverse automatic differentiation.
 
 ### 1.2 The 6-Brain Cognitive Architecture
@@ -40,46 +40,17 @@ Unlike homogeneous CPU/GPU cores, each CRON core integrates six domain-specific 
 
 ---
 
-## 2. Language Specification: High-Level CRON (`.cr`)
-
-CRON combines the readability of modern expressive languages with strict systems-level memory semantics.
-
-### 2.1 EBNF Grammar Overview (v2.0)
-```ebnf
-ModuleDecl    ::= ".MODULE" Identifier
-EntryDecl     ::= ".ENTRY" Label
-Statement     ::= LetBinding | AssignStmt | ControlFlow | BrainBlock | ChannelOp
-LetBinding    ::= "let" [ "lin" | "mut" ] Identifier [ ":" Type ] "=" Expr
-Type          ::= PrimitiveType | LinearType | CognitiveType | GenericType
-LinearType    ::= "linear" Type
-CognitiveType ::= "wave_t" | "vec4_i8" | "spk_stamp" | "rev_t" | "qubit_t"
-ChannelOp     ::= Identifier "<|" Expr | Identifier "|>" Identifier
-BrainBlock    ::= "brain" Identifier "{" Statement* "}"
-```
-
-### 2.2 Linear Ownership & Region Arenas
-CRON guarantees compile-time memory safety without a garbage collector via affine and linear types:
-```cron
-let lin wave_a: linear wave_t = pack_wave(amp=[64, 32, 16, 8], phase=[32, 32, 64, 64])
-let lin wave_b: linear wave_t = pack_wave(amp=[32, 32, 32, 32], phase=[16, 16, 16, 16])
-
-; wave_a and wave_b must be consumed; duplicate consumption or omission triggers E0003/E0002
-let lin result = compute_attention_head(consume(wave_a), consume(wave_b))
-```
-
----
-
-## 3. Machine-Level Specification: 128-Bit VLIW (`.cl` / `.clb`)
+## 2. Machine-Level Specification: 128-Bit VLIW (`.cl` / `.clb`)
 
 Every machine cycle issues a 128-bit bundle consisting of four 32-bit slots, represented in human-readable ASCII by 10 characters per slot (40 characters total per bundle) across a 94-character safe ASCII alphabet.
 
-### 3.1 Slot Layout
+### 2.1 Slot Layout
 ```
 [ Slot 0: Arithmetic/NoC ] [ Slot 1: Photonic/Opt ] [ Slot 2: Reversible/SNN ] [ Slot 3: Flow/Control ]
 <------ 32 bits --------> <------ 32 bits -------> <------ 32 bits --------> <------ 32 bits --------->
 ```
 
-### 3.2 Homopolymer Macro Opcodes
+### 2.2 Homopolymer Macro Opcodes
 Twin-token opcodes provide single-cycle chip-wide coordination:
 - `AA`: Dual-bank SIMD self-broadcast and lockstep auto-accumulation.
 - `bb`: Chip-wide 256-core global synchronization barrier.
@@ -91,17 +62,17 @@ Twin-token opcodes provide single-cycle chip-wide coordination:
 
 ---
 
-## 4. Compiler Optimization & Feedback-Directed Optimization (FDO)
+## 3. Compiler Optimization & Feedback-Directed Optimization (FDO)
 
 CRON incorporates a multi-pass optimization pipeline positioned between semantic validation and scheduling:
 
 ```
-Source (.cr) -> Semantic Checker -> 5-Pass AST Optimizer -> VLIW Scheduler -> Native Codegen
-                                                                  ^                   |
-                                                                  |---- FDO Recompile |
-                                                                  |     (.prof loop)  |
-                                                                  v                   v
-                                                           Simulator Profile     Execution
+Source (.cl) -> Static Hazard Checker -> DAG Compaction Optimizer -> VLIW Scheduler -> Native Codegen
+                                                                          ^                   |
+                                                                          |---- FDO Recompile |
+                                                                          |     (.prof loop)  |
+                                                                          v                   v
+                                                                   Simulator Profile     Execution
 ```
 
 ### 4.1 The 5-Pass AST Optimizer

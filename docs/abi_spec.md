@@ -88,7 +88,7 @@ When routing cognitive packets across the 176-bit dedicated crossbar bus linking
 
 ## 5. Compilation Mapping Example
 
-### High-Level `.cr` Source:
+### High-Level Semantic Representation:
 ```crystal
 module MathCognitionABI
 

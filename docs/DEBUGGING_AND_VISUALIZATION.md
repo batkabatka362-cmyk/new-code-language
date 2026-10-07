@@ -6,7 +6,7 @@ This document provides a comprehensive guide to debugging and hardware telemetry
 
 ## 1. Overview & Architectural Design
 
-The CRON debugging system bridges high-level cognitive programs (`.cr`), low-level VLIW microcode bundles (`.cl`), and physical silicon hardware simulation through standard language and debugging protocols:
+The CRON debugging system bridges low-level VLIW microcode bundles (`.cl`), in-memory JIT execution, and physical silicon hardware simulation through standard language and debugging protocols:
 
 ```
 +-----------------------------------------------------------------------+
@@ -74,7 +74,7 @@ Content-Length: 124
 ## 3. Supported DAP Commands & Inspection Scopes
 
 ### 3.1 Breakpoint Management (`setBreakpoints`)
-- **Source Breakpoints**: Set by line number in `.cl` or `.cr` source files.
+- **Source Breakpoints**: Set by line number in `.cl` source files.
 - **Conditional Breakpoints**: Evaluated dynamically on each cycle:
   - Register conditions: `R0 == 42`, `R1 != 0`, `R2 > 1000`
   - Telemetry conditions: `temp >= 105.0`, `power > 35.0`
@@ -128,7 +128,7 @@ code --install-extension vscode-cron/cron-lang-1.3.0.vsix
 
 ### 4.2 Debug Configurations (`.vscode/launch.json`)
 
-To debug a `.cl` microcode kernel or `.cr` cognitive script, create a `.vscode/launch.json` file in your workspace:
+To debug a `.cl` microcode kernel, create a `.vscode/launch.json` file in your workspace:
 
 ```json
 {
@@ -143,7 +143,7 @@ To debug a `.cl` microcode kernel or `.cr` cognitive script, create a `.vscode/l
             "trace": true
         },
         {
-            "name": "CRON: Simulate 256-Core Torus (.cr)",
+            "name": "CRON: Simulate 256-Core Torus (.cl)",
             "type": "cron",
             "request": "launch",
             "program": "${file}",
