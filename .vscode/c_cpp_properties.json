@@ -6,7 +6,13 @@
         "${workspaceFolder}/include",
         "${workspaceFolder}/src_native",
         "${workspaceFolder}/benchmarks",
-        "${workspaceFolder}/**"
+        "${workspaceFolder}/**",
+        "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include/c++/16.1.0",
+        "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include/c++/16.1.0/x86_64-w64-mingw32",
+        "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/lib/gcc/x86_64-w64-mingw32/16.1.0/include",
+        "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/lib/gcc/x86_64-w64-mingw32/16.1.0/include-fixed",
+        "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/x86_64-w64-mingw32/include",
+        "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include"
       ],
       "defines": [
         "_DEBUG",
@@ -15,6 +21,10 @@
         "_POSIX_C_SOURCE=200809L"
       ],
       "compilerPath": "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin/gcc.exe",
+      "compilerArgs": [
+        "-fopenmp",
+        "-O3"
+      ],
       "cStandard": "c23",
       "cppStandard": "c++20",
       "intelliSenseMode": "windows-gcc-x64"

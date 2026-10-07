@@ -401,7 +401,7 @@ namespace Cron.NET
     }
 
     /// <summary>
-    /// Autonomous Swarm Self-Synthesis & Continuous Silicon Vibe-Healing Engine.
+    /// Autonomous Swarm Self-Synthesis &amp; Continuous Silicon Vibe-Healing Engine.
     /// </summary>
     public static class CronSwarmSynthesizer
     {
