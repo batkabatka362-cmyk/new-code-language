@@ -125,6 +125,7 @@ pub mod cl_compose;
 pub mod cl_verify_math;
 pub mod cl_lint;
 pub mod cl_schedule;
+pub mod cl_autograd;
 pub mod cl_forge;
 pub mod cl_transpile;
 pub mod cl_hopfield;

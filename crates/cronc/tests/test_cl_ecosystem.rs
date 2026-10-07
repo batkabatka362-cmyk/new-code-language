@@ -290,3 +290,18 @@ fn test_cl_cross_transpiler_wgsl_ptx_c23() {
     assert!(c23_rep.generated_code.contains("#include <stdint.h>"));
     assert!(c23_rep.generated_code.contains("void cron_cl_c23_execute("));
 }
+
+#[test]
+fn test_cl_in_silicon_autograd_training() {
+    // 1. Train MLP in-silicon
+    let report = cronc::cl_autograd::train_cl_mlp(40, 0.08);
+    assert!(report.converged, "In-silicon MLP training must converge");
+    assert!(report.final_loss < report.initial_loss * 0.20);
+    assert_eq!(report.total_parameters, 58);
+
+    // 2. Synthesize and verify training microcode
+    let microcode = cronc::cl_autograd::synthesize_training_microcode("autograd_grad_step", 128, 64);
+    assert!(microcode.contains("@kernel autograd_grad_step"));
+    let audit = cronc::cl_pkg::audit_cl_source(&microcode, "autograd_grad_step.cl");
+    assert!(audit.passed, "Synthesized autograd kernel must pass silicon audit: {:?}", audit.diagnostics);
+}

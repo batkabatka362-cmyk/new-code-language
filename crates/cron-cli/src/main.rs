@@ -106,6 +106,8 @@ fn print_help() {
     println!("    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl");
     println!("    cl-alphabet                    Display complete 94-character .cl specification table");
     println!("    cl-audit <file.cl>             Audit 94-char alphabet coverage, entropy & hardware hazards");
+    println!("    cl-fix <file.cl> [--in-place]  Resolve all intra-bundle RAW/WAW hazards via VLIW scheduler");
+    println!("    cl-train [--epochs N] [--lr F] Train neural model in-silicon with .cl autograd & AdamW");
     println!("    decompile <file.cl> [-o <out>] Decompile machine-native .cl into .cr Blueprint");
     println!("    check <file.cr>                Verify linear types, region safety, and syntax");
     println!("    bench-host                     Run live PyTorch vs CRON C23 benchmarks on this machine");
@@ -837,6 +839,9 @@ fn main() {
         }
         "cl-fix" | "fix-cl" => {
             handle_cl_fix_command(&args[2..]);
+        }
+        "cl-train" | "train-cl" => {
+            handle_cl_train_command(&args[2..]);
         }
         "cl-forge" | "forge" => {
             handle_cl_forge_command(&args[2..]);
@@ -7959,6 +7964,61 @@ fn handle_cl_fix_command(args: &[String]) {
             }
         }
         Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
+    }
+}
+
+fn handle_cl_train_command(args: &[String]) {
+    let mut epochs = 50usize;
+    let mut lr = 0.08f32;
+    let mut synth_path = None;
+    let mut emit_json = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--epochs" | "-e" => {
+                if let Some(val) = args.get(i + 1) {
+                    epochs = val.parse().unwrap_or(50);
+                    i += 1;
+                }
+            }
+            "--lr" => {
+                if let Some(val) = args.get(i + 1) {
+                    lr = val.parse().unwrap_or(0.08);
+                    i += 1;
+                }
+            }
+            "--synth" => {
+                if let Some(val) = args.get(i + 1) {
+                    synth_path = Some(val.clone());
+                    i += 1;
+                }
+            }
+            "--json" => {
+                emit_json = true;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let report = cronc::cl_autograd::train_cl_mlp(epochs, lr);
+
+    if let Some(p) = synth_path {
+        let microcode = cronc::cl_autograd::synthesize_training_microcode("in_silicon_autograd", 64, 32);
+        match std::fs::write(&p, &microcode) {
+            Ok(_) => println!("[CL-TRAIN] Synthesized training microcode saved to '{}'", p),
+            Err(e) => eprintln!("[ERROR] Could not write '{}': {}", p, e),
+        }
+    }
+
+    if emit_json {
+        println!(
+            "{{\"epochs\":{},\"initial_loss\":{:.6},\"final_loss\":{:.6},\"total_params\":{},\"peak_ipc\":{:.2},\"converged\":{}}}",
+            report.epochs, report.initial_loss, report.final_loss, report.total_parameters, report.peak_ipc, report.converged
+        );
+    } else {
+        print!("{}", report.render_ascii_hud());
     }
 }
 
