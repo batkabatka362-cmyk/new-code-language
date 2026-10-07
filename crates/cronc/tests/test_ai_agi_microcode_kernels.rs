@@ -31,9 +31,9 @@ pub fn generate_gqa8_kernel() -> String {
 
     // 8 Query heads projected against shared KV bank
     for h in 0..8 {
-        slots.push(build_valid_slot("_", &format!("MD04M102"))); // Q_h * K_shared
-        slots.push(build_valid_slot("_", &format!("ML05M403"))); // Scaled by 1/sqrt(d)
-        slots.push(build_valid_slot("_", &format!("SM06M500"))); // Online Softmax
+        slots.push(build_valid_slot("_", "MD04M102")); // Q_h * K_shared
+        slots.push(build_valid_slot("_", "ML05M403")); // Scaled by 1/sqrt(d)
+        slots.push(build_valid_slot("_", "SM06M500")); // Online Softmax
         slots.push(build_valid_slot("_", &format!("PO0{:X}M602", (h % 7) + 7))); // Attn * V_shared
     }
 
@@ -104,9 +104,9 @@ pub fn generate_hippocampal_replay_kernel() -> String {
 
     // 4-step Autoassociative Hopfield/HDC retrieval & sharp wave ripple broadcast
     for step in 0..4 {
-        slots.push(build_valid_slot("_", &format!("OP04M102"))); // Optical crossbar projection
-        slots.push(build_valid_slot("_", &format!("XO05M400"))); // XOR Hamming threshold clean
-        slots.push(build_valid_slot("_", &format!("CO06M503"))); // Compare with sharp-wave threshold
+        slots.push(build_valid_slot("_", "OP04M102")); // Optical crossbar projection
+        slots.push(build_valid_slot("_", "XO05M400")); // XOR Hamming threshold clean
+        slots.push(build_valid_slot("_", "CO06M503")); // Compare with sharp-wave threshold
         slots.push(build_valid_slot("~", &format!("TX07M6{:02}", step))); // Torus broadcast to Neocortex
     }
 
@@ -174,8 +174,8 @@ pub fn generate_bitnet_dequant_kernel() -> String {
     // Unpack 4 parallel trit lanes and apply scale
     for lane in 0..4 {
         slots.push(build_valid_slot("_", &format!("RO03M10{:X}", lane))); // Rotate bits
-        slots.push(build_valid_slot("_", &format!("MA04M303"))); // Mask 2-bit trit
-        slots.push(build_valid_slot("_", &format!("FX05M400"))); // Trit convert {-1, 0, +1}
+        slots.push(build_valid_slot("_", "MA04M303")); // Mask 2-bit trit
+        slots.push(build_valid_slot("_", "FX05M400")); // Trit convert {-1, 0, +1}
         slots.push(build_valid_slot("_", &format!("ML0{:X}M502", lane + 6))); // Scaled FP16 dequant
     }
 
@@ -202,12 +202,12 @@ fn test_new_ai_agi_microcode_kernels_integrity_and_jit() {
         assert_eq!(lint.warning_count, 0, "Kernel '{}' has hazard warnings: {:?}", name, lint.issues);
 
         // 2. Structural verification
-        let rep = verify_cl_program(code).expect(&format!("Structural verify failed for '{}'", name));
+        let rep = verify_cl_program(code).unwrap_or_else(|_| panic!("Structural verify failed for '{}'", name));
         assert!(rep.total_bundles > 0);
         assert!(rep.hazards.is_empty(), "Kernel '{}' has hazards: {:?}", name, rep.hazards);
 
         // 3. In-memory Silicon JIT execution
-        let core = run_cl_jit(code).expect(&format!("JIT execution failed for '{}'", name));
+        let core = run_cl_jit(code).unwrap_or_else(|_| panic!("JIT execution failed for '{}'", name));
         assert!(core.cycle_count > 0);
         assert!(core.is_halted, "Kernel '{}' did not halt cleanly", name);
 

@@ -1010,7 +1010,7 @@ impl CoreEngine {
                 let byte_addr = (base.wrapping_add(offset)) % 65536;
                 let word_idx = byte_addr / 4;
                 let byte_shift = (byte_addr % 4) * 8;
-                let byte_val = (self.registers[s] & 0xFF) as u32;
+                let byte_val = self.registers[s] & 0xFF;
                 let mask = !(0xFF << byte_shift);
                 self.dmem[word_idx] = (self.dmem[word_idx] & mask) | (byte_val << byte_shift);
             }

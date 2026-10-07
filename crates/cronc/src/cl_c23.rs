@@ -583,7 +583,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         }
                         "CD" => {
                             out.push_str("    {\n");
-                            out.push_str(&format!("        int32_t s_val, c_val;\n"));
+                            out.push_str("        int32_t s_val, c_val;\n");
                             out.push_str(&format!("        cron_cordic_step((int32_t)core->r[{}], &s_val, &c_val);\n", s));
                             out.push_str(&format!("        core->r[{}] = (uint32_t)s_val;\n", d));
                             out.push_str("    }\n");

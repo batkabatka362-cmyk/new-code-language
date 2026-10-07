@@ -94,6 +94,12 @@ pub struct ClTape {
     pub next_id: usize,
 }
 
+impl Default for ClTape {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClTape {
     pub fn new() -> Self {
         Self {

@@ -194,6 +194,12 @@ pub struct ClPacketRouter {
     pub dropped_packets: usize,
 }
 
+impl Default for ClPacketRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClPacketRouter {
     pub fn new() -> Self {
         Self {
@@ -230,6 +236,12 @@ impl ClPacketRouter {
 pub struct ClHttpGateway {
     pub total_requests: usize,
     pub total_responses: usize,
+}
+
+impl Default for ClHttpGateway {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ClHttpGateway {
@@ -327,7 +339,7 @@ pub fn run_cl_hardware_benchmark(packet_count: usize) -> ClNetTelemetryHud {
 
         // Queue into DMA ring and drain if full
         if ring.enqueue(pkt).is_err() {
-            while let Some(_) = ring.dequeue() {}
+            while ring.dequeue().is_some() {}
         }
 
         // Periodically simulate gateway requests

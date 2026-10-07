@@ -85,10 +85,10 @@ pub fn vectorize_pattern(
                 let imm_hex = format!("{:02X}", (c * 4) & 0xFF);
                 if *is_ternary {
                     raw_slots.push(build_valid_slot("_", &format!("TM03M{:02}", c % 16)));
-                    raw_slots.push(build_valid_slot("_", &format!("AD01M103")));
+                    raw_slots.push(build_valid_slot("_", "AD01M103"));
                 } else {
                     raw_slots.push(build_valid_slot("_", &format!("MD04M{:02}", c % 16)));
-                    raw_slots.push(build_valid_slot("_", &format!("PO01M104")));
+                    raw_slots.push(build_valid_slot("_", "PO01M104"));
                 }
                 raw_slots.push(build_valid_slot("_", &format!("TL05${}", imm_hex)));
                 raw_slots.push(build_valid_slot("~", "RM06M100"));

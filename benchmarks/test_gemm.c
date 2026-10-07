@@ -27,5 +27,9 @@ int main() {
     struct timespec t0, t1; clock_gettime(CLOCK_MONOTONIC, &t0);
     for(int r=0; r<10; r++) gemm(A,B,C);
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    printf('%.2f us\n', ((t1.tv_sec-t0.tv_sec)*1e6 + (t1.tv_nsec-t0.tv_nsec)*1e-3)/10.0);
+    printf("%.2f us\n", ((t1.tv_sec-t0.tv_sec)*1e6 + (t1.tv_nsec-t0.tv_nsec)*1e-3)/10.0);
+    free(A);
+    free(B);
+    free(C);
+    return 0;
 }
