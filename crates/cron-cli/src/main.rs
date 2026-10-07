@@ -108,6 +108,7 @@ fn print_help() {
     println!("    cl-audit <file.cl>             Audit 94-char alphabet coverage, entropy & hardware hazards");
     println!("    decompile <file.cl> [-o <out>] Decompile machine-native .cl into .cr Blueprint");
     println!("    check <file.cr>                Verify linear types, region safety, and syntax");
+    println!("    bench-host                     Run live PyTorch vs CRON C23 benchmarks on this machine");
     println!("    explain [code]                 Explain compiler error code (e.g. E0002) with fix examples");
     println!("    test [dir]                     Compile and run all .cr files in a directory");
     println!("    fmt <file.cr>                  Auto-format .cr source code with standard style");
@@ -834,6 +835,9 @@ fn main() {
         "cl-lint" | "lint-cl" => {
             handle_cl_lint_command(&args[2..]);
         }
+        "cl-fix" | "fix-cl" => {
+            handle_cl_fix_command(&args[2..]);
+        }
         "cl-forge" | "forge" => {
             handle_cl_forge_command(&args[2..]);
         }
@@ -1340,6 +1344,29 @@ fn main() {
                         eprintln!("{}", e);
                         std::process::exit(1);
                     }
+                }
+            }
+        }
+        "bench-host" => {
+            let script = ["benchmarks/run_real_benchmarks.py", "../../benchmarks/run_real_benchmarks.py"]
+                .iter()
+                .find(|p| std::path::Path::new(p).exists())
+                .copied();
+            match script {
+                Some(path) => {
+                    let py = if cfg!(windows) { "python" } else { "python3" };
+                    match std::process::Command::new(py).arg(path).status() {
+                        Ok(s) if s.success() => {}
+                        Ok(s) => std::process::exit(s.code().unwrap_or(1)),
+                        Err(e) => {
+                            eprintln!("Failed to launch {}: {}", py, e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => {
+                    eprintln!("benchmarks/run_real_benchmarks.py not found (run from the repository root).");
+                    std::process::exit(1);
                 }
             }
         }
@@ -4245,31 +4272,6 @@ fn main() {
                 return;
             }
             handle_cl_compare_command(&args[2..]);
-        }
-        "bench-host" => {
-            let emit_json = args.iter().any(|a| a == "--json");
-            let py_script = "benchmarks/run_real_benchmarks.py";
-            if Path::new(py_script).exists() {
-                let mut cmd = std::process::Command::new("python");
-                cmd.arg(py_script);
-                if emit_json {
-                    cmd.arg("--json");
-                }
-                match cmd.status() {
-                    Ok(status) => {
-                        if !status.success() {
-                            std::process::exit(status.code().unwrap_or(1));
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("[BENCH-HOST ERROR] Failed to run python: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-            } else {
-                eprintln!("[BENCH-HOST ERROR] Benchmark runner script not found at '{}'", py_script);
-                std::process::exit(1);
-            }
         }
         "build-native-lib" | "build-native" => {
             let mut out_path = None;
@@ -7926,6 +7928,34 @@ fn handle_cl_lint_command(args: &[String]) {
             }
             if !report.is_clean && report.error_count > 0 {
                 std::process::exit(1);
+            }
+        }
+        Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
+    }
+}
+
+fn handle_cl_fix_command(args: &[String]) {
+    if args.is_empty() {
+        println!("USAGE: cron cl-fix <file.cl> [-o <out.cl>] [--in-place]");
+        return;
+    }
+    let input_path = &args[0];
+    let in_place = args.iter().any(|a| a == "--in-place");
+    let out_path = args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1));
+    match std::fs::read_to_string(input_path) {
+        Ok(source) => {
+            let rep = cronc::cl_schedule::resolve_hazards(&source);
+            println!(
+                "[CL-FIX] bundles {} -> {}, hazards resolved: {}",
+                rep.bundles_before, rep.bundles_after, rep.hazards_resolved
+            );
+            let target = if in_place { Some(input_path.as_str()) } else { out_path.map(|s| s.as_str()) };
+            match target {
+                Some(p) => match std::fs::write(p, &rep.source) {
+                    Ok(_) => println!("[CL-FIX] wrote {}", p),
+                    Err(e) => eprintln!("[ERROR] Could not write '{}': {}", p, e),
+                },
+                None => print!("{}", rep.source),
             }
         }
         Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
