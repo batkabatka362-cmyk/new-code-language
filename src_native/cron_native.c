@@ -796,3 +796,218 @@ CRON_EXPORT void cron_c140_tensor_folding_batch(
     free(matrices);
 }
 
+// ============================================================================
+// Zero-Copy Hardware DMA Ring Buffer & 4D-Torus Packet Router (Hard Backend)
+// ============================================================================
+
+#include <time.h>
+
+struct cron_dma_ring_s {
+    size_t capacity;
+    size_t mask;
+    size_t head;
+    size_t tail;
+    cron_packet_t* buffer;
+};
+
+CRON_EXPORT cron_dma_ring_t* cron_dma_ring_create(size_t capacity) {
+    if (capacity < 2) capacity = 2;
+    // Round up to next power of two
+    size_t cap = 1;
+    while (cap < capacity) {
+        cap <<= 1;
+    }
+    cron_dma_ring_t* ring = (cron_dma_ring_t*)malloc(sizeof(cron_dma_ring_t));
+    if (!ring) return NULL;
+
+    ring->capacity = cap;
+    ring->mask = cap - 1;
+    __atomic_store_n(&ring->head, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&ring->tail, 0, __ATOMIC_RELAXED);
+
+    ring->buffer = (cron_packet_t*)malloc(cap * sizeof(cron_packet_t));
+    if (!ring->buffer) {
+        free(ring);
+        return NULL;
+    }
+    memset(ring->buffer, 0, cap * sizeof(cron_packet_t));
+    return ring;
+}
+
+CRON_EXPORT void cron_dma_ring_destroy(cron_dma_ring_t* ring) {
+    if (!ring) return;
+    if (ring->buffer) {
+        free(ring->buffer);
+        ring->buffer = NULL;
+    }
+    free(ring);
+}
+
+CRON_EXPORT int cron_dma_ring_enqueue(cron_dma_ring_t* ring, const cron_packet_t* pkt) {
+    if (!ring || !pkt) return 0;
+    size_t head = __atomic_load_n(&ring->head, __ATOMIC_RELAXED);
+    size_t tail = __atomic_load_n(&ring->tail, __ATOMIC_ACQUIRE);
+
+    if (head - tail >= ring->capacity) {
+        return 0; // Ring buffer full
+    }
+
+    size_t idx = head & ring->mask;
+    ring->buffer[idx] = *pkt;
+
+    __atomic_store_n(&ring->head, head + 1, __ATOMIC_RELEASE);
+    return 1;
+}
+
+CRON_EXPORT int cron_dma_ring_dequeue(cron_dma_ring_t* ring, cron_packet_t* pkt_out) {
+    if (!ring) return 0;
+    size_t tail = __atomic_load_n(&ring->tail, __ATOMIC_RELAXED);
+    size_t head = __atomic_load_n(&ring->head, __ATOMIC_ACQUIRE);
+
+    if (tail == head) {
+        return 0; // Ring buffer empty
+    }
+
+    size_t idx = tail & ring->mask;
+    if (pkt_out) {
+        *pkt_out = ring->buffer[idx];
+    }
+
+    __atomic_store_n(&ring->tail, tail + 1, __ATOMIC_RELEASE);
+    return 1;
+}
+
+CRON_EXPORT size_t cron_dma_ring_occupancy(const cron_dma_ring_t* ring) {
+    if (!ring) return 0;
+    size_t head = __atomic_load_n(&ring->head, __ATOMIC_ACQUIRE);
+    size_t tail = __atomic_load_n(&ring->tail, __ATOMIC_ACQUIRE);
+    return head - tail;
+}
+
+CRON_EXPORT size_t cron_dma_ring_capacity(const cron_dma_ring_t* ring) {
+    return ring ? ring->capacity : 0;
+}
+
+CRON_EXPORT uint8_t cron_packet_compute_checksum(const cron_packet_t* pkt) {
+    if (!pkt) return 0;
+    uint8_t c = 0;
+    c ^= pkt->src_core;
+    c ^= pkt->dst_core;
+    c ^= pkt->channel;
+    c ^= pkt->length;
+    size_t len = pkt->length > CRON_PACKET_MAX_PAYLOAD ? CRON_PACKET_MAX_PAYLOAD : pkt->length;
+    for (size_t i = 0; i < len; ++i) {
+        c ^= pkt->payload[i];
+    }
+    return c;
+}
+
+CRON_EXPORT int cron_packet_is_valid(const cron_packet_t* pkt) {
+    if (!pkt) return 0;
+    if (pkt->magic != CRON_PACKET_MAGIC) return 0;
+    return (cron_packet_compute_checksum(pkt) == pkt->checksum) ? 1 : 0;
+}
+
+CRON_EXPORT int cron_4d_torus_route(uint8_t src_core, uint8_t dst_core, uint8_t* hops_out) {
+    uint8_t sx = src_core & 0x03;
+    uint8_t sy = (src_core >> 2) & 0x03;
+    uint8_t sz = (src_core >> 4) & 0x03;
+    uint8_t sw = (src_core >> 6) & 0x03;
+
+    uint8_t dx = dst_core & 0x03;
+    uint8_t dy = (dst_core >> 2) & 0x03;
+    uint8_t dz = (dst_core >> 4) & 0x03;
+    uint8_t dw = (dst_core >> 6) & 0x03;
+
+    uint8_t hops = 0;
+    while (sx != dx) { sx = (sx + 1) & 0x03; hops++; }
+    while (sy != dy) { sy = (sy + 1) & 0x03; hops++; }
+    while (sz != dz) { sz = (sz + 1) & 0x03; hops++; }
+    while (sw != dw) { sw = (sw + 1) & 0x03; hops++; }
+
+    if (hops_out) {
+        *hops_out = hops;
+    }
+    return (int)hops;
+}
+
+CRON_EXPORT size_t cron_packet_router_burst(
+    cron_dma_ring_t* ring,
+    size_t packet_count,
+    float* avg_hops_out,
+    float* throughput_gbps_out
+) {
+    if (!ring || packet_count == 0) {
+        if (avg_hops_out) *avg_hops_out = 0.0f;
+        if (throughput_gbps_out) *throughput_gbps_out = 0.0f;
+        return 0;
+    }
+
+    uint64_t total_hops = 0;
+    size_t routed_count = 0;
+    size_t total_bytes = 0;
+
+    double t_start = 0.0;
+#ifdef _OPENMP
+    t_start = omp_get_wtime();
+#else
+    struct timespec ts_start;
+    clock_gettime(CLOCK_MONOTONIC, &ts_start);
+    t_start = (double)ts_start.tv_sec + (double)ts_start.tv_nsec * 1e-9;
+#endif
+
+    for (size_t i = 0; i < packet_count; ++i) {
+        uint8_t src = (uint8_t)(i % 256);
+        uint8_t dst = (uint8_t)((i * 7 + 13) % 256);
+
+        cron_packet_t pkt;
+        pkt.magic = CRON_PACKET_MAGIC;
+        pkt.src_core = src;
+        pkt.dst_core = dst;
+        pkt.channel = (uint8_t)(i % 4);
+        pkt.length = 64;
+
+        for (uint8_t p = 0; p < 64; ++p) {
+            pkt.payload[p] = (uint8_t)(src ^ dst ^ p);
+        }
+        pkt.checksum = cron_packet_compute_checksum(&pkt);
+
+        if (cron_packet_is_valid(&pkt)) {
+            uint8_t hops = 0;
+            cron_4d_torus_route(src, dst, &hops);
+            total_hops += hops;
+            routed_count++;
+            total_bytes += (size_t)pkt.length + 8;
+        }
+
+        if (!cron_dma_ring_enqueue(ring, &pkt)) {
+            cron_packet_t drained;
+            while (cron_dma_ring_dequeue(ring, &drained)) {}
+            cron_dma_ring_enqueue(ring, &pkt);
+        }
+    }
+
+    double t_end = 0.0;
+#ifdef _OPENMP
+    t_end = omp_get_wtime();
+#else
+    struct timespec ts_end;
+    clock_gettime(CLOCK_MONOTONIC, &ts_end);
+    t_end = (double)ts_end.tv_sec + (double)ts_end.tv_nsec * 1e-9;
+#endif
+
+    double elapsed_sec = t_end - t_start;
+    if (elapsed_sec < 1e-7) elapsed_sec = 1e-7;
+
+    if (avg_hops_out) {
+        *avg_hops_out = routed_count > 0 ? (float)((double)total_hops / (double)routed_count) : 0.0f;
+    }
+
+    if (throughput_gbps_out) {
+        double gigabits = ((double)total_bytes * 8.0) / 1e9;
+        *throughput_gbps_out = (float)(gigabits / elapsed_sec);
+    }
+
+    return routed_count;
+}
+

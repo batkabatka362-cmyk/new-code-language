@@ -9,6 +9,7 @@
 #define CRON_RT_HPP
 
 #include "cron_rt.h"
+#include "cron_native.h"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,6 +18,7 @@
 #include <memory>
 #include <array>
 #include <optional>
+#include <algorithm>
 
 namespace cron {
 
@@ -360,6 +362,139 @@ class TorusMesh {
 public:
     static int64_t distance(int64_t core_a, int64_t core_b) {
         return cron_torus_distance_c(core_a, core_b);
+    }
+};
+
+// ----------------------------------------------------------------------------
+// 7. Zero-Copy DMA Ring Buffer & 4D-Torus Packet Router (Hard Backend)
+// ----------------------------------------------------------------------------
+
+class Packet {
+public:
+    cron_packet_t raw{};
+
+    Packet() {
+        raw.magic = CRON_PACKET_MAGIC;
+    }
+
+    Packet(uint8_t src, uint8_t dst, uint8_t ch, std::span<const uint8_t> data) {
+        raw.magic = CRON_PACKET_MAGIC;
+        raw.src_core = src;
+        raw.dst_core = dst;
+        raw.channel = ch;
+        size_t len = std::min(data.size(), static_cast<size_t>(CRON_PACKET_MAX_PAYLOAD));
+        raw.length = static_cast<uint8_t>(len);
+        std::copy_n(data.data(), len, raw.payload);
+        if (len < CRON_PACKET_MAX_PAYLOAD) {
+            std::fill(raw.payload + len, raw.payload + CRON_PACKET_MAX_PAYLOAD, 0);
+        }
+        raw.checksum = cron_packet_compute_checksum(&raw);
+    }
+
+    Packet(uint8_t src, uint8_t dst, uint8_t ch, std::string_view text)
+        : Packet(src, dst, ch, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size())) {}
+
+    bool is_valid() const noexcept {
+        return cron_packet_is_valid(&raw) != 0;
+    }
+
+    uint8_t src() const noexcept { return raw.src_core; }
+    uint8_t dst() const noexcept { return raw.dst_core; }
+    uint8_t channel() const noexcept { return raw.channel; }
+    uint8_t length() const noexcept { return raw.length; }
+
+    std::span<const uint8_t> payload() const noexcept {
+        return {raw.payload, raw.length};
+    }
+
+    std::string_view payload_as_string() const noexcept {
+        return {reinterpret_cast<const char*>(raw.payload), raw.length};
+    }
+};
+
+class DmaRing {
+public:
+    explicit DmaRing(size_t capacity = 1024)
+        : ring_(cron_dma_ring_create(capacity)) {
+        if (!ring_) {
+            throw std::bad_alloc();
+        }
+    }
+
+    ~DmaRing() {
+        if (ring_) {
+            cron_dma_ring_destroy(ring_);
+            ring_ = nullptr;
+        }
+    }
+
+    DmaRing(const DmaRing&) = delete;
+    DmaRing& operator=(const DmaRing&) = delete;
+
+    DmaRing(DmaRing&& other) noexcept : ring_(other.ring_) {
+        other.ring_ = nullptr;
+    }
+
+    DmaRing& operator=(DmaRing&& other) noexcept {
+        if (this != &other) {
+            if (ring_) cron_dma_ring_destroy(ring_);
+            ring_ = other.ring_;
+            other.ring_ = nullptr;
+        }
+        return *this;
+    }
+
+    bool enqueue(const Packet& pkt) noexcept {
+        return cron_dma_ring_enqueue(ring_, &pkt.raw) != 0;
+    }
+
+    std::optional<Packet> dequeue() noexcept {
+        Packet p;
+        if (cron_dma_ring_dequeue(ring_, &p.raw)) {
+            return p;
+        }
+        return std::nullopt;
+    }
+
+    size_t occupancy() const noexcept {
+        return cron_dma_ring_occupancy(ring_);
+    }
+
+    size_t capacity() const noexcept {
+        return cron_dma_ring_capacity(ring_);
+    }
+
+    bool empty() const noexcept {
+        return occupancy() == 0;
+    }
+
+    cron_dma_ring_t* raw_handle() const noexcept { return ring_; }
+
+private:
+    cron_dma_ring_t* ring_{nullptr};
+};
+
+class PacketRouter {
+public:
+    static int route(uint8_t src_core, uint8_t dst_core, uint8_t* hops_out = nullptr) noexcept {
+        return cron_4d_torus_route(src_core, dst_core, hops_out);
+    }
+
+    struct BurstResult {
+        size_t packets_routed{0};
+        float avg_hops{0.0f};
+        float throughput_gbps{0.0f};
+    };
+
+    static BurstResult run_burst(DmaRing& ring, size_t packet_count) {
+        BurstResult res{};
+        res.packets_routed = cron_packet_router_burst(
+            ring.raw_handle(),
+            packet_count,
+            &res.avg_hops,
+            &res.throughput_gbps
+        );
+        return res;
     }
 };
 

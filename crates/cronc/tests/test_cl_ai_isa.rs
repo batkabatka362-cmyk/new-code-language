@@ -133,7 +133,8 @@ B0002: _SM07$100> _SS08@200> _NO00#000> _HL00!000>
 
     // Run natively via C23
     let temp_dir = std::env::temp_dir();
-    let out_bin = temp_dir.join(if cfg!(windows) { "test_cl_ai_native.exe" } else { "test_cl_ai_native" });
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let out_bin = temp_dir.join(if cfg!(windows) { format!("test_cl_ai_native_{}_{}.exe", std::process::id(), ts) } else { format!("test_cl_ai_native_{}_{}", std::process::id(), ts) });
 
     // In C23 test code, inject r[1] = 2.0f before bundles
     let mut c23_code = cronc::cl_c23::compile_cl_to_c23(cl_code, "ai_kernel").expect("C23 compilation failed");
@@ -142,7 +143,7 @@ B0002: _SM07$100> _SS08@200> _NO00#000> _HL00!000>
         "cron_silicon_init(&core);\n    core.r[1] = cron_f32_to_u32(2.0f);",
     );
 
-    let temp_c_file = temp_dir.join(format!("test_cl_ai_{}.c", std::process::id()));
+    let temp_c_file = temp_dir.join(format!("test_cl_ai_{}_{}.c", std::process::id(), ts));
     std::fs::write(&temp_c_file, &c23_code).expect("Failed to write C file");
 
     let cc = if gcc_check.is_ok() { "gcc" } else { "clang" };

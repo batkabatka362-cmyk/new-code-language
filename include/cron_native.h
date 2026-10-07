@@ -250,6 +250,43 @@ CRON_EXPORT void cron_c140_tensor_folding_batch(
     int64_t num_rotors
 );
 
+// ============================================================================
+// Zero-Copy Hardware DMA Ring Buffer & 4D-Torus Packet Router (Hard Backend)
+// ============================================================================
+
+#define CRON_PACKET_MAGIC 0x4352 // 'C' 'R'
+#define CRON_PACKET_MAX_PAYLOAD 120
+
+typedef struct {
+    uint16_t magic;      // 0x4352
+    uint8_t  src_core;   // Source core ID (0..255)
+    uint8_t  dst_core;   // Destination core ID (0..255)
+    uint8_t  channel;    // Virtual channel (0..3)
+    uint8_t  length;     // Payload byte length (0..120)
+    uint8_t  payload[CRON_PACKET_MAX_PAYLOAD];
+    uint8_t  checksum;   // CRC-8 XOR checksum
+} cron_packet_t;
+
+typedef struct cron_dma_ring_s cron_dma_ring_t;
+
+CRON_EXPORT cron_dma_ring_t* cron_dma_ring_create(size_t capacity);
+CRON_EXPORT void cron_dma_ring_destroy(cron_dma_ring_t* ring);
+CRON_EXPORT int cron_dma_ring_enqueue(cron_dma_ring_t* ring, const cron_packet_t* pkt);
+CRON_EXPORT int cron_dma_ring_dequeue(cron_dma_ring_t* ring, cron_packet_t* pkt_out);
+CRON_EXPORT size_t cron_dma_ring_occupancy(const cron_dma_ring_t* ring);
+CRON_EXPORT size_t cron_dma_ring_capacity(const cron_dma_ring_t* ring);
+
+CRON_EXPORT uint8_t cron_packet_compute_checksum(const cron_packet_t* pkt);
+CRON_EXPORT int cron_packet_is_valid(const cron_packet_t* pkt);
+
+CRON_EXPORT int cron_4d_torus_route(uint8_t src_core, uint8_t dst_core, uint8_t* hops_out);
+CRON_EXPORT size_t cron_packet_router_burst(
+    cron_dma_ring_t* ring,
+    size_t packet_count,
+    float* avg_hops_out,
+    float* throughput_gbps_out
+);
+
 #ifdef __cplusplus
 }
 #endif

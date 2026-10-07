@@ -75,10 +75,11 @@ fn test_native_gcc_c23_compilation_and_execution() {
     }
 
     let temp_dir = std::env::temp_dir();
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
     let exe_name = if cfg!(windows) {
-        format!("cron_c23_test_{}.exe", std::process::id())
+        format!("cron_c23_test_{}_{}.exe", std::process::id(), ts)
     } else {
-        format!("cron_c23_test_{}", std::process::id())
+        format!("cron_c23_test_{}_{}", std::process::id(), ts)
     };
     let exe_path = temp_dir.join(&exe_name);
 
@@ -114,10 +115,11 @@ fn test_native_gcc_c23_benchmarking_mode() {
     }
 
     let temp_dir = std::env::temp_dir();
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
     let exe_name = if cfg!(windows) {
-        format!("cron_c23_bench_{}.exe", std::process::id())
+        format!("cron_c23_bench_{}_{}.exe", std::process::id(), ts)
     } else {
-        format!("cron_c23_bench_{}", std::process::id())
+        format!("cron_c23_bench_{}_{}", std::process::id(), ts)
     };
     let exe_path = temp_dir.join(&exe_name);
 

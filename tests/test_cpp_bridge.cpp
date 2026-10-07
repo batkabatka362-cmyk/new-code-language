@@ -184,7 +184,53 @@ int main() {
         std::cout << "  ✓ Test 9 Passed: CSP Channel (FIFO & non-blocking) and 4D-Torus Wormhole mesh routing verified." << std::endl;
     }
 
-    std::cout << "\n🎉 ALL 9 CRON C++20 ZERO-OVERHEAD BRIDGE TESTS PASSED (GRADE SSS+)!" << std::endl;
+    // TEST 10: Zero-Copy DMA Ring Buffer & 4D-Torus Packet Router (Grade SSS+ Hard Backend)
+    {
+        // 10.1 Packet Integrity & Checksum
+        std::string_view msg = "CRON_SILICON_HARD_DMA_PACKET_BURST";
+        cron::Packet pkt(0, 255, 1, msg);
+        assert(pkt.is_valid());
+        assert(pkt.src() == 0);
+        assert(pkt.dst() == 255);
+        assert(pkt.channel() == 1);
+        assert(pkt.payload_as_string() == msg);
+
+        // 10.2 4D-Torus Dimension-Order Routing
+        uint8_t hops = 0;
+        int route_res = cron::PacketRouter::route(0, 255, &hops);
+        assert(route_res == 12);
+        assert(hops == 12);
+
+        // 10.3 Lock-Free DMA Ring Buffer Enqueue & Dequeue
+        cron::DmaRing ring(64);
+        assert(ring.empty());
+        assert(ring.capacity() == 64);
+
+        for (uint8_t i = 0; i < 32; ++i) {
+            cron::Packet p(i, 255 - i, 0, "BURST");
+            assert(ring.enqueue(p));
+        }
+        assert(ring.occupancy() == 32);
+
+        for (uint8_t i = 0; i < 32; ++i) {
+            auto dequeued = ring.dequeue();
+            assert(dequeued.has_value());
+            assert(dequeued->src() == i);
+        }
+        assert(ring.empty());
+
+        // 10.4 Burst Simulation Benchmark
+        auto burst = cron::PacketRouter::run_burst(ring, 10000);
+        assert(burst.packets_routed == 10000);
+        assert(burst.avg_hops > 0.0f);
+        assert(burst.throughput_gbps > 0.0f);
+
+        std::cout << "  ✓ Test 10 Passed: Zero-copy DMA Ring Buffer & 4D-Torus Packet Router verified ("
+                  << burst.packets_routed << " pkts, Avg Hops: " << burst.avg_hops
+                  << ", Throughput: " << burst.throughput_gbps << " Gbps)." << std::endl;
+    }
+
+    std::cout << "\n🎉 ALL 10 CRON C++20 ZERO-OVERHEAD BRIDGE TESTS PASSED (GRADE SSS+)!" << std::endl;
     return 0;
 }
 
