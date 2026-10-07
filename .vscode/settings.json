@@ -23,6 +23,7 @@
     "${workspaceFolder}/include",
     "${workspaceFolder}/src_native",
     "${workspaceFolder}/benchmarks",
+    "${workspaceFolder}/synth",
     "${workspaceFolder}/**",
     "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include/c++/16.1.0",
     "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/include/c++/16.1.0/x86_64-w64-mingw32",
