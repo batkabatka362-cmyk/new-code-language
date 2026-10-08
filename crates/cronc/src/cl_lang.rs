@@ -365,15 +365,18 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
         || prefix == '$' || prefix == '#' || prefix == ':' || prefix == '\\'
         || prefix == '*' || prefix == '+' || prefix == '-' || prefix == '/'
         || prefix == '?' || prefix == '!' || prefix == '=' || prefix == '<' || prefix == '>'
-        || prefix == '.' || prefix == '(' || prefix == ')';
+        || prefix == '.' || prefix == '(' || prefix == ')' || prefix == '`';
     if !is_valid_prefix {
         return Err(format!("Invalid slot prefix '{}' in '{}'", prefix, raw));
     }
 
-    let mut opcode: String = chars[1..3].iter().collect();
-    if opcode == "_N" || raw.starts_with("__NOP") {
-        opcode = "NO".to_string();
-    }
+    let opcode: String = if prefix == '`' {
+        "SM".to_string()
+    } else if chars[1..3].iter().collect::<String>() == "_N" || raw.starts_with("__NOP") {
+        "NO".to_string()
+    } else {
+        chars[1..3].iter().collect()
+    };
     let terminator = chars[9];
     let is_valid_terminator = terminator.is_ascii_graphic();
     if !is_valid_terminator {

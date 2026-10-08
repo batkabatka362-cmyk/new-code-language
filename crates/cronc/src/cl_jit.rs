@@ -166,6 +166,24 @@ fn tile_transpose(v: u32) -> u32 {
     res
 }
 
+#[inline(always)]
+fn decode_base64_val(c: char) -> u8 {
+    match c {
+        'A'..='Z' => c as u8 - b'A',
+        'a'..='z' => c as u8 - b'a' + 26,
+        '0'..='9' => c as u8 - b'0' + 52,
+        '+' | '-' => 62,
+        '/' | '_' => 63,
+        _ => 0,
+    }
+}
+
+#[inline(always)]
+fn decode_base90_val(c: char) -> u8 {
+    const BASE90: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[]^_{|}~";
+    BASE90.iter().position(|&b| b == c as u8).unwrap_or(0) as u8
+}
+
 pub fn run_cl_jit(cl_code: &str) -> Result<ClJitCore, String> {
     let mut core = ClJitCore::new();
     execute_cl_on_core(cl_code, &mut core)?;
@@ -232,6 +250,33 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                     }) % 16;
                     let s = slot.src_reg.unwrap_or(0) % 16;
                     let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
+                    if slot.prefix == '`' {
+                        let chars: Vec<char> = slot_str.chars().collect();
+                        if chars.len() == 10 {
+                            let mode_val = decode_base64_val(chars[1]);
+                            let s_id = ((mode_val >> 4) & 0x3) as usize;
+                            let w = decode_base90_val(chars[2]) as u32;
+                            let step = decode_base90_val(chars[6]) as u32;
+                            let alu_op = chars[7];
+                            let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as usize % 16;
+                            let val = chars[9].to_digit(16).unwrap_or(step % 16);
+
+                            match alu_op {
+                                '+' => core.r[reg] = core.r[reg].wrapping_add(val),
+                                '-' => core.r[reg] = core.r[reg].wrapping_sub(val),
+                                '*' => {
+                                    let shift = (w % 4) + 1;
+                                    core.r[reg] ^= val << shift;
+                                }
+                                '^' => core.r[reg] ^= val,
+                                '=' => core.r[reg] = val,
+                                '!' => core.is_halted = true,
+                                _ => {}
+                            }
+                        }
+                        continue;
+                    }
+
                     let imm_val = parse_imm_val(slot_str).unwrap_or(imm_nibble as u32);
 
                     match slot.opcode.as_str() {
