@@ -93,7 +93,7 @@ fn print_help() {
     println!("    cl-compare [target|all] [opts] Real-World Performance & Efficiency Benchmark vs PyTorch/CUDA & Mojo");
     println!("    bench [target|all] [opts]      Competitive Benchmark Validation Engine & Technical Whitepaper");
     println!("    bench-host                     Run live empirical host benchmarks vs PyTorch and C23 native code");
-    println!("    wafer-sim [--task \"...\"] [--hotspots N] [--thermal] [--json] 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm Simulation & 1F1B Pipeline");
+    println!("    wafer-sim [--workload sphere|consensus] [--tokens N] [--task \"...\"] [--hotspots N] [--thermal] [--svg path] [--html path] [--json] 65,536-Core 8D Hyper-Torus Wafer-Scale Swarm & SiPh DWDM Optics");
     println!("    dap                            Run Debug Adapter Protocol (DAP) server over stdio for VS Code / IDE debugger");
     println!("    vibe-spec [--format f] [-o s]  Generate AI Vibe-Coding specification (EBNF, JSON Schema, LLM Prompt)");
     println!("    cl-schema [-o schema.json]     Generate machine-readable JSON Schema for .cl language");
@@ -7529,6 +7529,10 @@ fn handle_quantum_sim_command(args: &[String]) {
 
 fn handle_wafer_sim_command(args: &[String]) {
     let mut task = "Distributed 65,536-Core Wafer-Scale Supercomputing Consensus".to_string();
+    let mut workload = "consensus".to_string();
+    let mut tokens = 64usize;
+    let mut svg_out: Option<String> = None;
+    let mut html_out: Option<String> = None;
     let mut emit_json = false;
     let mut hotspots = 0usize;
     let mut thermal_mode = false;
@@ -7536,8 +7540,25 @@ fn handle_wafer_sim_command(args: &[String]) {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--workload" | "-w" if i + 1 < args.len() => {
+                workload = args[i + 1].to_lowercase();
+                i += 2;
+            }
+            "--tokens" if i + 1 < args.len() => {
+                tokens = args[i + 1].parse().unwrap_or(64);
+                workload = "sphere".to_string();
+                i += 2;
+            }
             "--task" | "-t" if i + 1 < args.len() => {
                 task = args[i + 1].clone();
+                i += 2;
+            }
+            "--svg" if i + 1 < args.len() => {
+                svg_out = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--html" if i + 1 < args.len() => {
+                html_out = Some(args[i + 1].clone());
                 i += 2;
             }
             "--hotspots" if i + 1 < args.len() => {
@@ -7562,13 +7583,19 @@ fn handle_wafer_sim_command(args: &[String]) {
         println!("================================================================================");
         println!(" CRON 65,536-CORE WAFER-SCALE AUTONOMOUS SWARM RUNTIME (16x16 DIES, 8D-TORUS)");
         println!(" Topology: 256 Dies x 256 Cores (16x16 Wafer Grid x 4x4x4x4 Torus NoC, 8D-DOR)");
-        println!(" Interconnect: 12.8 Tbps/die Waveguide Mesh (3,276.8 Tbps Total Photonic BW)");
+        println!(" Interconnect: 12.8 Tbps/die SiPh DWDM Mesh (3,276.8 Tbps Total Photonic BW)");
         println!(" Routing: 8D-DOR with Virtual Channels (VC0/VC1/VC2/VC3) & 0 Collisions Verified");
+        println!(" Optics: 8 DWDM Channels (1530-1565nm), 0.15 dB/cm Loss, 48.0W Laser Budget");
         if hotspots > 0 || thermal_mode {
             println!(" Thermal Simulator: Active Fourier Bleed, DVFS Step-Down & Adaptive Deflection");
         }
         println!(" Pipeline: 1F1B Zero-Bubble Parallelism Engine (16 Stages)");
-        println!(" Task: {}", task);
+        println!(" Workload: {} | Multiplier-Free 0 DSP Slices", workload.to_uppercase());
+        if workload == "sphere" || task.to_lowercase().contains("sphere") || task.to_lowercase().contains("llm") {
+            println!(" Prompt: {} | Generation: {} Tokens (655.36 TOPS)", task, tokens);
+        } else {
+            println!(" Task: {}", task);
+        }
         println!("================================================================================");
     }
 
@@ -7578,7 +7605,40 @@ fn handle_wafer_sim_command(args: &[String]) {
     } else if thermal_mode {
         mesh.inject_thermal_hotspots(8);
     }
-    let report = mesh.execute_task(&task);
+
+    let report = if workload == "sphere" || task.to_lowercase().contains("sphere") || task.to_lowercase().contains("llm") {
+        mesh.execute_sphere_llm_inference(&task, tokens)
+    } else {
+        mesh.execute_task(&task)
+    };
+
+    if let Some(ref svg_path) = svg_out {
+        if let Some(parent) = std::path::Path::new(svg_path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::write(svg_path, &report.svg_wafer_diagram) {
+            Ok(_) => {
+                if !emit_json {
+                    println!("[EXPORT] 300mm Monolithic Silicon Wafer SVG saved to: {}", svg_path);
+                }
+            }
+            Err(e) => eprintln!("Error writing SVG to {}: {}", svg_path, e),
+        }
+    }
+
+    if let Some(ref html_path) = html_out {
+        if let Some(parent) = std::path::Path::new(html_path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::write(html_path, &report.html_dashboard) {
+            Ok(_) => {
+                if !emit_json {
+                    println!("[EXPORT] Standalone Wafer Dashboard HTML saved to: {}", html_path);
+                }
+            }
+            Err(e) => eprintln!("Error writing HTML to {}: {}", html_path, e),
+        }
+    }
 
     if emit_json {
         println!("{}", report.to_json());
@@ -7586,6 +7646,15 @@ fn handle_wafer_sim_command(args: &[String]) {
         println!("{}", report.ascii_wafer_hud);
         println!("\n[WAFER CONVERGENCE]");
         println!("{}", report.resolution);
+        println!("\n[PHOTONIC DWDM INTERCONNECT TELEMETRY]");
+        println!("  Optical Carriers:          8 DWDM Channels (100 GHz spacing)");
+        println!("  Per-Die Optical Bandwidth: 12.8 Tbps");
+        println!("  Aggregate Wafer Bandwidth: {:.1} Tbps", report.telemetry.aggregate_photonic_bandwidth_tbps);
+        println!("  Waveguide Propagation Loss:0.15 dB/cm");
+        println!("  Laser Power Consumption:   {:.1} W", report.telemetry.optical_laser_power_watts);
+        println!("  Bit Error Rate:            < 1e-15 (KP4 FEC)");
+        println!("  Multiplier-Free DSP Usage: 0 DSP slices (0.00 FLOPs)");
+        println!("  Compute Throughput:        {:.2} Geodesic TOPS", report.telemetry.aggregate_tera_ops_sec);
     }
 }
 

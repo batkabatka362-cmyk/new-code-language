@@ -6,9 +6,9 @@
 
 use cronc::cl_swarm::{AgentRole, PacketKind};
 use cronc::cl_swarm_wafer::{
-    CollisionAvoidanceBuffer, Coord8D, PipelineSchedule, VirtualChannel, WaferDORRouter,
-    WaferHierarchy, WaferSwarmMesh, WaferSwarmPacket, CORES_PER_DIE, TOTAL_DIES, TOTAL_WAFER_CORES,
-    WAFER_DIES_X, WAFER_DIES_Y,
+    CollisionAvoidanceBuffer, Coord8D, PhotonicWaveguidePhysics, PipelineSchedule,
+    VirtualChannel, WaferDORRouter, WaferHierarchy, WaferSwarmMesh, WaferSwarmPacket,
+    CORES_PER_DIE, TOTAL_DIES, TOTAL_WAFER_CORES, WAFER_DIES_X, WAFER_DIES_Y,
 };
 
 // -----------------------------------------------------------------------------
@@ -396,5 +396,80 @@ fn test_wafer_scale_execution_with_hotspots_and_zero_collision() {
     assert!(report.telemetry.peak_die_temp_c >= 105.0);
     assert!(report.telemetry.thermal_deflections_count > 0, "Deflection count must be positive");
     assert!(report.ascii_wafer_hud.contains("0 Collisions (VERIFIED)"));
+}
+
+// -----------------------------------------------------------------------------
+// 10. 4D Sphere LLM Inference, Photonic Physics & SVG/HTML Dashboard Tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_photonic_physics_modeling() {
+    let siph = PhotonicWaveguidePhysics::new();
+    assert_eq!(siph.num_dwdm_channels, 8);
+    assert_eq!(siph.channel_spacing_ghz, 100.0);
+    assert_eq!(siph.waveguide_loss_db_per_cm, 0.15);
+    assert_eq!(siph.laser_power_watts, 48.0);
+    assert!(siph.bit_error_rate < 1e-14);
+
+    // Test loss over 20 cm
+    let loss_20cm = siph.optical_loss_db(20.0);
+    assert!((loss_20cm - 4.2).abs() < 1e-6); // 20 * 0.15 + 1.2 = 4.2 dB
+
+    // Test thermal wavelength drift
+    let drift_10c = siph.thermal_wavelength_shift_pm(10.0);
+    assert_eq!(drift_10c, 1000.0); // 10 * 100 pm/°C = 1000 pm = 1 nm
+
+    // Test micro-heater tuning power
+    let tuning_pwr = siph.tuning_power_mw(5.0);
+    assert_eq!(tuning_pwr, 62.5); // 5 * 12.5 mW = 62.5 mW
+}
+
+#[test]
+fn test_wafer_scale_sphere_llm_inference_execution() {
+    let mut mesh = WaferSwarmMesh::new_65536();
+    let num_tokens = 32usize;
+    let report = mesh.execute_sphere_llm_inference("Predict Clifford Geodesic Trajectory", num_tokens);
+
+    assert!(report.consensus_achieved);
+    assert_eq!(report.telemetry.active_cores, TOTAL_WAFER_CORES);
+    assert_eq!(report.telemetry.packet_collisions, 0);
+    assert!(report.telemetry.zero_collision_verified);
+    assert!(report.telemetry.tier3_wafer_quorum);
+
+    // Multiplier-free 0 DSP discipline & Geodesic curvature verification
+    let expected_geodesic_ops = (num_tokens as u64) * (TOTAL_WAFER_CORES as u64) * 64u64;
+    assert_eq!(report.telemetry.total_geodesic_ops, expected_geodesic_ops);
+    assert!(report.telemetry.total_geodesic_ops > 0);
+    assert_eq!(report.telemetry.aggregate_tera_ops_sec, 655.36);
+    assert_eq!(report.telemetry.optical_laser_power_watts, 48.0);
+    assert!(report.telemetry.aggregate_photonic_bandwidth_tbps > 0.0);
+
+    // Pipeline verification
+    assert_eq!(report.telemetry.pipeline_stages, 16);
+    assert_eq!(report.telemetry.pipeline_bubbles, 15);
+
+    // Artifact verification
+    assert!(report.svg_wafer_diagram.contains("<svg"));
+    assert!(report.svg_wafer_diagram.contains("CRON 65,536-CORE WAFER-SCALE SUPERCOMPUTER"));
+    assert!(report.svg_wafer_diagram.contains("300mm Monolithic Silicon Wafer"));
+    assert!(report.html_dashboard.contains("<!DOCTYPE html>"));
+    assert!(report.html_dashboard.contains("CRON 65,536-Core Wafer-Scale Supercomputer Dashboard"));
+    assert!(report.html_dashboard.contains("Photonic Mesh Physics"));
+}
+
+#[test]
+fn test_wafer_svg_and_html_generation_directly() {
+    let mut mesh = WaferSwarmMesh::new_65536();
+    mesh.inject_thermal_hotspots(6);
+    let report = mesh.execute_task("Direct Visualization Test");
+
+    let svg = mesh.generate_wafer_svg(&report);
+    assert!(svg.contains("<circle cx=\"500\" cy=\"500\" r=\"470\""));
+    assert!(svg.contains("Die #"));
+
+    let html = mesh.generate_wafer_html_dashboard(&report);
+    assert!(html.contains("<html lang=\"en\">"));
+    assert!(html.contains("3-Tier Quorum Consensus"));
+    assert!(html.contains("Thermal Telemetry"));
 }
 

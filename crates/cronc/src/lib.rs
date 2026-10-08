@@ -246,7 +246,8 @@ pub use clifford::{
 };
 
 pub use cl_swarm_wafer::{
-    Coord8D, PipelineSchedule, WaferAgent, WaferDORRouter, WaferHierarchy, WaferSwarmMesh,
+    CollisionAvoidanceBuffer, Coord8D, PhotonicWaveguidePhysics, PipelineSchedule,
+    WaferAgent, WaferDORRouter, WaferHierarchy, WaferSwarmMesh,
     WaferSwarmPacket, WaferSwarmReport, WaferSwarmTelemetry, CORES_PER_DIE,
     TOTAL_DIES, TOTAL_WAFER_CORES, WAFER_DIES_X, WAFER_DIES_Y,
 };
