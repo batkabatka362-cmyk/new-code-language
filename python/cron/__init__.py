@@ -475,12 +475,14 @@ class StigmergySwarm:
                 self.best_solution = best_pos
         self.evaporate_and_diffuse()
 
+PheromoneSwarmMesh = StigmergySwarm
+
 
 class LivingHomeostasis:
     """
     Continuous Biological Homeostasis & Neuromodulator Chemical Diffusion Engine.
     Simulates biological drives (energy, curiosity, fatigue) that modulate
-    cognitive processing — enabling the AGI to self-regulate activity levels,
+    cognitive processing -- enabling the AGI to self-regulate activity levels,
     trigger sleep consolidation, and manage metabolic budgets.
     """
     def __init__(self, energy: float = 1.0, curiosity: float = 0.5,
@@ -601,6 +603,7 @@ from .clifford import (
     blade_index,
     blade_sign,
 )
+from . import math_bridge as math
 
 __version__ = "1.0.0"
 
@@ -683,4 +686,8 @@ __all__ = [
     "fold_tensor_4d",
     "blade_index",
     "blade_sign",
+    # Unified AI/AGI Mathematical Bridge
+    "math",
+    "StigmergySwarm",
 ]
+
