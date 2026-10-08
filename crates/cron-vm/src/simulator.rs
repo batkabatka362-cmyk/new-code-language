@@ -291,7 +291,12 @@ impl Simulator {
 
         for line in cl_content.lines() {
             let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+            if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed == "{" || trimmed == "}" {
+                continue;
+            }
+
+            // Skip non-core directives (.stage, .tensor, .loop, .barrier, .sram, .hbm, etc.)
+            if trimmed.starts_with('.') && !trimmed.starts_with(".core") {
                 continue;
             }
 

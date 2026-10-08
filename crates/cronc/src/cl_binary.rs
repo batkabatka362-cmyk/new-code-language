@@ -276,6 +276,8 @@ pub fn assemble_cl_to_clb(cl_content: &str) -> Result<Vec<u8>, String> {
             || trimmed.starts_with('.')
             || trimmed.starts_with('@')
             || trimmed.starts_with('#')
+            || trimmed == "{"
+            || trimmed == "}"
         {
             continue;
         }

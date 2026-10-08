@@ -94,6 +94,19 @@ pub enum ClDirective {
         tau_us: usize,
         dopamine: f32,
     },
+    Loop {
+        count: usize,
+        stride: usize,
+    },
+    Barrier {
+        name: String,
+        cores: String,
+    },
+    MemorySpace {
+        space: String,
+        size_kb: usize,
+        bank: usize,
+    },
     Custom {
         name: String,
         content: String,
@@ -706,6 +719,66 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         });
     }
 
+    if let Some(rest) = trimmed.strip_prefix(".loop") {
+        let rest = rest.trim();
+        let mut count = 1usize;
+        let mut stride = 1usize;
+        for token in split_directive_tokens(rest.trim_end_matches('{').trim()) {
+            let tok = token.trim();
+            if let Some(val) = tok.strip_prefix("count=") {
+                if let Ok(c) = val.parse::<usize>() { count = c; }
+            } else if let Some(val) = tok.strip_prefix("stride=") {
+                if let Ok(s) = val.parse::<usize>() { stride = s; }
+            }
+        }
+        return Ok(ClDirective::Loop { count, stride });
+    }
+
+    if let Some(rest) = trimmed.strip_prefix(".barrier") {
+        let rest = rest.trim();
+        let mut name = "sync".to_string();
+        let mut cores = "all".to_string();
+        for token in split_directive_tokens(rest) {
+            let tok = token.trim();
+            if let Some(val) = tok.strip_prefix("name=") {
+                name = val.trim_matches('"').to_string();
+            } else if let Some(val) = tok.strip_prefix("cores=") {
+                cores = val.trim_matches('"').to_string();
+            }
+        }
+        return Ok(ClDirective::Barrier { name, cores });
+    }
+
+    if trimmed.starts_with(".sram") || trimmed.starts_with(".hbm") || trimmed.starts_with(".noc") {
+        let (space, rest) = if let Some(r) = trimmed.strip_prefix(".sram") {
+            ("sram", r.trim())
+        } else if let Some(r) = trimmed.strip_prefix(".hbm") {
+            ("hbm", r.trim())
+        } else {
+            ("noc", trimmed.strip_prefix(".noc").unwrap().trim())
+        };
+        let mut size_kb = if space == "sram" { 64 } else if space == "hbm" { 16777216 } else { 0 };
+        let mut bank = 0usize;
+        for token in split_directive_tokens(rest) {
+            let tok = token.trim();
+            if let Some(val) = tok.strip_prefix("size=") {
+                let v = val.trim_end_matches("KB").trim_end_matches("kb").trim_end_matches("MB").trim_end_matches("GB");
+                if let Ok(s) = v.parse::<usize>() {
+                    if val.contains("GB") || val.contains("gb") {
+                        size_kb = s * 1024 * 1024;
+                    } else if val.contains("MB") || val.contains("mb") {
+                        size_kb = s * 1024;
+                    } else {
+                        size_kb = s;
+                    }
+                }
+            } else if let Some(val) = tok.strip_prefix("bank=") {
+                if let Ok(b) = val.parse::<usize>() { bank = b; }
+            }
+        }
+        return Ok(ClDirective::MemorySpace { space: space.to_string(), size_kb, bank });
+    }
+
     let name = trimmed.split_whitespace().next().unwrap_or(trimmed).to_string();
     Ok(ClDirective::Custom { name, content: trimmed.to_string() })
 }
@@ -717,7 +790,7 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
     for line in content.lines() {
         line_num += 1;
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed.starts_with('#') {
+        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed == "{" || trimmed == "}" {
             continue;
         }
 
