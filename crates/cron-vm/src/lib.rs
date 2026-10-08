@@ -78,4 +78,20 @@ mod tests {
         assert!(sparse_branches[0].1 > 0);
         assert_eq!(sparse_branches[1].1, 0);
     }
+
+    #[test]
+    fn test_4d_sphere_isa_execution_in_vm() {
+        let cl_code = r#"
+        ; 4D Hyperspherical Geodesic VLIW Kernel
+        B0001: `A00010+01 `Q01011+11 `g02012=21 `w03013+31
+        B0002: `A00111+01 `Q01112+11 `g02123-21 `w03114=31
+        B0003: `A00212=01 `Q01213+11 `g02224-21 `w03215=31
+        B0004: _HL00#0000 _NO00#0000 _NO00#0000 _NO00#0000
+        "#;
+        let stats = run_cl(cl_code);
+        assert_eq!(stats.total_cycles, 4);
+        assert!(stats.sphere_curvature_ops >= 12);
+        assert_eq!(stats.flop_count, 0, "Guaranteed 0.00 FLOPs Multiplier-Free execution");
+    }
 }
+

@@ -9,12 +9,12 @@
 // 100% Multiplier-Free - 0 FLOPs - 16x-20x Memory Compression
 // ============================================================================
 
+use crate::cl_sphere_infer::{SphereCompileOptions, SphereWeightMatrix};
+use crate::model_importer::gguf::{parse_gguf_header, GgufTensorType};
+use crate::model_importer::safetensors::parse_safetensors;
 use std::fs;
 use std::path::Path;
 use std::time::Instant;
-use crate::cl_sphere_infer::{SphereCompileOptions, SphereWeightMatrix};
-use crate::model_importer::safetensors::parse_safetensors;
-use crate::model_importer::gguf::{parse_gguf_header, GgufTensorType};
 
 /// Supported Input Model Formats
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,7 +28,11 @@ pub enum ModelInputFormat {
 impl ModelInputFormat {
     pub fn from_path<P: AsRef<Path>>(path: P) -> Self {
         let p = path.as_ref();
-        let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+        let ext = p
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
         match ext.as_str() {
             "safetensors" => ModelInputFormat::SafeTensors,
             "gguf" => ModelInputFormat::Gguf,
@@ -109,10 +113,22 @@ impl ModelConversionReport {
         out.push_str("========================================================================================\n");
         out.push_str("   CRON UNIVERSAL AI CONVERTER: PYTORCH/GGUF/SAFETENSORS -> 4D SPHERE SILICON (.cl)     \n");
         out.push_str("========================================================================================\n");
-        out.push_str(&format!("  Model Identifier:          {}\n", self.model_name));
-        out.push_str(&format!("  Source Input Format:       {}\n", self.input_format.as_str()));
-        out.push_str(&format!("  Total Tensors Lowered:     {}\n", self.total_tensors_converted));
-        out.push_str(&format!("  Total Parameters:          {} params\n", self.total_parameters));
+        out.push_str(&format!(
+            "  Model Identifier:          {}\n",
+            self.model_name
+        ));
+        out.push_str(&format!(
+            "  Source Input Format:       {}\n",
+            self.input_format.as_str()
+        ));
+        out.push_str(&format!(
+            "  Total Tensors Lowered:     {}\n",
+            self.total_tensors_converted
+        ));
+        out.push_str(&format!(
+            "  Total Parameters:          {} params\n",
+            self.total_parameters
+        ));
         out.push_str("----------------------------------------------------------------------------------------\n");
         out.push_str(&format!(
             "  Original FP32 Footprint:   {:.2} KB ({:.2} MB)\n",
@@ -124,16 +140,33 @@ impl ModelConversionReport {
             self.quantized_ternary_bytes as f64 / 1024.0,
             self.quantized_ternary_bytes as f64 / (1024.0 * 1024.0)
         ));
-        out.push_str(&format!("  Compression Multiplier:    \x1b[1;32m{:.2}x Smaller Footprint\x1b[0m\n", self.overall_compression_ratio));
-        out.push_str(&format!("  Model Ternary Sparsity:    {:.2}% Zero-Ternary Pruned\n", self.average_sparsity_percentage));
-        out.push_str(&format!("  Synthesized CL Bundles:    {} 128-bit VLIW Bundles\n", self.total_cl_bundles));
-        out.push_str(&format!("  Total 4D Geodesic Ops:     {} discrete curvature operations\n", self.total_geodesic_operations));
-        out.push_str(&format!("  Conversion Latency:        {:.2} ms\n", self.conversion_time_ms));
+        out.push_str(&format!(
+            "  Compression Multiplier:    \x1b[1;32m{:.2}x Smaller Footprint\x1b[0m\n",
+            self.overall_compression_ratio
+        ));
+        out.push_str(&format!(
+            "  Model Ternary Sparsity:    {:.2}% Zero-Ternary Pruned\n",
+            self.average_sparsity_percentage
+        ));
+        out.push_str(&format!(
+            "  Synthesized CL Bundles:    {} 128-bit VLIW Bundles\n",
+            self.total_cl_bundles
+        ));
+        out.push_str(&format!(
+            "  Total 4D Geodesic Ops:     {} discrete curvature operations\n",
+            self.total_geodesic_operations
+        ));
+        out.push_str(&format!(
+            "  Conversion Latency:        {:.2} ms\n",
+            self.conversion_time_ms
+        ));
         out.push_str("----------------------------------------------------------------------------------------\n");
         out.push_str("  HARDWARE ACCELERATION DISCIPLINE:\n");
         out.push_str("  Floating Point Operations: \x1b[1;32m0.00 FLOPs (100% Multiplier-Free Discrete Integer)\x1b[0m\n");
         out.push_str("  Hardware Multiplier (DSP): \x1b[1;32m0 DSP Slices Required\x1b[0m\n");
-        out.push_str("  Silicon Target:            256-Core 4D-Torus Neuromorphic Mesh (DOR X->Y->Z->W)\n");
+        out.push_str(
+            "  Silicon Target:            256-Core 4D-Torus Neuromorphic Mesh (DOR X->Y->Z->W)\n",
+        );
         out.push_str("========================================================================================\n");
         out.push_str(" LAYER BREAKDOWN:\n");
         out.push_str(" Tensor Name                    | Shape     | Params   | FP32 (KB) | 1.58b (KB) | Sparsity\n");
@@ -143,7 +176,11 @@ impl ModelConversionReport {
             let shape_str = format!("{}x{}", l.rows, l.cols);
             out.push_str(&format!(
                 " {:<30} | {:<9} | {:<8} | {:<9.2} | {:<10.2} | {:>6.1}%\n",
-                if l.tensor_name.len() > 30 { &l.tensor_name[..30] } else { &l.tensor_name },
+                if l.tensor_name.len() > 30 {
+                    &l.tensor_name[..30]
+                } else {
+                    &l.tensor_name
+                },
                 shape_str,
                 l.parameter_count,
                 l.fp32_bytes as f64 / 1024.0,
@@ -162,17 +199,50 @@ impl ModelConversionReport {
         let mut json = String::with_capacity(4096);
         json.push_str("{\n");
         json.push_str(&format!("  \"model_name\": \"{}\",\n", self.model_name));
-        json.push_str(&format!("  \"input_format\": \"{}\",\n", self.input_format.as_str()));
-        json.push_str(&format!("  \"total_tensors_converted\": {},\n", self.total_tensors_converted));
-        json.push_str(&format!("  \"total_parameters\": {},\n", self.total_parameters));
-        json.push_str(&format!("  \"original_fp32_bytes\": {},\n", self.original_fp32_bytes));
-        json.push_str(&format!("  \"quantized_ternary_bytes\": {},\n", self.quantized_ternary_bytes));
-        json.push_str(&format!("  \"overall_compression_ratio\": {:.2},\n", self.overall_compression_ratio));
-        json.push_str(&format!("  \"average_sparsity_percentage\": {:.2},\n", self.average_sparsity_percentage));
-        json.push_str(&format!("  \"total_cl_bundles\": {},\n", self.total_cl_bundles));
-        json.push_str(&format!("  \"total_geodesic_operations\": {},\n", self.total_geodesic_operations));
-        json.push_str(&format!("  \"zero_flop_guarantee\": {},\n", self.zero_flop_guarantee));
-        json.push_str(&format!("  \"conversion_time_ms\": {:.2},\n", self.conversion_time_ms));
+        json.push_str(&format!(
+            "  \"input_format\": \"{}\",\n",
+            self.input_format.as_str()
+        ));
+        json.push_str(&format!(
+            "  \"total_tensors_converted\": {},\n",
+            self.total_tensors_converted
+        ));
+        json.push_str(&format!(
+            "  \"total_parameters\": {},\n",
+            self.total_parameters
+        ));
+        json.push_str(&format!(
+            "  \"original_fp32_bytes\": {},\n",
+            self.original_fp32_bytes
+        ));
+        json.push_str(&format!(
+            "  \"quantized_ternary_bytes\": {},\n",
+            self.quantized_ternary_bytes
+        ));
+        json.push_str(&format!(
+            "  \"overall_compression_ratio\": {:.2},\n",
+            self.overall_compression_ratio
+        ));
+        json.push_str(&format!(
+            "  \"average_sparsity_percentage\": {:.2},\n",
+            self.average_sparsity_percentage
+        ));
+        json.push_str(&format!(
+            "  \"total_cl_bundles\": {},\n",
+            self.total_cl_bundles
+        ));
+        json.push_str(&format!(
+            "  \"total_geodesic_operations\": {},\n",
+            self.total_geodesic_operations
+        ));
+        json.push_str(&format!(
+            "  \"zero_flop_guarantee\": {},\n",
+            self.zero_flop_guarantee
+        ));
+        json.push_str(&format!(
+            "  \"conversion_time_ms\": {:.2},\n",
+            self.conversion_time_ms
+        ));
         json.push_str("  \"layers\": [\n");
 
         for (i, l) in self.layers.iter().enumerate() {
@@ -321,13 +391,26 @@ pub fn convert_ai_model_file(
     let mut all_cl_bundles = 0usize;
     let mut cl_code_output = String::new();
 
-    cl_code_output.push_str("; ==============================================================================\n");
-    cl_code_output.push_str("; CRON 4D SPHERICAL NEURAL MACHINE CODE (.cl) — QUANTIZED FROM PRETRAINED MODEL\n");
-    cl_code_output.push_str(&format!("; Source Model: '{}' | Format: {}\n", stem, format.as_str()));
-    cl_code_output.push_str("; Architecture: BitNet b1.58 Ternary {-1, 0, +1} | 0 FLOPs | 0 DSP Multipliers\n");
-    cl_code_output.push_str("; Topology: 4-Head Concentric Spherical Shells | 256-Core 4D-Torus NoC Mesh\n");
+    cl_code_output.push_str(
+        "; ==============================================================================\n",
+    );
+    cl_code_output.push_str(
+        "; CRON 4D SPHERICAL NEURAL MACHINE CODE (.cl) — QUANTIZED FROM PRETRAINED MODEL\n",
+    );
+    cl_code_output.push_str(&format!(
+        "; Source Model: '{}' | Format: {}\n",
+        stem,
+        format.as_str()
+    ));
+    cl_code_output.push_str(
+        "; Architecture: BitNet b1.58 Ternary {-1, 0, +1} | 0 FLOPs | 0 DSP Multipliers\n",
+    );
+    cl_code_output
+        .push_str("; Topology: 4-Head Concentric Spherical Shells | 256-Core 4D-Torus NoC Mesh\n");
     cl_code_output.push_str("; Formula: R = W, Curvature = ((X + Z) >> 5) + 1, GeoTerm = Q_sign * ((Val * Curvature) >> R_shift)\n");
-    cl_code_output.push_str("; ==============================================================================\n\n");
+    cl_code_output.push_str(
+        "; ==============================================================================\n\n",
+    );
 
     let mut packed_binary_bytes: Vec<u8> = Vec::new();
     // Magic: "SPH4"
@@ -338,8 +421,16 @@ pub fn convert_ai_model_file(
             continue;
         }
 
-        let rows = if tensor.shape.len() >= 2 { tensor.shape[0] } else { 1 };
-        let cols = if tensor.shape.len() >= 2 { tensor.shape[1] } else { tensor.values.len() };
+        let rows = if tensor.shape.len() >= 2 {
+            tensor.shape[0]
+        } else {
+            1
+        };
+        let cols = if tensor.shape.len() >= 2 {
+            tensor.shape[1]
+        } else {
+            tensor.values.len()
+        };
         let count = tensor.values.len();
 
         let sphere_mat = SphereWeightMatrix::from_floats(&tensor.name, rows, cols, &tensor.values);
@@ -382,7 +473,10 @@ pub fn convert_ai_model_file(
             &layer_compile_opts,
         );
 
-        let bundle_count = layer_cl.lines().filter(|l| l.trim().starts_with('B') && l.contains(':')).count();
+        let bundle_count = layer_cl
+            .lines()
+            .filter(|l| l.trim().starts_with('B') && l.contains(':'))
+            .count();
         all_cl_bundles += bundle_count;
         cl_code_output.push_str(&layer_cl);
         cl_code_output.push_str("\n\n");
@@ -402,7 +496,11 @@ pub fn convert_ai_model_file(
     }
 
     let tensor_count = layer_stats.len();
-    let avg_sparsity = if tensor_count > 0 { sparsity_sum / tensor_count as f32 } else { 0.0 };
+    let avg_sparsity = if tensor_count > 0 {
+        sparsity_sum / tensor_count as f32
+    } else {
+        0.0
+    };
     let overall_compression = if total_ternary_bytes > 0 {
         total_fp32_bytes as f64 / total_ternary_bytes as f64
     } else {

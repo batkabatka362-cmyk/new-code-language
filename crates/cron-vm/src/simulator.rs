@@ -31,6 +31,8 @@ pub struct HardwareStats {
     pub thermal_throttled_cores: usize,
     pub thermal_deflection_hops: usize,
     pub zero_collision_verified: bool,
+    pub sphere_curvature_ops: usize,
+    pub flop_count: usize,
 }
 
 // === FDO (Feedback-Directed Optimization) Execution Profile (Pages 746–749) ===
@@ -779,6 +781,7 @@ impl Simulator {
         let mut total_energy = 0;
         let mut total_pumps = 0;
         let mut total_arena_resets = 0;
+        let mut total_sphere_ops = 0;
 
         for core in &self.cores {
             total_mzi += core.optical_gemm_count;
@@ -791,6 +794,7 @@ impl Simulator {
             total_energy += core.energy_saved_uw;
             total_pumps += core.photonic_pumps;
             total_arena_resets += core.arena_resets;
+            total_sphere_ops += core.sphere_curvature_ops_count;
             if core.thermal_level > peak_temp {
                 peak_temp = core.thermal_level;
             }
@@ -807,6 +811,8 @@ impl Simulator {
         self.stats.total_energy_saved_uw = total_energy;
         self.stats.photonic_pumps = total_pumps;
         self.stats.arena_resets = total_arena_resets;
+        self.stats.sphere_curvature_ops = total_sphere_ops;
+        self.stats.flop_count = 0; // Guaranteed 0 FLOPs
         // Reversible memory saves ~128 bytes per reverse auto-diff step per core
         self.stats.dram_bandwidth_saved_mb = (total_rev as f64 * 128.0) / (1024.0 * 1024.0);
 

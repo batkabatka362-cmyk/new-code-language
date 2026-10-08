@@ -174,6 +174,51 @@ impl PagedWeightStreamer {
         Self::from_file(path, layers, page_capacity_bytes)
     }
 
+    /// Creates a streaming weight reader from an on-disk .sphere packed binary file.
+    /// .sphere files contain 16x-compressed BitNet b1.58 ternary weights (b"SPH4").
+    pub fn from_sphere_file<P: AsRef<Path>>(
+        path: P,
+        num_layers: usize,
+        page_capacity_bytes: usize,
+    ) -> Result<Self, String> {
+        let mut file = File::open(path.as_ref())
+            .map_err(|e| format!("Failed to open .sphere file {:?}: {}", path.as_ref(), e))?;
+
+        let mut magic = [0u8; 4];
+        file.read_exact(&mut magic)
+            .map_err(|e| format!("Failed to read magic from .sphere file: {}", e))?;
+
+        if &magic != b"SPH4" {
+            return Err("Invalid .sphere magic header (expected 'SPH4')".to_string());
+        }
+
+        let total_size = file.metadata()
+            .map_err(|e| format!("Failed to get file metadata: {}", e))?
+            .len();
+
+        let payload_size = (total_size.saturating_sub(4)) as usize;
+        let count = num_layers.max(1);
+        let layer_size = payload_size / count;
+
+        let mut layers = Vec::with_capacity(count);
+        for idx in 0..count {
+            let offset = 4 + (idx * layer_size) as u64;
+            let sz = if idx + 1 == count {
+                payload_size - (idx * layer_size)
+            } else {
+                layer_size
+            };
+            layers.push(LayerMetadata {
+                layer_idx: idx,
+                file_offset: offset,
+                size_bytes: sz,
+                tensor_name: format!("sphere.layer.{}", idx),
+            });
+        }
+
+        Self::from_file(path, layers, page_capacity_bytes)
+    }
+
     /// Streams a layer's weights into the provided regional scratchpad buffer,
     /// guaranteeing that only this layer resides in active memory.
     pub fn stream_layer(&self, layer_idx: usize, target_buf: &mut [u8]) -> Result<usize, String> {
@@ -236,3 +281,41 @@ impl PagedWeightStreamer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_sphere_file_streaming() {
+        let temp_dir = std::env::temp_dir().join("cron_test_sphere_stream");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let sphere_file = temp_dir.join("weights.sphere");
+
+        // Write synthetic SPH4 file: Magic (4) + 64 bytes of packed ternary weights
+        let mut f = File::create(&sphere_file).unwrap();
+        f.write_all(b"SPH4").unwrap();
+        let payload = vec![0b01010101u8; 64]; // all +1 ternary weights
+        f.write_all(&payload).unwrap();
+        drop(f);
+
+        // Stream 4 layers
+        let streamer = PagedWeightStreamer::from_sphere_file(&sphere_file, 4, 1024)
+            .expect("Valid .sphere streaming");
+
+        assert_eq!(streamer.layers.len(), 4);
+        assert_eq!(streamer.layers[0].size_bytes, 16);
+
+        let mut buf = vec![0u8; 16];
+        let bytes_read = streamer.stream_layer(0, &mut buf).unwrap();
+        assert_eq!(bytes_read, 16);
+        assert_eq!(buf[0], 0b01010101);
+
+        streamer.evict_layer();
+        assert_eq!(streamer.telemetry().active_memory_bytes, 0);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}
+

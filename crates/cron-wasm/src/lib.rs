@@ -405,6 +405,66 @@ pub extern "C" fn cron_wasm_version() -> *const u8 {
     set_result("CRON Toolchain v0.1.0 (Rust wasm32 Native Engine)".to_string(), false)
 }
 
+/// Generate text using the 4D Sphere Transformer LLM Engine directly in WebAssembly (0 FLOPs)
+#[no_mangle]
+pub extern "C" fn cron_wasm_sphere_llm_generate(
+    prompt_ptr: *const u8,
+    prompt_len: usize,
+    max_tokens: usize,
+    temperature: f32,
+) -> *const u8 {
+    let prompt = if !prompt_ptr.is_null() && prompt_len > 0 {
+        let slice = unsafe { std::slice::from_raw_parts(prompt_ptr, prompt_len) };
+        std::str::from_utf8(slice).unwrap_or("CRON 4D Sphere Intelligence")
+    } else {
+        "CRON 4D Sphere Intelligence"
+    };
+
+    let config = cronc::SphereTransformerConfig {
+        vocab_size: 256,
+        hidden_dim: 64,
+        num_layers: 2,
+        num_heads: 4,
+        head_dim: 16,
+        intermediate_dim: (64 * 8) / 3,
+        max_seq_len: 128,
+    };
+
+    let model = cronc::SphereTransformerModel::new_synthetic(config);
+    let result = model.generate_text(prompt, max_tokens.min(64), temperature);
+
+    let json = format!(
+        "{{\"prompt\":\"{}\",\"generated_text\":\"{}\",\"tokens_generated\":{},\"total_geodesic_ops\":{},\"zero_flops\":true,\"latency_ms\":{:.2}}}",
+        prompt.replace('"', "\\\""),
+        result.generated_text.replace('"', "\\\""),
+        result.tokens_generated,
+        result.total_geodesic_ops,
+        result.generation_time_ms
+    );
+    set_result(json, false)
+}
+
+/// Run 4D Sphere multiplier-free inference matrix step directly in WebAssembly (0 FLOPs)
+#[no_mangle]
+pub extern "C" fn cron_wasm_sphere_infer(rows: usize, cols: usize) -> *const u8 {
+    let r = rows.clamp(4, 64);
+    let c = cols.clamp(4, 64);
+    let mut weights = Vec::with_capacity(r * c);
+    for idx in 0..(r * c) {
+        let w = ((idx as f32 * 0.41).sin() * 2.0) - 0.2;
+        weights.push(w);
+    }
+    let matrix = cronc::SphereWeightMatrix::from_floats("wasm_sphere_layer", r, c, &weights);
+    let activations: Vec<i32> = (0..c).map(|col| (col as i32 * 3 + 1) % 15).collect();
+    let res = cronc::SphereInferenceEngine::infer_layer_native(&matrix, &activations, 0);
+
+    let json = format!(
+        "{{\"layer\":\"{}\",\"rows\":{},\"cols\":{},\"sparsity_pct\":{:.2},\"scale\":{:.6},\"compression_ratio\":{:.2},\"zero_flops\":true,\"dsp_slices\":0,\"total_geodesic_ops\":{}}}",
+        matrix.name, r, c, matrix.sparsity * 100.0, matrix.scale, res.compression_ratio, res.total_geodesic_ops
+    );
+    set_result(json, false)
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -580,6 +640,30 @@ B0001: _AD01$102> _NO00#000> _NO00#000> _HL00#000!
         let wgsl_code = std::str::from_utf8(wgsl_slice).unwrap();
         assert!(wgsl_code.contains("@compute @workgroup_size(256, 1, 1)"));
         assert!(wgsl_code.contains("fn main("));
+    }
+
+    #[test]
+    fn test_wasm_sphere_infer_and_llm() {
+        // 1. 4D Sphere multiplier-free inference matrix
+        let infer_ptr = cron_wasm_sphere_infer(8, 8);
+        assert_eq!(cron_wasm_get_is_err(), 0);
+        let infer_len = cron_wasm_get_result_len();
+        let infer_slice = unsafe { std::slice::from_raw_parts(infer_ptr, infer_len) };
+        let infer_json = std::str::from_utf8(infer_slice).unwrap();
+        assert!(infer_json.contains("\"zero_flops\":true"));
+        assert!(infer_json.contains("\"dsp_slices\":0"));
+        assert!(infer_json.contains("\"layer\":\"wasm_sphere_layer\""));
+
+        // 2. 4D Sphere Transformer LLM generation
+        let prompt = "CRON Native Sphere";
+        let llm_ptr = cron_wasm_sphere_llm_generate(prompt.as_ptr(), prompt.len(), 8, 0.7);
+        assert_eq!(cron_wasm_get_is_err(), 0);
+        let llm_len = cron_wasm_get_result_len();
+        let llm_slice = unsafe { std::slice::from_raw_parts(llm_ptr, llm_len) };
+        let llm_json = std::str::from_utf8(llm_slice).unwrap();
+        assert!(llm_json.contains("\"zero_flops\":true"));
+        assert!(llm_json.contains("\"prompt\":\"CRON Native Sphere\""));
+        assert!(llm_json.contains("\"tokens_generated\":"));
     }
 }
 

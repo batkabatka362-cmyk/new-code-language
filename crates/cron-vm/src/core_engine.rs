@@ -89,6 +89,12 @@ pub struct CoreEngine {
 
     // === 64KB Scratchpad SRAM Data Memory (16,384 words x 32-bit = 64KB) ===
     pub dmem: Vec<u32>,
+
+    // === 4D Hyperspherical Geodesic ALU Engine (0 FLOPs Multiplier-Free) ===
+    pub sphere_coords: [[u32; 4]; 4],
+    pub sphere_errors: [bool; 4],
+    pub sphere_matrix_acc: [i32; 4],
+    pub sphere_curvature_ops_count: usize,
 }
 
 impl CoreEngine {
@@ -146,6 +152,11 @@ impl CoreEngine {
             ras: Vec::new(),
             zohl_counter: 0,
             dmem: vec![0u32; 16384],
+            // 4D Sphere ISA state
+            sphere_coords: [[0; 4]; 4],
+            sphere_errors: [false; 4],
+            sphere_matrix_acc: [0; 4],
+            sphere_curvature_ops_count: 0,
         }
     }
 
@@ -207,10 +218,85 @@ fn parse_target_or_offset(slot: &str, fallback: usize) -> usize {
     }
 }
 
+#[inline(always)]
+fn decode_base64_val(c: char) -> u8 {
+    match c {
+        'A'..='Z' => c as u8 - b'A',
+        'a'..='z' => c as u8 - b'a' + 26,
+        '0'..='9' => c as u8 - b'0' + 52,
+        '+' | '-' => 62,
+        '/' | '_' => 63,
+        _ => 0,
+    }
+}
+
+#[inline(always)]
+fn decode_base90_val(c: char) -> u8 {
+    const BASE90: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[]^_{|}~";
+    BASE90.iter().position(|&b| b == c as u8).unwrap_or(0) as u8
+}
+
 impl CoreEngine {
     pub fn execute_slot(&mut self, slot: &str) -> Option<u32> {
         if self.is_halted || slot.len() < 3 {
             return None;
+        }
+
+        // Milestone #035: Sovereign 4D Hyperspherical Geodesic ALU (0 FLOPs Multiplier-Free)
+        if slot.starts_with('`') {
+            let chars: Vec<char> = slot.chars().collect();
+            if chars.len() == 10 {
+                let mode_val = decode_base64_val(chars[1]);
+                let s_id = ((mode_val >> 4) & 0x3) as usize;
+                let is_err = ((mode_val >> 3) & 1) == 1;
+                let _is_pen = ((mode_val >> 2) & 1) == 1;
+                let is_rd = ((mode_val >> 1) & 1) == 1;
+                let is_wr = (mode_val & 1) == 1;
+
+                let w = decode_base90_val(chars[2]) as u32;
+                let lat_x = decode_base90_val(chars[3]) as u32;
+                let lon_z = decode_base90_val(chars[4]) as u32;
+                let quad = match chars[5] {
+                    '1' | 'N' | 'A' => 1,
+                    '2' | 'W' | 'B' => 2,
+                    '3' | 'S' | 'C' => 3,
+                    '4' | 'E' | 'D' => 4,
+                    _ => 1,
+                };
+                let step = decode_base90_val(chars[6]) as u32;
+                let alu_op = chars[7];
+                let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as usize % 16;
+                let val = chars[9].to_digit(16).unwrap_or(step % 16);
+
+                let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
+                let radial_shift = (w % 4) + 1;
+                let q_sign: i32 = if quad == 1 || quad == 4 { 1 } else { -1 };
+
+                let geo_term = q_sign * (((val * curvature_weight) >> radial_shift) as i32);
+                self.sphere_matrix_acc[s_id] += geo_term;
+                self.sphere_curvature_ops_count += 1;
+                self.sphere_coords[s_id] = [w, lat_x, lon_z, quad];
+                self.sphere_errors[s_id] = is_err;
+
+                let cell_addr = ((w * 360 + lat_x * 90 + lon_z) as usize) % self.dmem.len();
+                if is_rd {
+                    self.registers[reg] = self.dmem[cell_addr];
+                }
+                if is_wr {
+                    self.dmem[cell_addr] = self.registers[reg];
+                }
+
+                match alu_op {
+                    '+' => self.registers[reg] = self.registers[reg].wrapping_add(val * curvature_weight),
+                    '-' => self.registers[reg] = self.registers[reg].wrapping_sub(val * curvature_weight),
+                    '*' => self.registers[reg] ^= (val * curvature_weight) << radial_shift,
+                    '^' => self.registers[reg] ^= val * curvature_weight,
+                    '=' => self.registers[reg] = val * curvature_weight,
+                    '!' => self.is_halted = true,
+                    _ => {}
+                }
+                return Some(self.registers[reg]);
+            }
         }
 
         let (op, dest_bank, dest_reg, src, imm, mode) = self.parse_slot_metadata(slot);
@@ -512,7 +598,7 @@ impl CoreEngine {
                 let s = if src > 0 { src } else { d };
                 let expert_id = (self.registers[s] >> 4) & 0x0F;
                 let target_core = (expert_id * 16) % 256;
-                self.registers[d] = (expert_id << 16) | (target_core as u32);
+                self.registers[d] = (expert_id << 16) | target_core;
                 self.spatial_broadcast_count += 1;
             }
             "PF" => {

@@ -871,7 +871,8 @@ fn sample_token(logits: &[i32], temperature: f32) -> u8 {
         }
 
         // Pseudo-stochastic pick based on hash / linear congruent sample
-        let random_fraction = (((logits[0].unsigned_abs() * 1103515245 + 12345) % 1000) as f32) / 1000.0;
+        let seed = logits.first().copied().unwrap_or(0).unsigned_abs() as u64;
+        let random_fraction = (((seed.wrapping_mul(1103515245).wrapping_add(12345)) % 1000) as f32) / 1000.0;
         let target = random_fraction * exp_sum;
 
         let mut acc = 0.0f32;
