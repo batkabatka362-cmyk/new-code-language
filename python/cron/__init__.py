@@ -606,6 +606,8 @@ from .clifford import (
 from . import math_bridge as math
 from . import agent
 from .agent import CronReasoner, ProblemSpec, SolutionCertificate, solve_problem
+from . import clm
+from .clm import ClmModel, save_clm, load_clm
 
 
 __all__ = [
@@ -693,8 +695,13 @@ __all__ = [
     "CronReasoner",
     "ProblemSpec",
     "SolutionCertificate",
-    "solve_problem",
+    # Sovereign Living Model (.clm) Inference
+    "clm",
+    "ClmModel",
+    "save_clm",
+    "load_clm",
     "StigmergySwarm",
 ]
+
 
 
