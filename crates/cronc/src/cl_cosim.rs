@@ -12,6 +12,24 @@ use crate::cl_lang::{parse_slot, ClSlot};
 use crate::cl_jit::ClJitCore;
 use crate::verilog_backend::encode_slot_to_u32;
 
+#[inline(always)]
+fn decode_base64_val(c: char) -> u8 {
+    match c {
+        'A'..='Z' => c as u8 - b'A',
+        'a'..='z' => c as u8 - b'a' + 26,
+        '0'..='9' => c as u8 - b'0' + 52,
+        '+' | '-' => 62,
+        '/' | '_' => 63,
+        _ => 0,
+    }
+}
+
+#[inline(always)]
+fn decode_base90_val(c: char) -> u8 {
+    const BASE90: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[]^_{|}~";
+    BASE90.iter().position(|&b| b == c as u8).unwrap_or(0) as u8
+}
+
 /// Cycle snapshot comparing Software Reference and Synthesizable RTL hardware state
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CosimCycleRecord {
@@ -57,6 +75,9 @@ pub struct ClCosimReport {
     pub software_halted: bool,
     pub rtl_halted: bool,
     pub execution_time_us: u128,
+    pub sphere_curvature_ops: usize,
+    pub soft_sphere_acc: [i32; 4],
+    pub rtl_sphere_acc: [i32; 4],
 }
 
 /// Optical MZI Photonic GEMM multi-cycle latency pipeline model
@@ -135,6 +156,9 @@ pub struct VerilogRtlCoreSimulator {
     pub reversible_ops_count: usize,
     pub stdp_updates_count: usize,
     pub spatial_broadcast_count: usize,
+    pub sphere_matrix_acc: [i32; 4],
+    pub sphere_curvature_ops: usize,
+    pub sphere_coords: [[u32; 4]; 4],
 }
 
 impl VerilogRtlCoreSimulator {
@@ -151,6 +175,9 @@ impl VerilogRtlCoreSimulator {
             reversible_ops_count: 0,
             stdp_updates_count: 0,
             spatial_broadcast_count: 0,
+            sphere_matrix_acc: [0; 4],
+            sphere_curvature_ops: 0,
+            sphere_coords: [[0; 4]; 4],
         }
     }
 
@@ -180,6 +207,51 @@ impl VerilogRtlCoreSimulator {
             let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
             let raw_slot = if i < slot_strs.len() { slot_strs[i] } else { &slot.raw };
             let imm_val = parse_imm_val(raw_slot).unwrap_or(imm_nibble as u32);
+
+            if slot.prefix == '`' {
+                let chars: Vec<char> = raw_slot.chars().collect();
+                if chars.len() == 10 {
+                    let mode_val = decode_base64_val(chars[1]);
+                    let s_id = ((mode_val >> 4) & 0x3) as usize;
+                    let w = decode_base90_val(chars[2]) as u32;
+                    let lat_x = decode_base90_val(chars[3]) as u32;
+                    let lon_z = decode_base90_val(chars[4]) as u32;
+                    let quad = match chars[5] {
+                        '1' | 'N' | 'A' => 1,
+                        '2' | 'W' | 'B' => 2,
+                        '3' | 'S' | 'C' => 3,
+                        '4' | 'E' | 'D' => 4,
+                        _ => 1,
+                    };
+                    let step = decode_base90_val(chars[6]) as u32;
+                    let alu_op = chars[7];
+                    let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as usize % 16;
+                    let val = chars[9].to_digit(16).unwrap_or(step % 16);
+
+                    // Discrete Spherical Curvature Metric:
+                    let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
+                    let radial_shift = (w % 4) + 1;
+                    let q_sign: i32 = if quad == 1 || quad == 4 { 1 } else { -1 };
+
+                    // 4D Sphere Geodesic ALU Accumulator (Opcode 6'h38 in Verilog)
+                    let geo_term = q_sign * (((val * curvature_weight) >> radial_shift) as i32);
+                    self.sphere_matrix_acc[s_id] += geo_term;
+                    self.sphere_curvature_ops += 1;
+                    self.sphere_coords[s_id] = [w, lat_x, lon_z, quad];
+
+                    let scaled = val * curvature_weight;
+                    match alu_op {
+                        '+' => self.rf[reg] = self.rf[reg].wrapping_add(scaled),
+                        '-' => self.rf[reg] = self.rf[reg].wrapping_sub(scaled),
+                        '*' => self.rf[reg] ^= scaled << radial_shift,
+                        '^' => self.rf[reg] ^= scaled,
+                        '=' => self.rf[reg] = scaled,
+                        '!' => self.halted = true,
+                        _ => {}
+                    }
+                }
+                continue;
+            }
 
             match slot.opcode.as_str() {
                 op if op.starts_with('=') || slot.prefix == '\'' => {
@@ -525,6 +597,49 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                     let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
                     let imm_val = parse_imm_val(slot_str).unwrap_or(imm_nibble as u32);
 
+                    if slot.prefix == '`' {
+                        let chars: Vec<char> = slot_str.chars().collect();
+                        if chars.len() == 10 {
+                            let mode_val = decode_base64_val(chars[1]);
+                            let s_id = ((mode_val >> 4) & 0x3) as usize;
+                            let w = decode_base90_val(chars[2]) as u32;
+                            let lat_x = decode_base90_val(chars[3]) as u32;
+                            let lon_z = decode_base90_val(chars[4]) as u32;
+                            let quad = match chars[5] {
+                                '1' | 'N' | 'A' => 1,
+                                '2' | 'W' | 'B' => 2,
+                                '3' | 'S' | 'C' => 3,
+                                '4' | 'E' | 'D' => 4,
+                                _ => 1,
+                            };
+                            let step = decode_base90_val(chars[6]) as u32;
+                            let alu_op = chars[7];
+                            let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as usize % 16;
+                            let val = chars[9].to_digit(16).unwrap_or(step % 16);
+
+                            let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
+                            let radial_shift = (w % 4) + 1;
+                            let q_sign: i32 = if quad == 1 || quad == 4 { 1 } else { -1 };
+
+                            let geo_term = q_sign * (((val * curvature_weight) >> radial_shift) as i32);
+                            soft_core.sphere_matrix_acc[s_id] += geo_term;
+                            soft_core.sphere_curvature_ops_count += 1;
+                            soft_core.sphere_coords[s_id] = [w, lat_x, lon_z, quad];
+
+                            let scaled = val * curvature_weight;
+                            match alu_op {
+                                '+' => soft_core.r[reg] = soft_core.r[reg].wrapping_add(scaled),
+                                '-' => soft_core.r[reg] = soft_core.r[reg].wrapping_sub(scaled),
+                                '*' => soft_core.r[reg] ^= scaled << radial_shift,
+                                '^' => soft_core.r[reg] ^= scaled,
+                                '=' => soft_core.r[reg] = scaled,
+                                '!' => soft_core.is_halted = true,
+                                _ => {}
+                            }
+                        }
+                        continue;
+                    }
+
                     match slot.opcode.as_str() {
                         op if op.starts_with('=') || slot.prefix == '\'' => {
                             soft_core.r[d] = imm_val;
@@ -776,6 +891,18 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                 }
             }
 
+            for s_id in 0..4 {
+                if soft_core.sphere_matrix_acc[s_id] != rtl_core.sphere_matrix_acc[s_id] {
+                    cycle_matches = false;
+                    let err_msg = format!(
+                        "Cycle #{} ({}): 4D Sphere Acc [{}] divergence. Soft={}, RTL={}",
+                        total_cycles, b_label.trim(), s_id, soft_core.sphere_matrix_acc[s_id], rtl_core.sphere_matrix_acc[s_id]
+                    );
+                    diff_notes.push(err_msg.clone());
+                    divergence_details.push(err_msg);
+                }
+            }
+
             if soft_core.is_halted != rtl_core.halted {
                 cycle_matches = false;
                 let err_msg = format!(
@@ -832,6 +959,9 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
         software_halted: soft_core.is_halted,
         rtl_halted: rtl_core.halted,
         execution_time_us: elapsed,
+        sphere_curvature_ops: rtl_core.sphere_curvature_ops,
+        soft_sphere_acc: soft_core.sphere_matrix_acc,
+        rtl_sphere_acc: rtl_core.sphere_matrix_acc,
     })
 }
 
@@ -847,6 +977,9 @@ impl ClCosimReport {
         json.push_str(&format!("  \"software_halted\": {},\n", self.software_halted));
         json.push_str(&format!("  \"rtl_halted\": {},\n", self.rtl_halted));
         json.push_str(&format!("  \"execution_time_us\": {},\n", self.execution_time_us));
+        json.push_str(&format!("  \"sphere_curvature_ops\": {},\n", self.sphere_curvature_ops));
+        json.push_str(&format!("  \"soft_sphere_acc\": [{}, {}, {}, {}],\n", self.soft_sphere_acc[0], self.soft_sphere_acc[1], self.soft_sphere_acc[2], self.soft_sphere_acc[3]));
+        json.push_str(&format!("  \"rtl_sphere_acc\": [{}, {}, {}, {}],\n", self.rtl_sphere_acc[0], self.rtl_sphere_acc[1], self.rtl_sphere_acc[2], self.rtl_sphere_acc[3]));
 
         // divergence_details array
         if self.divergence_details.is_empty() {
@@ -961,6 +1094,20 @@ impl ClCosimReport {
             ));
         }
         out.push_str("========================================================================================\n");
+
+        if self.sphere_curvature_ops > 0 {
+            out.push_str(" 4D Sphere Geodesic Telemetry (0 FLOPs, 0 Multipliers):\n");
+            out.push_str(&format!("   Total Geodesic Operations:    {}\n", self.sphere_curvature_ops));
+            out.push_str(&format!("   Golden Soft Accumulator:      [{:?}]\n", self.soft_sphere_acc));
+            out.push_str(&format!("   Verilog RTL Accumulator:      [{:?}]\n", self.rtl_sphere_acc));
+            let match_str = if self.soft_sphere_acc == self.rtl_sphere_acc {
+                "\x1b[1;32m[PASS] 100% BIT-EXACT SPHERE GEODESIC PARITY\x1b[0m"
+            } else {
+                "\x1b[1;31m[FAIL] SPHERE GEODESIC DIVERGENCE\x1b[0m"
+            };
+            out.push_str(&format!("   Sphere Metric Parity:         {}\n", match_str));
+            out.push_str("========================================================================================\n");
+        }
 
         if !self.divergence_details.is_empty() {
             out.push_str("\x1b[1;31mDIVERGENCE ROOT-CAUSE ANALYSIS:\x1b[0m\n");

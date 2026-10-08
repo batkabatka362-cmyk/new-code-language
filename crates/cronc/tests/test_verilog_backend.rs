@@ -90,3 +90,36 @@ fn test_verilog_sphere_geodesic_matrix_synthesis() {
     assert!(tb.contains("Sphere Acc [0]: %0d"));
 }
 
+#[test]
+fn test_verilog_torus_256_top_synthesis() {
+    let cl_code = r#"
+    ; 4D Sphere Geodesic 256-Core Microcode
+    B0000: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
+    B0001: `C0FA11+02 `R0AK31+14 `g0KF21*21 `015541+31
+    B0002: `A3:y14+09 `Q3y?34+16 `g3++24^22 `w3UU44!30
+    "#;
+
+    let top_rtl = cronc::verilog_backend::generate_torus_256_top_verilog(cl_code, "sphere_torus_256_top")
+        .expect("256-Core Torus RTL synthesis failed");
+
+    assert!(top_rtl.contains("module sphere_torus_256_top ("));
+    assert!(top_rtl.contains("output wire        global_halted"));
+    assert!(top_rtl.contains("output wire [31:0] total_aggregate_ops"));
+    assert!(top_rtl.contains("output wire [31:0] core_0_acc_0"));
+    assert!(top_rtl.contains("output wire [31:0] core_255_acc_0"));
+    assert!(top_rtl.contains("module noc_router_4d_node"));
+    assert!(top_rtl.contains("module sphere_torus_256_top_core"));
+    assert!(top_rtl.contains("genvar cw, cz, cy, cx;"));
+    assert!(top_rtl.contains("localparam E_ID = (cw * 64) + (cz * 16) + (cy * 4) + ((cx + 1) % 4);"));
+    assert!(top_rtl.contains("localparam W_ID = (cw * 64) + (cz * 16) + (cy * 4) + ((cx + 3) % 4);"));
+    assert!(top_rtl.contains("localparam N_ID = (cw * 64) + (cz * 16) + (((cy + 1) % 4) * 4) + cx;"));
+    assert!(top_rtl.contains("localparam S_ID = (cw * 64) + (cz * 16) + (((cy + 3) % 4) * 4) + cx;"));
+
+    let tb_rtl = cronc::verilog_backend::generate_torus_256_top_testbench("sphere_torus_256_top");
+    assert!(tb_rtl.contains("module tb_sphere_torus_256_top;"));
+    assert!(tb_rtl.contains("sphere_torus_256_top dut ("));
+    assert!(tb_rtl.contains("Silicon Cores:              256 Cores (4x4x4x4 Toroidal Mesh)"));
+    assert!(tb_rtl.contains("Total Aggregate 4D Ops:"));
+    assert!(tb_rtl.contains("$finish(0);"));
+}
+

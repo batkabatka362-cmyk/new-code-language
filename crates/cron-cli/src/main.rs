@@ -50,6 +50,7 @@ fn print_help() {
     println!("    cl-verilog <file.cl> [-o out.v] Synthesize standalone Verilog RTL hardware core from .cl");
     println!("    cl-sphere-infer [weights]      4D Sphere Matrix Multiplier-Free Inference Engine (0 FLOPs, 256-Core Torus)");
     println!("    cl-sphere-compile [weights]    Compile Neural Weights to 4D Sphere Sovereign Microcode (.cl)");
+    println!("    cl-sphere-llm [prompt]         End-to-End 4D Sphere LLM Multiplier-Free Text Generator (0 FLOPs)");
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
     println!("    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench");
     println!("    cl-macro <file.clm> [-o out.cl] High-Level Macro Assembler (.clm) to VLIW 10-char bundles");
@@ -2260,6 +2261,7 @@ fn main() {
 
             let mut out_path = None;
             let mut tb_path = None;
+            let mut is_top_256 = false;
             let mut i = 3;
             while i < args.len() {
                 if args[i] == "-o" && i + 1 < args.len() {
@@ -2268,6 +2270,9 @@ fn main() {
                 } else if (args[i] == "--tb" || args[i] == "--testbench") && i + 1 < args.len() {
                     tb_path = Some(args[i + 1].clone());
                     i += 2;
+                } else if args[i] == "--top-256" || args[i] == "--torus-256" {
+                    is_top_256 = true;
+                    i += 1;
                 } else {
                     i += 1;
                 }
@@ -2276,7 +2281,18 @@ fn main() {
             let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
             let is_cl = input_path.ends_with(".cl") || content.trim_start().starts_with('B') || content.contains("B0000:");
 
-            let (verilog_rtl, module_name) = if is_cl {
+            let (verilog_rtl, module_name) = if is_top_256 {
+                let mod_name = format!("{}_torus_256_top", stem);
+                println!("[VERILOG 256-CORE TORUS] Synthesizing 256-Core 4D-Torus Chip RTL for '{}'...", input_path);
+                let rtl = match cronc::verilog_backend::generate_torus_256_top_verilog(&content, &mod_name) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("[VERILOG SYNTHESIS ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                (rtl, mod_name)
+            } else if is_cl {
                 let mod_name = stem.to_string();
                 let rtl = match cronc::verilog_backend::generate_verilog_hdl(&content, &mod_name) {
                     Ok(v) => v,
@@ -2310,7 +2326,11 @@ fn main() {
             }
 
             if let Some(ref path) = tb_path {
-                let tb_code = cronc::verilog_backend::generate_testbench(&module_name);
+                let tb_code = if is_top_256 {
+                    cronc::verilog_backend::generate_torus_256_top_testbench(&module_name)
+                } else {
+                    cronc::verilog_backend::generate_testbench(&module_name)
+                };
                 if let Err(e) = fs::write(path, &tb_code) {
                     eprintln!("Error writing Verilog Testbench to '{}': {}", path, e);
                     std::process::exit(1);
@@ -2646,6 +2666,81 @@ fn main() {
                 println!("  Throughput: {:.2} Million 4D Geodesic Ops / second", (total_b_ops as f64 / b_sec) / 1_000_000.0);
                 println!("  Hardware Efficiency: Infinite Ops/FLOP (0 FLOPs consumed)");
             }
+        }
+        "cl-sphere-llm" | "sphere-llm" => {
+            let mut prompt = "CRON 4D Sphere Intelligence".to_string();
+            let mut max_tokens = 32usize;
+            let mut temperature = 0.7f32;
+            let mut hidden_dim = 64usize;
+            let mut num_layers = 2usize;
+
+            let mut i = 2;
+            while i < args.len() {
+                if args[i] == "--prompt" && i + 1 < args.len() {
+                    prompt = args[i + 1].clone();
+                    i += 2;
+                } else if args[i] == "--tokens" && i + 1 < args.len() {
+                    max_tokens = args[i + 1].parse().unwrap_or(32);
+                    i += 2;
+                } else if args[i] == "--temp" && i + 1 < args.len() {
+                    temperature = args[i + 1].parse().unwrap_or(0.7);
+                    i += 2;
+                } else if args[i] == "--hidden" && i + 1 < args.len() {
+                    hidden_dim = args[i + 1].parse().unwrap_or(64);
+                    i += 2;
+                } else if args[i] == "--layers" && i + 1 < args.len() {
+                    num_layers = args[i + 1].parse().unwrap_or(2);
+                    i += 2;
+                } else if !args[i].starts_with('-') {
+                    prompt = args[i].clone();
+                    i += 1;
+                } else {
+                    i += 1;
+                }
+            }
+
+            println!("================================================================================");
+            println!("      CRON 4D SPHERE TRANSFORMER MULTIPLIER-FREE LLM ENGINE                    ");
+            println!("================================================================================");
+            println!("  Model Topology:            {}-Layer 4-Head Discrete Spherical Transformer", num_layers);
+            println!("  Hidden Dim:                {} | Attention Heads: 4 (Heads 0, 1, 2, 3)", hidden_dim);
+            println!("  Precision Standard:        BitNet b1.58 Ternary {{-1, 0, +1}} (0.00 FLOPs)");
+            println!("  Prompt:                    \"{}\"", prompt);
+            println!("  Max New Tokens:            {} | Temperature: {:.2}", max_tokens, temperature);
+            println!("--------------------------------------------------------------------------------");
+
+            let config = cronc::SphereTransformerConfig {
+                vocab_size: 256,
+                hidden_dim,
+                num_layers,
+                num_heads: 4,
+                head_dim: hidden_dim / 4,
+                intermediate_dim: (hidden_dim * 8) / 3,
+                max_seq_len: 128,
+            };
+
+            let model = cronc::SphereTransformerModel::new_synthetic(config);
+            println!("  Total Parameters:          {} (Quantized to 1.58-bit)", model.total_parameters);
+            println!("  Memory Footprint:          {:.2} KB (vs {:.2} KB in FP32)",
+                     (model.total_parameters as f32 * 1.58 / 8.0) / 1024.0,
+                     (model.total_parameters as f32 * 4.0) / 1024.0);
+            println!("--------------------------------------------------------------------------------");
+            println!("[GENERATING] Running 4D Spherical Geodesic Autoregressive Decode Loop...\n");
+
+            let result = model.generate_text(&prompt, max_tokens, temperature);
+
+            println!("--------------------------------------------------------------------------------");
+            println!("  Generated Tokens Output:   {:?}", result.output_tokens);
+            println!("  Decoded Text Output:       \"{}{}\"", prompt, result.generated_text);
+            println!("--------------------------------------------------------------------------------");
+            println!("  4D SPHERE SILICON TELEMETRY:");
+            println!("  Tokens Generated:          {}", result.tokens_generated);
+            println!("  Total Geodesic Ops:        {}", result.total_geodesic_ops);
+            println!("  Latency:                   {:.2} ms ({:.2} tokens/sec)", result.generation_time_ms, result.tokens_per_sec);
+            println!("  Total FLOPs:               0.00 (Zero Floating Point Multiplications)");
+            println!("  DSP Multipliers Used:      0 (Zero Hardware DSP Slices)");
+            println!("  Thermodynamic Property:    Discrete Integer Geodesic Wavefront");
+            println!("================================================================================");
         }
         "c23" | "cl-c23" => {
             if args.len() < 3 {

@@ -148,8 +148,9 @@ pub mod docgen;
 pub mod cl_sphere_infer;
 
 pub use cl_sphere_infer::{
-    compile_weights_to_sphere_cl, SphereCompileOptions, SphereCoreNode, SphereInferenceEngine,
-    SphereInferenceResult, SphereTorusCluster, SphereWeightMatrix, TorusClusterExecutionReport,
+    compile_weights_to_sphere_cl, SphereCompileOptions, SphereCoreNode, SphereGenerationResult,
+    SphereInferenceEngine, SphereInferenceResult, SphereKVCache, SphereTorusCluster,
+    SphereTransformerConfig, SphereTransformerModel, SphereWeightMatrix, TorusClusterExecutionReport,
 };
 
 pub use cl_vectorizer::{

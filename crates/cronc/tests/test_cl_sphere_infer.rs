@@ -159,3 +159,54 @@ fn test_sphere_torus_256_core_cluster() {
     assert!(report.aggregate_throughput_mops_sec > 0.0);
 }
 
+#[test]
+fn test_sphere_transformer_model_forward_step() {
+    use cronc::cl_sphere_infer::{SphereKVCache, SphereTransformerConfig, SphereTransformerModel};
+
+    let config = SphereTransformerConfig {
+        vocab_size: 256,
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 4,
+        head_dim: 8,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+    };
+
+    let model = SphereTransformerModel::new_synthetic(config.clone());
+    assert!(model.total_parameters > 0);
+
+    let mut kv_cache = SphereKVCache::new(config.num_layers, config.max_seq_len, config.hidden_dim);
+
+    let (logits, ops) = model.forward_step(b'A', 0, &mut kv_cache);
+    assert_eq!(logits.len(), 256);
+    assert!(ops > 0);
+    assert_eq!(kv_cache.k.len(), 2);
+}
+
+#[test]
+fn test_sphere_transformer_generate_text() {
+    use cronc::cl_sphere_infer::{SphereTransformerConfig, SphereTransformerModel};
+
+    let config = SphereTransformerConfig {
+        vocab_size: 256,
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 4,
+        head_dim: 8,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+    };
+
+    let model = SphereTransformerModel::new_synthetic(config);
+    let result = model.generate_text("Hi", 6, 0.0);
+
+    assert_eq!(result.tokens_generated, 6);
+    assert_eq!(result.dsp_multipliers_used, 0);
+    assert_eq!(result.flop_count, 0);
+    assert!(result.total_geodesic_ops > 0);
+    assert!(result.tokens_per_sec > 0.0);
+    assert!(result.memory_reduction_percent > 90.0);
+}
+
+

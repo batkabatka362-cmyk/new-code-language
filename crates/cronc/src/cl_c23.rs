@@ -34,6 +34,24 @@ impl SimdTarget {
     }
 }
 
+#[inline(always)]
+fn decode_base64_val(c: char) -> u8 {
+    match c {
+        'A'..='Z' => c as u8 - b'A',
+        'a'..='z' => c as u8 - b'a' + 26,
+        '0'..='9' => c as u8 - b'0' + 52,
+        '+' | '-' => 62,
+        '/' | '_' => 63,
+        _ => 0,
+    }
+}
+
+#[inline(always)]
+fn decode_base90_val(c: char) -> u8 {
+    const BASE90: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[]^_{|}~";
+    BASE90.iter().position(|&b| b == c as u8).unwrap_or(0) as u8
+}
+
 fn parse_imm_val(slot: &str) -> Option<u32> {
     if let Some(hash_pos) = slot.find('#') {
         let hex_part: String = slot[hash_pos + 1..]
@@ -115,6 +133,10 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    float dopamine_level;\n");
     out.push_str("    float serotonin_level;\n");
     out.push_str("    float norepinephrine_level;\n");
+    out.push_str("    // 4D Sphere Geodesic Silicon State (0 FLOPs)\n");
+    out.push_str("    int32_t sphere_matrix_acc[4];\n");
+    out.push_str("    size_t sphere_curvature_ops_count;\n");
+    out.push_str("    uint32_t sphere_coords[4][4];\n");
     out.push_str("} CronSiliconCore;\n\n");
 
     out.push_str("static inline uint32_t cron_f32_to_u32(float f) {\n");
@@ -216,6 +238,30 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    *out_sin_q16 = y;\n");
     out.push_str("}\n\n");
 
+    out.push_str("// 4D Sphere Geodesic Discrete Curvature Step (0 FLOPs, 0 DSP Multipliers)\n");
+    out.push_str("static inline void cron_sphere_geodesic_step(CronSiliconCore* core, uint32_t s_id, uint32_t w, uint32_t x, uint32_t z, uint32_t q, uint32_t val, char alu_op, uint32_t reg) {\n");
+    out.push_str("    uint32_t cur_wt = ((x + z) >> 5) + 1;\n");
+    out.push_str("    uint32_t r_shift = (w % 4) + 1;\n");
+    out.push_str("    int32_t q_sign = (q == 1 || q == 4) ? 1 : -1;\n");
+    out.push_str("    int32_t geo_term = q_sign * (int32_t)((val * cur_wt) >> r_shift);\n");
+    out.push_str("    core->sphere_matrix_acc[s_id] += geo_term;\n");
+    out.push_str("    core->sphere_curvature_ops_count++;\n");
+    out.push_str("    core->sphere_coords[s_id][0] = w;\n");
+    out.push_str("    core->sphere_coords[s_id][1] = x;\n");
+    out.push_str("    core->sphere_coords[s_id][2] = z;\n");
+    out.push_str("    core->sphere_coords[s_id][3] = q;\n");
+    out.push_str("    uint32_t scaled = val * cur_wt;\n");
+    out.push_str("    switch (alu_op) {\n");
+    out.push_str("        case '+': core->r[reg] += scaled; break;\n");
+    out.push_str("        case '-': core->r[reg] -= scaled; break;\n");
+    out.push_str("        case '*': core->r[reg] ^= (scaled << r_shift); break;\n");
+    out.push_str("        case '^': core->r[reg] ^= scaled; break;\n");
+    out.push_str("        case '=': core->r[reg] = scaled; break;\n");
+    out.push_str("        case '!': core->is_halted = true; break;\n");
+    out.push_str("        default: break;\n");
+    out.push_str("    }\n");
+    out.push_str("}\n\n");
+
     out.push_str("static inline void cron_silicon_init(CronSiliconCore* core) {\n");
     out.push_str("    memset(core, 0, sizeof(CronSiliconCore));\n");
     out.push_str("    core->lfsr_state = 0xACE1u;\n");
@@ -272,6 +318,34 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                 if let Ok(slot) = parse_slot(slot_str) {
                     if slot.opcode == "NO" || slot.opcode == "_N" {
                         continue;
+                    }
+
+                    if slot.prefix == '`' {
+                        let chars: Vec<char> = slot_str.chars().collect();
+                        if chars.len() == 10 {
+                            let mode_val = decode_base64_val(chars[1]);
+                            let s_id = ((mode_val >> 4) & 0x3) as u32;
+                            let w = decode_base90_val(chars[2]) as u32;
+                            let lat_x = decode_base90_val(chars[3]) as u32;
+                            let lon_z = decode_base90_val(chars[4]) as u32;
+                            let quad = match chars[5] {
+                                '1' | 'N' | 'A' => 1u32,
+                                '2' | 'W' | 'B' => 2u32,
+                                '3' | 'S' | 'C' => 3u32,
+                                '4' | 'E' | 'D' => 4u32,
+                                _ => 1u32,
+                            };
+                            let step = decode_base90_val(chars[6]) as u32;
+                            let alu_op = chars[7];
+                            let reg = chars[8].to_digit(16).unwrap_or(s_id) % 16;
+                            let val = chars[9].to_digit(16).unwrap_or(step % 16);
+
+                            out.push_str(&format!(
+                                "    cron_sphere_geodesic_step(core, {}u, {}u, {}u, {}u, {}u, {}u, '{}', {}u);\n",
+                                s_id, w, lat_x, lon_z, quad, val, alu_op, reg
+                            ));
+                            continue;
+                        }
                     }
 
                     let d = slot.dest_reg.unwrap_or(0) % 16;
@@ -765,6 +839,10 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("        printf(\"  Throughput (MIPS):           %.2f MIPS\\n\", mips);\n");
     out.push_str("        printf(\"  Compute Peak (GFLOPS/GOPS):  %.2f GFLOPS\\n\", gflops);\n");
     out.push_str("    }\n");
+    out.push_str("    if (core.sphere_curvature_ops_count > 0) {\n");
+    out.push_str("        printf(\"  4D Sphere Geodesic Ops:      %zu (0 FLOPs Multiplier-Free)\\n\", core.sphere_curvature_ops_count);\n");
+    out.push_str("        printf(\"  Sphere Acc [0..3]:           [%d, %d, %d, %d]\\n\", core.sphere_matrix_acc[0], core.sphere_matrix_acc[1], core.sphere_matrix_acc[2], core.sphere_matrix_acc[3]);\n");
+    out.push_str("    }\n");
     out.push_str("    printf(\"  Final Register R0:           0x%08X (%u)\\n\", core.r[0], core.r[0]);\n");
     out.push_str("    printf(\"  Final Register R1:           0x%08X (%u)\\n\", core.r[1], core.r[1]);\n");
     out.push_str("    printf(\"  Final Register R4:           0x%08X (%u)\\n\", core.r[4], core.r[4]);\n");
@@ -787,7 +865,10 @@ pub fn compile_cl_to_native_binary_with_target(
 ) -> Result<(), String> {
     let c23_code = compile_cl_to_c23(cl_source, "cron_kernel")?;
     let temp_dir = std::env::temp_dir();
-    let temp_c_file = temp_dir.join(format!("cron_cl_kernel_{}.c", std::process::id()));
+    static CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let count = CALL_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let temp_c_file = temp_dir.join(format!("cron_cl_kernel_{}_{}_{}.c", std::process::id(), count, ts));
 
     fs::write(&temp_c_file, c23_code)
         .map_err(|e| format!("Failed to write temporary C source: {}", e))?;

@@ -146,3 +146,52 @@ fn test_native_gcc_c23_benchmarking_mode() {
 
     let _ = fs::remove_file(&exe_path);
 }
+
+#[test]
+fn test_c23_sphere_geodesic_compilation_and_execution() {
+    let sphere_cl = r#"
+@kernel sphere_matrix_test
+.target silicon.sphere_isa
+B0001: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
+B0002: `C0FA11+02 `R0AK31+14 `g0KF21*21 `015541+31
+B0003: `E1ZP12+05 `U1Pj32+13 `g1eU22^27 `02AA42+32
+B0004: `B2te13+06 `S2e%33+18 `g2oo23*23 `w2KK43+34
+B0005: `A3:y14+09 `Q3y?34+16 `g3++24^22 `w3UU44!30
+"#;
+
+    let c23 = compile_cl_to_c23(sphere_cl, "sphere_kernel").expect("Transpilation failed");
+    assert!(c23.contains("cron_sphere_geodesic_step"));
+    assert!(c23.contains("sphere_matrix_acc"));
+
+    if Command::new("gcc").arg("--version").output().is_err() {
+        return;
+    }
+
+    let temp_dir = std::env::temp_dir();
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let exe_name = if cfg!(windows) {
+        format!("cron_sphere_c23_{}_{}.exe", std::process::id(), ts)
+    } else {
+        format!("cron_sphere_c23_{}_{}", std::process::id(), ts)
+    };
+    let exe_path = temp_dir.join(&exe_name);
+
+    let res = compile_cl_to_native_binary_with_target(
+        sphere_cl,
+        exe_path.to_str().unwrap(),
+        "3",
+        SimdTarget::Auto,
+    );
+    assert!(res.is_ok(), "Native compilation of sphere kernel failed: {:?}", res);
+
+    let output = Command::new(&exe_path)
+        .output()
+        .expect("Failed to execute native sphere kernel");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "Sphere execution failed: {}", stdout);
+    assert!(stdout.contains("4D Sphere Geodesic Ops:      20 (0 FLOPs Multiplier-Free)"));
+    assert!(stdout.contains("Sphere Acc [0..3]:"));
+    assert!(stdout.contains("STATUS: 100% BIT-EXACT SILICON C23 PARITY VERIFIED"));
+
+    let _ = fs::remove_file(&exe_path);
+}
