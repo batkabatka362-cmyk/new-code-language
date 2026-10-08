@@ -33,3 +33,7 @@ package-lock.json
 **/bin/
 **/obj/
 
+# Test fixtures and scratch
+tests/fixtures/
+scratch/
+

@@ -146,11 +146,17 @@ pub mod cl_rtl_export;
 pub mod cl_jit_accel;
 pub mod docgen;
 pub mod cl_sphere_infer;
+pub mod cl_convert;
 
 pub use cl_sphere_infer::{
     compile_weights_to_sphere_cl, SphereCompileOptions, SphereCoreNode, SphereGenerationResult,
     SphereInferenceEngine, SphereInferenceResult, SphereKVCache, SphereTorusCluster,
     SphereTransformerConfig, SphereTransformerModel, SphereWeightMatrix, TorusClusterExecutionReport,
+};
+
+pub use cl_convert::{
+    convert_ai_model_file, LayerConversionStats, ModelConvertOptions, ModelConversionReport,
+    ModelInputFormat,
 };
 
 pub use cl_vectorizer::{

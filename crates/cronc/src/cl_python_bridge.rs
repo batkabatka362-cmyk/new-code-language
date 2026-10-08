@@ -132,3 +132,111 @@ pub extern "C" fn cron_cl_jit_exec(cl_source_cstr: *const c_char, out_regs: *mut
         }
     }
 }
+
+/// Quantize a continuous float weight tensor into BitNet b1.58 ternary weights {-1, 0, +1}
+#[no_mangle]
+pub extern "C" fn cron_sphere_quantize_tensor(
+    weights: *const c_float,
+    count: usize,
+    out_ternary: *mut i8,
+    out_scale: *mut c_float,
+) -> i32 {
+    if weights.is_null() || out_ternary.is_null() || count == 0 {
+        return -1;
+    }
+    unsafe {
+        let slice = std::slice::from_raw_parts(weights, count);
+        let (ternary, params) = crate::model_importer::ternary::quantize_to_ternary(slice);
+        std::ptr::copy_nonoverlapping(ternary.as_ptr(), out_ternary, count);
+        if !out_scale.is_null() {
+            *out_scale = params.scale;
+        }
+        0
+    }
+}
+
+/// Convert a 2D PyTorch/NumPy weight matrix directly into 4D Spherical CL microcode
+#[no_mangle]
+pub extern "C" fn cron_sphere_export_layer_cl(
+    layer_name: *const c_char,
+    weights: *const c_float,
+    rows: usize,
+    cols: usize,
+    out_cl_buf: *mut c_char,
+    max_len: usize,
+) -> i32 {
+    if weights.is_null() || out_cl_buf.is_null() || rows == 0 || cols == 0 || max_len == 0 {
+        return -1;
+    }
+    unsafe {
+        let name_str = if layer_name.is_null() {
+            "pytorch_layer"
+        } else {
+            CStr::from_ptr(layer_name).to_str().unwrap_or("pytorch_layer")
+        };
+
+        let count = rows * cols;
+        let slice = std::slice::from_raw_parts(weights, count);
+        let sphere_mat = crate::cl_sphere_infer::SphereWeightMatrix::from_floats(name_str, rows, cols, slice);
+        let dummy_acts = vec![1i32; cols.min(16)];
+        let cl_code = crate::cl_sphere_infer::compile_weights_to_sphere_cl(
+            &sphere_mat,
+            &dummy_acts,
+            &crate::cl_sphere_infer::SphereCompileOptions::default(),
+        );
+
+        let c_str = match CString::new(cl_code) {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let bytes = c_str.as_bytes_with_nul();
+        let copy_len = bytes.len().min(max_len);
+        std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, out_cl_buf, copy_len);
+        *out_cl_buf.add(copy_len - 1) = 0;
+        0
+    }
+}
+
+/// Convert a SafeTensors, GGUF, or PyTorch model file and output JSON conversion telemetry
+#[no_mangle]
+pub extern "C" fn cron_sphere_convert_file(
+    in_path_cstr: *const c_char,
+    out_path_cstr: *const c_char,
+    out_report_buf: *mut c_char,
+    max_len: usize,
+) -> i32 {
+    if in_path_cstr.is_null() {
+        return -1;
+    }
+    unsafe {
+        let in_path = match CStr::from_ptr(in_path_cstr).to_str() {
+            Ok(s) => s,
+            Err(_) => return -2,
+        };
+        let out_path = if out_path_cstr.is_null() {
+            None
+        } else {
+            CStr::from_ptr(out_path_cstr).to_str().ok()
+        };
+
+        match crate::cl_convert::convert_ai_model_file(
+            in_path,
+            out_path,
+            &crate::cl_convert::ModelConvertOptions::default(),
+        ) {
+            Ok(rep) => {
+                if !out_report_buf.is_null() && max_len > 0 {
+                    let json = rep.to_json();
+                    if let Ok(c_json) = CString::new(json) {
+                        let bytes = c_json.as_bytes_with_nul();
+                        let copy_len = bytes.len().min(max_len);
+                        std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, out_report_buf, copy_len);
+                        *out_report_buf.add(copy_len - 1) = 0;
+                    }
+                }
+                0
+            }
+            Err(_) => -3,
+        }
+    }
+}

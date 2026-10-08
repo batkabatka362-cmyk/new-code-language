@@ -51,6 +51,7 @@ fn print_help() {
     println!("    cl-sphere-infer [weights]      4D Sphere Matrix Multiplier-Free Inference Engine (0 FLOPs, 256-Core Torus)");
     println!("    cl-sphere-compile [weights]    Compile Neural Weights to 4D Sphere Sovereign Microcode (.cl)");
     println!("    cl-sphere-llm [prompt]         End-to-End 4D Sphere LLM Multiplier-Free Text Generator (0 FLOPs)");
+    println!("    cl-convert <model> [-o out]    Universal AI Model Converter: SafeTensors/GGUF/PyTorch -> 4D Sphere CL");
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
     println!("    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench");
     println!("    cl-macro <file.clm> [-o out.cl] High-Level Macro Assembler (.clm) to VLIW 10-char bundles");
@@ -2741,6 +2742,54 @@ fn main() {
             println!("  DSP Multipliers Used:      0 (Zero Hardware DSP Slices)");
             println!("  Thermodynamic Property:    Discrete Integer Geodesic Wavefront");
             println!("================================================================================");
+        }
+        "cl-convert" | "convert" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing input file. Usage: cron cl-convert <input.safetensors|input.gguf|input.bin> [-o <out.cl|out.sphere>] [--heads <4>] [--json]");
+                std::process::exit(1);
+            }
+            let input_path = &args[2];
+            let mut out_path = None;
+            let mut target_heads = 4usize;
+            let mut json_mode = false;
+
+            let mut i = 3;
+            while i < args.len() {
+                if args[i] == "-o" && i + 1 < args.len() {
+                    out_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "--heads" && i + 1 < args.len() {
+                    target_heads = args[i + 1].parse().unwrap_or(4);
+                    i += 2;
+                } else if args[i] == "--json" {
+                    json_mode = true;
+                    i += 1;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let options = cronc::ModelConvertOptions {
+                target_heads,
+                base_layer_depth: 0,
+                max_bundles_per_layer: 50_000,
+                export_microcode: true,
+                export_packed_binary: true,
+            };
+
+            let report = match cronc::convert_ai_model_file(input_path, out_path.as_deref(), &options) {
+                Ok(rep) => rep,
+                Err(e) => {
+                    eprintln!("[CONVERSION ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            if json_mode {
+                println!("{}", report.to_json());
+            } else {
+                println!("{}", report.format_ascii_report());
+            }
         }
         "c23" | "cl-c23" => {
             if args.len() < 3 {
