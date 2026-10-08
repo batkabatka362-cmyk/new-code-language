@@ -43,6 +43,11 @@ pub struct ClJitCore {
     pub branch_target: Option<usize>,
     pub ras: Vec<usize>,
     pub dmem: Vec<u32>,
+    // Milestone #035: Sovereign 4D Spherical Geodesic Matrix Engine (0 FLOPs)
+    pub sphere_coords: [[u32; 4]; 4],
+    pub sphere_errors: [bool; 4],
+    pub sphere_matrix_acc: [i32; 4],
+    pub sphere_curvature_ops_count: usize,
 }
 
 impl ClJitCore {
@@ -79,6 +84,10 @@ impl ClJitCore {
             branch_target: None,
             ras: Vec::new(),
             dmem: vec![0u32; 16384],
+            sphere_coords: [[0; 4]; 4],
+            sphere_errors: [false; 4],
+            sphere_matrix_acc: [0; 4],
+            sphere_curvature_ops_count: 0,
         }
     }
 
@@ -255,21 +264,60 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         if chars.len() == 10 {
                             let mode_val = decode_base64_val(chars[1]);
                             let s_id = ((mode_val >> 4) & 0x3) as usize;
+                            let is_err = ((mode_val >> 3) & 1) == 1;
+                            let _is_pen = ((mode_val >> 2) & 1) == 1;
+                            let is_rd = ((mode_val >> 1) & 1) == 1;
+                            let is_wr = (mode_val & 1) == 1;
+
                             let w = decode_base90_val(chars[2]) as u32;
+                            let lat_x = decode_base90_val(chars[3]) as u32;
+                            let lon_z = decode_base90_val(chars[4]) as u32;
+                            let quad = match chars[5] {
+                                '1' | 'N' | 'A' => 1,
+                                '2' | 'W' | 'B' => 2,
+                                '3' | 'S' | 'C' => 3,
+                                '4' | 'E' | 'D' => 4,
+                                _ => 1,
+                            };
                             let step = decode_base90_val(chars[6]) as u32;
                             let alu_op = chars[7];
                             let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as usize % 16;
                             let val = chars[9].to_digit(16).unwrap_or(step % 16);
 
+                            // Discrete Spherical Curvature Metric:
+                            // R = W (Radial Layer Depth)
+                            // Curvature Weight = ((X + Z) / 32) + 1
+                            let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
+                            let radial_shift = (w % 4) + 1;
+                            let q_sign: i32 = if quad == 1 || quad == 4 { 1 } else { -1 };
+
+                            // 4D Sphere Matrix Projection Accumulator:
+                            let geo_term = q_sign * (((val * curvature_weight) >> radial_shift) as i32);
+                            core.sphere_matrix_acc[s_id] += geo_term;
+                            core.sphere_curvature_ops_count += 1;
+
+                            // Update 4-Head spatial state
+                            core.sphere_coords[s_id] = [w, lat_x, lon_z, quad];
+                            core.sphere_errors[s_id] = is_err;
+
+                            // Spatial grid memory access
+                            let cell_addr = ((w * 360 + lat_x * 90 + lon_z) as usize) % core.dmem.len();
+                            if is_rd {
+                                core.r[reg] = core.dmem[cell_addr];
+                            }
+                            if is_wr {
+                                core.dmem[cell_addr] = core.r[reg];
+                            }
+
+                            // Curvature-weighted integer ALU operations (0 FLOPs)
                             match alu_op {
-                                '+' => core.r[reg] = core.r[reg].wrapping_add(val),
-                                '-' => core.r[reg] = core.r[reg].wrapping_sub(val),
+                                '+' => core.r[reg] = core.r[reg].wrapping_add(val * curvature_weight),
+                                '-' => core.r[reg] = core.r[reg].wrapping_sub(val * curvature_weight),
                                 '*' => {
-                                    let shift = (w % 4) + 1;
-                                    core.r[reg] ^= val << shift;
+                                    core.r[reg] ^= (val * curvature_weight) << radial_shift;
                                 }
-                                '^' => core.r[reg] ^= val,
-                                '=' => core.r[reg] = val,
+                                '^' => core.r[reg] ^= val * curvature_weight,
+                                '=' => core.r[reg] = val * curvature_weight,
                                 '!' => core.is_halted = true,
                                 _ => {}
                             }

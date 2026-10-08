@@ -2035,6 +2035,18 @@ fn main() {
                                 println!("  Streaming Fused Ops:          {} ops", core.fused_ops_count);
                                 println!("  DRAM/HBM Traffic Eliminated:  {} B", core.hbm_bytes_saved);
                             }
+                            if core.sphere_curvature_ops_count > 0 {
+                                println!("  4D Sphere Curvature Ops:      {} ops (0 FLOPs, Metric: R=W, ((X+Z)/32)+1)", core.sphere_curvature_ops_count);
+                                println!("  4D Sphere Matrix Accumulator: [X: {:+5}, Z: {:+5}, Y: {:+5}, W: {:+5}]",
+                                    core.sphere_matrix_acc[0], core.sphere_matrix_acc[1], core.sphere_matrix_acc[2], core.sphere_matrix_acc[3]);
+                                let head_names = ["X", "Z", "Y", "W"];
+                                print!("  4-Head Final Sphere Coords:   ");
+                                for i in 0..4 {
+                                    let c = core.sphere_coords[i];
+                                    print!("{}[W{:02},X{:02}°,Z{:02}°,Q{}] ", head_names[i], c[0], c[1], c[2], c[3]);
+                                }
+                                println!();
+                            }
                             println!("------------------------------------------------------------");
                             println!("  Final Register R0:            0x{:08X} ({})", core.r[0], core.r[0]);
                             println!("  Final Register R1:            0x{:08X} ({})", core.r[1], core.r[1]);
