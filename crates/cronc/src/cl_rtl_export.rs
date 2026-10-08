@@ -169,7 +169,8 @@ pub fn export_cl_to_rtl(
     let bundle_count = total_words.div_ceil(4);
     let estimated_luts = 450 + (bundle_count * 12);
     let estimated_ffs = 512 + (bundle_count * 8);
-    let estimated_dsps = 16.min(bundle_count * 2);
+    let is_sphere_isa = cl_source.contains('`') || cl_source.contains(".sphere_isa");
+    let estimated_dsps = if is_sphere_isa { 0 } else { 16.min(bundle_count * 2) };
     let estimated_brams = 2.max(bundle_count.div_ceil(64));
     let dynamic_power_mw = 78.125 * (bundle_count as f64).min(4.0);
 

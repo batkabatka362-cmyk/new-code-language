@@ -202,3 +202,39 @@ fn test_cl_cosim_sphere_geodesic_parity() {
     assert!(trace.contains("Total Geodesic Operations:    20"));
     assert!(trace.contains("[PASS] 100% BIT-EXACT SPHERE GEODESIC PARITY"));
 }
+
+#[test]
+fn test_cl_cosim_neural_transformer_layer_parity() {
+    // Multi-bundle Neural Transformer Layer with 4D Sphere Matrix and Ternary activations
+    let cl_code = r#"
+    @kernel transformer_layer_cosim
+    .target silicon.sphere_isa
+    B0000: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
+    B0001: `C0FA11+02 `R0AK31+14 `g0KF21*21 `015541+31
+    B0002: `E1ZP12+05 `U1Pj32+13 `g1eU22^27 `02AA42+32
+    B0003: `B2te13+06 `S2e%33+18 `g2oo23*23 `w2KK43+34
+    B0004: `A3:y14+09 `Q3y?34+16 `g3++24^22 `w3UU44+30
+    B0005: '=00#0A04> '=10#040B> '=20#1201> '=30#0102>
+    B0006: `A00010+00 `B00020+10 `C00030+20 `D00040+30
+    B0007: `A12310*04 `B12320*14 `C12330*24 `D12340*34
+    B0008: `A3:y14+09 `Q3y?34+16 `g3++24^22 `w3UU44=30
+    B0009: _SH00$0B4> _RF00#008> _RS00#008> _HL00$008!
+    "#;
+
+    let options = CosimOptions {
+        max_cycles: 100,
+        trace_all_cycles: true,
+        strict_parity: true,
+    };
+
+    let report = run_cl_cosim(cl_code, &options).expect("Neural transformer co-simulation failed");
+
+    assert!(report.is_100pct_parity, "Expected 100% parity, got divergences: {:?}", report.divergence_details);
+    assert_eq!(report.bit_exact_match_count, report.total_cycles_simulated);
+    assert_eq!(report.divergence_count, 0);
+    assert!(report.sphere_curvature_ops >= 28, "Expected at least 28 geodesic ops, got {}", report.sphere_curvature_ops);
+    assert_eq!(report.soft_sphere_acc, report.rtl_sphere_acc, "Software and RTL sphere accumulators must match exactly");
+    assert!(report.software_halted);
+    assert!(report.rtl_halted);
+}
+

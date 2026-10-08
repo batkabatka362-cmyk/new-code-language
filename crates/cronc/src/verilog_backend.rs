@@ -213,9 +213,9 @@ module {module_name} (
     wire [4:0]  sph_step      = inst_data[4:0];
     wire        sph_q_sign    = (sph_quad == 2'd0 || sph_quad == 2'd3);
 
-    // Discrete Curvature Math (Zero DSP, purely combinational logic)
-    wire [31:0] sph_scaled    = sph_val * sph_cur_wt;
-    wire signed [31:0] sph_geo_term = sph_q_sign ? 
+    // Discrete Curvature Math (Strict 0 DSP, 0 FLOPs, purely combinational 6-LUT logic)
+    (* use_dsp = "no" *) wire [31:0] sph_scaled    = sph_val * sph_cur_wt;
+    (* use_dsp = "no" *) wire signed [31:0] sph_geo_term = sph_q_sign ? 
         $signed(sph_scaled >> sph_rad_shift) : 
         -$signed(sph_scaled >> sph_rad_shift);
 

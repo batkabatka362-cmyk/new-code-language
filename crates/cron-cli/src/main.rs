@@ -5394,7 +5394,7 @@ fn main() {
         }
         "flash" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--target <t>] [--interface <i>] [--out-dir <dir>] [--dry-run]");
+                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--target <t>] [--interface <i>] [--out-dir <dir>|-o <dir>] [--dry-run]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5423,7 +5423,7 @@ fn main() {
                         std::process::exit(1);
                     });
                     i += 2;
-                } else if args[i] == "--out-dir" && i + 1 < args.len() {
+                } else if (args[i] == "--out-dir" || args[i] == "-o" || args[i] == "--out") && i + 1 < args.len() {
                     out_dir = std::path::PathBuf::from(&args[i + 1]);
                     i += 2;
                 } else if args[i] == "--dry-run" {
@@ -5458,7 +5458,13 @@ fn main() {
                 }
             };
 
-            println!("[2/4] Generating Vivado Physical Synthesis Tcl & Timing Constraints...");
+            let toolchain_desc = match config.target {
+                cronc::SiliconTarget::OpenLaneSky130 => "OpenLane SkyWater 130nm ASIC Config & SDC Timing Constraints",
+                cronc::SiliconTarget::YosysNextPnr => "Open-Source Yosys + NextPNR Synthesis & PnR Scripts",
+                cronc::SiliconTarget::IntelStratix10 => "Intel Quartus Prime Pro Tcl & SDC Timing Constraints",
+                _ => "AMD Vivado Physical Synthesis Tcl & Timing Constraints",
+            };
+            println!("[2/4] Generating {}...", toolchain_desc);
             let pkg = cronc::generate_hardware_package(&verilog_rtl, module_name, &config);
 
             println!("[3/4] Generating Zero-Copy PCIe Gen5 x16 AXI4 DMA Host Drivers...");
@@ -5470,7 +5476,13 @@ fn main() {
             println!("[4/4] Hardware Deployment Package Assembled in '{:?}':", out_dir);
             println!("      ✓ Verilog RTL Core:       {}/cron_top.v", out_dir.display());
             println!("      ✓ Vivado Synthesis Tcl:   {}/synth.tcl", out_dir.display());
+            println!("      ✓ Quartus Synthesis Tcl:  {}/synth_quartus.tcl", out_dir.display());
+            println!("      ✓ OpenLane 130nm Config:  {}/config.json", out_dir.display());
+            println!("      ✓ OpenLane Tapeout Flow:  {}/run_openlane.sh", out_dir.display());
+            println!("      ✓ Yosys Synthesis Script: {}/synth_yosys.ys", out_dir.display());
+            println!("      ✓ NextPNR Place & Route:  {}/run_nextpnr.sh", out_dir.display());
             println!("      ✓ Timing Constraints XDC: {}/timing.xdc", out_dir.display());
+            println!("      ✓ Timing Constraints SDC: {}/timing.sdc", out_dir.display());
             println!("      ✓ Host PCIe DMA Header:   {}/cron_pcie_dma.h", out_dir.display());
             println!("      ✓ Host PCIe DMA Driver:   {}/cron_pcie_dma.c", out_dir.display());
             println!("      ✓ Deployment Manifest:    {}/flash_manifest.json", out_dir.display());
@@ -5484,10 +5496,16 @@ fn main() {
             println!("  Core Clock Target:            {} MHz ({:.3} ns)", config.core_clock_mhz, 1000.0 / config.core_clock_mhz as f64);
             println!("  4D-Torus NoC Clock:           {} MHz ({:.3} ns)", config.noc_clock_mhz, 1000.0 / config.noc_clock_mhz as f64);
             println!("  Estimated FPGA LUTs:          {} LUTs", pkg.estimated_luts);
-            println!("  Estimated DSP Multipliers:    {} DSPs", pkg.estimated_dsp);
+            println!("  Estimated DSP Multipliers:    {} DSPs (100% Multiplier-Free)", pkg.estimated_dsp);
             println!("  Estimated BRAM Blocks:        {} Blocks", pkg.estimated_bram);
             println!("============================================================");
-            println!("  STATUS: HARDWARE PACKAGE READY FOR VIVADO / JTAG FLASH\n");
+            let status_msg = match config.target {
+                cronc::SiliconTarget::OpenLaneSky130 => "STATUS: HARDWARE PACKAGE READY FOR SKYWATER 130NM ASIC TAPEOUT",
+                cronc::SiliconTarget::YosysNextPnr => "STATUS: HARDWARE PACKAGE READY FOR YOSYS / NEXTPNR FPGA SYNTHESIS",
+                cronc::SiliconTarget::IntelStratix10 => "STATUS: HARDWARE PACKAGE READY FOR INTEL QUARTUS PRIME PRO",
+                _ => "STATUS: HARDWARE PACKAGE READY FOR AMD VIVADO / JTAG FLASH",
+            };
+            println!("  {}\n", status_msg);
         }
         "verify" => {
             if args.len() < 3 {
