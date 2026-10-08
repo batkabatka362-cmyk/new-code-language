@@ -346,7 +346,7 @@ pub fn convert_ai_model_file(
 
         let fp32_bytes = count * 4;
         // Ternary weights packed at 2 bits per weight = 4 weights per byte
-        let ternary_bytes = (count + 3) / 4;
+        let ternary_bytes = count.div_ceil(4);
 
         total_params += count;
         total_fp32_bytes += fp32_bytes;

@@ -175,7 +175,7 @@ pub fn compile_weights_to_sphere_cl(
         }
 
         // Periodic Landauer Reversible Return at group boundary
-        if options.enable_reversible_reset && bundle_idx > 0 && bundle_idx % 32 == 0 {
+        if options.enable_reversible_reset && bundle_idx > 0 && bundle_idx.is_multiple_of(32) {
             cl.push_str(&format!(
                 "; --- Landauer Reversible Checkpoint Phase Boundary ---\n\
                  B{:04}: '=00#0000> '=10#0000> '=20#0000> '=30#0000>\n",
@@ -695,10 +695,8 @@ impl SphereTransformerModel {
             // Update KV Cache
             let cache_pos = pos.min(self.config.max_seq_len - 1);
             let layer_offset = cache_pos * h;
-            for i in 0..h {
-                kv_cache.k[l_idx][layer_offset + i] = k[i];
-                kv_cache.v[l_idx][layer_offset + i] = v[i];
-            }
+            kv_cache.k[l_idx][layer_offset..(h + layer_offset)].copy_from_slice(&k[..h]);
+            kv_cache.v[l_idx][layer_offset..(h + layer_offset)].copy_from_slice(&v[..h]);
 
             // B. Discrete 4-Head Attention Mechanism
             let mut context = vec![0i32; h];

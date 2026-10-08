@@ -176,7 +176,7 @@ fn test_raw_float_dump_to_4d_sphere_conversion() {
 #[test]
 fn test_python_c_abi_ffi_bridge() {
     // 1. Test cron_sphere_quantize_tensor
-    let weights = vec![1.5f32, -1.2, 0.05, 0.0, -0.01, 2.0, -2.5, 0.9];
+    let weights = [1.5f32, -1.2, 0.05, 0.0, -0.01, 2.0, -2.5, 0.9];
     let mut out_ternary = vec![0i8; weights.len()];
     let mut scale = 0.0f32;
 
