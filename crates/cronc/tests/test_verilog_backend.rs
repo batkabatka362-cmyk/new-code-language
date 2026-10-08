@@ -58,3 +58,35 @@ fn test_verilog_full_source_synthesis() {
     assert!(hdl.contains("module cksl_edge_core"));
     assert!(hdl.contains("inst_data <="));
 }
+
+#[test]
+fn test_verilog_sphere_geodesic_matrix_synthesis() {
+    // 4D Sphere Geodesic 10-char slot tokens
+    let cl_code = r#"
+    ; 4D Sphere Geodesic Matrix Core Microcode
+    B0000: `A00010+00 `B00020+10 `C00030+20 `D00040+30
+    B0001: `A12310*04 `B12320*14 `C12330*24 `D12340*34
+    B0002: `A00010!00 `B00020!10 `C00030!20 `D00040!30
+    "#;
+
+    let slot = parse_slot("`A12310*04").expect("valid slot");
+    let word = encode_slot_to_u32(&slot);
+    // Opcode for 4D Sphere Geodesic is 0x38 (Opcode 6'h38)
+    assert_eq!((word >> 26) & 0x3F, 0x38);
+
+    let hdl = generate_verilog_hdl(cl_code, "sphere_matrix_core").expect("verilog generation");
+    assert!(hdl.contains("module sphere_matrix_core ("));
+    assert!(hdl.contains("output reg  [31:0] sphere_acc_0"));
+    assert!(hdl.contains("output reg  [31:0] sphere_acc_1"));
+    assert!(hdl.contains("output reg  [31:0] sphere_acc_2"));
+    assert!(hdl.contains("output reg  [31:0] sphere_acc_3"));
+    assert!(hdl.contains("output reg  [31:0] sphere_curvature_ops"));
+    assert!(hdl.contains("6'h38: begin // 4D Sphere Geodesic ALU"));
+    assert!(hdl.contains("sphere_acc[sph_head] <= sphere_acc[sph_head] + sph_geo_term;"));
+
+    let tb = generate_testbench("sphere_matrix_core");
+    assert!(tb.contains("sphere_matrix_core dut ("));
+    assert!(tb.contains(".sphere_acc_0(sphere_acc_0)"));
+    assert!(tb.contains("Sphere Acc [0]: %0d"));
+}
+

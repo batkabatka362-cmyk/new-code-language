@@ -145,6 +145,12 @@ pub mod cl_vectorizer;
 pub mod cl_rtl_export;
 pub mod cl_jit_accel;
 pub mod docgen;
+pub mod cl_sphere_infer;
+
+pub use cl_sphere_infer::{
+    compile_weights_to_sphere_cl, SphereCompileOptions, SphereCoreNode, SphereInferenceEngine,
+    SphereInferenceResult, SphereTorusCluster, SphereWeightMatrix, TorusClusterExecutionReport,
+};
 
 pub use cl_vectorizer::{
     vectorize_pattern, pack_slots_into_vliw_bundles, VectorPattern, VectorizerConfig, VectorizerReport,
