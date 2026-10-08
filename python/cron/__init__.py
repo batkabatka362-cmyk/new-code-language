@@ -604,8 +604,9 @@ from .clifford import (
     blade_sign,
 )
 from . import math_bridge as math
+from . import agent
+from .agent import CronReasoner, ProblemSpec, SolutionCertificate, solve_problem
 
-__version__ = "1.0.0"
 
 __all__ = [
     # Sovereign .cl Core & Runtime Engine
@@ -686,8 +687,14 @@ __all__ = [
     "fold_tensor_4d",
     "blade_index",
     "blade_sign",
-    # Unified AI/AGI Mathematical Bridge
+    # Unified AI/AGI Mathematical Bridge & Autonomous Reasoner
     "math",
+    "agent",
+    "CronReasoner",
+    "ProblemSpec",
+    "SolutionCertificate",
+    "solve_problem",
     "StigmergySwarm",
 ]
+
 
