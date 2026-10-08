@@ -195,3 +195,75 @@ B0005: `A3:y14+09 `Q3y?34+16 `g3++24^22 `w3UU44!30
 
     let _ = fs::remove_file(&exe_path);
 }
+
+#[test]
+fn test_sphere_webgpu_and_ptx_transpilation() {
+    let sphere_cl = r#"
+@kernel sphere_transpile_test
+B0000: '==01#0005 '==02#0003 `C0FA11+02 `R0AK31+14
+B0001: _MD03$102> `E1ZP12+05 `U1Pj32+13 _HL00!000>
+"#;
+
+    // 1. WebGPU WGSL Transpilation
+    let wgsl_rep = cronc::transpile_cl(sphere_cl, cronc::TranspileTarget::WebGpuWgsl)
+        .expect("WGSL transpile of 4D Sphere kernel must succeed");
+    assert!(wgsl_rep.generated_code.contains("cron_wgsl_sphere_geodesic_step"));
+    assert!(wgsl_rep.generated_code.contains("cron_wgsl_ternary_dot"));
+    assert!(wgsl_rep.generated_code.contains("sphere_matrix_acc"));
+    assert!(wgsl_rep.generated_code.contains("@compute @workgroup_size(256, 1, 1)"));
+
+    // 2. NVIDIA PTX (CUDA SM_80+) Transpilation
+    let ptx_rep = cronc::transpile_cl(sphere_cl, cronc::TranspileTarget::NvidiaPtx)
+        .expect("PTX transpile of 4D Sphere kernel must succeed");
+    assert!(ptx_rep.generated_code.contains(".target sm_80"));
+    assert!(ptx_rep.generated_code.contains("mul.lo.u32"));
+    assert!(ptx_rep.generated_code.contains("shr.u32"));
+    assert!(ptx_rep.generated_code.contains("popc.b32"));
+    assert!(ptx_rep.generated_code.contains("add.s32 %s_acc"));
+}
+
+#[test]
+fn test_c23_avx2_sphere_benchmarking() {
+    if Command::new("gcc").arg("--version").output().is_err() {
+        return;
+    }
+
+    let sphere_cl = r#"
+@kernel sphere_bench_kernel
+B0000: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
+B0001: `C0FA11+02 `R0AK31+14 `g0KF21*21 `015541+31
+B0002: `E1ZP12+05 `U1Pj32+13 `g1eU22^27 `02AA42+32
+B0003: _HL00!000> _NO00#000> _NO00#000> _NO00#000>
+"#;
+
+    let temp_dir = std::env::temp_dir();
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let exe_name = if cfg!(windows) {
+        format!("cron_bench_avx_{}_{}.exe", std::process::id(), ts)
+    } else {
+        format!("cron_bench_avx_{}_{}", std::process::id(), ts)
+    };
+    let exe_path = temp_dir.join(&exe_name);
+
+    let res = compile_cl_to_native_binary_with_target(
+        sphere_cl,
+        exe_path.to_str().unwrap(),
+        "3",
+        SimdTarget::Avx2,
+    );
+    assert!(res.is_ok(), "Native compilation with AVX2 failed: {:?}", res);
+
+    let output = Command::new(&exe_path)
+        .arg("--bench")
+        .arg("50000")
+        .output()
+        .expect("Failed to execute benchmark");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "AVX2 Benchmark run failed: {}", stdout);
+    assert!(stdout.contains("CRON_SIMD_AVX2") || stdout.contains("AVX2 + FMA + BMI2 + POPCNT"));
+    assert!(stdout.contains("4D Sphere Geodesic Ops:"));
+    assert!(stdout.contains("Throughput (MIPS):"));
+
+    let _ = fs::remove_file(&exe_path);
+}
+
