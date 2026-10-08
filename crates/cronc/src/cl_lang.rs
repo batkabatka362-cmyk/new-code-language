@@ -197,6 +197,9 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "QK", // 4-Bit Sub-Byte Key Quantize & Pack into SRAM RingTape
     "QV", // 4-Bit Sub-Byte Value Quantize & Pack into SRAM RingTape
     "QA", // Sub-Byte Streaming FlashAttention Step
+    "XR", // Mixture of Experts (MoE) 4D-Torus Dynamic Packet Router
+    "PF", // Zero-Overhead DMA Prefetch Double-Buffering
+    "HB", // On-Silicon Neuromorphic Synaptic Plasticity Step (Online Hebbian / Oja)
     "SI", // SiLU Activation (SwiGLU)
     "GE", // GELU Activation
     "SS", // Selective Scan SSM Step (Mamba)

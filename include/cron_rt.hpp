@@ -829,6 +829,123 @@ public:
     }
 };
 
+// ----------------------------------------------------------------------------
+// 12. Mixture of Experts (MoE) Dynamic 4D-Torus Packet Router
+// ----------------------------------------------------------------------------
+
+class MoERouter {
+public:
+    int num_experts;
+    int top_k;
+    int d_model;
+
+    MoERouter(int n_exp, int k, int d)
+        : num_experts(n_exp), top_k(k), d_model(d) {
+        if (k > n_exp) throw std::invalid_argument("MoERouter: top_k cannot exceed num_experts");
+    }
+
+    std::vector<cron_moe_route_t> route(std::span<const float> gating_logits) const {
+        if (static_cast<int>(gating_logits.size()) < num_experts) {
+            throw std::invalid_argument("MoERouter::route: logits size smaller than num_experts");
+        }
+        std::vector<cron_moe_route_t> routes(static_cast<size_t>(top_k));
+        cron_moe_route_topk(gating_logits.data(), num_experts, top_k, routes.data());
+        return routes;
+    }
+
+    float dispatch(
+        std::span<const float> token_input,
+        std::span<const cron_moe_route_t> routes,
+        std::span<float> expert_workspace
+    ) const {
+        if (static_cast<int>(token_input.size()) < d_model) {
+            throw std::invalid_argument("MoERouter::dispatch: token_input size smaller than d_model");
+        }
+        if (static_cast<int>(expert_workspace.size()) < top_k * d_model) {
+            throw std::invalid_argument("MoERouter::dispatch: expert_workspace size smaller than top_k * d_model");
+        }
+        return cron_moe_dispatch_and_gate_power(
+            token_input.data(),
+            d_model,
+            routes.data(),
+            top_k,
+            num_experts,
+            expert_workspace.data()
+        );
+    }
+};
+
+// ----------------------------------------------------------------------------
+// 13. Zero-Overhead DMA Prefetch Double-Buffering Engine
+// ----------------------------------------------------------------------------
+
+class DmaDoubleBuffer {
+public:
+    size_t buffer_elements;
+    std::vector<float> ping;
+    std::vector<float> pong;
+    cron_dma_double_buffer_t handle;
+
+    explicit DmaDoubleBuffer(size_t elements)
+        : buffer_elements(elements), ping(elements, 0.0f), pong(elements, 0.0f) {
+        cron_dma_double_buffer_init(
+            &handle,
+            ping.data(),
+            pong.data(),
+            elements * sizeof(float)
+        );
+    }
+
+    void prefetch_async(std::span<const float> src_hbm) {
+        size_t count = std::min(src_hbm.size(), buffer_elements);
+        cron_dma_prefetch_async(&handle, src_hbm.data(), count);
+    }
+
+    std::span<float> swap_and_sync() {
+        float* active_ptr = cron_dma_swap_and_sync(&handle);
+        return {active_ptr, buffer_elements};
+    }
+
+    std::span<float> active_buffer() noexcept {
+        return handle.current_active == 0 ? std::span<float>{ping} : std::span<float>{pong};
+    }
+};
+
+// ----------------------------------------------------------------------------
+// 14. On-Silicon Neuromorphic Synaptic Plasticity (Online Hebbian / Oja's Rule)
+// ----------------------------------------------------------------------------
+
+class NeuromorphicPlasticity {
+public:
+    int d_in;
+    int d_out;
+    std::vector<float> weights; // [d_out * d_in]
+
+    NeuromorphicPlasticity(int in_dim, int out_dim)
+        : d_in(in_dim), d_out(out_dim), weights(static_cast<size_t>(in_dim) * out_dim, 0.01f) {}
+
+    void online_hebbian_step(
+        std::span<const float> pre_syn,
+        std::span<const float> post_syn,
+        float learning_rate = 0.01f
+    ) {
+        if (static_cast<int>(pre_syn.size()) < d_in || static_cast<int>(post_syn.size()) < d_out) {
+            throw std::invalid_argument("NeuromorphicPlasticity: activation dimension mismatch");
+        }
+        cron_hebbian_oja_step_f32(
+            weights.data(),
+            pre_syn.data(),
+            post_syn.data(),
+            d_in,
+            d_out,
+            learning_rate
+        );
+    }
+
+    std::span<float> get_weights() noexcept { return weights; }
+    std::span<const float> get_weights() const noexcept { return weights; }
+};
+
 } // namespace cron
 
 #endif /* CRON_RT_HPP */

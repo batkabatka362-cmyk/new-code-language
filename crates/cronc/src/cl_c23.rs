@@ -365,6 +365,19 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str("    core->ai_isa_ops_count++;\n");
                             out.push_str(&format!("    core->r[{}] = (core->r[{}] + core->r[{}]) >> 1; // Sub-Byte Streaming FlashAttention\n", d, d, s));
                         }
+                        "XR" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str("    core->spatial_broadcast_count++;\n");
+                            out.push_str(&format!("    {{\n        uint32_t exp_id = (core->r[{}] >> 4) & 0x0Fu;\n        uint32_t tgt_core = (exp_id * 16u) % 256u;\n        core->r[{}] = (exp_id << 16) | tgt_core; // MoE 4D-Torus Dynamic Packet Route\n    }}\n", s, d));
+                        }
+                        "PF" => {
+                            out.push_str("    core->ai_isa_ops_count++;\n");
+                            out.push_str(&format!("    {{\n        size_t dst_a = core->r[{}] & 0x3FFFu;\n        size_t src_a = core->r[{}] & 0x3FFFu;\n        for (size_t i = 0; i < 16; i++) core->dmem[(dst_a + i) % 16384] = core->dmem[(src_a + i) % 16384]; // Zero-Overhead DMA Prefetch\n    }}\n", d, s));
+                        }
+                        "HB" => {
+                            out.push_str("    core->stdp_updates_count++;\n");
+                            out.push_str(&format!("    {{\n        int32_t pre = (int32_t)(core->r[{}] & 0xFFu);\n        int32_t post = (int32_t)((core->r[{}] >> 8) & 0xFFu);\n        size_t syn_idx = (size_t)(core->r[{}] & 0x0Fu);\n        int32_t cur_w = (int32_t)core->stdp_weights[syn_idx];\n        int32_t delta = ((pre * post) - ((post * post * cur_w) >> 7)) >> 4;\n        int32_t updated = cur_w + delta;\n        if (updated > 127) updated = 127;\n        if (updated < -127) updated = -127;\n        core->stdp_weights[syn_idx] = (int8_t)updated;\n        core->r[{}] = (uint32_t)(updated & 0xFF);\n    }}\n", s, s, d, d));
+                        }
                         "RF" => {
                             out.push_str("    core->reversible_ops_count++;\n");
                             out.push_str(&format!("    cron_reversible_swap(&core->r[{}], &core->r[{}]);\n", d, s));

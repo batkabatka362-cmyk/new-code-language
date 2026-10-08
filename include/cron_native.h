@@ -432,6 +432,74 @@ CRON_EXPORT void cron_cluster_distributed_gemm_f32(
     int num_chips
 );
 
+// ============================================================================
+// Mixture of Experts (MoE) Dynamic 4D-Torus Packet Router
+// ============================================================================
+
+typedef struct {
+    uint32_t expert_id;       // Target expert ID (0..num_experts-1)
+    uint8_t  target_core_id;  // 4D Torus destination core ID
+    float    routing_weight;  // Normalized gating weight (Softmax over Top-K)
+} cron_moe_route_t;
+
+CRON_EXPORT void cron_moe_route_topk(
+    const float* gating_logits,
+    int num_experts,
+    int top_k,
+    cron_moe_route_t* routes_out
+);
+
+CRON_EXPORT float cron_moe_dispatch_and_gate_power(
+    const float* token_input,
+    int d_model,
+    const cron_moe_route_t* routes,
+    int top_k,
+    int total_experts,
+    float* expert_workspace
+);
+
+// ============================================================================
+// Zero-Overhead DMA Prefetch Double-Buffering
+// ============================================================================
+
+typedef struct {
+    float* sram_ping;         // Active compute buffer in 64KB SRAM
+    float* sram_pong;         // Prefetch buffer in 64KB SRAM
+    size_t buffer_size_bytes; // Size of each buffer in bytes
+    int current_active;       // 0 for ping, 1 for pong
+    bool dma_in_flight;       // Flag indicating asynchronous prefetch in flight
+} cron_dma_double_buffer_t;
+
+CRON_EXPORT void cron_dma_double_buffer_init(
+    cron_dma_double_buffer_t* db,
+    float* sram_ping,
+    float* sram_pong,
+    size_t buffer_size_bytes
+);
+
+CRON_EXPORT void cron_dma_prefetch_async(
+    cron_dma_double_buffer_t* db,
+    const float* src_dram_hbm,
+    size_t count_floats
+);
+
+CRON_EXPORT float* cron_dma_swap_and_sync(
+    cron_dma_double_buffer_t* db
+);
+
+// ============================================================================
+// On-Silicon Neuromorphic Synaptic Plasticity (Online Hebbian / Oja's Rule)
+// ============================================================================
+
+CRON_EXPORT void cron_hebbian_oja_step_f32(
+    float* W,
+    const float* pre_syn,
+    const float* post_syn,
+    int d_in,
+    int d_out,
+    float learning_rate
+);
+
 #ifdef __cplusplus
 }
 #endif

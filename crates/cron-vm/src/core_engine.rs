@@ -506,6 +506,42 @@ impl CoreEngine {
                 let s = if src > 0 { src } else { 0 };
                 self.registers[d] = (self.registers[d].wrapping_add(self.registers[s])) >> 1;
             }
+            "XR" => {
+                // Mixture of Experts (MoE) 4D-Torus Dynamic Packet Router
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { d };
+                let expert_id = (self.registers[s] >> 4) & 0x0F;
+                let target_core = (expert_id * 16) % 256;
+                self.registers[d] = (expert_id << 16) | (target_core as u32);
+                self.spatial_broadcast_count += 1;
+            }
+            "PF" => {
+                // Zero-Overhead DMA Prefetch Double-Buffering
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { d };
+                let sram_offset = (self.registers[d] & 0x3FFF) as usize;
+                let pgas_src = (self.registers[s] & 0x3FFF) as usize;
+                for i in 0..16 {
+                    let src_idx = (pgas_src + i) % self.dmem.len();
+                    let dst_idx = (sram_offset + i) % self.dmem.len();
+                    self.dmem[dst_idx] = self.dmem[src_idx];
+                }
+                self.dma_transfers += 1;
+            }
+            "HB" => {
+                // On-Silicon Neuromorphic Synaptic Plasticity Step (Online Hebbian / Oja's rule in SRAM)
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { d };
+                let pre_act = (self.registers[s] & 0xFF) as i32;
+                let post_act = ((self.registers[s] >> 8) & 0xFF) as i32;
+                let syn_idx = (self.registers[d] & 0x0F) as usize;
+                let old_w = self.stdp_weights[syn_idx] as i32;
+                let dw = ((pre_act * post_act) - ((post_act * post_act * old_w) >> 7)) >> 4;
+                let new_w = (old_w + dw).clamp(-127, 127);
+                self.stdp_weights[syn_idx] = new_w as i8;
+                self.registers[d] = (new_w as u32) & 0xFF;
+                self.stdp_updates_count += 1;
+            }
             "BK" => {
                 // Reversible Backward Invert (Brain 3)
                 self.reversible_ops_count += 1;
