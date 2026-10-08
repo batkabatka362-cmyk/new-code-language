@@ -45,17 +45,20 @@ pub const OP_TABLE: &[&str] = &[
     "PS", "CA", "CD", "AW", "WH", "LF", "LI", "TX", "RX", "IR", // 30..39
     "DF", "AC", "SN", "SC", "RN", "PL", "RT", "HL", "=0", "=1", // 40..49
     "==", "bb", "CC", "DD", "EE", "BB", "FF", "11", "88", "99", // 50..59
-    "aa", "ee", "00", "P0",                                     // 60..63
+    "aa", "ee", "00", "P0", "P1", "TI", "TD", "TR", "TW", "ZL", // 60..69
+    "TC", "TM", "DE", "DN", "DS", "UN", "RM", "SM", "SZ", "QK", // 70..79
+    "QV", "QA", "XR", "PF", "HB", "SI", "GE", "SS", "AD", "ML", // 80..89
+    "DV", "EX", "SQ", "FX", "CP", "XO", "RO", "MA", "CO", "DA", // 90..99
+    "SE", "NE", "RV", "LD", "SR", "LB", "BY", "JS", "LT", "BG", // 100..109
+    "BZ", "BN", "JP", "CI", "CF", "PR", "FU", "FE", "cc", "co", // 110..119
+    "dd", "ff", "_N", "M0", "M1", "M2", "A0", "B0",             // 120..127
 ];
 
 pub const MODE_TABLE: &[char] = &[
     '$', '#', '@', '+', '-', '*', '/', '%', '&', '|', // 0..9
-    '^', '~', '=', '<', '>', '?', '!', 'G', ':', ';', // 10..19
-    ',', '.', '_', '\'', '0', '1', '2', '3', '4', '5', // 20..29
-    '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', // 30..39
-    'X', 'Y', 'Z', 'W', 'H', 'L', 'S', 'U', 'V', 'T', // 40..49
-    'M', 'N', 'O', 'P', 'Q', 'R', 'I', 'J', 'K', 'E', // 50..59
-    '?', '!', '/', '\\',                              // 60..63
+    '^', '~', '=', '<', '>', '?', '!', ':', ';', ',', // 10..19
+    '.', '_', '\'', '0', '1', '2', '3', '4', '5', '6', // 20..29
+    '\\', '`',                                        // 30..31
 ];
 
 pub fn opcode_to_id(op: &str) -> u8 {
@@ -166,13 +169,21 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
         };
 
         return (prefix_bits << 30)
-            | ((op_id as u32 & 0x3F) << 24)
-            | ((dest_bank & 0xF) << 20)
+            | ((op_id as u32 & 0x7F) << 23)
+            | ((dest_bank & 0x7) << 20)
             | ((dest_reg & 0xF) << 16)
             | (imm16 as u32);
     }
 
-    // Standard Slot Encoding
+    // Standard Slot Encoding:
+    // [31:30] Prefix (2 bits)
+    // [29:23] Opcode ID (7 bits, 0..127)
+    // [22:19] Dest Bank (4 bits)
+    // [18:15] Dest Reg (4 bits)
+    // [14:10] Mode Symbol ID (5 bits, 0..31)
+    // [9:6]   Src Reg (4 bits)
+    // [5:2]   Immediate Nibble (4 bits)
+    // [1:0]   Terminator (2 bits)
     let op_str: String = if chars.len() >= 3 {
         chars[1..3].iter().collect()
     } else {
@@ -207,10 +218,10 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
     let term_bits = terminator_to_bits(terminator);
 
     (prefix_bits << 30)
-        | ((op_id as u32 & 0x3F) << 24)
-        | ((dest_bank & 0xF) << 20)
-        | ((dest_reg & 0xF) << 16)
-        | ((mode_id as u32 & 0x3F) << 10)
+        | ((op_id as u32 & 0x7F) << 23)
+        | ((dest_bank & 0xF) << 19)
+        | ((dest_reg & 0xF) << 15)
+        | ((mode_id as u32 & 0x1F) << 10)
         | ((src_reg & 0xF) << 6)
         | ((imm_nibble & 0xF) << 2)
         | (term_bits & 0x3)
@@ -220,19 +231,22 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
 pub fn decode_u32_to_slot(encoded: u32) -> String {
     let prefix_bits = (encoded >> 30) & 0x3;
     let prefix = bits_to_prefix(prefix_bits);
-    let op_id = ((encoded >> 24) & 0x3F) as u8;
+    let op_id = ((encoded >> 23) & 0x7F) as u8;
     let op_str = id_to_opcode(op_id);
-    let dest_bank = (encoded >> 20) & 0xF;
-    let dest_reg = (encoded >> 16) & 0xF;
 
     // Check for Immediate Load Slot
     if prefix == '\'' && (op_str == "==" || op_str == "=0" || op_str == "=1") {
+        let dest_bank = (encoded >> 20) & 0x7;
+        let dest_reg = (encoded >> 16) & 0xF;
         let imm16 = (encoded & 0xFFFF) as u16;
-        return format!("'={:1X}{:1X}#{:04X}>", dest_bank, dest_reg, imm16);
+        let op_c = if op_str == "==" { '=' } else if op_str == "=1" { '1' } else { '0' };
+        return format!("'={}{:1X}{:1X}#{:03X}>", op_c, dest_bank, dest_reg, imm16 & 0xFFF);
     }
 
     // Standard Slot Decoding
-    let mode_id = ((encoded >> 10) & 0x3F) as u8;
+    let dest_bank = (encoded >> 19) & 0xF;
+    let dest_reg = (encoded >> 15) & 0xF;
+    let mode_id = ((encoded >> 10) & 0x1F) as u8;
     let mode_char = id_to_mode(mode_id);
     let src_reg = (encoded >> 6) & 0xF;
     let imm_nibble = (encoded >> 2) & 0xF;
@@ -380,4 +394,33 @@ pub fn disassemble_clb_to_cl(bytes: &[u8]) -> Result<String, String> {
     }
 
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clb_ai_opcodes_roundtrip() {
+        let opcodes = ["_SZ08$900>", "_QK01$400>", "_QV02$500>", "_QA04$100>", "_XR05$100>", "_PF03@200>", "_HB00#400>"];
+        for slot in opcodes {
+            let encoded = encode_slot_to_u32(slot);
+            assert_ne!(encoded, 0);
+            let decoded = decode_u32_to_slot(encoded);
+            assert_eq!(&decoded[0..3], &slot[0..3], "Prefix and Opcode mismatch");
+            assert_eq!(&decoded[3..5], &slot[3..5], "Dest register mismatch");
+        }
+    }
+
+    #[test]
+    fn test_clb_assemble_disassemble() {
+        let sample = "B0000: _SZ08$900> _QK01$400> _QV02$500> _QA04$100>\nB0001: _XR05$100> _PF03@200> _HB00#400> _HL00!000>\n";
+        let binary = assemble_cl_to_clb(sample).expect("Assembly should succeed");
+        assert_eq!(&binary[0..4], &CLB_MAGIC);
+        let disasm = disassemble_clb_to_cl(&binary).expect("Disassembly should succeed");
+        assert!(disasm.contains("_SZ"));
+        assert!(disasm.contains("_XR"));
+        assert!(disasm.contains("_PF"));
+        assert!(disasm.contains("_HB"));
+    }
 }
