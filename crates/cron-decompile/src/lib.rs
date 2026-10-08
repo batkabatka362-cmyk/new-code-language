@@ -34,6 +34,28 @@ pub fn parse_slot_str(slot: &str) -> Option<ParsedSlot> {
     }
     let chars: Vec<char> = slot.chars().collect();
     let prefix = chars[0];
+    if slot.starts_with('`') {
+        // Mode64 4D Spherical Curvature ISA token: ` W X Z Q Step ALU Reg Val Term
+        let op = "SPH".to_string();
+        let dest_reg = if chars.len() >= 8 { chars[7].to_digit(16).unwrap_or(0) as usize } else { 0 };
+        let mode = if chars.len() >= 5 { chars[4] } else { '+' };
+        let term = chars.last().copied().unwrap_or('>');
+        let imm_val = if chars.len() >= 9 { chars[8].to_digit(16) } else { None };
+
+        return Some(ParsedSlot {
+            raw: slot.to_string(),
+            prefix: '`',
+            op,
+            dest: dest_reg,
+            dest_bank: 0,
+            mode,
+            src: 0,
+            parity: '0',
+            imm: imm_val.unwrap_or(0) as usize,
+            term,
+            imm_val,
+        });
+    }
 
     if slot.starts_with("'=") || slot.starts_with("==") {
         // Immediate load slot: '= <dest_bank> <dest_reg> # <imm16> >
@@ -192,6 +214,7 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     let has_barrier = all_slots.iter().any(|s| s.op == "bb");
     let has_optical = all_slots.iter().any(|s| s.op == "OP" || s.op == "WD");
     let has_fuse = all_slots.iter().any(|s| s.op == "FU" || s.op == "FE");
+    let has_sphere = all_slots.iter().any(|s| s.prefix == '`' || s.op == "SPH");
     let has_clifford = cl_code.contains(".clifford")
         || cl_code.contains("clifford_so4_rot")
         || (all_slots.iter().any(|s| s.op == "TT") && all_slots.iter().filter(|s| s.op == "MD").count() >= 4);
@@ -204,6 +227,11 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     out.push_str("// ============================================================================\n\n");
     out.push_str(&format!(".MODULE {}\n", module_name));
     out.push_str(".ENTRY _main\n\n");
+
+    if has_sphere {
+        out.push_str("// CRON 4D Hyperspherical Geodesic Curvature Engine (0 FLOPs)\n");
+        out.push_str("use cron.sphere::{sphere_geodesic_step, SphereMatrix}\n\n");
+    }
 
     if has_clifford {
         out.push_str("// CRON Cl(4,0) Spacetime Clifford Algebra Engine\n");
@@ -310,6 +338,20 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
                         out.push_str(&format!("{}let {}: u32 = {:#06X}\n", indent, var_name, val));
                         declared_names.insert(var_name.clone());
                     }
+                    reg_exprs[d] = var_name.clone();
+                    last_assigned_var = var_name;
+                }
+
+                "SPH" => {
+                    let d_name = reg_exprs[d].clone();
+                    let val = slot.imm_val.unwrap_or(slot.imm as u32);
+                    let count = ssa_counter.entry(format!("r{}", d)).or_insert(0);
+                    *count += 1;
+                    let var_name = format!("r{}_{}", d, count);
+                    out.push_str(&format!(
+                        "{}let {} = sphere_geodesic_step({}, val=0x{:X})\n",
+                        indent, var_name, d_name, val
+                    ));
                     reg_exprs[d] = var_name.clone();
                     last_assigned_var = var_name;
                 }
@@ -1003,6 +1045,19 @@ B0001: _PO03+102> _FE00$000> _bb00$000> _HL00$000>
         assert!(decompiled.contains("fuse [tile=(4, 4), stream=SRAM] {"));
         assert!(decompiled.contains("const_r1 + const_r2"));
         assert!(decompiled.contains("}"));
+    }
+
+    #[test]
+    fn test_decompile_4d_sphere_isa() {
+        let cl_code = r#"
+B0000: '=01#000A> _NO00$000> _NO00$000> _NO00$000>
+B0001: `012+0G15> _NO00$000> _NO00$000> _HL00$000>
+"#;
+        let decompiled = decompile_cl(cl_code).expect("Should decompile 4D sphere microcode");
+        assert!(decompiled.contains("// CRON 4D Hyperspherical Geodesic Curvature Engine (0 FLOPs)"));
+        assert!(decompiled.contains("use cron.sphere::{sphere_geodesic_step, SphereMatrix}"));
+        assert!(decompiled.contains("sphere_geodesic_step("));
+        assert!(decompiled.contains("val=0x5"));
     }
 }
 
