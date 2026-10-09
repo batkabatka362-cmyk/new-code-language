@@ -2502,6 +2502,9 @@ fn main() {
         "cl-topological" | "topological" => {
             cron_cli::topological_commands::handle_topological_command(&args);
         }
+        "cl-topological-lm" | "cl-lm" | "topological-lm" => {
+            cron_cli::topological_commands::handle_topological_lm_command(&args);
+        }
         "cl-sphere-compile" | "sphere-compile" => {
             cron_cli::sphere_commands::handle_sphere_compile(&args);
         }

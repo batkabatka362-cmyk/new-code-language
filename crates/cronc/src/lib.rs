@@ -103,6 +103,7 @@ pub mod cl_lsp;
 pub mod cl_visualizer;
 pub mod cl_clifford;
 pub mod cl_topological;
+pub mod cl_topological_lm;
 pub mod cl_hyperdimensional;
 pub mod cl_neuromodulation;
 pub mod cl_sleep_engine;
@@ -251,6 +252,11 @@ pub use cl_topological::{
     CorticalLayerKind, PhaseToken, PhaseTokenEngine, ReversibleFsm8, SnakeState,
     TopologicalCycleTelemetry, TopologicalHydraulicUnit, TopologicalInstruction,
     TopologicalUniverse128, TransitionMode, UnifiedTopologicalRuntime, WaveInterferenceAttention,
+};
+
+pub use cl_topological_lm::{
+    CorticalColumnUnit, PhaseKvCache, TopologicalBrainTransformer, TopologicalVocab,
+    VocabPhaseEntry,
 };
 
 pub use cl_swarm_wafer::{

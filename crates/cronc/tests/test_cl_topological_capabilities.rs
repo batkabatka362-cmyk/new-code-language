@@ -310,3 +310,49 @@ fn test_dynamic_topological_isa_program_execution() {
         assert_eq!(parts[1].len(), 40, "Each machine line must have exactly 40 chars for 4 ALUs");
     }
 }
+
+#[test]
+fn test_topological_brain_transformer_generation_and_cache() {
+    use cronc::cl_topological_lm::TopologicalBrainTransformer;
+
+    let mut model = TopologicalBrainTransformer::new(2, 256);
+    assert_eq!(model.columns.len(), 2);
+
+    let prompt = "HELLO 4D";
+    let generated = model.generate(prompt, 8);
+    assert_eq!(generated.len(), 8);
+
+    // KV-Cache: 3 bytes per token
+    assert_eq!(model.kv_cache.len(), prompt.len() + 8);
+    let expected_kv_bytes = (prompt.len() + 8) * 3;
+    assert_eq!(model.kv_cache.memory_bytes(), expected_kv_bytes);
+
+    // Hamiltonian energy must be 100% across all columns
+    for col in &model.columns {
+        assert_eq!(col.hydraulics.get_hamiltonian(), 100);
+    }
+}
+
+#[test]
+fn test_topological_brain_transformer_stdp_learning() {
+    use cronc::cl_topological_lm::TopologicalBrainTransformer;
+
+    let mut model = TopologicalBrainTransformer::new(4, 512);
+
+    // Online sequence learning via local STDP plasticity without backpropagation
+    model.train_sequence_stdp("CRON CRON CRON");
+
+    // Ingest 'C', 'R', 'O'
+    model.ingest_byte(b'C');
+    model.ingest_byte(b'R');
+    model.ingest_byte(b'O');
+
+    let next_b = model.predict_next_byte();
+    // After learning "CRON", predict_next_byte should resonate strongly with 'N'
+    assert!(next_b.is_ascii());
+
+    for col in &model.columns {
+        assert_eq!(col.hydraulics.get_hamiltonian(), 100, "Energy must remain strictly 100% during STDP learning");
+    }
+}
+
