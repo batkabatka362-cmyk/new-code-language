@@ -49,6 +49,7 @@ fn print_help() {
     println!("    cl-run <file.cl>               Execute .cl machine code in RAM via sub-microsecond JIT engine");
     println!("    cl-llvm <file.cl> [-o out.ll]  Transpile .cl directly into SSA LLVM Intermediate Representation");
     println!("    cl-verilog <file.cl> [-o out.v] Synthesize standalone Verilog RTL hardware core from .cl");
+    println!("    matrix4 [opts]                 Flagship Matrix 4.1 4D Spherical Geodesic Cortex Supercomputer Project");
     println!("    cl-topological <file.cl> [opts] 4D Clifford Topological Engine (Zero-GEMM, Zero-DRAM, Parity Balancer, RTL Synth)");
     println!("    cl-sphere-infer [weights]      4D Sphere Matrix Multiplier-Free Inference Engine (0 FLOPs, 256-Core Torus)");
     println!("    cl-sphere-compile [weights]    Compile Neural Weights to 4D Sphere Sovereign Microcode (.cl)");
@@ -2520,6 +2521,9 @@ fn main() {
         }
         "c23" | "cl-c23" => {
             cron_cli::sphere_commands::handle_c23(&args);
+        }
+        "matrix4" | "cl-matrix4" | "matrix" => {
+            cron_cli::matrix4_commands::handle_matrix4_command(&args);
         }
         "cl-heal" => {
             if args.len() < 3 {

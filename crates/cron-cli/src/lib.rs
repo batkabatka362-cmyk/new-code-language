@@ -11,3 +11,4 @@ pub mod bench_server;
 pub mod chat;
 pub mod sphere_commands;
 pub mod topological_commands;
+pub mod matrix4_commands;

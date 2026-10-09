@@ -187,6 +187,9 @@ pub struct TopologicalBrainTransformer {
     pub columns: Vec<CorticalColumnUnit>,
     pub kv_cache: PhaseKvCache,
     pub total_tokens_processed: usize,
+    pub transitions: Vec<u16>,
+    pub last_byte: Option<u8>,
+    pub recent_bytes: Vec<u8>,
 }
 
 impl TopologicalBrainTransformer {
@@ -200,11 +203,20 @@ impl TopologicalBrainTransformer {
             columns: cols,
             kv_cache,
             total_tokens_processed: 0,
+            transitions: vec![0u16; 65536],
+            last_byte: None,
+            recent_bytes: Vec::with_capacity(16),
         }
     }
 
     /// Process a single byte token through all cortical columns and cache it
     pub fn ingest_byte(&mut self, b: u8) {
+        self.last_byte = Some(b);
+        self.recent_bytes.push(b);
+        if self.recent_bytes.len() > 16 {
+            self.recent_bytes.remove(0);
+        }
+
         self.total_tokens_processed += 1;
         let entry = self.vocab.get_by_byte(b).cloned().unwrap_or_else(|| {
             VocabPhaseEntry::new(b as usize, b, CorticalLayerKind::Layer4Sensory)
@@ -228,11 +240,19 @@ impl TopologicalBrainTransformer {
         let motor_snake = &primary_col.snakes[3]; // Layer V Motor output
         let sensory_snake = &primary_col.snakes[2]; // Layer IV Sensory
 
+        let last_b = self.last_byte.unwrap_or(b' ');
+        let last_b_idx = (last_b as usize) << 8;
+
         let mut best_byte = b' ';
         let mut max_resonance: i64 = i64::MIN;
 
         for entry in &self.vocab.entries {
             let mut score: i64 = 0;
+
+            // Bias towards printable ASCII for textual coherence
+            if entry.token_byte.is_ascii_graphic() || entry.token_byte == b' ' || entry.token_byte == b'\n' {
+                score += 80;
+            }
 
             // 1. Constructive Phase Resonance against motor output
             let dx_m = (entry.phase.theta_x as i32 - motor_snake.x as i32).abs();
@@ -244,7 +264,34 @@ impl TopologicalBrainTransformer {
             let phase_lut = WaveInterferenceAttention::INTERFERENCE_LUT[motor_snake.spin as usize][entry.spin as usize] as i64;
             score += spatial_motor as i64 * phase_lut;
 
-            // 2. Contextual Resonance over recent Phase KV-Cache tokens (last 8)
+            // 2. Synaptic STDP Transition Geodesic Boost
+            let trans_idx = last_b_idx | (entry.token_byte as usize);
+            let trans_weight = (self.transitions[trans_idx] as i64).min(400);
+            if trans_weight > 0 {
+                let appeared_recently = self.recent_bytes.iter().rev().take(3).any(|&b| b == entry.token_byte);
+                if !appeared_recently {
+                    score += trans_weight * 12;
+                }
+            }
+
+            // 3. Dynamic Refractory Penalty (prevents immediate repetitive stuttering and n-gram cycles)
+            if let Some(&last) = self.recent_bytes.last() {
+                if entry.token_byte == last {
+                    score -= 800; // avoid immediate single-character repeating (e.g. AAAA)
+                }
+            }
+            if self.recent_bytes.len() >= 2 {
+                let second_last = self.recent_bytes[self.recent_bytes.len() - 2];
+                if entry.token_byte == second_last {
+                    score -= 500; // avoid 2-char ping-pong (e.g. ABABAB)
+                }
+            }
+            let recent_occurrences = self.recent_bytes.iter().filter(|&&b| b == entry.token_byte).count();
+            if recent_occurrences >= 2 {
+                score -= (recent_occurrences as i64) * 600;
+            }
+
+            // 4. Contextual Resonance over recent Phase KV-Cache tokens (last 8)
             let cache_len = self.kv_cache.len();
             let recent_slice = if cache_len > 8 {
                 &self.kv_cache.tokens[cache_len - 8..]
@@ -258,7 +305,7 @@ impl TopologicalBrainTransformer {
                 score += rec_score * recency_discount;
             }
 
-            // 3. Bi-Directional Sensory Alignment
+            // 5. Bi-Directional Sensory Alignment
             let dx_s = (entry.phase.theta_x as i32 - sensory_snake.x as i32).abs();
             let dx_s = dx_s.min(100 - dx_s);
             score += (100 - dx_s) as i64;
@@ -296,24 +343,33 @@ impl TopologicalBrainTransformer {
         }
 
         for window in bytes.windows(2) {
-            let pre_b = window[0];
-            let post_b = window[1];
+            let pre_b = window[0] as usize;
+            let post_b = window[1] as usize;
 
-            // Fetch vocab entries
+            // Fetch pre-synaptic phase and post-synaptic spin
             let (pre_phase, post_spin) = {
-                let pre = &self.vocab.entries[pre_b as usize];
-                (pre.phase, self.vocab.entries[post_b as usize].spin)
+                let pre = &self.vocab.entries[pre_b];
+                (pre.phase, self.vocab.entries[post_b].spin)
             };
 
             // Ingest pre-synaptic token
-            self.ingest_byte(pre_b);
+            self.ingest_byte(window[0]);
 
-            // STDP Phase alignment: adapt post-synaptic token coords towards pre-synaptic resonance
-            let post_entry = &mut self.vocab.entries[post_b as usize];
+            // STDP Phase alignment: adapt post-synaptic token coords towards pre-synaptic resonance on S^3
+            let post_entry = &mut self.vocab.entries[post_b];
             post_entry.phase.theta_x = ((post_entry.phase.theta_x as u32 * 3 + pre_phase.theta_x as u32) / 4) as u8 % 100;
             post_entry.phase.theta_z = ((post_entry.phase.theta_z as u32 * 3 + pre_phase.theta_z as u32) / 4) as u8 % 100;
             post_entry.spin = post_spin;
+
+            // Strengthen directed transition geodesic on S^3
+            let idx = (pre_b << 8) | post_b;
+            self.transitions[idx] = self.transitions[idx].saturating_add(64);
         }
+        if let Some(&last) = bytes.last() {
+            self.ingest_byte(last);
+        }
+        self.recent_bytes.clear();
+        self.last_byte = None;
     }
 
     /// Hardware Resource Audit: returns total active RAM in bytes
@@ -321,7 +377,8 @@ impl TopologicalBrainTransformer {
         let vocab_size = self.vocab.entries.len() * std::mem::size_of::<VocabPhaseEntry>();
         let column_size = self.columns.len() * std::mem::size_of::<CorticalColumnUnit>();
         let cache_size = self.kv_cache.memory_bytes();
-        vocab_size + column_size + cache_size
+        let trans_size = self.transitions.len() * 2;
+        vocab_size + column_size + cache_size + trans_size
     }
 
     /// Serialize complete topological model to binary .cl_brain format
@@ -380,6 +437,26 @@ impl TopologicalBrainTransformer {
             buf.push(tok.theta_z);
             buf.push(tok.depth_w);
         }
+
+        // Transitions matrix: 65536 * 2 bytes
+        buf.extend_from_slice(&(self.transitions.len() as u32).to_le_bytes());
+        for &t in &self.transitions {
+            buf.extend_from_slice(&t.to_le_bytes());
+        }
+
+        // Active state context (last_byte and recent_bytes)
+        match self.last_byte {
+            Some(b) => {
+                buf.push(1);
+                buf.push(b);
+            }
+            None => {
+                buf.push(0);
+                buf.push(0);
+            }
+        }
+        buf.extend_from_slice(&(self.recent_bytes.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&self.recent_bytes);
 
         buf
     }
@@ -540,11 +617,48 @@ impl TopologicalBrainTransformer {
             }
         }
 
+        let mut transitions = vec![0u16; 65536];
+        if offset + 4 <= bytes.len() {
+            let trans_len = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+            let to_read = trans_len.min(65536);
+            for idx in 0..to_read {
+                if offset + 2 <= bytes.len() {
+                    transitions[idx] = u16::from_le_bytes([bytes[offset], bytes[offset+1]]);
+                    offset += 2;
+                }
+            }
+        }
+
+        let mut last_byte = None;
+        if offset + 2 <= bytes.len() {
+            let has_last = bytes[offset] == 1;
+            let last_val = bytes[offset + 1];
+            offset += 2;
+            if has_last {
+                last_byte = Some(last_val);
+            }
+        }
+
+        let mut recent_bytes = Vec::with_capacity(16);
+        if offset + 4 <= bytes.len() {
+            let rlen = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+            let to_read = rlen.min(16);
+            if offset + to_read <= bytes.len() {
+                recent_bytes.extend_from_slice(&bytes[offset..offset+to_read]);
+                let _ = rlen;
+            }
+        }
+
         Ok(Self {
             vocab,
             columns,
             kv_cache,
             total_tokens_processed,
+            transitions,
+            last_byte,
+            recent_bytes,
         })
     }
 

@@ -207,7 +207,7 @@ EXAMPLES:
         return;
     }
 
-    let prompt = &args[2];
+    let mut prompt = "CRON 4D Topological".to_string();
     let mut generate_count = 16usize;
     let mut train_text: Option<String> = None;
     let mut dataset_file: Option<String> = None;
@@ -217,9 +217,13 @@ EXAMPLES:
     let mut columns = 4usize;
     let mut context_len = 512usize;
 
-    let mut i = 3;
+    let mut i = 2;
     while i < args.len() {
         match args[i].as_str() {
+            "--prompt" | "-p" if i + 1 < args.len() => {
+                prompt = args[i + 1].clone();
+                i += 2;
+            }
             "--generate" | "-g" if i + 1 < args.len() => {
                 generate_count = args[i + 1].parse().unwrap_or(16);
                 i += 2;
@@ -251,6 +255,10 @@ EXAMPLES:
             "--context" | "-k" if i + 1 < args.len() => {
                 context_len = args[i + 1].parse().unwrap_or(512);
                 i += 2;
+            }
+            arg if !arg.starts_with('-') => {
+                prompt = arg.to_string();
+                i += 1;
             }
             _ => {
                 i += 1;
@@ -310,7 +318,7 @@ EXAMPLES:
     }
 
     println!("\n[INGESTION] Prompt: \"{}\"", prompt);
-    let output = model.generate(prompt, generate_count);
+    let output = model.generate(&prompt, generate_count);
 
     let kv_bytes = model.kv_cache.memory_bytes();
     let fp16_equiv_bytes = model.kv_cache.len() * 512;
