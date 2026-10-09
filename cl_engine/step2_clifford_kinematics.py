@@ -24,10 +24,6 @@ import random
 # Windows UTF-8 stdout
 sys.stdout.reconfigure(encoding='utf-8')
 
-print("=" * 80)
-print(" АЛХАМ 2: ОРОН ЗАЙН ДИСКРЕТ КЛИФФОРД ХӨДӨЛГӨӨНИЙ ДҮРМҮҮД (KINEMATICS)")
-print("=" * 80)
-
 class CliffordKinematicsEngine:
     def __init__(self):
         # 4 Могойн 4D координатууд: W[0..99], X[0..99], Z[0..99]
@@ -109,58 +105,65 @@ class CliffordKinematicsEngine:
                         deflections += 1
         return deflections
 
-print("\n--- 1. ХОЁР ГОРИМЫН БОДИТ ХАРЬЦУУЛАЛТЫН ТУРШИЛТ ---")
-engine = CliffordKinematicsEngine()
+def run_clifford_kinematics_lab():
+    print("=" * 80)
+    print(" АЛХАМ 2: ОРОН ЗАЙН ДИСКРЕТ КЛИФФОРД ХӨДӨЛГӨӨНИЙ ДҮРМҮҮД (KINEMATICS)")
+    print("=" * 80)
+    print("\n--- 1. ХОЁР ГОРИМЫН БОДИТ ХАРЬЦУУЛАЛТЫН ТУРШИЛТ ---")
+    engine = CliffordKinematicsEngine()
 
-print("Туршилт: Могой 0-ийг 'Бүтэн ороох' горимоор, Могой 1-ийг 'Шууд нэвтрэх' горимоор 105 такт ажиллуулав:")
-for t in range(105):
-    # Могой 0: Горим А (Бүтэн ороож дуусаад W давхарга шилжинэ)
-    mode_a, len_a = engine.step_full_wrap_mode(0, target_depth_direction=+1)
-    
-    # Могой 1: Горим Б (Шууд W гүн рүү цоолно)
-    mode_b, len_b = engine.step_direct_tunnel_mode(1, dw=+1 if t % 10 == 0 else 0, dx=1, dz=0)
-
-print(f"  Могой 0 (Горим А - Бүтэн Ороолт) : Одоогийн гүн W={engine.w[0]}, Туулсан замын урт={engine.total_path_length[0]}")
-print(f"  Могой 1 (Горим Б - Шууд Нэвтрэлт): Одоогийн гүн W={engine.w[1]}, Туулсан замын урт={engine.total_path_length[1]}")
-
-print("\n--- 2. 'ТАХИР ЗҮҮ'-НИЙ БРАЙД ДИФЛЕКТОРЫН 50,000-АЛХАМТ ШАЛГАЛТ ---")
-sim_steps = 50000
-total_deflections = 0
-detected_collisions = 0
-
-random.seed(12345)
-for t in range(sim_steps):
-    # 4 могой санамсаргүй чиглэлд хурдтай шилжинэ
-    for k in range(4):
-        dw = random.choice([-1, 0, 1])
-        dx = random.choice([0, 1, 2])
-        dz = random.choice([0, 1, 2])
-        engine.step_direct_tunnel_mode(k, dw, dx, dz)
+    print("Туршилт: Могой 0-ийг 'Бүтэн ороох' горимоор, Могой 1-ийг 'Шууд нэвтрэх' горимоор 105 такт ажиллуулав:")
+    for t in range(105):
+        # Могой 0: Горим А (Бүтэн ороож дуусаад W давхарга шилжинэ)
+        mode_a, len_a = engine.step_full_wrap_mode(0, target_depth_direction=+1)
         
-    # Брайдын дифлектор шалгаж хамгаалах
-    deflect_count = engine.apply_braid_deflector()
-    total_deflections += deflect_count
-    
-    # Бодит 4D орон зайд мөргөлдөөн гарсан эсэхийг эцсийн байдлаар магадлах
-    for i in range(4):
-        for j in range(i + 1, 4):
-            if engine.x[i] == engine.x[j] and engine.z[i] == engine.z[j] and engine.w[i] == engine.w[j]:
-                detected_collisions += 1
+        # Могой 1: Горим Б (Шууд W гүн рүү цоолно)
+        mode_b, len_b = engine.step_direct_tunnel_mode(1, dw=+1 if t % 10 == 0 else 0, dx=1, dz=0)
 
-print(f"  Симуляцийн нийт алхам             : {sim_steps:,} алхам")
-print(f"  Дифлектороор хамгаалсан тохиолдол  : {total_deflections:,} удаа")
-print(f"  Бодит 4D Мөргөлдөөн (Collisions)  : {detected_collisions} (ҮНЭМЛЭХҮЙ 0.00%)")
-assert detected_collisions == 0, "FATAL: Collision occurred!"
+    print(f"  Могой 0 (Горим А - Бүтэн Ороолт) : Одоогийн гүн W={engine.w[0]}, Туулсан замын урт={engine.total_path_length[0]}")
+    print(f"  Могой 1 (Горим Б - Шууд Нэвтрэлт): Одоогийн гүн W={engine.w[1]}, Туулсан замын урт={engine.total_path_length[1]}")
 
-print("\n--- 3. 14-БИТ БАГЦАЛСАН ГАДАРГУУГИЙН РЕГИСТРИЙН ШАЛГАЛТ ---")
-for k in range(4):
-    c_k = (engine.x[k] << 7) | engine.z[k]
-    # Маскаар буцаан задлах
-    unpacked_x = c_k >> 7
-    unpacked_z = c_k & 0x7F
-    assert unpacked_x == engine.x[k] and unpacked_z == engine.z[k]
-    print(f"  Могой {k}: Координат (X={engine.x[k]:02d}, Z={engine.z[k]:02d}) -> 14-бит Код C={c_k:05d} (0x{c_k:04X}) [ТӨГС ТОХИРОВ]")
+    print("\n--- 2. 'ТАХИР ЗҮҮ'-НИЙ БРАЙД ДИФЛЕКТОРЫН 50,000-АЛХАМТ ШАЛГАЛТ ---")
+    sim_steps = 50000
+    total_deflections = 0
+    detected_collisions = 0
 
-print("\n" + "=" * 80)
-print(" АЛХАМ 2-ИЙН ДҮГНЭЛТ: ШИЛЖИЛТИЙН ДҮРМҮҮД БА МӨРГӨЛДӨӨНГҮЙ КИНЕМАТИК ТӨГС БАТАЛГААЖИВ!")
-print("=" * 80)
+    random.seed(12345)
+    for t in range(sim_steps):
+        # 4 могой санамсаргүй чиглэлд хурдтай шилжинэ
+        for k in range(4):
+            dw = random.choice([-1, 0, 1])
+            dx = random.choice([0, 1, 2])
+            dz = random.choice([0, 1, 2])
+            engine.step_direct_tunnel_mode(k, dw, dx, dz)
+            
+        # Брайдын дифлектор шалгаж хамгаалах
+        deflect_count = engine.apply_braid_deflector()
+        total_deflections += deflect_count
+        
+        # Бодит 4D орон зайд мөргөлдөөн гарсан эсэхийг эцсийн байдлаар магадлах
+        for i in range(4):
+            for j in range(i + 1, 4):
+                if engine.x[i] == engine.x[j] and engine.z[i] == engine.z[j] and engine.w[i] == engine.w[j]:
+                    detected_collisions += 1
+
+    print(f"  Симуляцийн нийт алхам             : {sim_steps:,} алхам")
+    print(f"  Дифлектороор хамгаалсан тохиолдол  : {total_deflections:,} удаа")
+    print(f"  Бодит 4D Мөргөлдөөн (Collisions)  : {detected_collisions} (ҮНЭМЛЭХҮЙ 0.00%)")
+    assert detected_collisions == 0, "FATAL: Collision occurred!"
+
+    print("\n--- 3. 14-БИТ БАГЦАЛСАН ГАДАРГУУГИЙН РЕГИСТРИЙН ШАЛГАЛТ ---")
+    for k in range(4):
+        c_k = (engine.x[k] << 7) | engine.z[k]
+        # Маскаар буцаан задлах
+        unpacked_x = c_k >> 7
+        unpacked_z = c_k & 0x7F
+        assert unpacked_x == engine.x[k] and unpacked_z == engine.z[k]
+        print(f"  Могой {k}: Координат (X={engine.x[k]:02d}, Z={engine.z[k]:02d}) -> 14-бит Код C={c_k:05d} (0x{c_k:04X}) [ТӨГС ТОХИРОВ]")
+
+    print("\n" + "=" * 80)
+    print(" АЛХАМ 2-ИЙН ДҮГНЭЛТ: ШИЛЖИЛТИЙН ДҮРМҮҮД БА МӨРГӨЛДӨӨНГҮЙ КИНЕМАТИК ТӨГС БАТАЛГААЖИВ!")
+    print("=" * 80)
+
+if __name__ == "__main__":
+    run_clifford_kinematics_lab()

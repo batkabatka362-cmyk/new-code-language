@@ -20,10 +20,6 @@ import math
 # Windows UTF-8 stdout
 sys.stdout.reconfigure(encoding='utf-8')
 
-print("=" * 80)
-print(" АЛХАМ 1: ТОПОЛОГИ САНАХ ОЙН ХАЯГЛАЛ (TCA) — ХУВЬСГАЛТ ШИНЭ ПАРАДИГМ")
-print("=" * 80)
-
 class Topological128BitUniverse:
     """
     128-Битийн Бүхэл Резисторт Бүрэн Багтах 4D Бөмбөрцөг Систем:
@@ -121,29 +117,36 @@ class Topological128BitUniverse:
         # Шинэчлэгдсэн төлөвийг буцаан 128-битийн нэгдсэн үгэнд багцлах
         self.pack(w_list, x_list, z_list, spin_list, vol_list)
 
-print("\n--- 128-БИТИЙН ТОПОЛОГИ РЕГИСТРИЙН ТУРШИЛТ ---")
-universe = Topological128BitUniverse()
+def run_topological_memory_lab():
+    print("=" * 80)
+    print(" АЛХАМ 1: ТОПОЛОГИ САНАХ ОЙН ХАЯГЛАЛ (TCA) — ХУВЬСГАЛТ ШИНЭ ПАРАДИГМ")
+    print("=" * 80)
+    print("\n--- 128-БИТИЙН ТОПОЛОГИ РЕГИСТРИЙН ТУРШИЛТ ---")
+    universe = Topological128BitUniverse()
 
-w_l, x_l, z_l, s_l, v_l = universe.unpack()
-print(f"Эхлэлийн 128-бит Hex : 0x{universe.raw_128bit:032X}")
-print(f"Радиаль гүн W         : {w_l}")
-print(f"Хос эргэлт X, Z       : X={x_l}, Z={z_l}")
-print(f"Спин ба Эзлэхүүн      : Spin={s_l}, Vol={v_l}%")
-
-# 5 алхам эргүүлж шалгах
-print("\n--- МАНДАЛ ДЭЭРХ 5 АЛХАМ КЛИФФОРДЫН ЭРГЭЛТ ---")
-for step in range(5):
-    # Могой 0, 1 хөдөлнө, 2, 3 зангуу (0) болно
-    test_cmds = [
-        (0, 1, 0, False),  # Могой 0: X дагуу эргэнэ
-        (1, 0, 1, False),  # Могой 1: W+1 ба Z дагуу эргэнэ
-        (0, 0, 0, True),   # Могой 2: 0-Зангуу (Спин)
-        (0, 0, 0, True),   # Могой 3: 0-Зангуу (Спин)
-    ]
-    universe.rotate_step(test_cmds)
     w_l, x_l, z_l, s_l, v_l = universe.unpack()
-    print(f"Алхам {step+1} | 128-бит Hex: 0x{universe.raw_128bit:032X} | W={w_l} X={x_l} Z={z_l} Spin={s_l}")
+    print(f"Эхлэлийн 128-бит Hex : 0x{universe.raw_128bit:032X}")
+    print(f"Радиаль гүн W         : {w_l}")
+    print(f"Хос эргэлт X, Z       : X={x_l}, Z={z_l}")
+    print(f"Спин ба Эзлэхүүн      : Spin={s_l}, Vol={v_l}%")
 
-print("\n" + "=" * 80)
-print(" АЛХАМ 1-ИЙН ДҮГНЭЛТ: ПОЙНТЕРГҮЙ, КЭШ АЛДАГДАЛГҮЙ 128-БИТ ТӨГС БАЙГУУЛАМЖ!")
-print("=" * 80)
+    # 5 алхам эргүүлж шалгах
+    print("\n--- МАНДАЛ ДЭЭРХ 5 АЛХАМ КЛИФФОРДЫН ЭРГЭЛТ ---")
+    for step in range(5):
+        # Могой 0, 1 хөдөлнө, 2, 3 зангуу (0) болно
+        test_cmds = [
+            (0, 1, 0, False),  # Могой 0: X дагуу эргэнэ
+            (1, 0, 1, False),  # Могой 1: W+1 ба Z дагуу эргэнэ
+            (0, 0, 0, True),   # Могой 2: 0-Зангуу (Спин)
+            (0, 0, 0, True),   # Могой 3: 0-Зангуу (Спин)
+        ]
+        universe.rotate_step(test_cmds)
+        w_l, x_l, z_l, s_l, v_l = universe.unpack()
+        print(f"Алхам {step+1} | 128-бит Hex: 0x{universe.raw_128bit:032X} | W={w_l} X={x_l} Z={z_l} Spin={s_l}")
+
+    print("\n" + "=" * 80)
+    print(" АЛХАМ 1-ИЙН ДҮГНЭЛТ: ПОЙНТЕРГҮЙ, КЭШ АЛДАГДАЛГҮЙ 128-БИТ ТӨГС БАЙГУУЛАМЖ!")
+    print("=" * 80)
+
+if __name__ == "__main__":
+    run_topological_memory_lab()
