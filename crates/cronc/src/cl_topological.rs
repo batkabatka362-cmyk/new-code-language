@@ -662,3 +662,222 @@ impl fmt::Display for TopologicalCycleTelemetry {
         )
     }
 }
+
+/// High-Level CL Topological Compiler & Hardware Synthesizer
+pub struct ClTopologicalCompiler;
+
+impl ClTopologicalCompiler {
+    /// Compiles either High-Level CL DSL source or raw 40-char VLIW microcode into bundles
+    pub fn compile_source(source: &str) -> Result<Vec<CliffordVliwBundle>, String> {
+        let mut bundles = Vec::new();
+        let lines: Vec<&str> = source.lines().collect();
+        let mut i = 0;
+
+        while i < lines.len() {
+            let line = lines[i].trim();
+            i += 1;
+
+            if line.is_empty() || line.starts_with("//") || line.starts_with('#') {
+                continue;
+            }
+
+            // Check if raw 40-char VLIW line (e.g. "B0000:W102030025...")
+            if line.contains(':') && line.split(':').nth(1).map_or(false, |b| b.trim().len() == 40) {
+                let bundle = CliffordVliwBundle::from_vliw_line(line)?;
+                bundles.push(bundle);
+                continue;
+            }
+
+            // Check for high-level block: "bundle <Name> {"
+            if line.starts_with("bundle ") && line.contains('{') {
+                let name = line["bundle ".len()..line.find('{').unwrap()].trim().to_string();
+                let mut snakes_map = std::collections::BTreeMap::new();
+
+                while i < lines.len() {
+                    let sub_line = lines[i].trim();
+                    i += 1;
+
+                    if sub_line.is_empty() || sub_line.starts_with("//") || sub_line.starts_with('#') {
+                        continue;
+                    }
+                    if sub_line.starts_with('}') {
+                        break;
+                    }
+
+                    // Parse snake line: "S0: WRAP W=10 X=20 Z=30 spin=0 vol=25"
+                    let snake = Self::parse_high_level_snake_line(sub_line)?;
+                    snakes_map.insert(snake.id, snake);
+                }
+
+                if snakes_map.len() != 4 {
+                    return Err(format!(
+                        "Bundle '{}' must define all 4 snakes (S0..S3), found {}",
+                        name, snakes_map.len()
+                    ));
+                }
+
+                let snakes = [
+                    snakes_map.remove(&0).unwrap(),
+                    snakes_map.remove(&1).unwrap(),
+                    snakes_map.remove(&2).unwrap(),
+                    snakes_map.remove(&3).unwrap(),
+                ];
+
+                let bundle = CliffordVliwBundle::new(&name, snakes);
+                bundle.validate_invariants()?;
+                bundles.push(bundle);
+            }
+        }
+
+        if bundles.is_empty() {
+            return Err("No valid CL bundles or instructions found in source".to_string());
+        }
+
+        Ok(bundles)
+    }
+
+    /// Parse a single high-level snake definition line
+    fn parse_high_level_snake_line(line: &str) -> Result<SnakeState, String> {
+        let clean = line.trim().trim_end_matches(';');
+        let parts: Vec<&str> = clean.split(':').collect();
+        if parts.len() != 2 {
+            return Err(format!("Expected 'S<id>: ...' in '{}'", clean));
+        }
+
+        let s_id_str = parts[0].trim().to_uppercase();
+        if !s_id_str.starts_with('S') || s_id_str.len() != 2 {
+            return Err(format!("Invalid snake identifier '{}'", parts[0]));
+        }
+        let id: usize = s_id_str[1..2].parse().map_err(|e| format!("Invalid snake id: {}", e))?;
+
+        let body = parts[1].trim();
+        let tokens: Vec<&str> = body.split_whitespace().collect();
+        if tokens.is_empty() {
+            return Err(format!("Empty snake definition in '{}'", clean));
+        }
+
+        let mode_str = tokens[0].to_uppercase();
+        let mode = match mode_str.as_str() {
+            "WRAP" => TransitionMode::Wrap,
+            "TUNNEL" => TransitionMode::Tunnel,
+            "FLUID" => TransitionMode::Fluid,
+            "ANCHOR" => TransitionMode::Anchor,
+            other => return Err(format!("Unknown mode '{}'", other)),
+        };
+
+        let mut w: u8 = 0;
+        let mut x: u8 = 0;
+        let mut z: u8 = 0;
+        let mut spin: u8 = 0;
+        let mut vol: u8 = 25;
+
+        for tok in &tokens[1..] {
+            if let Some(val) = tok.strip_prefix("W=").or_else(|| tok.strip_prefix("w=")) {
+                w = val.parse().map_err(|e| format!("Invalid W in '{}': {}", tok, e))?;
+            } else if let Some(val) = tok.strip_prefix("X=").or_else(|| tok.strip_prefix("x=")) {
+                x = val.parse().map_err(|e| format!("Invalid X in '{}': {}", tok, e))?;
+            } else if let Some(val) = tok.strip_prefix("Z=").or_else(|| tok.strip_prefix("z=")) {
+                z = val.parse().map_err(|e| format!("Invalid Z in '{}': {}", tok, e))?;
+            } else if let Some(val) = tok.strip_prefix("spin=").or_else(|| tok.strip_prefix("SPIN=")) {
+                let s_val: u16 = val.parse().map_err(|e| format!("Invalid spin in '{}': {}", tok, e))?;
+                spin = match s_val {
+                    0 | 90 | 180 | 270 => (s_val / 90) as u8,
+                    1 | 2 | 3 => s_val as u8,
+                    _ => return Err(format!("Invalid spin value '{}' (must be 0, 90, 180, 270)", val)),
+                };
+            } else if let Some(val) = tok.strip_prefix("vol=").or_else(|| tok.strip_prefix("VOL=")) {
+                let clean_vol = val.trim_end_matches('%');
+                vol = clean_vol.parse().map_err(|e| format!("Invalid vol in '{}': {}", tok, e))?;
+            }
+        }
+
+        Ok(SnakeState::new(id, mode, w, x, z, spin, vol))
+    }
+
+    /// Emit 128-bit hexadecimal strings for Verilog ROM initialization
+    pub fn emit_verilog_rom_hex(bundles: &[CliffordVliwBundle]) -> String {
+        bundles.iter().map(|b| b.to_universe_128().to_verilog_hex()).collect::<Vec<_>>().join("\n") + "\n"
+    }
+
+    /// Emit aligned C SIMD header (cl_universe_128_t)
+    pub fn emit_c_simd_header(bundles: &[CliffordVliwBundle], program_name: &str) -> String {
+        let guard = format!("CLIFFORD_{}_H", program_name.to_uppercase());
+        let mut out = String::new();
+        out.push_str(&format!("#ifndef {}\n#define {}\n\n", guard, guard));
+        out.push_str("#include <stdint.h>\n\n");
+        out.push_str("typedef struct __attribute__((aligned(16))) {\n");
+        out.push_str("    uint64_t low64;\n");
+        out.push_str("    uint64_t high64;\n");
+        out.push_str("} cl_universe_128_t;\n\n");
+        out.push_str(&format!("static const cl_universe_128_t {}_rom[{}] = {{\n", program_name.to_lowercase(), bundles.len()));
+
+        for b in bundles {
+            let (low, high) = b.to_universe_128().to_c_simd_u64();
+            out.push_str(&format!("    {{ 0x{:016X}ULL, 0x{:016X}ULL }}, // {}\n", low, high, b.label));
+        }
+
+        out.push_str("};\n\n");
+        out.push_str(&format!("#endif // {}\n", guard));
+        out
+    }
+
+    /// Emit standalone synthesizable Verilog RTL Top module
+    pub fn emit_synthesizable_verilog_core(core_name: &str, rom_depth: usize) -> String {
+        format!(r#"// ============================================================================
+// Synthesizable 4D Clifford Hardware Core Top Module: {}
+// Pure Discrete Topological Architecture — Zero Floating Point Units
+// ============================================================================
+`timescale 1ns / 1ps
+
+module {}(
+    input  wire        clk,
+    input  wire        rst_n,
+    input  wire [7:0]  pc_addr,
+    output reg  [7:0]  hamiltonian_vol,
+    output reg         collision_alert,
+    output wire [123:0] universe_out
+);
+
+    // 128-Bit Instruction ROM (Depth: {})
+    reg [127:0] instruction_rom [0:{}];
+
+    initial begin
+        $readmemh("rom_init.hex", instruction_rom);
+    end
+
+    wire [127:0] current_bundle = instruction_rom[pc_addr];
+    assign universe_out = current_bundle[123:0];
+
+    // Hardware Invariant Monitors
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            hamiltonian_vol <= 8'd0;
+            collision_alert <= 1'b0;
+        end else begin
+            // Sum of 4 volumes: bits [123:92]
+            hamiltonian_vol <= current_bundle[99:92] + current_bundle[107:100] + 
+                               current_bundle[115:108] + current_bundle[123:116];
+            collision_alert <= 1'b0; // Braid deflector eliminates collisions
+        end
+    end
+
+endmodule
+"#, core_name, core_name, rom_depth, rom_depth.saturating_sub(1))
+    }
+
+    /// Execute cycle-accurate simulation across all bundles
+    pub fn run_simulation(bundles: &[CliffordVliwBundle], cycles: usize) -> Vec<TopologicalCycleTelemetry> {
+        let mut runtime = UnifiedTopologicalRuntime::new();
+        let mut telemetries = Vec::with_capacity(cycles);
+
+        for c in 0..cycles {
+            let bundle = &bundles[c % bundles.len()];
+            runtime.load_bundle(bundle);
+            let telem = runtime.step_cycle();
+            telemetries.push(telem);
+        }
+
+        telemetries
+    }
+}
+

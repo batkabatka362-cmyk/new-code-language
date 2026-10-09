@@ -48,6 +48,7 @@ fn print_help() {
     println!("    cl-run <file.cl>               Execute .cl machine code in RAM via sub-microsecond JIT engine");
     println!("    cl-llvm <file.cl> [-o out.ll]  Transpile .cl directly into SSA LLVM Intermediate Representation");
     println!("    cl-verilog <file.cl> [-o out.v] Synthesize standalone Verilog RTL hardware core from .cl");
+    println!("    cl-topological <file.cl> [opts] 4D Clifford Topological Engine (Zero-GEMM, Zero-DRAM, Parity Balancer, RTL Synth)");
     println!("    cl-sphere-infer [weights]      4D Sphere Matrix Multiplier-Free Inference Engine (0 FLOPs, 256-Core Torus)");
     println!("    cl-sphere-compile [weights]    Compile Neural Weights to 4D Sphere Sovereign Microcode (.cl)");
     println!("    cl-sphere-llm [prompt]         End-to-End 4D Sphere LLM Multiplier-Free Text Generator (0 FLOPs)");
@@ -2497,6 +2498,9 @@ fn main() {
                     println!("[PASS] Hardware RTL verification successful!");
                 }
             }
+        }
+        "cl-topological" | "topological" => {
+            cron_cli::topological_commands::handle_topological_command(&args);
         }
         "cl-sphere-compile" | "sphere-compile" => {
             cron_cli::sphere_commands::handle_sphere_compile(&args);
