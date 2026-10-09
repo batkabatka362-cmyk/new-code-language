@@ -2,8 +2,8 @@
 ## Санаануудын Ангилал, Системчлэл, Алдаа Засвар ба Шинэ Үеийн Тооцооллын Бүрэн Зураглал
 
 > **Эх сурвалж ба Баримт бичгийн Статус:**  
-> Энэхүү баримт бичиг нь [matrix4.1.pdf](file:///c:/Users/local_ybjuj27/Desktop/new%20code%20language/matrix4.1.pdf) (183 хуудас) болон [matrix4_1_notes.md](file:///c:/Users/local_ybjuj27/Desktop/new%20code%20language/matrix4_1_notes.md)-д агуулагдаж буй бүх санаануудыг **холилдоо, давхардал, дутуу зүйлсгүйгээр нарийвчлан ангилж, алдааг нь засаж сайжруулсан албан ёсны Архитектурын Мастер Хувилбар** юм.  
-> Үндсэн түүхий тэмдэглэл [matrix4_1_notes.md](file:///c:/Users/local_ybjuj27/Desktop/new%20code%20language/matrix4_1_notes.md)-ийг хэвээр хадгалж, энэхүү файлд цэвэршүүлэн системчилсэн цогц загварыг буулгав.
+> Энэхүү баримт бичиг нь [matrix4.1.pdf](file:///c:/Users/local_ybjuj27/Desktop/new%20code%20language/matrix4.1.pdf) (183 хуудас) болон [matrix4_1_notes.md](file:///c:/Users/local_ybjuj27/Desktop/new%20code%20language/docs/research/matrix4_1_notes.md)-д агуулагдаж буй бүх санаануудыг **холилдоо, давхардал, дутуу зүйлсгүйгээр нарийвчлан ангилж, алдааг нь засаж сайжруулсан албан ёсны Архитектурын Мастер Хувилбар** юм.  
+> Үндсэн түүхий тэмдэглэл [matrix4_1_notes.md](file:///c:/Users/local_ybjuj27/Desktop/new%20code%20language/docs/research/matrix4_1_notes.md)-ийг хэвээр хадгалж, энэхүү файлд цэвэршүүлэн системчилсэн цогц загварыг буулгав.
 
 ---
 
