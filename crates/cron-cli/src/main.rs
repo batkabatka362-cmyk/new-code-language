@@ -14,8 +14,9 @@ fn print_banner() {
  ██║     ██╔══██╗██║   ██║██║╚██╗██║
  ╚██████╗██║  ██║╚██████╔╝██║ ╚████║
   ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
-  CRON Cognitive Language Toolchain v1.0
-  Target: 256-Core 4D-Torus Neuromorphic Hardware
+  CRON AGI & Silicon Cipher Machine Architecture v1.0
+  Target: 256-Core 4D-Torus S^3xZ100 Hard Silicon Backend
+  Specification: Pure VLIW Cipher Microcode (Zero Verbal Words, Zero GEMM, Zero DRAM)
 "#);
 }
 

@@ -1,19 +1,31 @@
 // ============================================================================
-// CRON Low-Level Machine Language (.cl) Engine & Validator
-// .cl is the first-class, machine-native, AI-native programming language
-// for the 256-Core 4D-Torus neuromorphic/photonic processor.
+// CRON AGI & Silicon Cipher Machine Language (.cl) Engine & Validator
+//
+// OFFICIAL MANIFESTO:
+//   CL is NOT C++, NOT Python, and NOT a verbose human scripting language.
+//   CL is a dense, cipher-compact 10-char VLIW microcode language designed
+//   exclusively for AGI/AI Autonomous Agents and Hard Silicon Backends:
+//     - 256-Core 4D-Torus S^3 x Z100 Processor
+//     - Multiplier-Free O(0) FLOPs Spherical Matrix Wave Interference Core
+//     - Zero-DRAM 16-Bank Reversible PGAS SRAM Register File
+//     - RTL Synthesizable Hard Silicon (SkyWater Sky130, Xilinx UltraScale+)
+//
+// ZERO VERBAL WORDS POLICY:
+//   English keywords, classes, methods, and verbal DSL statements are
+//   STRICTLY FORBIDDEN in .cl code. All .cl files must consist purely of
+//   system directives (@kernel, .target) and 10-character VLIW cipher slots.
 //
 // Syntax Specification:
 //   - Bundle: B<cycle_num>: <slot0> <slot1> <slot2> <slot3>
 //   - Slot:   Exactly 10 ASCII characters per token.
-//             [0]   Prefix: '_' (Operation) or '\'' (Immediate load)
+//             [0]    Prefix: '_' (Operation) or '\'' (Immediate load)
 //             [1..2] Opcode: 2-char mnemonic (OP, FA, PO, MD, BK, BL, RF, etc.)
 //             [3..4] Dest Register: R0..RF (hex 00..0F)
-//             [5]   Mode / Delimiter: '$', '#', '@'
-//             [6]   Src Register / High Parameter
-//             [7]   Parity / Check Token (Index 7)
-//             [8]   Immediate / Low Parameter
-//             [9]   Terminator: '>' (Execute) or '!' (Halt/Trap)
+//             [5]    Mode / Delimiter: '$', '#', '@', etc.
+//             [6]    Src Register / High Parameter
+//             [7]    Parity / Check Token / CRC-8 ATM
+//             [8]    Immediate / Low Parameter
+//             [9]    Terminator: '>' (Execute) or '!' (Halt/Trap)
 // ============================================================================
 
 use std::collections::HashSet;
@@ -400,7 +412,11 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
                  && opcode != "LT" && opcode != "JS" && opcode != "SR" && opcode != "BY"
                  && opcode != "TI" && opcode != "TD" && opcode != "TW" && opcode != "ZL"
                  && opcode != "DE" && opcode != "DW" && opcode != "DN" && opcode != "DS"
-                 && opcode != "bb" && opcode != "BB" && opcode != "RT" && opcode != "FE" && opcode != "PR";
+                 && opcode != "bb" && opcode != "BB" && opcode != "RT" && opcode != "FE" && opcode != "PR"
+                 && opcode != "CC" && opcode != "DD" && opcode != "EE" && opcode != "11"
+                 && opcode != "88" && opcode != "99" && opcode != "aa" && opcode != "cc"
+                 && opcode != "co" && opcode != "dd" && opcode != "ee" && opcode != "ff"
+                 && opcode != "00" && opcode != "FF";
     let dest_reg = if is_writer {
         usize::from_str_radix(&dest_str, 16).ok()
     } else {

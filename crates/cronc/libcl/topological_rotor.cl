@@ -1,20 +1,20 @@
-// ============================================================================
-// CRON 4D Clifford Topological Program: topological_rotor.cl
-// High-Level Topological Domain Language (No Pointers, No Float GEMM)
-// ============================================================================
+; ============================================================================
+; CRON Standard Microcode Library: crates/cronc/libcl/topological_rotor.cl
+; 4D Clifford Torus Kinematics & Wave-Interference Rotor (Zero Verbal Words)
+; Target: 256-Core 4D-Torus S^3 x Z100 Silicon Backend
+; ============================================================================
+@kernel topological_rotor_cortex
+.target silicon.4d_torus
+.ipc_target 4.0
 
-// Bundle 0: 4-Way Symmetric Balance (25% volume each)
-bundle BalanceState {
-    S0: WRAP   W=10 X=20 Z=30 spin=0  vol=25
-    S1: WRAP   W=10 X=22 Z=30 spin=0  vol=25
-    S2: TUNNEL W=40 X=50 Z=60 spin=90 vol=25
-    S3: ANCHOR W=00 X=00 Z=00 spin=0  vol=25
-}
+; Cycle 0: Arena reset, thermal sentry arm, load seed coordinate token
+B0000: _RS00$000> _SH00$000> '=01#0041> _NO00$000>
 
-// Bundle 1: Tri-Spiral with Snake 3 in 0-Anchor Vacuum (34% / 33% / 33%)
-bundle TriSpiralParity {
-    S0: WRAP   W=11 X=21 Z=31 spin=90  vol=34
-    S1: WRAP   W=11 X=23 Z=31 spin=180 vol=33
-    S2: TUNNEL W=41 X=51 Z=61 spin=270 vol=33
-    S3: ANCHOR W=00 X=00 Z=00 spin=0   vol=0
-}
+; Cycle 1: Encode S^3 phase token, clamp to Sensory Layer IV, parity rotate [34,33,33]
+B0001: _TP02$100> _LY03$002> _HP04$000> _NO00$000>
+
+; Cycle 2: Non-collision curved needle deflection & 0-FLOPs wave interference
+B0002: _CN05$000> _WF06$200> _bb00$000> _NO00$000>
+
+; Cycle 3: Broadcast motor resonance across 4D Torus & graceful silicon halt
+B0003: _SB06$000> _NO00$000> _NO00$000> !HL00#000(

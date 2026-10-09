@@ -1,36 +1,23 @@
-// ============================================================================
-// CRON Continuous 4D Clifford Topological Program: topological_program.cl
-// High-Level Topological Trajectory DSL (Zero Pointers, Zero Float GEMM)
-// ============================================================================
+; ============================================================================
+; CRON Continuous 4D Clifford Topological Kernel: crates/cronc/libcl/topological_program.cl
+; Pure Silicon Machine Cipher Microcode (Zero Verbal English Words)
+; Target: 256-Core 4D-Torus S^3 x Z100 Silicon Backend
+; ============================================================================
+@kernel topological_program_flow
+.target silicon.4d_torus
+.ipc_target 4.0
 
-// 1. Initial 4-Way Symmetric Balance Bundle (25% volume each)
-bundle InitBalance {
-    S0: WRAP   W=10 X=20 Z=30 spin=0  vol=25
-    S1: WRAP   W=10 X=22 Z=30 spin=0  vol=25
-    S2: TUNNEL W=40 X=50 Z=60 spin=90 vol=25
-    S3: ANCHOR W=00 X=00 Z=00 spin=0  vol=25
-}
+; Cycle 0: Silicon initialization & 0-Anchor vacuum state setup
+B0000: _RS00$000> _SH00$000> '=01#004D> _NO00$000>
 
-// 2. Conservative Fluidic Energy Transfer: S3 -> S0 (Moves S3 into 0-Anchor Vacuum)
-transfer S3 -> S0 vol=25;
+; Cycle 1: 4D Phase Token injection onto S^3 and Layer IV Sensory clamping
+B0001: _TP02$100> _LY03$002> _HP04$000> _NO00$000>
 
-// 3. 8-Step Reversible FSM Permutation (T^8 = I)
-fsm_step forward;
+; Cycle 2: Curved Needle Braid Deflector (|Wi - Wj| >= 1) & Reversible FSM step
+B0002: _CN05$000> _RF06$200> _NO00$000> _NO00$000>
 
-// 4. Continuous Geodesic Trajectory Flow (Advance 4 clock cycles on S^3)
-flow 4;
+; Cycle 3: Wave Interference Resonance Attention (+2 constructive, +1 transverse, 0 notch)
+B0003: _WF07$200> _bb00$000> _NO00$000> _NO00$000>
 
-// 5. Non-Euclidean Braid Exchange (Braid Deflector enforces |Wi - Wj| >= 1)
-braid S0, S1;
-
-// 6. Wave Interference Attention Resonance
-resonate;
-
-// 7. Parity Rotation (Rotates +1% quantum across active snakes)
-parity_rotate;
-
-// 8. Neocortical Sensory Layer Clamping (W constrained to Layer IV: 41..60)
-layer IV S0;
-
-// 9. 3-Byte Phase-Only KV-Cache Token Embedding
-phase_token "MIND" -> S0;
+; Cycle 4: 4D Torus NoC Packet Routing & Silicon Halt
+B0004: _PO08+700> _SB09$000> _NO00$000> !HL00#000(

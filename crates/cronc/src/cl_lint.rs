@@ -126,7 +126,25 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
 
     for (line_idx, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        if !trimmed.starts_with('B') || !trimmed.contains(':') {
+        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Directives allowed: @kernel, .target, .ipc_target, .weights, .stage, .tensor, .fuse, .flow, .layout, .core, .clifford
+        if trimmed.starts_with('@') || trimmed.starts_with('.') {
+            continue;
+        }
+
+        // Zero Verbal Words Policy: CL is NOT C++/Python. All verbal English code is strictly forbidden.
+        if (!trimmed.starts_with('B') && !trimmed.starts_with('b')) || !trimmed.contains(':') {
+            issues.push(ClLintIssue {
+                cycle: total_bundles,
+                slot_index: None,
+                rule_id: "L000_ZERO_VERBAL_WORDS_VIOLATION".to_string(),
+                severity: LintSeverity::Error,
+                message: format!("Illegal verbal English code or invalid line syntax at line {}: '{}'", line_idx + 1, trimmed),
+                recommendation: "Remove verbal code; CL is pure cipher microcode (zero English words)".to_string(),
+            });
             continue;
         }
 
@@ -183,9 +201,11 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
                 let expected = slot_str.chars().nth(9).unwrap();
                 let computed = (33 + (compute_slot_crc(payload) % 94)) as char;
                 let is_macro_crc_valid = expected == computed;
+                let is_sphere_slot = slot_str.starts_with('`');
                 let is_token_crc_valid = crate::cl_lang::verify_token_crc8(slot_str)
                     || ((slot_str.ends_with('>') || slot_str.ends_with('!'))
-                        && slot_str.chars().nth(7).map(|c| c.is_ascii_hexdigit()).unwrap_or(false));
+                        && slot_str.chars().nth(7).map(|c| c.is_ascii_hexdigit()).unwrap_or(false))
+                    || is_sphere_slot;
 
                 if !is_macro_crc_valid && !is_token_crc_valid {
                     issues.push(ClLintIssue {
@@ -200,6 +220,7 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
             }
 
             if let Ok(parsed) = parse_slot(slot_str) {
+                let is_sphere_slot = slot_str.starts_with('`');
                 if parsed.opcode == "HL" {
                     has_halted = true;
                 }
@@ -217,7 +238,7 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
                 }
 
                 // Intra-bundle RAW / WAW Register Contention
-                if parsed.opcode != "NO" && parsed.opcode != "HL" {
+                if parsed.opcode != "NO" && parsed.opcode != "HL" && !is_sphere_slot {
                     if let Some(src) = parsed.src_reg {
                         if bundle_writes.contains(&src) && parsed.opcode != "==" {
                             issues.push(ClLintIssue {

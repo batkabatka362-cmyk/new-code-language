@@ -167,6 +167,31 @@ impl SnakeState {
             return Err(format!("Slot must be exactly 10 characters, got '{}' (len {})", slot, slot.len()));
         }
         let chars: Vec<char> = slot.chars().collect();
+
+        // 1. Standard CL VLIW Microcode Slot: Prefix in ['_', '\'', '~', '@', '!']
+        if chars[0] == '_' || chars[0] == '\'' || chars[0] == '~' || chars[0] == '@' || chars[0] == '!' {
+            let op = &slot[1..3];
+            let dest = chars[4].to_digit(16).unwrap_or(0) as u8;
+            let imm = chars[8].to_digit(16).unwrap_or(0) as u8;
+            let (mode, w, x, z, spin) = match op {
+                "TP" => (TransitionMode::Wrap, 50, (dest * 7 + 10) % 100, (imm * 11 + 20) % 100, 1),
+                "WF" => (TransitionMode::Fluid, 70, (dest * 5 + 30) % 100, (imm * 13 + 40) % 100, 2),
+                "CN" => (TransitionMode::Tunnel, 30, (dest * 3 + 20) % 100, (imm * 9 + 30) % 100, 0),
+                "HP" => (TransitionMode::Anchor, 0, 0, 0, 0),
+                "LY" => (TransitionMode::Wrap, match imm { 0 => 10, 1 => 25, 2 => 50, 3 => 70, _ => 85 }, 25, 35, 1),
+                "RS" | "SH" => (TransitionMode::Anchor, 0, 0, 0, 0),
+                "OP" | "MD" => (TransitionMode::Tunnel, 60, (dest * 8) % 100, (imm * 6) % 100, 2),
+                _ => (TransitionMode::Wrap, (dest * 10) % 100, (imm * 10) % 100, (dest + imm) % 100, 0),
+            };
+            let vol = match snake_id {
+                0 => 34,
+                1 | 2 => 33,
+                _ => 0,
+            };
+            return Ok(Self::new(snake_id, mode, w, x, z, spin, vol));
+        }
+
+        // 2. Dense Coordinate Cipher format: e.g. "W102030025"
         let mode = TransitionMode::from_char(chars[0])?;
         let w: u8 = slot[1..3].parse().map_err(|e| format!("Invalid W coordinate: {}", e))?;
         let x: u8 = slot[3..5].parse().map_err(|e| format!("Invalid X coordinate: {}", e))?;
@@ -998,6 +1023,11 @@ impl ClTopologicalCompiler {
             i += 1;
 
             if line.is_empty() || line.starts_with("//") || line.starts_with('#') || line.starts_with(';') {
+                continue;
+            }
+
+            // Directives to ignore in topological microcode: @kernel, .target, .ipc_target, etc.
+            if line.starts_with('@') || line.starts_with('.') {
                 continue;
             }
 
