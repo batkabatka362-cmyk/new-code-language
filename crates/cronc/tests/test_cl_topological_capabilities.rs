@@ -356,3 +356,70 @@ fn test_topological_brain_transformer_stdp_learning() {
     }
 }
 
+#[test]
+fn test_topological_brain_save_load_roundtrip() {
+    use cronc::cl_topological_lm::TopologicalBrainTransformer;
+
+    let mut model = TopologicalBrainTransformer::new(3, 128);
+    model.train_sequence_stdp("SOVEREIGN 4D TOPOLOGY");
+    model.ingest_byte(b'S');
+    model.ingest_byte(b'O');
+
+    let original_pred = model.predict_next_byte();
+
+    // 1. In-memory roundtrip via to_bytes and from_bytes
+    let serialized = model.to_bytes();
+    assert!(!serialized.is_empty());
+    assert_eq!(&serialized[0..8], b"CLBRN001");
+
+    let restored = TopologicalBrainTransformer::from_bytes(&serialized).expect("Deserialization failed");
+    assert_eq!(restored.columns.len(), model.columns.len());
+    assert_eq!(restored.kv_cache.len(), model.kv_cache.len());
+    assert_eq!(restored.total_tokens_processed, model.total_tokens_processed);
+    assert_eq!(restored.predict_next_byte(), original_pred);
+
+    // 2. File-based save and load
+    let temp_path = std::env::temp_dir().join("test_topological_brain.cl_brain");
+    model.save_to_file(&temp_path).expect("Failed to save .cl_brain file");
+    assert!(temp_path.exists());
+
+    let file_restored = TopologicalBrainTransformer::load_from_file(&temp_path).expect("Failed to load .cl_brain file");
+    assert_eq!(file_restored.columns.len(), 3);
+    assert_eq!(file_restored.predict_next_byte(), original_pred);
+
+    let _ = std::fs::remove_file(temp_path);
+}
+
+#[test]
+fn test_topological_dataset_file_streaming() {
+    use cronc::cl_topological_lm::TopologicalBrainTransformer;
+
+    let dataset_text = "ALPHA BETA GAMMA DELTA EPSILON ZETA ETA THETA 4D CLIFFORD";
+    let temp_corpus = std::env::temp_dir().join("test_topological_corpus.txt");
+    std::fs::write(&temp_corpus, dataset_text).expect("Failed to write temp corpus");
+
+    let mut model = TopologicalBrainTransformer::new(2, 256);
+    let trained_tokens = model.train_dataset_file(&temp_corpus, 2).expect("Dataset training failed");
+    assert_eq!(trained_tokens, dataset_text.len() * 2);
+
+    for col in &model.columns {
+        assert_eq!(col.hydraulics.get_hamiltonian(), 100);
+    }
+
+    let _ = std::fs::remove_file(temp_corpus);
+}
+
+#[test]
+fn test_vm_topological_opcodes_execution() {
+    let cl_code = r#"
+    ; Topological Cortex VM Integration Test
+    B0000: _RS00$000> _SH00$000> '=01#0041> _NO00$000>
+    B0001: _TP02$100> _LY03$002> _HP04$000> _NO00$000>
+    B0002: _CN05$000> _WF06$200> _bb00$000> _HL00$000>
+    "#;
+
+    let stats = cron_vm::run_cl(cl_code);
+    assert!(stats.total_cycles >= 2, "Must execute topological bundles");
+}
+
+

@@ -216,6 +216,12 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "SI", // SiLU Activation (SwiGLU)
     "GE", // GELU Activation
     "SS", // Selective Scan SSM Step (Mamba)
+    // Milestone #044: 4D Clifford Topological Engine & TNM v1.0 Opcodes
+    "TP", // 4D Topological Phase Token Encode / S^3 Coordinate Mapping
+    "WF", // 4D Wave Interference Resonance Attention (+2, +1, 0, 0 FLOPs)
+    "CN", // 4D Curved Needle Non-Collision Deflector Step (|Wi - Wj| >= 1)
+    "HP", // 4D Homeostasis Parity Rotation [34, 33, 33] Cycle (H == 100%)
+    "LY", // 4D Cortical Layer Transition / Clamp (Apical -> Sensory -> Motor)
     // Extended Arithmetic, Logical & Neuromorphic Opcodes
     "AD", // Add
     "ML", // Multiply

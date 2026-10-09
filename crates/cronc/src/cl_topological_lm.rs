@@ -323,4 +323,252 @@ impl TopologicalBrainTransformer {
         let cache_size = self.kv_cache.memory_bytes();
         vocab_size + column_size + cache_size
     }
+
+    /// Serialize complete topological model to binary .cl_brain format
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        // Magic header: 8 bytes
+        buf.extend_from_slice(b"CLBRN001");
+        // Version: 4 bytes
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        // Columns count: 4 bytes
+        buf.extend_from_slice(&(self.columns.len() as u32).to_le_bytes());
+        // Max context: 4 bytes
+        buf.extend_from_slice(&(self.kv_cache.max_capacity as u32).to_le_bytes());
+        // Total tokens processed: 8 bytes
+        buf.extend_from_slice(&(self.total_tokens_processed as u64).to_le_bytes());
+        // Vocab size: 4 bytes
+        buf.extend_from_slice(&(self.vocab.entries.len() as u32).to_le_bytes());
+
+        // Vocab entries
+        for entry in &self.vocab.entries {
+            buf.extend_from_slice(&(entry.token_id as u32).to_le_bytes());
+            buf.push(entry.token_byte);
+            buf.push(entry.phase.theta_x);
+            buf.push(entry.phase.theta_z);
+            buf.push(entry.phase.depth_w);
+            buf.push(entry.spin);
+        }
+
+        // Cortical columns
+        for col in &self.columns {
+            buf.extend_from_slice(&(col.id as u32).to_le_bytes());
+            buf.extend_from_slice(&col.sensory_error.to_le_bytes());
+            for s in &col.snakes {
+                buf.push(s.id as u8);
+                let mode_byte = match s.mode {
+                    TransitionMode::Wrap => 0u8,
+                    TransitionMode::Tunnel => 1u8,
+                    TransitionMode::Fluid => 2u8,
+                    TransitionMode::Anchor => 3u8,
+                };
+                buf.push(mode_byte);
+                buf.push(s.w);
+                buf.push(s.x);
+                buf.push(s.z);
+                buf.push(s.spin);
+                buf.push(s.vol);
+            }
+            buf.extend_from_slice(&col.hydraulics.volumes);
+            buf.push(col.hydraulics.parity_phase as u8);
+        }
+
+        // Phase KV cache
+        buf.extend_from_slice(&(self.kv_cache.tokens.len() as u32).to_le_bytes());
+        for tok in &self.kv_cache.tokens {
+            buf.push(tok.theta_x);
+            buf.push(tok.theta_z);
+            buf.push(tok.depth_w);
+        }
+
+        buf
+    }
+
+    /// Deserialize topological model from binary .cl_brain format
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() < 32 {
+            return Err("Binary brain payload too short (< 32 bytes)".to_string());
+        }
+        if &bytes[0..8] != b"CLBRN001" {
+            return Err("Invalid magic bytes: expected 'CLBRN001'".to_string());
+        }
+        let mut offset = 8;
+
+        let version = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]);
+        offset += 4;
+        if version != 1 {
+            return Err(format!("Unsupported brain model version: {}", version));
+        }
+
+        let n_columns = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+
+        let max_context = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+
+        let total_tokens_processed = u64::from_le_bytes([
+            bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3],
+            bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7]
+        ]) as usize;
+        offset += 8;
+
+        let vocab_size = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+        offset += 4;
+
+        let mut entries = Vec::with_capacity(vocab_size);
+        for _ in 0..vocab_size {
+            if offset + 10 > bytes.len() {
+                return Err("Truncated vocab entry in binary brain".to_string());
+            }
+            let token_id = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+            let token_byte = bytes[offset];
+            offset += 1;
+            let theta_x = bytes[offset];
+            offset += 1;
+            let theta_z = bytes[offset];
+            offset += 1;
+            let depth_w = bytes[offset];
+            offset += 1;
+            let spin = bytes[offset];
+            offset += 1;
+
+            entries.push(VocabPhaseEntry {
+                token_id,
+                token_byte,
+                phase: PhaseToken {
+                    theta_x,
+                    theta_z,
+                    depth_w,
+                },
+                spin,
+            });
+        }
+        let vocab = TopologicalVocab { entries };
+
+        let mut columns = Vec::with_capacity(n_columns);
+        for _ in 0..n_columns {
+            if offset + 8 > bytes.len() {
+                return Err("Truncated column header in binary brain".to_string());
+            }
+            let id = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+            let sensory_error = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]);
+            offset += 4;
+
+            let mut snakes = [
+                SnakeState::new(0, TransitionMode::Wrap, 8, 10, 20, 0, 25),
+                SnakeState::new(1, TransitionMode::Wrap, 25, 30, 40, 1, 25),
+                SnakeState::new(2, TransitionMode::Tunnel, 50, 50, 60, 2, 25),
+                SnakeState::new(3, TransitionMode::Wrap, 70, 70, 80, 3, 25),
+            ];
+
+            for s_idx in 0..4 {
+                if offset + 7 > bytes.len() {
+                    return Err("Truncated snake state in binary brain".to_string());
+                }
+                let sid = bytes[offset] as usize;
+                offset += 1;
+                let mode = match bytes[offset] {
+                    0 => TransitionMode::Wrap,
+                    1 => TransitionMode::Tunnel,
+                    2 => TransitionMode::Fluid,
+                    _ => TransitionMode::Anchor,
+                };
+                offset += 1;
+                let w = bytes[offset];
+                offset += 1;
+                let x = bytes[offset];
+                offset += 1;
+                let z = bytes[offset];
+                offset += 1;
+                let spin = bytes[offset];
+                offset += 1;
+                let vol = bytes[offset];
+                offset += 1;
+
+                snakes[s_idx] = SnakeState {
+                    id: sid,
+                    mode,
+                    w,
+                    x,
+                    z,
+                    spin,
+                    vol,
+                };
+            }
+
+            if offset + 5 > bytes.len() {
+                return Err("Truncated hydraulics state in binary brain".to_string());
+            }
+            let volumes = [bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]];
+            offset += 4;
+            let parity_phase = bytes[offset] as usize;
+            offset += 1;
+
+            let mut hydraulics = TopologicalHydraulicUnit::new();
+            hydraulics.volumes = volumes;
+            hydraulics.parity_phase = parity_phase;
+
+            columns.push(CorticalColumnUnit {
+                id,
+                snakes,
+                hydraulics,
+                sensory_error,
+            });
+        }
+
+        let mut kv_cache = PhaseKvCache::new(max_context);
+        if offset + 4 <= bytes.len() {
+            let kv_len = u32::from_le_bytes([bytes[offset], bytes[offset+1], bytes[offset+2], bytes[offset+3]]) as usize;
+            offset += 4;
+            for _ in 0..kv_len {
+                if offset + 3 > bytes.len() {
+                    break;
+                }
+                let theta_x = bytes[offset];
+                offset += 1;
+                let theta_z = bytes[offset];
+                offset += 1;
+                let depth_w = bytes[offset];
+                offset += 1;
+                kv_cache.push(PhaseToken {
+                    theta_x,
+                    theta_z,
+                    depth_w,
+                });
+            }
+        }
+
+        Ok(Self {
+            vocab,
+            columns,
+            kv_cache,
+            total_tokens_processed,
+        })
+    }
+
+    /// Save trained model to disk as a .cl_brain file
+    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {
+        let bytes = self.to_bytes();
+        std::fs::write(path, bytes)
+    }
+
+    /// Load trained model from a .cl_brain file
+    pub fn load_from_file<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Self> {
+        let bytes = std::fs::read(path)?;
+        Self::from_bytes(&bytes).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    }
+
+    /// Stream train on a real text/code file using local Riemannian STDP
+    pub fn train_dataset_file<P: AsRef<std::path::Path>>(&mut self, path: P, epochs: usize) -> std::io::Result<usize> {
+        let text = std::fs::read_to_string(path)?;
+        let total_chars = text.len();
+        let num_epochs = epochs.max(1);
+        for _ in 0..num_epochs {
+            self.train_sequence_stdp(&text);
+        }
+        Ok(total_chars * num_epochs)
+    }
 }
+

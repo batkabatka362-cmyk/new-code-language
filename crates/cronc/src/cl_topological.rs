@@ -291,14 +291,15 @@ impl CliffordVliwBundle {
     /// Parse from a standard 40-character line (e.g. "B0000:W102030025W102230025T405060125A000000025")
     pub fn from_vliw_line(line: &str) -> Result<Self, String> {
         let trimmed = line.trim();
-        let (label, body) = if let Some(idx) = trimmed.find(':') {
+        let (label, raw_body) = if let Some(idx) = trimmed.find(':') {
             (trimmed[..idx].trim().to_string(), trimmed[idx + 1..].trim())
         } else {
             ("B_ANON".to_string(), trimmed)
         };
+        let body: String = raw_body.chars().filter(|c| !c.is_whitespace()).collect();
 
         if body.len() != 40 {
-            return Err(format!("VLIW body must be exactly 40 chars, got {} chars in '{}'", body.len(), body));
+            return Err(format!("VLIW body must be exactly 40 chars, got {} chars in '{}'", body.len(), raw_body));
         }
 
         let s0 = SnakeState::from_slot_10char(&body[0..10], 0)?;
@@ -996,12 +997,15 @@ impl ClTopologicalCompiler {
             let line = lines[i].trim();
             i += 1;
 
-            if line.is_empty() || line.starts_with("//") || line.starts_with('#') {
+            if line.is_empty() || line.starts_with("//") || line.starts_with('#') || line.starts_with(';') {
                 continue;
             }
 
             // Check if raw 40-char VLIW line: "B0000:W102030025..."
-            if line.contains(':') && line.split(':').nth(1).map_or(false, |b| b.trim().len() == 40) {
+            if line.contains(':') && line.split(':').nth(1).map_or(false, |b| {
+                let clean: String = b.chars().filter(|c| !c.is_whitespace()).collect();
+                clean.len() == 40
+            }) {
                 let bundle = CliffordVliwBundle::from_vliw_line(line)?;
                 instructions.push(TopologicalInstruction::Bundle(bundle));
                 continue;
@@ -1016,7 +1020,7 @@ impl ClTopologicalCompiler {
                     let sub_line = lines[i].trim();
                     i += 1;
 
-                    if sub_line.is_empty() || sub_line.starts_with("//") || sub_line.starts_with('#') {
+                    if sub_line.is_empty() || sub_line.starts_with("//") || sub_line.starts_with('#') || sub_line.starts_with(';') {
                         continue;
                     }
                     if sub_line.starts_with('}') {

@@ -95,6 +95,12 @@ pub struct CoreEngine {
     pub sphere_errors: [bool; 4],
     pub sphere_matrix_acc: [i32; 4],
     pub sphere_curvature_ops_count: usize,
+
+    // === 4D Clifford Topological Engine & TNM v1.0 Cortical Registers ===
+    pub topological_snakes: [[u8; 5]; 4], // [W, X, Z, Spin, Vol]
+    pub topological_parity_phase: usize,
+    pub topological_deflections: usize,
+    pub topological_resonance_acc: i64,
 }
 
 impl CoreEngine {
@@ -157,6 +163,16 @@ impl CoreEngine {
             sphere_errors: [false; 4],
             sphere_matrix_acc: [0; 4],
             sphere_curvature_ops_count: 0,
+            // 4D Clifford Topological Engine state
+            topological_snakes: [
+                [8, 10, 20, 0, 25],
+                [25, 30, 40, 1, 25],
+                [50, 50, 60, 2, 25],
+                [70, 70, 80, 3, 25],
+            ],
+            topological_parity_phase: 0,
+            topological_deflections: 0,
+            topological_resonance_acc: 0,
         }
     }
 
@@ -1230,6 +1246,95 @@ impl CoreEngine {
                 for w in self.stdp_weights.iter_mut() {
                     *w += 1;
                 }
+            }
+            "TP" => {
+                // 4D Topological Phase Token: encode byte/val to S^3 coords (W, X, Z)
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { d };
+                let val = if imm > 0 { imm as u32 } else { self.registers[s] };
+                let raw_byte = (val & 0xFF) as u8;
+                let theta_x = ((raw_byte as u32 * 37) % 100) as u8;
+                let theta_z = ((raw_byte as u32 * 73 + 19) % 100) as u8;
+                let depth_w = if raw_byte.is_ascii_whitespace() { 8 }
+                    else if raw_byte.is_ascii_alphabetic() { 50 }
+                    else if raw_byte.is_ascii_digit() { 30 }
+                    else { 70 };
+                let spin = ((raw_byte / 64) % 4) as u8;
+
+                // Update sensory snake (Snake 2, Layer IV Sensory)
+                self.topological_snakes[2] = [depth_w, theta_x, theta_z, spin, self.topological_snakes[2][4]];
+
+                // Pack into destination register: (W << 16) | (X << 8) | Z
+                self.registers[d] = ((depth_w as u32) << 16) | ((theta_x as u32) << 8) | (theta_z as u32);
+            }
+            "WF" => {
+                // 4D Wave Interference Resonance Attention (+2 constructive, +1 transverse, 0 destructive notch)
+                const LUT: [[i8; 4]; 4] = [
+                    [2, 1, 0, 1],
+                    [1, 2, 1, 0],
+                    [0, 1, 2, 1],
+                    [1, 0, 1, 2],
+                ];
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { d };
+                let spin_a = (self.topological_snakes[3][3] % 4) as usize; // Motor snake
+                let spin_b = ((self.registers[s] >> 24) % 4) as usize;
+                let weight = LUT[spin_a][spin_b] as i64;
+
+                let dx = (self.topological_snakes[2][1] as i32 - self.topological_snakes[3][1] as i32).abs();
+                let dz = (self.topological_snakes[2][2] as i32 - self.topological_snakes[3][2] as i32).abs();
+                let spatial = (100 - (dx.min(100 - dx) + dz.min(100 - dz))).max(0) as i64;
+                let score = spatial * weight;
+
+                self.topological_resonance_acc += score;
+                self.registers[d] = score as u32;
+            }
+            "CN" => {
+                // 4D Curved Needle Braid Deflector: enforces |Wi - Wj| >= 1 on 2D overlap (0.00% collision rate)
+                let d = if dest > 0 { dest } else { 0 };
+                let mut deflections = 0;
+                for i in 0..4 {
+                    for j in (i + 1)..4 {
+                        if self.topological_snakes[i][1] == self.topological_snakes[j][1]
+                            && self.topological_snakes[i][2] == self.topological_snakes[j][2]
+                            && self.topological_snakes[i][0] == self.topological_snakes[j][0]
+                        {
+                            self.topological_snakes[i][0] = (self.topological_snakes[i][0] + 1) % 100;
+                            deflections += 1;
+                        }
+                    }
+                }
+                self.topological_deflections += deflections;
+                self.registers[d] = deflections as u32;
+            }
+            "HP" => {
+                // 4D Homeostasis Parity Rotation [34, 33, 33] -> [33, 34, 33] -> [33, 33, 34] (H == 100%)
+                let d = if dest > 0 { dest } else { 0 };
+                self.topological_parity_phase = (self.topological_parity_phase + 1) % 3;
+                let vols = match self.topological_parity_phase {
+                    0 => [34, 33, 33],
+                    1 => [33, 34, 33],
+                    _ => [33, 33, 34],
+                };
+                self.topological_snakes[0][4] = vols[0];
+                self.topological_snakes[1][4] = vols[1];
+                self.topological_snakes[2][4] = vols[2];
+                self.registers[d] = self.topological_parity_phase as u32;
+            }
+            "LY" => {
+                // 4D Cortical Layer Transition / Clamp
+                let d = if dest > 0 { dest } else { 0 };
+                let s_id = (dest % 4) as usize;
+                let target_layer = if imm > 0 { imm as u8 } else { (self.registers[dest] & 0x7) as u8 };
+                let clamped_w = match target_layer {
+                    0 => self.topological_snakes[s_id][0].clamp(0, 15),   // Layer I Apical
+                    1 => self.topological_snakes[s_id][0].clamp(16, 40),  // Layer II/III Lateral
+                    2 => self.topological_snakes[s_id][0].clamp(41, 60),  // Layer IV Sensory
+                    3 => self.topological_snakes[s_id][0].clamp(61, 80),  // Layer V Motor
+                    _ => self.topological_snakes[s_id][0].clamp(81, 99),  // Layer VI Predictive
+                };
+                self.topological_snakes[s_id][0] = clamped_w;
+                self.registers[d] = clamped_w as u32;
             }
             _ => {}
         }

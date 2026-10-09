@@ -190,6 +190,10 @@ USAGE:
 OPTIONS:
     --generate <N>      Number of tokens to generate (default: 16)
     --train <text>      Online Riemannian STDP sequence training text
+    --dataset <file>    Stream-train on real text/code file dataset
+    --epochs <N>        Training passes over dataset (default: 1)
+    --save-brain <file> Save trained model weights to binary .cl_brain file
+    --load-brain <file> Load pre-trained model weights from binary .cl_brain file
     --columns <C>       Number of 6-layer neocortical columns (default: 4)
     --context <K>       Max 3-byte Phase KV-Cache context tokens (default: 512)
     -h, --help          Show this help message
@@ -197,6 +201,8 @@ OPTIONS:
 EXAMPLES:
     cron cl-lm "CRON" --generate 12
     cron cl-lm "CRON" --train "CRON IS 4D CLIFFORD" --generate 16
+    cron cl-lm "4D" --dataset corpus.txt --epochs 3 --save-brain my_brain.cl_brain
+    cron cl-lm "SOVEREIGN" --load-brain my_brain.cl_brain --generate 24
 "#);
         return;
     }
@@ -204,6 +210,10 @@ EXAMPLES:
     let prompt = &args[2];
     let mut generate_count = 16usize;
     let mut train_text: Option<String> = None;
+    let mut dataset_file: Option<String> = None;
+    let mut epochs = 1usize;
+    let mut save_brain_path: Option<String> = None;
+    let mut load_brain_path: Option<String> = None;
     let mut columns = 4usize;
     let mut context_len = 512usize;
 
@@ -216,6 +226,22 @@ EXAMPLES:
             }
             "--train" | "-t" if i + 1 < args.len() => {
                 train_text = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--dataset" | "-d" if i + 1 < args.len() => {
+                dataset_file = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--epochs" | "-e" if i + 1 < args.len() => {
+                epochs = args[i + 1].parse().unwrap_or(1);
+                i += 2;
+            }
+            "--save-brain" | "-s" if i + 1 < args.len() => {
+                save_brain_path = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--load-brain" | "-l" if i + 1 < args.len() => {
+                load_brain_path = Some(args[i + 1].clone());
                 i += 2;
             }
             "--columns" | "-c" if i + 1 < args.len() => {
@@ -238,12 +264,49 @@ EXAMPLES:
     println!("  Neocortical Columns: {} (6 Layers: Apical -> Lateral -> Sensory -> Motor)", columns);
     println!("  Max Phase KV-Cache:  {} tokens (3 bytes/token, 98.83% RAM compression)", context_len);
 
-    let mut model = cronc::cl_topological_lm::TopologicalBrainTransformer::new(columns, context_len);
+    let mut model = if let Some(ref brain_path) = load_brain_path {
+        println!("\n[LOAD MODEL] Loading topological brain from '{}'...", brain_path);
+        match cronc::cl_topological_lm::TopologicalBrainTransformer::load_from_file(brain_path) {
+            Ok(m) => {
+                println!("  [SUCCESS] Loaded model with {} columns, {} tokens processed.", m.columns.len(), m.total_tokens_processed);
+                m
+            }
+            Err(e) => {
+                eprintln!("[ERROR] Failed to load brain model from '{}': {}", brain_path, e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        cronc::cl_topological_lm::TopologicalBrainTransformer::new(columns, context_len)
+    };
 
     if let Some(ref text) = train_text {
         println!("\n[STDP TRAINING] Learning sequence '{}' on S^3 manifold (Zero Backpropagation)...", text);
         model.train_sequence_stdp(text);
         println!("  [SUCCESS] Local Riemannian STDP plasticity updated. All column energies H == 100%.");
+    }
+
+    if let Some(ref data_path) = dataset_file {
+        println!("\n[DATASET TRAINING] Streaming corpus from '{}' for {} epoch(s)...", data_path, epochs);
+        match model.train_dataset_file(data_path, epochs) {
+            Ok(trained_tokens) => {
+                println!("  [SUCCESS] Completed {} tokens of local Riemannian STDP training.", trained_tokens);
+            }
+            Err(e) => {
+                eprintln!("[ERROR] Failed to train on dataset '{}': {}", data_path, e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if let Some(ref save_path) = save_brain_path {
+        println!("\n[SAVE MODEL] Saving topological brain to '{}'...", save_path);
+        if let Err(e) = model.save_to_file(save_path) {
+            eprintln!("[ERROR] Failed to save brain model to '{}': {}", save_path, e);
+        } else {
+            let file_size = std::fs::metadata(save_path).map(|m| m.len()).unwrap_or(0);
+            println!("  [SUCCESS] Saved .cl_brain file ({} bytes).", file_size);
+        }
     }
 
     println!("\n[INGESTION] Prompt: \"{}\"", prompt);
