@@ -247,9 +247,10 @@ pub use clifford::{
 };
 
 pub use cl_topological::{
-    ClTopologicalCompiler, CliffordKinematicsEngine, CliffordVliwBundle, SnakeState,
-    TopologicalCycleTelemetry, TopologicalHydraulicUnit, TopologicalUniverse128,
-    TransitionMode, UnifiedTopologicalRuntime, WaveInterferenceAttention,
+    ClTopologicalCompiler, ClTopologicalProgram, CliffordKinematicsEngine, CliffordVliwBundle,
+    CorticalLayerKind, PhaseToken, PhaseTokenEngine, ReversibleFsm8, SnakeState,
+    TopologicalCycleTelemetry, TopologicalHydraulicUnit, TopologicalInstruction,
+    TopologicalUniverse128, TransitionMode, UnifiedTopologicalRuntime, WaveInterferenceAttention,
 };
 
 pub use cl_swarm_wafer::{

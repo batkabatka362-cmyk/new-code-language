@@ -200,3 +200,113 @@ fn test_unified_topological_runtime_end_to_end() {
 
     assert_eq!(runtime.cycle_count, 11);
 }
+
+#[test]
+fn test_phase_token_engine_and_3byte_kv_cache() {
+    use cronc::cl_topological::{CorticalLayerKind, PhaseTokenEngine};
+
+    let text = "CRON4D";
+    let tokens = PhaseTokenEngine::encode_string(text, CorticalLayerKind::Layer4Sensory);
+    assert_eq!(tokens.len(), 6);
+
+    for tok in &tokens {
+        // 3 bytes total
+        let bytes = tok.to_bytes();
+        assert_eq!(bytes.len(), 3);
+        assert!(tok.depth_w >= 41 && tok.depth_w <= 60, "Must reside in Layer IV Sensory depth");
+    }
+
+    // Identical tokens produce maximum resonance
+    let res_self = PhaseTokenEngine::compute_resonance(&tokens[0], &tokens[0]);
+    assert_eq!(res_self, 100, "Self-resonance must be 100%");
+
+    // Cross-token resonance is bounded in 0..100
+    let res_cross = PhaseTokenEngine::compute_resonance(&tokens[0], &tokens[1]);
+    assert!(res_cross <= 100);
+}
+
+#[test]
+fn test_cortical_layer_mapping_and_clamping() {
+    use cronc::cl_topological::CorticalLayerKind;
+
+    assert_eq!(CorticalLayerKind::from_w(5), CorticalLayerKind::Layer1Apical);
+    assert_eq!(CorticalLayerKind::from_w(25), CorticalLayerKind::Layer23Lateral);
+    assert_eq!(CorticalLayerKind::from_w(50), CorticalLayerKind::Layer4Sensory);
+    assert_eq!(CorticalLayerKind::from_w(75), CorticalLayerKind::Layer5Motor);
+    assert_eq!(CorticalLayerKind::from_w(95), CorticalLayerKind::Layer6Predictive);
+
+    let l4 = CorticalLayerKind::Layer4Sensory;
+    assert_eq!(l4.clamp_w(10), 41);
+    assert_eq!(l4.clamp_w(55), 55);
+    assert_eq!(l4.clamp_w(90), 60);
+}
+
+#[test]
+fn test_reversible_fsm8_computation() {
+    use cronc::cl_topological::{ReversibleFsm8, SnakeState, TransitionMode};
+
+    let mut fsm = ReversibleFsm8::new();
+    assert_eq!(fsm.state, 0);
+
+    // 8 steps forward returns to initial state (T^8 = I)
+    for expected in 1..=8 {
+        let s = fsm.step_forward();
+        assert_eq!(s, expected % 8);
+    }
+    assert_eq!(fsm.state, 0, "T^8 must equal Identity (state 0)");
+
+    // Step backward is exact inverse: T^-1 = T^7
+    let s_back = fsm.step_backward();
+    assert_eq!(s_back, 7);
+
+    // Permutation of snakes
+    let mut snakes = [
+        SnakeState::new(0, TransitionMode::Wrap, 10, 20, 30, 0, 25),
+        SnakeState::new(1, TransitionMode::Wrap, 11, 21, 31, 1, 25),
+        SnakeState::new(2, TransitionMode::Wrap, 12, 22, 32, 2, 25),
+        SnakeState::new(3, TransitionMode::Wrap, 13, 23, 33, 3, 25),
+    ];
+    fsm.state = 1;
+    fsm.permute_snakes(&mut snakes);
+    assert_eq!(snakes[0].w, 11, "Snake 0 should now have coordinates of previous Snake 1");
+}
+
+#[test]
+fn test_dynamic_topological_isa_program_execution() {
+    use cronc::cl_topological::ClTopologicalCompiler;
+
+    let cl_source = r#"
+    // Initial manifold bundle
+    bundle InitState {
+        S0: WRAP   W=10 X=20 Z=30 spin=0 vol=25
+        S1: WRAP   W=10 X=22 Z=30 spin=0 vol=25
+        S2: TUNNEL W=40 X=50 Z=60 spin=90 vol=25
+        S3: ANCHOR W=00 X=00 Z=00 spin=0 vol=25
+    }
+
+    // Dynamic trajectory instructions
+    flow 3;
+    braid S0, S1;
+    resonate;
+    parity_rotate;
+    fsm_step forward;
+    layer IV S0;
+    transfer S3 -> S0 vol=25;
+    "#;
+
+    let bundles = ClTopologicalCompiler::compile_source(cl_source).expect("Source compilation must succeed");
+    assert!(!bundles.is_empty(), "Program must synthesize bundles");
+
+    // All synthesized bundles must strictly conserve H == 100%
+    for b in &bundles {
+        assert_eq!(b.snakes.iter().map(|s| s.vol as usize).sum::<usize>(), 100, "Every synthesized bundle must conserve H == 100%");
+    }
+
+    // Verify 40-character 10-10-10-10 microcode emission
+    let listing = ClTopologicalCompiler::emit_10char_vliw_program(&bundles);
+    assert!(listing.contains("B0000:"));
+    for line in listing.lines().filter(|l| l.starts_with("B")) {
+        let parts: Vec<&str> = line.split(':').collect();
+        assert_eq!(parts[1].len(), 40, "Each machine line must have exactly 40 chars for 4 ALUs");
+    }
+}
