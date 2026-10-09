@@ -509,7 +509,13 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
             }
         } else if !(trimmed.starts_with('B') || trimmed.starts_with('b') || trimmed.starts_with('L'))
                && !trimmed.starts_with('_') && !trimmed.starts_with('\'') && !trimmed.starts_with('~') && !trimmed.starts_with('!')
-               && !trimmed.starts_with('@') && !trimmed.starts_with('.') {
+               && !trimmed.starts_with('@') && !trimmed.starts_with('.')
+               && !trimmed.starts_with("bundle")
+               && !trimmed.starts_with('}')
+               && !trimmed.starts_with("S0:") && !trimmed.starts_with("S1:") && !trimmed.starts_with("S2:") && !trimmed.starts_with("S3:")
+               && !trimmed.starts_with("s0:") && !trimmed.starts_with("s1:") && !trimmed.starts_with("s2:") && !trimmed.starts_with("s3:")
+               && !trimmed.starts_with("transfer") && !trimmed.starts_with("attend") && !trimmed.starts_with("resonate")
+               && !trimmed.starts_with("step") && !trimmed.starts_with("flow") {
             diagnostics.push(Diagnostic {
                 range: Range {
                     start: Position { line: line_u32, character: 0 },
@@ -519,6 +525,22 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
                 code: Some("CL001".to_string()),
                 source: Some("cron-lsp".to_string()),
                 message: format!("Unrecognized statement in .cl microcode: '{}'. Expected 4-slot VLIW bundle", trimmed),
+            });
+        }
+    }
+
+    // If source contains topological bundles, perform full semantic invariant check
+    if source.contains("bundle ") {
+        if let Err(err_msg) = cronc::cl_topological::ClTopologicalCompiler::compile_source(source) {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position { line: 0, character: 0 },
+                    end: Position { line: 0, character: 10 },
+                },
+                severity: 1,
+                code: Some("TOPO_INV".to_string()),
+                source: Some("cron-lsp".to_string()),
+                message: format!("Topological Invariant Error: {}", err_msg),
             });
         }
     }
@@ -2329,6 +2351,60 @@ mod tests {
         assert!(diags.iter().any(|d| d["code"] == "CL004" && d["message"].as_str().unwrap().contains("R20")));
         // Should flag invalid slot count (2 slots instead of 4)
         assert!(diags.iter().any(|d| d["code"] == "CL001" && d["message"].as_str().unwrap().contains("found 2 slots")));
+    }
+
+    #[test]
+    fn test_lsp_cl_topological_diagnostics() {
+        let mut server = LspServer::new();
+        let valid_topo_cl = r#"
+        bundle InitManifold {
+            S0: WRAP W=0 X=0 Z=0 spin=0 vol=25;
+            S1: WRAP W=1 X=25 Z=50 spin=1 vol=25;
+            S2: WRAP W=2 X=50 Z=25 spin=2 vol=25;
+            S3: WRAP W=3 X=75 Z=75 spin=3 vol=25;
+        }
+        "#;
+
+        let open_req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": "file:///workspace/topological_rotor.cl",
+                    "text": valid_topo_cl
+                }
+            }
+        });
+
+        let resp_str = server.handle_message(&open_req.to_string()).unwrap();
+        let notify: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        assert_eq!(notify["method"], "textDocument/publishDiagnostics");
+        let diags = notify["params"]["diagnostics"].as_array().unwrap();
+        assert_eq!(diags.len(), 0, "Valid topological CL should produce zero diagnostics, got: {:?}", diags);
+
+        // Test invalid invariant (Volume sum != 100)
+        let invalid_topo_cl = r#"
+        bundle BadVolume {
+            S0: WRAP W=0 X=0 Z=0 spin=0 vol=20;
+            S1: WRAP W=1 X=25 Z=50 spin=1 vol=20;
+            S2: WRAP W=2 X=50 Z=25 spin=2 vol=20;
+            S3: WRAP W=3 X=75 Z=75 spin=3 vol=20;
+        }
+        "#;
+        let open_bad = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": {
+                "textDocument": {
+                    "uri": "file:///workspace/bad_rotor.cl",
+                    "text": invalid_topo_cl
+                }
+            }
+        });
+        let resp_bad = server.handle_message(&open_bad.to_string()).unwrap();
+        let notify_bad: serde_json::Value = serde_json::from_str(&resp_bad).unwrap();
+        let bad_diags = notify_bad["params"]["diagnostics"].as_array().unwrap();
+        assert!(bad_diags.iter().any(|d| d["code"] == "TOPO_INV"));
     }
 
     #[test]
