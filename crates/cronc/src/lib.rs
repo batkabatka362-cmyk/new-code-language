@@ -102,6 +102,7 @@ pub mod cl_importer;
 pub mod cl_lsp;
 pub mod cl_visualizer;
 pub mod cl_clifford;
+pub mod cl_topological;
 pub mod cl_hyperdimensional;
 pub mod cl_neuromodulation;
 pub mod cl_sleep_engine;
@@ -243,6 +244,12 @@ pub use cl_fmt::{format_cl_program, ClFmtOptions};
 pub use clifford::{
     blade_index, blade_sign, fold_tensor_4d, prefix_xor, Multivector4D, Rotor4D,
     BLADE_COUNT, BLADE_NAMES, CAYLEY_INDEX, CAYLEY_SIGN,
+};
+
+pub use cl_topological::{
+    CliffordKinematicsEngine, CliffordVliwBundle, SnakeState, TopologicalCycleTelemetry,
+    TopologicalHydraulicUnit, TopologicalUniverse128, TransitionMode, UnifiedTopologicalRuntime,
+    WaveInterferenceAttention,
 };
 
 pub use cl_swarm_wafer::{
