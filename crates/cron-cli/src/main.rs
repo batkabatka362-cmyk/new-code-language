@@ -205,6 +205,16 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    Autonomous Silicon Micro-Kernel PPA Performance Profiling Suite.\n");
             println!("OPTIONS:\n    --all       Profile all standard library kernels in libcl\n    --iters <n> Number of profiling iterations (default: 1000)\n    --hud       Render ASCII PPA Scoreboard\n    --json      Output performance metrics in JSON\n    -h, --help  Display this help message\n");
         }
+        "matrix4" | "cl-matrix4" | "matrix" => {
+            println!("USAGE:\n    cron matrix4 [OPTIONS] [file.cl]\n");
+            println!("DESCRIPTION:\n    Flagship 4D Spherical Geodesic Cortex Supercomputer Project Runner with 8 Matrix 4.1 domains.\n");
+            println!("OPTIONS:\n    --file <path>     Path to .cl microcode\n    --corpus <path>   Path to STDP corpus\n    --prompt <text>   Text prompt for wave interference generation\n    --tokens <n>      Number of tokens to generate\n    --bench           Run supercomputer throughput benchmark\n    --json            Output structured JSON telemetry\n    -h, --help        Display this help message\n");
+        }
+        "matrix4-chat" | "cortex-chat" => {
+            println!("USAGE:\n    cron matrix4 chat [OPTIONS]\n    cron matrix4-chat [OPTIONS]\n    cron cortex-chat [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Live 4D Cortical Chat & Real-Time Riemannian STDP Learning Terminal with 3-Byte KV-Cache.\n");
+            println!("OPTIONS:\n    --eval <prompt>   Run single turn non-interactively and exit\n    --corpus <path>   Knowledge corpus to bootstrap from\n    --brain <path>    Load pre-trained .cl_brain file\n    --tokens <n>      Maximum tokens per turn (default: 32)\n    --json            Output metrics in JSON\n    -h, --help        Display this help message\n");
+        }
         other => {
             println!("CRON Command: {}\n", other);
             println!("USAGE:\n    cron {} [OPTIONS] [ARGUMENTS]\n", other);
