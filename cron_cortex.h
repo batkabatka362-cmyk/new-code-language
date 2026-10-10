@@ -47,6 +47,9 @@ CRON_API void cron_cortex_inject_token(CronSiliconCore* core, uint8_t token_byte
 CRON_API uint32_t cron_cortex_get_hamiltonian(CronSiliconCore* core);
 CRON_API void cron_cortex_get_sensory(CronSiliconCore* core, uint32_t* out_w, uint32_t* out_x, uint32_t* out_z, uint32_t* out_spin);
 CRON_API void cron_cortex_get_telemetry(CronSiliconCore* core, CronCortexTelemetry* out_tel);
+CRON_API void cron_sphere_linear_forward(int32_t* out, const int32_t* in, const int8_t* ternary_weights, uint32_t batch_size, uint32_t in_dim, uint32_t out_dim);
+CRON_API void cron_sphere_swiglu(int32_t* out, const int32_t* gate, const int32_t* up, uint32_t size);
+CRON_API void cron_sphere_quantize_ternary(int8_t* out_ternary, float* out_scale, const float* in_floats, uint32_t count);
 
 #ifdef __cplusplus
 }

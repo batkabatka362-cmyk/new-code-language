@@ -1063,6 +1063,53 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    out_tel->sensory_z = (uint32_t)core->snake_z[2];\n");
     out.push_str("    out_tel->sensory_spin = (uint32_t)core->snake_spin[2];\n");
     out.push_str("}\n\n");
+    out.push_str(r#"CRON_EXPORT void cron_sphere_linear_forward(int32_t* out, const int32_t* in, const int8_t* ternary_weights, uint32_t batch_size, uint32_t in_dim, uint32_t out_dim) {
+    if (!out || !in || !ternary_weights) return;
+    for (uint32_t b = 0; b < batch_size; b++) {
+        const int32_t* in_b = in + (b * in_dim);
+        int32_t* out_b = out + (b * out_dim);
+        for (uint32_t o = 0; o < out_dim; o++) {
+            const int8_t* w_row = ternary_weights + (o * in_dim);
+            int32_t acc = 0;
+            for (uint32_t i = 0; i < in_dim; i++) {
+                int8_t w = w_row[i];
+                if (w == 1) acc += in_b[i];
+                else if (w == -1) acc -= in_b[i];
+            }
+            out_b[o] = acc;
+        }
+    }
+}
+
+CRON_EXPORT void cron_sphere_swiglu(int32_t* out, const int32_t* gate, const int32_t* up, uint32_t size) {
+    if (!out || !gate || !up) return;
+    for (uint32_t i = 0; i < size; i++) {
+        int32_t g = gate[i];
+        int32_t u = up[i];
+        int32_t silu_g = (g > 0) ? g : (g >> 3);
+        out[i] = silu_g + (u >> 2);
+    }
+}
+
+CRON_EXPORT void cron_sphere_quantize_ternary(int8_t* out_ternary, float* out_scale, const float* in_floats, uint32_t count) {
+    if (!out_ternary || !out_scale || !in_floats || count == 0) return;
+    double sum = 0.0;
+    for (uint32_t i = 0; i < count; i++) {
+        double v = in_floats[i];
+        sum += (v < 0 ? -v : v);
+    }
+    float scale = (float)(sum / count);
+    if (scale <= 1e-6f) scale = 1.0f;
+    *out_scale = scale;
+    float thresh = scale * 0.5f;
+    for (uint32_t i = 0; i < count; i++) {
+        float v = in_floats[i];
+        if (v > thresh) out_ternary[i] = 1;
+        else if (v < -thresh) out_ternary[i] = -1;
+        else out_ternary[i] = 0;
+    }
+}
+"#);
 
     out.push_str("#ifndef CRON_SHARED_LIB\n");
     out.push_str("int main(int argc, char** argv) {\n");
@@ -1196,6 +1243,9 @@ CRON_API void cron_cortex_inject_token(CronSiliconCore* core, uint8_t token_byte
 CRON_API uint32_t cron_cortex_get_hamiltonian(CronSiliconCore* core);
 CRON_API void cron_cortex_get_sensory(CronSiliconCore* core, uint32_t* out_w, uint32_t* out_x, uint32_t* out_z, uint32_t* out_spin);
 CRON_API void cron_cortex_get_telemetry(CronSiliconCore* core, CronCortexTelemetry* out_tel);
+CRON_API void cron_sphere_linear_forward(int32_t* out, const int32_t* in, const int8_t* ternary_weights, uint32_t batch_size, uint32_t in_dim, uint32_t out_dim);
+CRON_API void cron_sphere_swiglu(int32_t* out, const int32_t* gate, const int32_t* up, uint32_t size);
+CRON_API void cron_sphere_quantize_ternary(int8_t* out_ternary, float* out_scale, const float* in_floats, uint32_t count);
 
 #ifdef __cplusplus
 }
