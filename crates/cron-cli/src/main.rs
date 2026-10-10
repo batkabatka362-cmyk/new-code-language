@@ -3640,6 +3640,13 @@ fn main() {
                         simd_target = target;
                     }
                     i += 2;
+                } else if args[i] == "--dll" || args[i] == "--shared" {
+                    if out_path.is_none() {
+                        let p = std::path::Path::new(input_path);
+                        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("cron_kernel");
+                        out_path = Some(if cfg!(windows) { format!("{}.dll", stem) } else { format!("lib{}.so", stem) });
+                    }
+                    i += 1;
                 } else if args[i] == "--bench" {
                     run_after = true;
                     if i + 1 < args.len() && !args[i + 1].starts_with('-') {

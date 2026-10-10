@@ -760,6 +760,10 @@ pub fn run_matrix4_native(args: &[String]) {
                 opt_level = arg.trim_start_matches("-O").to_string();
                 i += 1;
             }
+            "--dll" | "--shared" => {
+                out_file = if cfg!(windows) { "cron_cortex.dll".to_string() } else { "libcron_cortex.so".to_string() };
+                i += 1;
+            }
             "--simd" if i + 1 < args.len() => {
                 if let Some(target) = cronc::cl_c23::SimdTarget::from_str_opt(&args[i + 1]) {
                     simd_target = target;

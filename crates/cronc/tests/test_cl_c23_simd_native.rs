@@ -267,3 +267,48 @@ B0003: _HL00!000> _NO00#000> _NO00#000> _NO00#000>
     let _ = fs::remove_file(&exe_path);
 }
 
+#[test]
+fn test_c23_shared_library_dll_compilation_and_header_generation() {
+    if Command::new("gcc").arg("--version").output().is_err() {
+        return;
+    }
+
+    let cl_code = r#"
+    @kernel cortex_dll_test
+    B0000: _RS00$000> _SH00$000> '=01#004D> _NO00$000>
+    B0001: _TP02$100> _LY03$002> _HP04$000> _NO00$000>
+    B0002: _CN05$000> _RF06$200> _NO00$000> _NO00$000>
+    B0003: _WF07$200> _bb00$000> _NO00$000> _NO00$000>
+    B0004: _PO08+700> _SB09$000> _NO00$000> !HL00#000(
+    "#;
+
+    let temp_dir = std::env::temp_dir();
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let dll_name = if cfg!(windows) {
+        format!("cron_test_cortex_{}_{}.dll", std::process::id(), ts)
+    } else {
+        format!("libcron_test_cortex_{}_{}.so", std::process::id(), ts)
+    };
+    let dll_path = temp_dir.join(&dll_name);
+
+    let res = compile_cl_to_native_binary_with_target(
+        cl_code,
+        dll_path.to_str().unwrap(),
+        "3",
+        SimdTarget::Auto,
+    );
+    assert!(res.is_ok(), "Native compilation of shared library failed: {:?}", res);
+    assert!(dll_path.exists(), "Output DLL must exist");
+
+    let header_path = temp_dir.join("cron_cortex.h");
+    assert!(header_path.exists(), "cron_cortex.h header must be generated");
+
+    let header_content = fs::read_to_string(&header_path).unwrap();
+    assert!(header_content.contains("cron_cortex_create"));
+    assert!(header_content.contains("cron_cortex_step"));
+    assert!(header_content.contains("cron_cortex_get_hamiltonian"));
+    assert!(header_content.contains("CronCortexTelemetry"));
+
+    let _ = fs::remove_file(&dll_path);
+}
+

@@ -983,6 +983,88 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    }\n");
     out.push_str("}\n\n");
 
+    out.push_str("// ============================================================================\n");
+    out.push_str("// C ABI Shared Library Dynamic Exports (C FFI / Python / C++ Interop)\n");
+    out.push_str("// ============================================================================\n");
+    out.push_str("#ifdef _WIN32\n");
+    out.push_str("  #define CRON_EXPORT __declspec(dllexport)\n");
+    out.push_str("#else\n");
+    out.push_str("  #define CRON_EXPORT __attribute__((visibility(\"default\")))\n");
+    out.push_str("#endif\n\n");
+    out.push_str("typedef struct {\n");
+    out.push_str("    uint64_t cycle_count;\n");
+    out.push_str("    uint64_t optical_gemm_count;\n");
+    out.push_str("    uint64_t reversible_ops_count;\n");
+    out.push_str("    uint64_t stdp_updates_count;\n");
+    out.push_str("    uint64_t spatial_broadcast_count;\n");
+    out.push_str("    uint64_t barrier_count;\n");
+    out.push_str("    uint64_t wave_interference_ops_count;\n");
+    out.push_str("    uint64_t deflections_count;\n");
+    out.push_str("    uint32_t hamiltonian;\n");
+    out.push_str("    uint32_t sensory_w;\n");
+    out.push_str("    uint32_t sensory_x;\n");
+    out.push_str("    uint32_t sensory_z;\n");
+    out.push_str("    uint32_t sensory_spin;\n");
+    out.push_str("} CronCortexTelemetry;\n\n");
+    out.push_str("CRON_EXPORT CronSiliconCore* cron_cortex_create(void) {\n");
+    out.push_str("    CronSiliconCore* core = (CronSiliconCore*)calloc(1, sizeof(CronSiliconCore));\n");
+    out.push_str("    if (core) cron_silicon_init(core);\n");
+    out.push_str("    return core;\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_destroy(CronSiliconCore* core) {\n");
+    out.push_str("    if (core) free(core);\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_reset(CronSiliconCore* core) {\n");
+    out.push_str("    if (core) cron_silicon_init(core);\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_step(CronSiliconCore* core) {\n");
+    out.push_str("    if (core) cron_execute_bundles(core);\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_run(CronSiliconCore* core, uint64_t cycles) {\n");
+    out.push_str("    if (!core) return;\n");
+    out.push_str("    for (uint64_t i = 0; i < cycles; i++) cron_execute_bundles(core);\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT uint32_t cron_cortex_get_reg(CronSiliconCore* core, uint32_t reg_idx) {\n");
+    out.push_str("    if (!core || reg_idx >= 16) return 0;\n");
+    out.push_str("    return core->r[reg_idx];\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_set_reg(CronSiliconCore* core, uint32_t reg_idx, uint32_t val) {\n");
+    out.push_str("    if (!core || reg_idx >= 16) return;\n");
+    out.push_str("    core->r[reg_idx] = val;\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_inject_token(CronSiliconCore* core, uint8_t token_byte) {\n");
+    out.push_str("    if (!core) return;\n");
+    out.push_str("    core->r[1] = (uint32_t)token_byte;\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT uint32_t cron_cortex_get_hamiltonian(CronSiliconCore* core) {\n");
+    out.push_str("    if (!core) return 0;\n");
+    out.push_str("    return (uint32_t)(core->hydraulic_volumes[0] + core->hydraulic_volumes[1] + core->hydraulic_volumes[2] + core->hydraulic_volumes[3]);\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_get_sensory(CronSiliconCore* core, uint32_t* out_w, uint32_t* out_x, uint32_t* out_z, uint32_t* out_spin) {\n");
+    out.push_str("    if (!core) return;\n");
+    out.push_str("    if (out_w) *out_w = (uint32_t)core->snake_w[2];\n");
+    out.push_str("    if (out_x) *out_x = (uint32_t)core->snake_x[2];\n");
+    out.push_str("    if (out_z) *out_z = (uint32_t)core->snake_z[2];\n");
+    out.push_str("    if (out_spin) *out_spin = (uint32_t)core->snake_spin[2];\n");
+    out.push_str("}\n\n");
+    out.push_str("CRON_EXPORT void cron_cortex_get_telemetry(CronSiliconCore* core, CronCortexTelemetry* out_tel) {\n");
+    out.push_str("    if (!core || !out_tel) return;\n");
+    out.push_str("    out_tel->cycle_count = core->cycle_count;\n");
+    out.push_str("    out_tel->optical_gemm_count = core->optical_gemm_count;\n");
+    out.push_str("    out_tel->reversible_ops_count = core->reversible_ops_count;\n");
+    out.push_str("    out_tel->stdp_updates_count = core->stdp_updates_count;\n");
+    out.push_str("    out_tel->spatial_broadcast_count = core->spatial_broadcast_count;\n");
+    out.push_str("    out_tel->barrier_count = core->barrier_count;\n");
+    out.push_str("    out_tel->wave_interference_ops_count = core->wave_interference_ops_count;\n");
+    out.push_str("    out_tel->deflections_count = core->deflections_count;\n");
+    out.push_str("    out_tel->hamiltonian = cron_cortex_get_hamiltonian(core);\n");
+    out.push_str("    out_tel->sensory_w = (uint32_t)core->snake_w[2];\n");
+    out.push_str("    out_tel->sensory_x = (uint32_t)core->snake_x[2];\n");
+    out.push_str("    out_tel->sensory_z = (uint32_t)core->snake_z[2];\n");
+    out.push_str("    out_tel->sensory_spin = (uint32_t)core->snake_spin[2];\n");
+    out.push_str("}\n\n");
+
+    out.push_str("#ifndef CRON_SHARED_LIB\n");
     out.push_str("int main(int argc, char** argv) {\n");
     out.push_str("    size_t bench_iters = 1;\n");
     out.push_str("    bool is_bench = false;\n");
@@ -1058,12 +1140,73 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    printf(\"  STATUS: 100%% BIT-EXACT SILICON C23 PARITY VERIFIED\\n\");\n");
     out.push_str("    return 0;\n");
     out.push_str("}\n");
+    out.push_str("#endif // CRON_SHARED_LIB\n");
 
     Ok(out)
 }
 
-/// Compiles .cl source code directly into a native host binary executable via host C compiler
-/// with specific SIMD target optimization flags.
+/// Generates the standard C/C++ FFI Header definition for the CRON Cortex Shared Library
+pub fn generate_c_header() -> &'static str {
+    r#"#ifndef CRON_CORTEX_H
+#define CRON_CORTEX_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef _WIN32
+  #ifdef CRON_EXPORTS
+    #define CRON_API __declspec(dllexport)
+  #else
+    #define CRON_API __declspec(dllimport)
+  #endif
+#else
+  #define CRON_API __attribute__((visibility("default")))
+#endif
+
+typedef struct CronSiliconCore CronSiliconCore;
+
+typedef struct {
+    uint64_t cycle_count;
+    uint64_t optical_gemm_count;
+    uint64_t reversible_ops_count;
+    uint64_t stdp_updates_count;
+    uint64_t spatial_broadcast_count;
+    uint64_t barrier_count;
+    uint64_t wave_interference_ops_count;
+    uint64_t deflections_count;
+    uint32_t hamiltonian;
+    uint32_t sensory_w;
+    uint32_t sensory_x;
+    uint32_t sensory_z;
+    uint32_t sensory_spin;
+} CronCortexTelemetry;
+
+CRON_API CronSiliconCore* cron_cortex_create(void);
+CRON_API void cron_cortex_destroy(CronSiliconCore* core);
+CRON_API void cron_cortex_reset(CronSiliconCore* core);
+CRON_API void cron_cortex_step(CronSiliconCore* core);
+CRON_API void cron_cortex_run(CronSiliconCore* core, uint64_t cycles);
+CRON_API uint32_t cron_cortex_get_reg(CronSiliconCore* core, uint32_t reg_idx);
+CRON_API void cron_cortex_set_reg(CronSiliconCore* core, uint32_t reg_idx, uint32_t val);
+CRON_API void cron_cortex_inject_token(CronSiliconCore* core, uint8_t token_byte);
+CRON_API uint32_t cron_cortex_get_hamiltonian(CronSiliconCore* core);
+CRON_API void cron_cortex_get_sensory(CronSiliconCore* core, uint32_t* out_w, uint32_t* out_x, uint32_t* out_z, uint32_t* out_spin);
+CRON_API void cron_cortex_get_telemetry(CronSiliconCore* core, CronCortexTelemetry* out_tel);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // CRON_CORTEX_H
+"#
+}
+
+/// Compiles .cl source code directly into a native host binary executable or shared library (.dll / .so)
+/// via host C compiler with specific SIMD target optimization flags.
 pub fn compile_cl_to_native_binary_with_target(
     cl_source: &str,
     output_binary_path: &str,
@@ -1079,6 +1222,10 @@ pub fn compile_cl_to_native_binary_with_target(
 
     fs::write(&temp_c_file, c23_code)
         .map_err(|e| format!("Failed to write temporary C source: {}", e))?;
+
+    let is_shared_lib = output_binary_path.ends_with(".dll")
+        || output_binary_path.ends_with(".so")
+        || output_binary_path.ends_with(".dylib");
 
     let compilers = ["gcc", "clang"];
     let mut success = false;
@@ -1132,6 +1279,11 @@ pub fn compile_cl_to_native_binary_with_target(
             cmd.arg(output_binary_path);
             cmd.arg(&opt_flag);
             cmd.arg(std_flag);
+            if is_shared_lib {
+                cmd.arg("-shared");
+                cmd.arg("-DCRON_SHARED_LIB");
+                cmd.arg("-fPIC");
+            }
             for f in &extra_flags {
                 cmd.arg(f);
             }
@@ -1161,6 +1313,11 @@ pub fn compile_cl_to_native_binary_with_target(
     let _ = fs::remove_file(&temp_c_file);
 
     if success {
+        if is_shared_lib {
+            let p = std::path::Path::new(output_binary_path);
+            let header_path = p.with_file_name("cron_cortex.h");
+            let _ = fs::write(header_path, generate_c_header());
+        }
         Ok(())
     } else {
         if last_err.is_empty() {
