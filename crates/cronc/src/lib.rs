@@ -255,8 +255,8 @@ pub use cl_topological::{
 };
 
 pub use cl_topological_lm::{
-    CorticalColumnUnit, PhaseKvCache, TopologicalBrainTransformer, TopologicalVocab,
-    VocabPhaseEntry,
+    CortexTurnMetrics, CorticalColumnUnit, PhaseKvCache, TopologicalBrainTransformer,
+    TopologicalVocab, VocabPhaseEntry,
 };
 
 pub use cl_swarm_wafer::{
