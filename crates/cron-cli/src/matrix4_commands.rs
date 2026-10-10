@@ -25,6 +25,15 @@ pub fn handle_matrix4_command(args: &[String]) {
         return;
     }
 
+    let is_native = (args.len() >= 2 && (args[1] == "matrix4-native" || args[1] == "cortex-native"))
+        || (args.len() >= 3 && (args[2] == "native" || args[2] == "aot" || args[2] == "compile-native"))
+        || args.iter().any(|a| a == "--native");
+
+    if is_native {
+        run_matrix4_native(args);
+        return;
+    }
+
     let mut input_file = "examples/matrix4_cortex_supercomputer/cortex_program.cl".to_string();
     let mut corpus_file = "examples/matrix4_cortex_supercomputer/knowledge_corpus.txt".to_string();
     let mut prompt = "CRON Matrix 4.1".to_string();
@@ -715,6 +724,123 @@ OPTIONS:
     --bench               Run 1,000 iteration supercomputer throughput benchmark
     --no-synth            Skip Verilog RTL synthesis export
     --json                Output structured JSON telemetry
+    --native, native      Transpile & compile directly into standalone x86_64 PE .exe
     -h, --help            Show this help message
 "#);
 }
+
+pub fn run_matrix4_native(args: &[String]) {
+    let mut input_file = "examples/matrix4_cortex_supercomputer/cortex_program.cl".to_string();
+    let default_bin = if cfg!(windows) { "cortex_program.exe" } else { "cortex_program" };
+    let mut out_file = default_bin.to_string();
+    let mut opt_level = "3".to_string();
+    let mut simd_target = cronc::cl_c23::SimdTarget::Auto;
+    let mut run_after = false;
+    let mut bench_iters: Option<usize> = None;
+
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "native" | "aot" | "--native" => {
+                i += 1;
+            }
+            "--file" | "-f" | "-i" if i + 1 < args.len() => {
+                input_file = args[i + 1].clone();
+                i += 2;
+            }
+            "-o" | "--out" | "--output" if i + 1 < args.len() => {
+                out_file = args[i + 1].clone();
+                i += 2;
+            }
+            "--opt" | "-O" if i + 1 < args.len() => {
+                opt_level = args[i + 1].trim_start_matches("-O").to_string();
+                i += 2;
+            }
+            arg if arg.starts_with("-O") => {
+                opt_level = arg.trim_start_matches("-O").to_string();
+                i += 1;
+            }
+            "--simd" if i + 1 < args.len() => {
+                if let Some(target) = cronc::cl_c23::SimdTarget::from_str_opt(&args[i + 1]) {
+                    simd_target = target;
+                }
+                i += 2;
+            }
+            "--bench" => {
+                run_after = true;
+                if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                    bench_iters = args[i + 1].parse::<usize>().ok();
+                    i += 2;
+                } else {
+                    bench_iters = Some(100000);
+                    i += 1;
+                }
+            }
+            "--run" | "-r" => {
+                run_after = true;
+                i += 1;
+            }
+            arg if !arg.starts_with('-') => {
+                if std::path::Path::new(arg).exists() {
+                    input_file = arg.to_string();
+                }
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    println!("================================================================================");
+    println!("   CRON MATRIX 4.1: BARE-METAL STANDALONE x86_64 NATIVE AOT COMPILER            ");
+    println!("================================================================================");
+    println!("  Target Microcode:     {}", input_file);
+    println!("  Output Standalone PE: {}", out_file);
+    println!("  Optimization Level:   -O{}", opt_level);
+    println!("  SIMD Architecture:    {:?}", simd_target);
+    println!("  Execution Mode:       Bare-Metal Windows Native (Zero-VM, Zero-Python, Direct Silicon)");
+    println!("--------------------------------------------------------------------------------");
+
+    let cl_code = match fs::read_to_string(&input_file) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[ERROR] Failed to read microcode '{}': {}", input_file, e);
+            std::process::exit(1);
+        }
+    };
+
+    let start = Instant::now();
+    match cronc::cl_c23::compile_cl_to_native_binary_with_target(&cl_code, &out_file, &opt_level, simd_target) {
+        Ok(()) => {
+            let elapsed = start.elapsed();
+            println!("[SUCCESS] Standalone native binary '{}' created in {:.2?}", out_file, elapsed);
+            if run_after {
+                println!("[LAUNCH] Executing standalone native binary...\n");
+                let launch_path = if !out_file.contains('/') && !out_file.contains('\\') {
+                    format!(".{}{}", std::path::MAIN_SEPARATOR, out_file)
+                } else {
+                    out_file.clone()
+                };
+                let mut cmd = std::process::Command::new(&launch_path);
+                if let Some(iters) = bench_iters {
+                    cmd.arg("--bench");
+                    cmd.arg(iters.to_string());
+                }
+                match cmd.status() {
+                    Ok(st) => {
+                        println!("\n[PROCESS] Standalone process terminated with status: {}", st);
+                    }
+                    Err(e) => {
+                        eprintln!("[ERROR] Failed to launch '{}': {}", out_file, e);
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            eprintln!("[FAILED] Native compilation failed: {}", err);
+            std::process::exit(1);
+        }
+    }
+}
+

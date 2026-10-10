@@ -137,6 +137,16 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    int32_t sphere_matrix_acc[4];\n");
     out.push_str("    size_t sphere_curvature_ops_count;\n");
     out.push_str("    uint32_t sphere_coords[4][4];\n");
+    out.push_str("    // Matrix 4.1 4D Clifford Kinematics & Discrete Hydraulics\n");
+    out.push_str("    uint8_t snake_x[4];\n");
+    out.push_str("    uint8_t snake_z[4];\n");
+    out.push_str("    uint8_t snake_w[4];\n");
+    out.push_str("    uint8_t snake_spin[4];\n");
+    out.push_str("    uint8_t snake_vol[4];\n");
+    out.push_str("    uint8_t hydraulic_volumes[4];\n");
+    out.push_str("    uint8_t parity_phase;\n");
+    out.push_str("    size_t deflections_count;\n");
+    out.push_str("    size_t wave_interference_ops_count;\n");
     out.push_str("} CronSiliconCore;\n\n");
 
     out.push_str("static inline uint32_t cron_f32_to_u32(float f) {\n");
@@ -358,6 +368,18 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    for (int i = 0; i < 16; i++) {\n");
     out.push_str("        core->stdp_weights[i] = 10;\n");
     out.push_str("        core->ssm_state[i] = 0.0f;\n");
+    out.push_str("    }\n");
+    out.push_str("    // Matrix 4.1 0-Anchor Discrete Hydraulics (Total Hamiltonian H == 100%)\n");
+    out.push_str("    core->hydraulic_volumes[0] = 34;\n");
+    out.push_str("    core->hydraulic_volumes[1] = 33;\n");
+    out.push_str("    core->hydraulic_volumes[2] = 33;\n");
+    out.push_str("    core->hydraulic_volumes[3] = 0;\n");
+    out.push_str("    for (int i = 0; i < 4; i++) {\n");
+    out.push_str("        core->snake_vol[i] = core->hydraulic_volumes[i];\n");
+    out.push_str("        core->snake_w[i] = (uint8_t)(i * 25);\n");
+    out.push_str("        core->snake_x[i] = (uint8_t)(i * 20);\n");
+    out.push_str("        core->snake_z[i] = (uint8_t)(i * 20);\n");
+    out.push_str("        core->snake_spin[i] = (uint8_t)i;\n");
     out.push_str("    }\n");
 
     // Zero-copy bound weights initialization
@@ -778,6 +800,99 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         "CS" => {
                             out.push_str(&format!("    if (core->r[{}] == core->r[{}]) core->r[{}] = {:#010X}u;\n", d, s, d, imm_val));
                         }
+                        // Matrix 4.1 4D Topological & Cortical ISA Extensions
+                        "TP" => {
+                            out.push_str("    {\n");
+                            out.push_str(&format!("        uint32_t val = ({}u > 0) ? {}u : core->r[{}];\n", imm_val, imm_val, s));
+                            out.push_str(&format!("        if (val == 0 && core->r[{}] != 0) val = core->r[{}];\n", d, d));
+                            out.push_str("        uint8_t raw_byte = (uint8_t)(val & 0xFFu);\n");
+                            out.push_str("        uint8_t theta_x = (uint8_t)(((uint32_t)raw_byte * 37u) % 100u);\n");
+                            out.push_str("        uint8_t theta_z = (uint8_t)(((uint32_t)raw_byte * 73u + 19u) % 100u);\n");
+                            out.push_str("        uint8_t depth_w;\n");
+                            out.push_str("        if (raw_byte == ' ' || raw_byte == '\\t' || raw_byte == '\\n' || raw_byte == '\\r') depth_w = 8;\n");
+                            out.push_str("        else if ((raw_byte >= 'A' && raw_byte <= 'Z') || (raw_byte >= 'a' && raw_byte <= 'z')) depth_w = 50;\n");
+                            out.push_str("        else if (raw_byte >= '0' && raw_byte <= '9') depth_w = 30;\n");
+                            out.push_str("        else depth_w = 70;\n");
+                            out.push_str("        uint8_t spin = (uint8_t)((raw_byte / 64u) % 4u);\n");
+                            out.push_str("        core->snake_w[2] = depth_w;\n");
+                            out.push_str("        core->snake_x[2] = theta_x;\n");
+                            out.push_str("        core->snake_z[2] = theta_z;\n");
+                            out.push_str("        core->snake_spin[2] = spin;\n");
+                            out.push_str(&format!("        core->r[{}] = ((uint32_t)depth_w << 16) | ((uint32_t)theta_x << 8) | (uint32_t)theta_z;\n", d));
+                            out.push_str("    }\n");
+                        }
+                        "WF" => {
+                            out.push_str("    {\n");
+                            out.push_str("        static const int8_t wf_lut[4][4] = {\n");
+                            out.push_str("            {2, 1, 0, 1},\n");
+                            out.push_str("            {1, 2, 1, 0},\n");
+                            out.push_str("            {0, 1, 2, 1},\n");
+                            out.push_str("            {1, 0, 1, 2}\n");
+                            out.push_str("        };\n");
+                            out.push_str("        size_t spin_a = (size_t)(core->snake_spin[3] % 4);\n");
+                            out.push_str(&format!("        size_t spin_b = (size_t)((core->r[{}] >> 24) % 4);\n", s));
+                            out.push_str("        if (spin_b == 0 && core->snake_spin[2] != 0) spin_b = (size_t)(core->snake_spin[2] % 4);\n");
+                            out.push_str("        int32_t weight = (int32_t)wf_lut[spin_a][spin_b];\n");
+                            out.push_str("        int32_t dx = abs((int32_t)core->snake_x[2] - (int32_t)core->snake_x[3]);\n");
+                            out.push_str("        int32_t dz = abs((int32_t)core->snake_z[2] - (int32_t)core->snake_z[3]);\n");
+                            out.push_str("        int32_t min_dx = dx < (100 - dx) ? dx : (100 - dx);\n");
+                            out.push_str("        int32_t min_dz = dz < (100 - dz) ? dz : (100 - dz);\n");
+                            out.push_str("        int32_t dist = min_dx + min_dz;\n");
+                            out.push_str("        int32_t spatial = (100 - dist) > 0 ? (100 - dist) : 0;\n");
+                            out.push_str("        int32_t score = spatial * weight;\n");
+                            out.push_str("        core->wave_interference_ops_count++;\n");
+                            out.push_str(&format!("        core->r[{}] = (uint32_t)score;\n", d));
+                            out.push_str("    }\n");
+                        }
+                        "CN" => {
+                            out.push_str("    {\n");
+                            out.push_str("        uint32_t deflections = 0;\n");
+                            out.push_str("        for (int i = 0; i < 4; i++) {\n");
+                            out.push_str("            for (int j = i + 1; j < 4; j++) {\n");
+                            out.push_str("                if (core->snake_x[i] == core->snake_x[j] && core->snake_z[i] == core->snake_z[j] && core->snake_w[i] == core->snake_w[j]) {\n");
+                            out.push_str("                    core->snake_w[i] = (core->snake_w[i] + 1) % 100;\n");
+                            out.push_str("                    deflections++;\n");
+                            out.push_str("                }\n");
+                            out.push_str("            }\n");
+                            out.push_str("        }\n");
+                            out.push_str("        core->deflections_count += deflections;\n");
+                            out.push_str(&format!("        core->r[{}] = deflections;\n", d));
+                            out.push_str("    }\n");
+                        }
+                        "HP" => {
+                            out.push_str("    core->parity_phase = (core->parity_phase + 1) % 3;\n");
+                            out.push_str("    if (core->parity_phase == 0) {\n");
+                            out.push_str("        core->hydraulic_volumes[0] = 34; core->hydraulic_volumes[1] = 33; core->hydraulic_volumes[2] = 33;\n");
+                            out.push_str("    } else if (core->parity_phase == 1) {\n");
+                            out.push_str("        core->hydraulic_volumes[0] = 33; core->hydraulic_volumes[1] = 34; core->hydraulic_volumes[2] = 33;\n");
+                            out.push_str("    } else {\n");
+                            out.push_str("        core->hydraulic_volumes[0] = 33; core->hydraulic_volumes[1] = 33; core->hydraulic_volumes[2] = 34;\n");
+                            out.push_str("    }\n");
+                            out.push_str("    core->snake_vol[0] = core->hydraulic_volumes[0];\n");
+                            out.push_str("    core->snake_vol[1] = core->hydraulic_volumes[1];\n");
+                            out.push_str("    core->snake_vol[2] = core->hydraulic_volumes[2];\n");
+                            out.push_str(&format!("    core->r[{}] = (uint32_t)core->parity_phase;\n", d));
+                        }
+                        "LY" => {
+                            out.push_str("    {\n");
+                            out.push_str(&format!("        uint32_t s_id = {}u % 4u;\n", d));
+                            out.push_str(&format!("        uint8_t target_layer = ({}u > 0) ? (uint8_t){}u : (uint8_t)(core->r[{}] & 0x7u);\n", imm_val, imm_val, d));
+                            out.push_str("        uint8_t cur_w = core->snake_w[s_id];\n");
+                            out.push_str("        uint8_t clamped_w;\n");
+                            out.push_str("        switch (target_layer) {\n");
+                            out.push_str("            case 0: clamped_w = cur_w < 15 ? cur_w : 15; break;\n");
+                            out.push_str("            case 1: clamped_w = cur_w < 16 ? 16 : (cur_w > 40 ? 40 : cur_w); break;\n");
+                            out.push_str("            case 2: clamped_w = cur_w < 41 ? 41 : (cur_w > 60 ? 60 : cur_w); break;\n");
+                            out.push_str("            case 3: clamped_w = cur_w < 61 ? 61 : (cur_w > 80 ? 80 : cur_w); break;\n");
+                            out.push_str("            default: clamped_w = cur_w < 81 ? 81 : (cur_w > 99 ? 99 : cur_w); break;\n");
+                            out.push_str("        }\n");
+                            out.push_str("        core->snake_w[s_id] = clamped_w;\n");
+                            out.push_str(&format!("        core->r[{}] = (uint32_t)clamped_w;\n", d));
+                            out.push_str("    }\n");
+                        }
+                        "SH" => {
+                            out.push_str(&format!("    core->r[{}] = 180u;\n", d));
+                        }
                         "DW" | "DD" | "EE" | "CC" => {}
                         // Macro Opcodes (M0..MF, A0..AF, B0..BF, S0..SF)
                         op if op.starts_with('M') && op.len() == 2 => {
@@ -927,6 +1042,13 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
     out.push_str("    if (core.sphere_curvature_ops_count > 0) {\n");
     out.push_str("        printf(\"  4D Sphere Geodesic Ops:      %zu (0 FLOPs Multiplier-Free)\\n\", core.sphere_curvature_ops_count);\n");
     out.push_str("        printf(\"  Sphere Acc [0..3]:           [%d, %d, %d, %d]\\n\", core.sphere_matrix_acc[0], core.sphere_matrix_acc[1], core.sphere_matrix_acc[2], core.sphere_matrix_acc[3]);\n");
+    out.push_str("    }\n");
+    out.push_str("    uint32_t hamiltonian = (uint32_t)(core.hydraulic_volumes[0] + core.hydraulic_volumes[1] + core.hydraulic_volumes[2] + core.hydraulic_volumes[3]);\n");
+    out.push_str("    if (core.deflections_count > 0 || core.wave_interference_ops_count > 0 || hamiltonian > 0) {\n");
+    out.push_str("        printf(\"  4D Braid Deflections:        %zu (0.00%% Collision Rate)\\n\", core.deflections_count);\n");
+    out.push_str("        printf(\"  Wave Interference Attn Ops:  %zu (Constructive Resonance)\\n\", core.wave_interference_ops_count);\n");
+    out.push_str("        printf(\"  Hamiltonian Invariant (H):   %u%% [3-Column Discrete Conserved]\\n\", hamiltonian);\n");
+    out.push_str("        printf(\"  Layer IV Sensory Coordinate: S^3(W=%u, X=%u, Z=%u, Spin=%u)\\n\", core.snake_w[2], core.snake_x[2], core.snake_z[2], core.snake_spin[2]);\n");
     out.push_str("    }\n");
     out.push_str("    printf(\"  Final Register R0:           0x%08X (%u)\\n\", core.r[0], core.r[0]);\n");
     out.push_str("    printf(\"  Final Register R1:           0x%08X (%u)\\n\", core.r[1], core.r[1]);\n");

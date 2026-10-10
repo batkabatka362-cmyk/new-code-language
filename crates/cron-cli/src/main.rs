@@ -2532,7 +2532,7 @@ fn main() {
         "c23" | "cl-c23" => {
             cron_cli::sphere_commands::handle_c23(&args);
         }
-        "matrix4" | "cl-matrix4" | "matrix" | "matrix4-chat" | "cortex-chat" => {
+        "matrix4" | "cl-matrix4" | "matrix" | "matrix4-chat" | "cortex-chat" | "matrix4-native" | "cortex-native" => {
             cron_cli::matrix4_commands::handle_matrix4_command(&args);
         }
         "cl-heal" => {
