@@ -880,6 +880,26 @@ impl SphereTransformerModel {
         )
     }
 
+    /// Export synthesizable FPGA RTL suite (Verilog, Testbench, Vivado/Quartus/Yosys scripts, XDC)
+    pub fn export_fpga_package(
+        &self,
+        prompt: &str,
+        num_tokens: usize,
+        config: &crate::cl_sphere_fpga::SphereFpgaConfig,
+    ) -> crate::cl_sphere_fpga::SphereFpgaPackage {
+        crate::cl_sphere_fpga::export_sphere_transformer_fpga(self, prompt, num_tokens, config)
+    }
+
+    /// Run cycle-accurate RTL hardware emulation and timing/power analysis
+    pub fn emulate_fpga(
+        &self,
+        prompt: &str,
+        num_tokens: usize,
+        config: &crate::cl_sphere_fpga::SphereFpgaConfig,
+    ) -> crate::cl_sphere_fpga::SphereFpgaEmulationReport {
+        crate::cl_sphere_fpga::emulate_sphere_transformer_fpga(self, prompt, num_tokens, config)
+    }
+
     /// Single Autoregressive Forward Step on 4D Sphere (0 FLOPs, Multiplier-Free)
     pub fn forward_step(
         &self,

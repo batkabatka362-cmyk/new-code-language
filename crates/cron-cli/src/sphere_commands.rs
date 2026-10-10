@@ -188,6 +188,10 @@ pub fn handle_sphere_llm(args: &[String]) {
     let mut export_cl: Option<String> = None;
     let mut compile_exe: Option<String> = None;
     let mut export_dll: Option<String> = None;
+    let mut export_fpga: Option<String> = None;
+    let mut emulate_fpga = false;
+    let mut clock_mhz = 500.0f64;
+    let mut fpga_target = cronc::cl_sphere_fpga::SphereFpgaTarget::XilinxAlveoU280;
     let mut run_after = false;
 
     let mut i = 2;
@@ -211,6 +215,20 @@ pub fn handle_sphere_llm(args: &[String]) {
             i += 1;
         } else if args[i] == "--export-dll" && i + 1 < args.len() {
             export_dll = Some(args[i + 1].clone());
+            i += 2;
+        } else if (args[i] == "--export-fpga" || args[i] == "--fpga-dir") && i + 1 < args.len() {
+            export_fpga = Some(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--emulate-fpga" {
+            emulate_fpga = true;
+            i += 1;
+        } else if args[i] == "--clock-mhz" && i + 1 < args.len() {
+            clock_mhz = args[i + 1].parse().unwrap_or(500.0);
+            i += 2;
+        } else if (args[i] == "--target" || args[i] == "--fpga-target") && i + 1 < args.len() {
+            if let Some(t) = cronc::cl_sphere_fpga::SphereFpgaTarget::from_str_opt(&args[i + 1]) {
+                fpga_target = t;
+            }
             i += 2;
         } else if args[i] == "--run" || args[i] == "-r" {
             run_after = true;
@@ -330,6 +348,51 @@ pub fn handle_sphere_llm(args: &[String]) {
         }
     }
 
+    // Export FPGA hardware package if requested
+    if let Some(ref fpga_dir) = export_fpga {
+        println!("[FPGA EXPORT] Synthesizing 4D Sphere LLM to Verilog RTL into '{}'...", fpga_dir);
+        let fpga_cfg = cronc::cl_sphere_fpga::SphereFpgaConfig {
+            target: fpga_target,
+            clock_freq_mhz: clock_mhz,
+            voltage_v: 0.85,
+            temperature_c: 25.0,
+            module_name: "sphere_transformer_llm_top".to_string(),
+            enable_vcd_dump: true,
+            max_sim_cycles: 50000,
+        };
+        let pkg = model.export_fpga_package(&prompt, max_tokens, &fpga_cfg);
+        if let Err(e) = pkg.write_to_directory(Path::new(fpga_dir)) {
+            eprintln!("[ERROR] Failed to write FPGA package to '{}': {}", fpga_dir, e);
+        } else {
+            println!("[SUCCESS] Full FPGA Hardware Suite exported to '{}'!", fpga_dir);
+            println!("  - Verilog RTL:             {}/sphere_transformer_llm_top.v", fpga_dir);
+            println!("  - Self-checking Testbench: {}/tb_sphere_transformer_llm_top.v", fpga_dir);
+            println!("  - AMD Vivado Synthesis:    {}/synth_vivado.tcl", fpga_dir);
+            println!("  - Timing Constraints:      {}/timing.xdc ({:.1} MHz)", fpga_dir, clock_mhz);
+            println!("  - Intel Quartus Synthesis: {}/synth_quartus.tcl", fpga_dir);
+            println!("  - Yosys ASIC Script:       {}/synth_yosys.ys", fpga_dir);
+            println!("  - Icarus Verilog Runner:   {}/run_iverilog.bat", fpga_dir);
+            println!("  - Hardware Manifest:       {}/fpga_manifest.json (0 DSP)", fpga_dir);
+        }
+    }
+
+    // Run FPGA emulation if requested
+    if emulate_fpga {
+        println!("[FPGA EMULATION] Executing cycle-accurate hardware RTL state machine simulation...\n");
+        let fpga_cfg = cronc::cl_sphere_fpga::SphereFpgaConfig {
+            target: fpga_target,
+            clock_freq_mhz: clock_mhz,
+            voltage_v: 0.85,
+            temperature_c: 25.0,
+            module_name: "sphere_transformer_llm_top".to_string(),
+            enable_vcd_dump: true,
+            max_sim_cycles: 50000,
+        };
+        let emu_report = model.emulate_fpga(&prompt, max_tokens, &fpga_cfg);
+        println!("{}", emu_report.format_ascii_report());
+        return;
+    }
+
     println!("[GENERATING] Running 4D Spherical Geodesic Autoregressive Decode Loop...\n");
 
     let result = model.generate_text(&prompt, max_tokens, temperature);
@@ -346,6 +409,120 @@ pub fn handle_sphere_llm(args: &[String]) {
     println!("  DSP Multipliers Used:      0 (Zero Hardware DSP Slices)");
     println!("  Thermodynamic Property:    Discrete Integer Geodesic Wavefront");
     println!("================================================================================");
+}
+
+pub fn handle_sphere_fpga(args: &[String]) {
+    let mut prompt = "CRON 4D".to_string();
+    let mut weights_path: Option<String> = None;
+    let mut out_dir: Option<String> = None;
+    let mut max_tokens = 16usize;
+    let mut clock_mhz = 500.0f64;
+    let mut fpga_target = cronc::cl_sphere_fpga::SphereFpgaTarget::XilinxAlveoU280;
+    let mut do_emulate = true;
+    let mut json_mode = false;
+    let mut hidden_dim = 64usize;
+    let mut num_layers = 2usize;
+
+    let mut i = 2;
+    while i < args.len() {
+        if args[i] == "--prompt" && i + 1 < args.len() {
+            prompt = args[i + 1].clone();
+            i += 2;
+        } else if (args[i] == "--weights" || args[i] == "-w") && i + 1 < args.len() {
+            weights_path = Some(args[i + 1].clone());
+            i += 2;
+        } else if (args[i] == "-o" || args[i] == "--output-dir" || args[i] == "--export-dir") && i + 1 < args.len() {
+            out_dir = Some(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--tokens" && i + 1 < args.len() {
+            max_tokens = args[i + 1].parse().unwrap_or(16);
+            i += 2;
+        } else if args[i] == "--clock-mhz" && i + 1 < args.len() {
+            clock_mhz = args[i + 1].parse().unwrap_or(500.0);
+            i += 2;
+        } else if (args[i] == "--target" || args[i] == "--fpga-target") && i + 1 < args.len() {
+            if let Some(t) = cronc::cl_sphere_fpga::SphereFpgaTarget::from_str_opt(&args[i + 1]) {
+                fpga_target = t;
+            }
+            i += 2;
+        } else if args[i] == "--emulate" || args[i] == "--run" {
+            do_emulate = true;
+            i += 1;
+        } else if args[i] == "--no-emulate" {
+            do_emulate = false;
+            i += 1;
+        } else if args[i] == "--json" {
+            json_mode = true;
+            i += 1;
+        } else if args[i] == "--hidden" && i + 1 < args.len() {
+            hidden_dim = args[i + 1].parse().unwrap_or(64);
+            i += 2;
+        } else if args[i] == "--layers" && i + 1 < args.len() {
+            num_layers = args[i + 1].parse().unwrap_or(2);
+            i += 2;
+        } else if !args[i].starts_with('-') {
+            prompt = args[i].clone();
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    let model = if let Some(ref wp) = weights_path {
+        let path = Path::new(wp);
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+        if ext == "gguf" {
+            cronc::SphereTransformerModel::from_gguf_file(path).unwrap_or_else(|e| {
+                eprintln!("[ERROR] Failed to load GGUF '{}': {}", wp, e);
+                std::process::exit(1);
+            })
+        } else {
+            cronc::SphereTransformerModel::from_safetensors_file(path).unwrap_or_else(|e| {
+                eprintln!("[ERROR] Failed to load SafeTensors '{}': {}", wp, e);
+                std::process::exit(1);
+            })
+        }
+    } else {
+        let config = cronc::SphereTransformerConfig {
+            vocab_size: 256,
+            hidden_dim,
+            num_layers,
+            num_heads: 4,
+            head_dim: hidden_dim / 4,
+            intermediate_dim: (hidden_dim * 8) / 3,
+            max_seq_len: 128,
+        };
+        cronc::SphereTransformerModel::new_synthetic(config)
+    };
+
+    let fpga_cfg = cronc::cl_sphere_fpga::SphereFpgaConfig {
+        target: fpga_target,
+        clock_freq_mhz: clock_mhz,
+        voltage_v: 0.85,
+        temperature_c: 25.0,
+        module_name: "sphere_transformer_llm_top".to_string(),
+        enable_vcd_dump: true,
+        max_sim_cycles: 50000,
+    };
+
+    if let Some(ref dir) = out_dir {
+        println!("[FPGA EXPORT] Synthesizing complete FPGA Verilog RTL suite into '{}'...", dir);
+        let pkg = model.export_fpga_package(&prompt, max_tokens, &fpga_cfg);
+        if let Err(e) = pkg.write_to_directory(Path::new(dir)) {
+            eprintln!("[ERROR] Failed to write FPGA package: {}", e);
+            std::process::exit(1);
+        }
+        println!("[SUCCESS] Exported 7-file FPGA Hardware Suite to '{}' (0 DSP Blocks Enforced)\n", dir);
+    }
+
+    if do_emulate {
+        let report = model.emulate_fpga(&prompt, max_tokens, &fpga_cfg);
+        if json_mode {
+            println!("{}", report.to_json());
+        } else {
+            println!("{}", report.format_ascii_report());
+        }
+    }
 }
 
 pub fn handle_convert(args: &[String]) {

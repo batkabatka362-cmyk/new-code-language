@@ -54,6 +54,7 @@ fn print_help() {
     println!("    cl-sphere-infer [weights]      4D Sphere Matrix Multiplier-Free Inference Engine (0 FLOPs, 256-Core Torus)");
     println!("    cl-sphere-compile [weights]    Compile Neural Weights to 4D Sphere Sovereign Microcode (.cl)");
     println!("    cl-sphere-llm [prompt]         End-to-End 4D Sphere LLM Multiplier-Free Text Generator (0 FLOPs)");
+    println!("    cl-sphere-fpga [opts]          Synthesize 4D Sphere LLM to Verilog RTL & Profile Timing/Power (0 DSP)");
     println!("    cl-convert <model> [-o out]    Universal AI Model Converter: SafeTensors/GGUF/PyTorch -> 4D Sphere CL");
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
     println!("    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench");
@@ -2525,6 +2526,9 @@ fn main() {
         }
         "cl-sphere-llm" | "sphere-llm" => {
             cron_cli::sphere_commands::handle_sphere_llm(&args);
+        }
+        "cl-sphere-fpga" | "sphere-fpga" | "cl-fpga" => {
+            cron_cli::sphere_commands::handle_sphere_fpga(&args);
         }
         "cl-convert" | "convert" => {
             cron_cli::sphere_commands::handle_convert(&args);
