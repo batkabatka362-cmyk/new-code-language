@@ -184,12 +184,37 @@ pub fn handle_sphere_llm(args: &[String]) {
     let mut temperature = 0.7f32;
     let mut hidden_dim = 64usize;
     let mut num_layers = 2usize;
+    let mut weights_path: Option<String> = None;
+    let mut export_cl: Option<String> = None;
+    let mut compile_exe: Option<String> = None;
+    let mut export_dll: Option<String> = None;
+    let mut run_after = false;
 
     let mut i = 2;
     while i < args.len() {
         if args[i] == "--prompt" && i + 1 < args.len() {
             prompt = args[i + 1].clone();
             i += 2;
+        } else if (args[i] == "--weights" || args[i] == "-w") && i + 1 < args.len() {
+            weights_path = Some(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--export-cl" && i + 1 < args.len() {
+            export_cl = Some(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--compile-exe" && i + 1 < args.len() {
+            compile_exe = Some(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--native" {
+            if compile_exe.is_none() {
+                compile_exe = Some(if cfg!(windows) { "sphere_llm.exe".to_string() } else { "sphere_llm".to_string() });
+            }
+            i += 1;
+        } else if args[i] == "--export-dll" && i + 1 < args.len() {
+            export_dll = Some(args[i + 1].clone());
+            i += 2;
+        } else if args[i] == "--run" || args[i] == "-r" {
+            run_after = true;
+            i += 1;
         } else if args[i] == "--tokens" && i + 1 < args.len() {
             max_tokens = args[i + 1].parse().unwrap_or(32);
             i += 2;
@@ -213,29 +238,98 @@ pub fn handle_sphere_llm(args: &[String]) {
     println!("================================================================================");
     println!("      CRON 4D SPHERE TRANSFORMER MULTIPLIER-FREE LLM ENGINE                    ");
     println!("================================================================================");
-    println!("  Model Topology:            {}-Layer 4-Head Discrete Spherical Transformer", num_layers);
-    println!("  Hidden Dim:                {} | Attention Heads: 4 (Heads 0, 1, 2, 3)", hidden_dim);
+
+    let model = if let Some(ref wp) = weights_path {
+        println!("  Weights File:              {}", wp);
+        let path = Path::new(wp);
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+        if ext == "gguf" {
+            match cronc::SphereTransformerModel::from_gguf_file(path) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("[ERROR] Failed to load GGUF '{}': {}", wp, e);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            match cronc::SphereTransformerModel::from_safetensors_file(path) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("[ERROR] Failed to load SafeTensors '{}': {}", wp, e);
+                    std::process::exit(1);
+                }
+            }
+        }
+    } else {
+        let config = cronc::SphereTransformerConfig {
+            vocab_size: 256,
+            hidden_dim,
+            num_layers,
+            num_heads: 4,
+            head_dim: hidden_dim / 4,
+            intermediate_dim: (hidden_dim * 8) / 3,
+            max_seq_len: 128,
+        };
+        cronc::SphereTransformerModel::new_synthetic(config)
+    };
+
+    println!("  Model Topology:            {}-Layer 4-Head Discrete Spherical Transformer", model.config.num_layers);
+    println!("  Hidden Dim:                {} | Attention Heads: 4 (Heads 0, 1, 2, 3)", model.config.hidden_dim);
     println!("  Precision Standard:        BitNet b1.58 Ternary {{-1, 0, +1}} (0.00 FLOPs)");
     println!("  Prompt:                    \"{}\"", prompt);
     println!("  Max New Tokens:            {} | Temperature: {:.2}", max_tokens, temperature);
-    println!("--------------------------------------------------------------------------------");
-
-    let config = cronc::SphereTransformerConfig {
-        vocab_size: 256,
-        hidden_dim,
-        num_layers,
-        num_heads: 4,
-        head_dim: hidden_dim / 4,
-        intermediate_dim: (hidden_dim * 8) / 3,
-        max_seq_len: 128,
-    };
-
-    let model = cronc::SphereTransformerModel::new_synthetic(config);
     println!("  Total Parameters:          {} (Quantized to 1.58-bit)", model.total_parameters);
     println!("  Memory Footprint:          {:.2} KB (vs {:.2} KB in FP32)",
              (model.total_parameters as f32 * 1.58 / 8.0) / 1024.0,
              (model.total_parameters as f32 * 4.0) / 1024.0);
     println!("--------------------------------------------------------------------------------");
+
+    // Export .cl if requested
+    if let Some(ref cl_path) = export_cl {
+        let cl_code = model.compile_to_sphere_cl(&prompt);
+        if let Err(e) = fs::write(cl_path, &cl_code) {
+            eprintln!("[ERROR] Failed to write .cl file '{}': {}", cl_path, e);
+        } else {
+            println!("[EXPORT] 4D Sphere LLM Sovereign Microcode written to: {}", cl_path);
+        }
+    }
+
+    // Compile .exe if requested
+    if let Some(ref exe_path) = compile_exe {
+        println!("[AOT COMPILE] Compiling 4D Sphere LLM directly to standalone native binary '{}'...", exe_path);
+        match model.compile_to_native_exe(&prompt, exe_path, "3") {
+            Ok(()) => {
+                println!("[SUCCESS] Standalone native binary '{}' created successfully!", exe_path);
+                if run_after {
+                    println!("[LAUNCH] Running standalone native binary...\n");
+                    let launch_path = if !exe_path.contains('/') && !exe_path.contains('\\') {
+                        format!(".{}{}", std::path::MAIN_SEPARATOR, exe_path)
+                    } else {
+                        exe_path.clone()
+                    };
+                    let _ = std::process::Command::new(&launch_path).status();
+                }
+            }
+            Err(e) => {
+                eprintln!("[ERROR] Native compilation failed: {}", e);
+            }
+        }
+    }
+
+    // Export .dll if requested
+    if let Some(ref dll_path) = export_dll {
+        println!("[FFI COMPILE] Compiling 4D Sphere LLM to shared C FFI library '{}'...", dll_path);
+        let cl_code = model.compile_to_sphere_cl(&prompt);
+        match cronc::cl_c23::compile_cl_to_native_binary_with_target(&cl_code, dll_path, "3", cronc::cl_c23::SimdTarget::Auto) {
+            Ok(()) => {
+                println!("[SUCCESS] Shared library '{}' and 'cron_cortex.h' created successfully!", dll_path);
+            }
+            Err(e) => {
+                eprintln!("[ERROR] DLL compilation failed: {}", e);
+            }
+        }
+    }
+
     println!("[GENERATING] Running 4D Spherical Geodesic Autoregressive Decode Loop...\n");
 
     let result = model.generate_text(&prompt, max_tokens, temperature);

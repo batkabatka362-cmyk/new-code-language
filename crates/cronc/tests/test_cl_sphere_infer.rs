@@ -209,4 +209,71 @@ fn test_sphere_transformer_generate_text() {
     assert!(result.memory_reduction_percent > 90.0);
 }
 
+#[test]
+fn test_sphere_transformer_from_safetensors_fixture() {
+    use cronc::cl_sphere_infer::SphereTransformerModel;
+    use std::path::Path;
+
+    let path = Path::new("tests/fixtures/pytorch_transformer_layer.safetensors");
+    if !path.exists() {
+        // Fallback relative path for workspace root
+        let root_path = Path::new("../../tests/fixtures/pytorch_transformer_layer.safetensors");
+        if !root_path.exists() {
+            return;
+        }
+    }
+
+    let actual_path = if path.exists() { path } else { Path::new("../../tests/fixtures/pytorch_transformer_layer.safetensors") };
+    let model = SphereTransformerModel::from_safetensors_file(actual_path)
+        .expect("Loading real safetensors model weights");
+
+    assert!(model.total_parameters > 0);
+    assert_eq!(model.config.num_heads, 4);
+
+    let res = model.generate_text("CRON", 4, 0.7);
+    assert_eq!(res.tokens_generated, 4);
+    assert_eq!(res.flop_count, 0);
+    assert_eq!(res.dsp_multipliers_used, 0);
+    assert!(res.total_geodesic_ops > 0);
+}
+
+#[test]
+fn test_sphere_transformer_compile_to_sphere_cl() {
+    use cronc::cl_sphere_infer::SphereTransformerModel;
+    use cronc::cl_lang::parse_slot;
+    use std::path::Path;
+
+    let path = Path::new("tests/fixtures/pytorch_transformer_layer.safetensors");
+    let actual_path = if path.exists() {
+        path
+    } else {
+        Path::new("../../tests/fixtures/pytorch_transformer_layer.safetensors")
+    };
+    if !actual_path.exists() {
+        return;
+    }
+
+    let model = SphereTransformerModel::from_safetensors_file(actual_path)
+        .expect("Loading model for CL compilation");
+    let cl_code = model.compile_to_sphere_cl("CRON");
+
+    assert!(cl_code.contains("@kernel sphere_transformer_llm_flow"));
+    assert!(cl_code.contains(".target silicon.sphere_isa"));
+
+    let mut bundle_count = 0;
+    for line in cl_code.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('B') && trimmed.contains(':') {
+            bundle_count += 1;
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            assert_eq!(parts.len(), 5);
+            for slot_str in &parts[1..5] {
+                let slot = parse_slot(slot_str).expect("Valid slot in LLM microcode");
+                assert_eq!(slot.raw.len(), 10);
+            }
+        }
+    }
+    assert!(bundle_count > 0, "Generated microcode must contain VLIW bundles");
+}
+
 
