@@ -8,19 +8,7 @@
 use crate::cl_lang::parse_slot;
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if let Some(hash_pos) = slot.find('#') {
-        let hex_part: String = slot[hash_pos + 1..]
-            .chars()
-            .take_while(|c| c.is_ascii_hexdigit())
-            .collect();
-        u32::from_str_radix(&hex_part, 16).ok()
-    } else if slot.len() == 10 {
-        let chars: Vec<char> = slot.chars().collect();
-        chars[8].to_digit(16)
-    } else {
-        let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
-        u32::from_str_radix(&imm_digits, 16).ok()
-    }
+    crate::cl_lang::parse_slot_immediate(slot)
 }
 
 pub struct ClLlvmCompiler {

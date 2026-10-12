@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRON 65,536-Core Wafer-Scale Supercomputer Dashboard</title>
+<style>
+  :root {
+    --bg-primary: #070a13;
+    --bg-card: rgba(16, 24, 40, 0.85);
+    --border: rgba(56, 189, 248, 0.2);
+    --accent: #00f5d4;
+    --cyan: #38bdf8;
+    --amber: #fbbf24;
+    --rose: #f43f5e;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(circle at 50% 20%, #0f172a 0%, #070a13 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+    line-height: 1.5;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+  }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+  }
+  .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .card-val { font-size: 22px; font-weight: 800; color: var(--cyan); margin-top: 4px; font-family: monospace; }
+  .main-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+  }
+  @media (max-width: 1024px) {
+    .main-layout { grid-template-columns: 1fr; }
+  }
+  .wafer-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .panel-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel-title { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .status-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+  .badge { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+  .badge-pass { background: rgba(0, 245, 212, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+  svg { max-width: 750px; height: auto; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>CRON 65,536-CORE WAFER-SCALE SUPERCOMPUTER</h1>
+    <div class="subtitle">300mm Monolithic Silicon Wafer • 256 Dies × 256 Cores • 8D Hyper-Torus Photonic Mesh</div>
+  </header>
+
+  <div class="metrics-grid">
+    <div class="card">
+      <div class="card-label">Active Cores</div>
+      <div class="card-val">65,536</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Photonic Bandwidth</div>
+      <div class="card-val">3276.8 Tbps</div>
+    </div>
+    <div class="card">
+      <div class="card-label">4D Geodesic Ops</div>
+      <div class="card-val">0.00 FLOPs (0 DSP)</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Pipeline Parallel</div>
+      <div class="card-val">1F1B (16 Stages)</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Consensus Latency</div>
+      <div class="card-val">17475.90 µs</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Peak Temperature</div>
+      <div class="card-val">25.0°C</div>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <div class="wafer-panel">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="100%" height="100%">
+  <defs>
+    <radialGradient id="waferGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#141c2e"/>
+      <stop offset="85%" stop-color="#090d16"/>
+      <stop offset="100%" stop-color="#020408"/>
+    </radialGradient>
+    <linearGradient id="waveguideGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5d4" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#7b2cbf" stop-opacity="0.8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Circular 300mm Monolithic Silicon Wafer Substrate -->
+  <circle cx="500" cy="500" r="470" fill="url(#waferGrad)" stroke="#2a3b5c" stroke-width="3"/>
+  <circle cx="500" cy="500" r="455" fill="none" stroke="#00f5d4" stroke-opacity="0.2" stroke-width="1" stroke-dasharray="8,4"/>
+  <!-- Wafer Alignment Notch -->
+  <path d="M 485 970 Q 500 955 515 970 Z" fill="#020408" stroke="#2a3b5c" stroke-width="2"/>
+  <line x1="166" y1="166" x2="166" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="210" y1="166" x2="210" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="254" y1="166" x2="254" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="298" y1="166" x2="298" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="342" y1="166" x2="342" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="386" y1="166" x2="386" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="430" y1="166" x2="430" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="474" y1="166" x2="474" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="518" y1="166" x2="518" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="562" y1="166" x2="562" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="606" y1="166" x2="606" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="650" y1="166" x2="650" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="694" y1="166" x2="694" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="738" y1="166" x2="738" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="782" y1="166" x2="782" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="826" y1="166" x2="826" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="166" x2="826" y2="166" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="210" x2="826" y2="210" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="254" x2="826" y2="254" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="298" x2="826" y2="298" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="342" x2="826" y2="342" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="386" x2="826" y2="386" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="430" x2="826" y2="430" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="474" x2="826" y2="474" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="518" x2="826" y2="518" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="562" x2="826" y2="562" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="606" x2="826" y2="606" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="650" x2="826" y2="650" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="694" x2="826" y2="694" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="738" x2="826" y2="738" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="782" x2="826" y2="782" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <line x1="166" y1="826" x2="826" y2="826" stroke="#00f5d4" stroke-opacity="0.25" stroke-width="1.5"/>
+  <rect x="148" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #000 (wx:0, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D00</text>
+  <rect x="192" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #001 (wx:1, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D01</text>
+  <rect x="236" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #002 (wx:2, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D02</text>
+  <rect x="280" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #003 (wx:3, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D03</text>
+  <rect x="324" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #004 (wx:4, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D04</text>
+  <rect x="368" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #005 (wx:5, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D05</text>
+  <rect x="412" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #006 (wx:6, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D06</text>
+  <rect x="456" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #007 (wx:7, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D07</text>
+  <rect x="500" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #008 (wx:8, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D08</text>
+  <rect x="544" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #009 (wx:9, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D09</text>
+  <rect x="588" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #010 (wx:10, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D10</text>
+  <rect x="632" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #011 (wx:11, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D11</text>
+  <rect x="676" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #012 (wx:12, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D12</text>
+  <rect x="720" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #013 (wx:13, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D13</text>
+  <rect x="764" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #014 (wx:14, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D14</text>
+  <rect x="808" y="148" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #015 (wx:15, wy:0) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="166" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D15</text>
+  <rect x="148" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #016 (wx:0, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D16</text>
+  <rect x="192" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #017 (wx:1, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D17</text>
+  <rect x="236" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #018 (wx:2, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D18</text>
+  <rect x="280" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #019 (wx:3, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D19</text>
+  <rect x="324" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #020 (wx:4, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D20</text>
+  <rect x="368" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #021 (wx:5, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D21</text>
+  <rect x="412" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #022 (wx:6, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D22</text>
+  <rect x="456" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #023 (wx:7, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D23</text>
+  <rect x="500" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #024 (wx:8, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D24</text>
+  <rect x="544" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #025 (wx:9, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D25</text>
+  <rect x="588" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #026 (wx:10, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D26</text>
+  <rect x="632" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #027 (wx:11, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D27</text>
+  <rect x="676" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #028 (wx:12, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D28</text>
+  <rect x="720" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #029 (wx:13, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D29</text>
+  <rect x="764" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #030 (wx:14, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D30</text>
+  <rect x="808" y="192" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #031 (wx:15, wy:1) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="210" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D31</text>
+  <rect x="148" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #032 (wx:0, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D32</text>
+  <rect x="192" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #033 (wx:1, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D33</text>
+  <rect x="236" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #034 (wx:2, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D34</text>
+  <rect x="280" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #035 (wx:3, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D35</text>
+  <rect x="324" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #036 (wx:4, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D36</text>
+  <rect x="368" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #037 (wx:5, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D37</text>
+  <rect x="412" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #038 (wx:6, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D38</text>
+  <rect x="456" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #039 (wx:7, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D39</text>
+  <rect x="500" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #040 (wx:8, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D40</text>
+  <rect x="544" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #041 (wx:9, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D41</text>
+  <rect x="588" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #042 (wx:10, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D42</text>
+  <rect x="632" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #043 (wx:11, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D43</text>
+  <rect x="676" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #044 (wx:12, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D44</text>
+  <rect x="720" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #045 (wx:13, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D45</text>
+  <rect x="764" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #046 (wx:14, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D46</text>
+  <rect x="808" y="236" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #047 (wx:15, wy:2) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="254" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D47</text>
+  <rect x="148" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #048 (wx:0, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D48</text>
+  <rect x="192" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #049 (wx:1, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D49</text>
+  <rect x="236" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #050 (wx:2, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D50</text>
+  <rect x="280" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #051 (wx:3, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D51</text>
+  <rect x="324" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #052 (wx:4, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D52</text>
+  <rect x="368" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #053 (wx:5, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D53</text>
+  <rect x="412" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #054 (wx:6, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D54</text>
+  <rect x="456" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #055 (wx:7, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D55</text>
+  <rect x="500" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #056 (wx:8, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D56</text>
+  <rect x="544" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #057 (wx:9, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D57</text>
+  <rect x="588" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #058 (wx:10, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D58</text>
+  <rect x="632" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #059 (wx:11, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D59</text>
+  <rect x="676" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #060 (wx:12, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D60</text>
+  <rect x="720" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #061 (wx:13, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D61</text>
+  <rect x="764" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #062 (wx:14, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D62</text>
+  <rect x="808" y="280" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #063 (wx:15, wy:3) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="298" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D63</text>
+  <rect x="148" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #064 (wx:0, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D64</text>
+  <rect x="192" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #065 (wx:1, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D65</text>
+  <rect x="236" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #066 (wx:2, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D66</text>
+  <rect x="280" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #067 (wx:3, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D67</text>
+  <rect x="324" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #068 (wx:4, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D68</text>
+  <rect x="368" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #069 (wx:5, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D69</text>
+  <rect x="412" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #070 (wx:6, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D70</text>
+  <rect x="456" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #071 (wx:7, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D71</text>
+  <rect x="500" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #072 (wx:8, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D72</text>
+  <rect x="544" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #073 (wx:9, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D73</text>
+  <rect x="588" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #074 (wx:10, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D74</text>
+  <rect x="632" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #075 (wx:11, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D75</text>
+  <rect x="676" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #076 (wx:12, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D76</text>
+  <rect x="720" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #077 (wx:13, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D77</text>
+  <rect x="764" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #078 (wx:14, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D78</text>
+  <rect x="808" y="324" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #079 (wx:15, wy:4) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="342" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D79</text>
+  <rect x="148" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #080 (wx:0, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D80</text>
+  <rect x="192" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #081 (wx:1, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D81</text>
+  <rect x="236" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #082 (wx:2, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D82</text>
+  <rect x="280" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #083 (wx:3, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D83</text>
+  <rect x="324" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #084 (wx:4, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D84</text>
+  <rect x="368" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #085 (wx:5, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D85</text>
+  <rect x="412" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #086 (wx:6, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D86</text>
+  <rect x="456" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #087 (wx:7, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D87</text>
+  <rect x="500" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #088 (wx:8, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D88</text>
+  <rect x="544" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #089 (wx:9, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D89</text>
+  <rect x="588" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #090 (wx:10, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D90</text>
+  <rect x="632" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #091 (wx:11, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D91</text>
+  <rect x="676" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #092 (wx:12, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D92</text>
+  <rect x="720" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #093 (wx:13, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D93</text>
+  <rect x="764" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #094 (wx:14, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D94</text>
+  <rect x="808" y="368" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #095 (wx:15, wy:5) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="386" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D95</text>
+  <rect x="148" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #096 (wx:0, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D96</text>
+  <rect x="192" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #097 (wx:1, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D97</text>
+  <rect x="236" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #098 (wx:2, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D98</text>
+  <rect x="280" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #099 (wx:3, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D99</text>
+  <rect x="324" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #100 (wx:4, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D00</text>
+  <rect x="368" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #101 (wx:5, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D01</text>
+  <rect x="412" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #102 (wx:6, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D02</text>
+  <rect x="456" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #103 (wx:7, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D03</text>
+  <rect x="500" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #104 (wx:8, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D04</text>
+  <rect x="544" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #105 (wx:9, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D05</text>
+  <rect x="588" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #106 (wx:10, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D06</text>
+  <rect x="632" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #107 (wx:11, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D07</text>
+  <rect x="676" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #108 (wx:12, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D08</text>
+  <rect x="720" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #109 (wx:13, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D09</text>
+  <rect x="764" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #110 (wx:14, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D10</text>
+  <rect x="808" y="412" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #111 (wx:15, wy:6) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="430" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D11</text>
+  <rect x="148" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #112 (wx:0, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D12</text>
+  <rect x="192" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #113 (wx:1, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D13</text>
+  <rect x="236" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #114 (wx:2, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D14</text>
+  <rect x="280" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #115 (wx:3, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D15</text>
+  <rect x="324" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #116 (wx:4, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D16</text>
+  <rect x="368" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #117 (wx:5, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D17</text>
+  <rect x="412" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #118 (wx:6, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D18</text>
+  <rect x="456" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #119 (wx:7, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D19</text>
+  <rect x="500" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #120 (wx:8, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D20</text>
+  <rect x="544" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #121 (wx:9, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D21</text>
+  <rect x="588" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #122 (wx:10, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D22</text>
+  <rect x="632" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #123 (wx:11, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D23</text>
+  <rect x="676" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #124 (wx:12, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D24</text>
+  <rect x="720" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #125 (wx:13, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D25</text>
+  <rect x="764" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #126 (wx:14, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D26</text>
+  <rect x="808" y="456" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #127 (wx:15, wy:7) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="474" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D27</text>
+  <rect x="148" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #128 (wx:0, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D28</text>
+  <rect x="192" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #129 (wx:1, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D29</text>
+  <rect x="236" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #130 (wx:2, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D30</text>
+  <rect x="280" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #131 (wx:3, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D31</text>
+  <rect x="324" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #132 (wx:4, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D32</text>
+  <rect x="368" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #133 (wx:5, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D33</text>
+  <rect x="412" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #134 (wx:6, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D34</text>
+  <rect x="456" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #135 (wx:7, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D35</text>
+  <rect x="500" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #136 (wx:8, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D36</text>
+  <rect x="544" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #137 (wx:9, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D37</text>
+  <rect x="588" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #138 (wx:10, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D38</text>
+  <rect x="632" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #139 (wx:11, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D39</text>
+  <rect x="676" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #140 (wx:12, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D40</text>
+  <rect x="720" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #141 (wx:13, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D41</text>
+  <rect x="764" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #142 (wx:14, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D42</text>
+  <rect x="808" y="500" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #143 (wx:15, wy:8) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="518" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D43</text>
+  <rect x="148" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #144 (wx:0, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D44</text>
+  <rect x="192" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #145 (wx:1, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D45</text>
+  <rect x="236" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #146 (wx:2, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D46</text>
+  <rect x="280" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #147 (wx:3, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D47</text>
+  <rect x="324" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #148 (wx:4, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D48</text>
+  <rect x="368" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #149 (wx:5, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D49</text>
+  <rect x="412" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #150 (wx:6, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D50</text>
+  <rect x="456" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #151 (wx:7, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D51</text>
+  <rect x="500" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #152 (wx:8, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D52</text>
+  <rect x="544" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #153 (wx:9, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D53</text>
+  <rect x="588" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #154 (wx:10, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D54</text>
+  <rect x="632" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #155 (wx:11, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D55</text>
+  <rect x="676" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #156 (wx:12, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D56</text>
+  <rect x="720" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #157 (wx:13, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D57</text>
+  <rect x="764" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #158 (wx:14, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D58</text>
+  <rect x="808" y="544" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #159 (wx:15, wy:9) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="562" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D59</text>
+  <rect x="148" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #160 (wx:0, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D60</text>
+  <rect x="192" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #161 (wx:1, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D61</text>
+  <rect x="236" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #162 (wx:2, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D62</text>
+  <rect x="280" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #163 (wx:3, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D63</text>
+  <rect x="324" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #164 (wx:4, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D64</text>
+  <rect x="368" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #165 (wx:5, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D65</text>
+  <rect x="412" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #166 (wx:6, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D66</text>
+  <rect x="456" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #167 (wx:7, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D67</text>
+  <rect x="500" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #168 (wx:8, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D68</text>
+  <rect x="544" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #169 (wx:9, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D69</text>
+  <rect x="588" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #170 (wx:10, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D70</text>
+  <rect x="632" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #171 (wx:11, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D71</text>
+  <rect x="676" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #172 (wx:12, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D72</text>
+  <rect x="720" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #173 (wx:13, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D73</text>
+  <rect x="764" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #174 (wx:14, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D74</text>
+  <rect x="808" y="588" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #175 (wx:15, wy:10) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="606" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D75</text>
+  <rect x="148" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #176 (wx:0, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D76</text>
+  <rect x="192" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #177 (wx:1, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D77</text>
+  <rect x="236" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #178 (wx:2, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D78</text>
+  <rect x="280" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #179 (wx:3, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D79</text>
+  <rect x="324" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #180 (wx:4, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D80</text>
+  <rect x="368" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #181 (wx:5, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D81</text>
+  <rect x="412" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #182 (wx:6, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D82</text>
+  <rect x="456" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #183 (wx:7, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D83</text>
+  <rect x="500" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #184 (wx:8, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D84</text>
+  <rect x="544" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #185 (wx:9, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D85</text>
+  <rect x="588" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #186 (wx:10, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D86</text>
+  <rect x="632" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #187 (wx:11, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D87</text>
+  <rect x="676" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #188 (wx:12, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D88</text>
+  <rect x="720" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #189 (wx:13, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D89</text>
+  <rect x="764" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #190 (wx:14, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D90</text>
+  <rect x="808" y="632" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #191 (wx:15, wy:11) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="650" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D91</text>
+  <rect x="148" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #192 (wx:0, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D92</text>
+  <rect x="192" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #193 (wx:1, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D93</text>
+  <rect x="236" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #194 (wx:2, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D94</text>
+  <rect x="280" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #195 (wx:3, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D95</text>
+  <rect x="324" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #196 (wx:4, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D96</text>
+  <rect x="368" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #197 (wx:5, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D97</text>
+  <rect x="412" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #198 (wx:6, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D98</text>
+  <rect x="456" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #199 (wx:7, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D99</text>
+  <rect x="500" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #200 (wx:8, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D00</text>
+  <rect x="544" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #201 (wx:9, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D01</text>
+  <rect x="588" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #202 (wx:10, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D02</text>
+  <rect x="632" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #203 (wx:11, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D03</text>
+  <rect x="676" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #204 (wx:12, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D04</text>
+  <rect x="720" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #205 (wx:13, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D05</text>
+  <rect x="764" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #206 (wx:14, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D06</text>
+  <rect x="808" y="676" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #207 (wx:15, wy:12) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="694" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D07</text>
+  <rect x="148" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #208 (wx:0, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D08</text>
+  <rect x="192" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #209 (wx:1, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D09</text>
+  <rect x="236" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #210 (wx:2, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D10</text>
+  <rect x="280" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #211 (wx:3, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D11</text>
+  <rect x="324" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #212 (wx:4, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D12</text>
+  <rect x="368" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #213 (wx:5, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D13</text>
+  <rect x="412" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #214 (wx:6, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D14</text>
+  <rect x="456" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #215 (wx:7, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D15</text>
+  <rect x="500" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #216 (wx:8, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D16</text>
+  <rect x="544" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #217 (wx:9, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D17</text>
+  <rect x="588" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #218 (wx:10, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D18</text>
+  <rect x="632" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #219 (wx:11, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D19</text>
+  <rect x="676" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #220 (wx:12, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D20</text>
+  <rect x="720" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #221 (wx:13, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D21</text>
+  <rect x="764" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #222 (wx:14, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D22</text>
+  <rect x="808" y="720" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #223 (wx:15, wy:13) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="738" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D23</text>
+  <rect x="148" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #224 (wx:0, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D24</text>
+  <rect x="192" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #225 (wx:1, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D25</text>
+  <rect x="236" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #226 (wx:2, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D26</text>
+  <rect x="280" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #227 (wx:3, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D27</text>
+  <rect x="324" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #228 (wx:4, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D28</text>
+  <rect x="368" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #229 (wx:5, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D29</text>
+  <rect x="412" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #230 (wx:6, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D30</text>
+  <rect x="456" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #231 (wx:7, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D31</text>
+  <rect x="500" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #232 (wx:8, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D32</text>
+  <rect x="544" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #233 (wx:9, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D33</text>
+  <rect x="588" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #234 (wx:10, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D34</text>
+  <rect x="632" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #235 (wx:11, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D35</text>
+  <rect x="676" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #236 (wx:12, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D36</text>
+  <rect x="720" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #237 (wx:13, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D37</text>
+  <rect x="764" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #238 (wx:14, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D38</text>
+  <rect x="808" y="764" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #239 (wx:15, wy:14) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="782" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D39</text>
+  <rect x="148" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #240 (wx:0, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="166" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D40</text>
+  <rect x="192" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #241 (wx:1, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="210" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D41</text>
+  <rect x="236" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #242 (wx:2, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="254" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D42</text>
+  <rect x="280" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #243 (wx:3, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="298" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D43</text>
+  <rect x="324" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #244 (wx:4, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="342" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D44</text>
+  <rect x="368" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #245 (wx:5, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="386" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D45</text>
+  <rect x="412" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #246 (wx:6, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="430" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D46</text>
+  <rect x="456" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #247 (wx:7, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="474" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D47</text>
+  <rect x="500" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #248 (wx:8, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="518" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D48</text>
+  <rect x="544" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #249 (wx:9, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="562" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D49</text>
+  <rect x="588" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #250 (wx:10, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="606" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D50</text>
+  <rect x="632" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #251 (wx:11, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="650" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D51</text>
+  <rect x="676" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #252 (wx:12, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="694" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D52</text>
+  <rect x="720" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #253 (wx:13, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="738" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D53</text>
+  <rect x="764" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #254 (wx:14, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="782" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D54</text>
+  <rect x="808" y="808" width="36" height="36" rx="4" fill="#00f5d4" fill-opacity="0.75" stroke="#05d5b2" stroke-width="1.2">
+    <title>Die #255 (wx:15, wy:15) | Temp: 25.0°C | 256 Cores | Throttled: false</title>
+  </rect>
+  <text x="826" y="826" font-family="monospace" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">D55</text>
+
+  <!-- HUD Badges -->
+  <g transform="translate(500, 75)" text-anchor="middle">
+    <text font-family="'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="900" fill="#00f5d4" letter-spacing="2">CRON 65,536-CORE WAFER-SCALE SUPERCOMPUTER</text>
+    <text y="24" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" fill="#94a3b8">300mm Monolithic Silicon Wafer • 256 Dies × 256 Cores • 8D Hyper-Torus NoC</text>
+  </g>
+  <g transform="translate(500, 920)" text-anchor="middle">
+    <rect x="-340" y="-18" width="680" height="34" rx="17" fill="#0a0f1d" stroke="#22324e" stroke-width="1"/>
+    <text y="4" font-family="monospace" font-size="11" fill="#38bdf8">BW: 3,276.8 Tbps | Cores: 65,536 (100% Active) | Latency: 17475.9 µs | 0 Collisions | 0 DSPs</text>
+  </g>
+</svg>
+    </div>
+    <div class="side-panel">
+      <div class="panel-section">
+        <div class="panel-title"><span>⚡</span> Photonic Mesh Physics</div>
+        <div class="status-row"><span>Optical Carriers:</span><span>8 DWDM Channels</span></div>
+        <div class="status-row"><span>Per-Die Optical BW:</span><span>12.8 Tbps</span></div>
+        <div class="status-row"><span>Aggregate Wafer BW:</span><span>3,276.8 Tbps</span></div>
+        <div class="status-row"><span>Waveguide Loss:</span><span>0.15 dB/cm</span></div>
+        <div class="status-row"><span>Optical Laser Power:</span><span>48.0 W</span></div>
+        <div class="status-row"><span>Bit Error Rate:</span><span>&lt; 10⁻¹⁵ (KP4)</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-title"><span>🌐</span> 3-Tier Quorum Consensus</div>
+        <div class="status-row"><span>Tier 1 Intra-Die:</span><span class="badge badge-pass">256/256 Dies</span></div>
+        <div class="status-row"><span>Tier 2 Quadrants:</span><span class="badge badge-pass">16/16 Quads</span></div>
+        <div class="status-row"><span>Tier 3 Wafer Mesh:</span><span class="badge badge-pass">VERIFIED</span></div>
+        <div class="status-row"><span>Packet Collisions:</span><span class="badge badge-pass">0 (VERIFIED)</span></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-title"><span>🔥</span> Thermal Telemetry</div>
+        <div class="status-row"><span>Throttled Dies:</span><span>0/256</span></div>
+        <div class="status-row"><span>Thermal Deflections:</span><span>0</span></div>
+        <div class="status-row"><span>Active DVFS Step-Down:</span><span>Enabled</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

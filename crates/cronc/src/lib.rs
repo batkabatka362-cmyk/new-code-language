@@ -26,6 +26,7 @@ pub mod llvm_backend;
 pub mod jit_backend;
 pub mod autodiff;
 pub mod cl_binary;
+pub mod cl_ir;
 pub mod gpu_backend;
 pub mod autotune;
 pub mod cl_c23;
@@ -176,6 +177,9 @@ pub use cl_rtl_export::{
 };
 pub use cl_jit_accel::{
     run_accelerated_batch_jit, run_fast_jit, BatchJitReport,
+};
+pub use cl_ir::{
+    ClProgramIR, ClBundleIR, ClMicroOp, AluOp, MemOp, BranchCond, NeuroOp,
 };
 
 pub use cl_compose::{

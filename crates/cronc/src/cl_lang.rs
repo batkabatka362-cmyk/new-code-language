@@ -132,6 +132,7 @@ pub struct ClReport {
     pub opcodes_verified: usize,
     pub parity_verified: usize,
     pub crc_verified: usize,
+    pub strict_crc_verified: usize,
     pub hazards: Vec<String>,
     pub labels_found: usize,
     pub cores_partitioned: usize,
@@ -148,7 +149,7 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "PO", // Predicated SIMD ALU
     "MD", // Mult-Dot Sub-Byte SIMD MAC
     "BK", // Backward Invert Reversible Pass (Brain 3)
-    "BL", // Halo Cache Blend
+    "CB", // Halo Cache Blend
     "RF", // Reversible Fredkin Swap Gate (Brain 3)
     "GU", // Gradient Update
     "ST", // STDP Synapse Update / Staging Prefetch (Brain 4)
@@ -160,7 +161,7 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "SP", // Fiber Spawn
     "FJ", // Fiber Join
     "DW", // DMA Transfer Wait
-    "SB", // Spatial Broadcast Across 4D Torus
+    "SB", // Spatial Broadcast Across 4D Torus / Subtraction
     "SH", // Self-Healing Sentry Config (Brain 6)
     "RC", // Re-route Fallback Channel
     "TO", // Toffoli 3-Wire Reversible Gate (Brain 3)
@@ -199,6 +200,7 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "BN", // Branch if Non-Zero
     "BL", // Branch if Less/Negative
     "BG", // Branch if Greater
+    "JL", // Jump/Branch if Less
     "bb", // 256-Core Chip-Wide Global Synchronization Barrier
     "FU", // Fusion Stream Anchor Start (Milestone #012)
     "FE", // Fusion Stream Anchor End / Commit (Milestone #012)
@@ -211,7 +213,7 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "TC", // Malbolge 16-Trit SIMD Crazy Operation / Activation LUT
     "TM", // Malbolge Multiplier-Free BitNet b1.58 Trit-MAC
     "DE", // Befunge Systolic Push East (+X)
-    "DW", // Befunge Systolic Push West (-X)
+    "PW", // Befunge Systolic Push West (-X)
     "DN", // Befunge Systolic Push North (+Y)
     "DS", // Befunge Systolic Push South (-Y)
     "UN", // Prolog 1-Cycle Hardware Symbolic Index Matcher / Unifier
@@ -236,6 +238,7 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "LY", // 4D Cortical Layer Transition / Clamp (Apical -> Sensory -> Motor)
     // Extended Arithmetic, Logical & Neuromorphic Opcodes
     "AD", // Add
+    "SU", // Subtract (Canonical 0-FLOPs Subtraction)
     "ML", // Multiply
     "DV", // Divide
     "EX", // Exponential
@@ -263,13 +266,13 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "M8", "M9", "MB", "MC", "ME", "MF", // Matrix Macro Opcodes
     // Accumulator & Activation Bank Macro Opcodes
     "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7",
-    "A8", "A9", "AA", "AB", "AC", "AD", "AE", "AF",
+    "A8", "A9", "AA", "AB", "AE", "AF",
     // Barrier & Brain-Bridge Macro Opcodes
     "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7",
-    "B8", "B9", "BA", "BB", "BC", "BD", "BE", "BF",
+    "B8", "B9", "BA", "BC", "BD", "BE", "BF",
     // Sensory & State Macro Opcodes
     "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7",
-    "S8", "S9", "SA", "SB", "SC", "SD", "SE", "SF",
+    "S8", "S9", "SA", "SD", "SF",
     "_N", // NOP Alias
     // Extended Homopolymer Macro Opcodes
     "CC", // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation
@@ -409,9 +412,9 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
     let is_writer = opcode != "SH" && opcode != "RS" 
                  && opcode != "HL" && opcode != "DW" && opcode != "YD" && opcode != "NO"
                  && opcode != "JP" && opcode != "BZ" && opcode != "BN" && opcode != "BL" && opcode != "BG"
-                 && opcode != "LT" && opcode != "JS" && opcode != "SR" && opcode != "BY"
+                 && opcode != "JL" && opcode != "LT" && opcode != "JS" && opcode != "SR" && opcode != "BY"
                  && opcode != "TI" && opcode != "TD" && opcode != "TW" && opcode != "ZL"
-                 && opcode != "DE" && opcode != "DW" && opcode != "DN" && opcode != "DS"
+                 && opcode != "DE" && opcode != "PW" && opcode != "DW" && opcode != "DN" && opcode != "DS"
                  && opcode != "bb" && opcode != "BB" && opcode != "RT" && opcode != "FE" && opcode != "PR"
                  && opcode != "CC" && opcode != "DD" && opcode != "EE" && opcode != "11"
                  && opcode != "88" && opcode != "99" && opcode != "aa" && opcode != "cc"
@@ -922,6 +925,9 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
             if slot.parity_token.is_ascii_hexdigit() || slot.parity_token.is_ascii_alphanumeric() {
                 report.parity_verified += 1;
             }
+            if verify_token_crc8(slot_str) {
+                report.strict_crc_verified += 1;
+            }
             if verify_token_crc8(slot_str) || slot.parity_token.is_ascii_hexdigit() {
                 report.crc_verified += 1;
             }
@@ -1001,4 +1007,59 @@ pub fn verify_token_crc8(raw: &str) -> bool {
     let actual_crc = compute_crc8_atm(payload.as_bytes()) & 0x0F;
     let expected_nibble = chars[7].to_digit(16).unwrap_or(0xFF) as u8;
     actual_crc == expected_nibble
+}
+
+/// Unified canonical parser for immediate values and branch targets in CL instruction tokens.
+/// Standard 10-character slots store 12-bit immediate in chars [6..9] and parity/term in [9].
+/// Branch targets store full 16-bit cycle target in chars [6..10].
+pub fn parse_slot_immediate(slot: &str) -> Option<u32> {
+    if slot.len() == 10 {
+        if let Some(hash_pos) = slot.find('#') {
+            let is_branch = slot.starts_with('!')
+                || slot[1..3].eq("JP") || slot[1..3].eq("BZ")
+                || slot[1..3].eq("BN") || slot[1..3].eq("BL")
+                || slot[1..3].eq("BG") || slot[1..3].eq("JL")
+                || slot[1..3].eq("JS");
+
+            if is_branch {
+                let hex_part: String = slot[hash_pos + 1..]
+                    .chars()
+                    .take(4)
+                    .take_while(|c| c.is_ascii_hexdigit())
+                    .collect();
+                return u32::from_str_radix(&hex_part, 16).ok();
+            }
+
+            let part3: String = slot[hash_pos + 1..]
+                .chars()
+                .take(3)
+                .take_while(|c| c.is_ascii_hexdigit())
+                .collect();
+            let v3 = u32::from_str_radix(&part3, 16).ok();
+
+            let part4: String = slot[hash_pos + 1..]
+                .chars()
+                .take(4)
+                .take_while(|c| c.is_ascii_hexdigit())
+                .collect();
+            if let Ok(v4) = u32::from_str_radix(&part4, 16) {
+                if v3 == Some(0) && v4 > 0 {
+                    return Some(v4);
+                }
+            }
+            v3
+        } else {
+            let chars: Vec<char> = slot.chars().collect();
+            chars[8].to_digit(16)
+        }
+    } else if let Some(hash_pos) = slot.find('#') {
+        let hex_part: String = slot[hash_pos + 1..]
+            .chars()
+            .take_while(|c| c.is_ascii_hexdigit())
+            .collect();
+        u32::from_str_radix(&hex_part, 16).ok()
+    } else {
+        let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
+        u32::from_str_radix(&imm_digits, 16).ok()
+    }
 }

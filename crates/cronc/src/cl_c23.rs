@@ -53,19 +53,7 @@ fn decode_base90_val(c: char) -> u8 {
 }
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if let Some(hash_pos) = slot.find('#') {
-        let hex_part: String = slot[hash_pos + 1..]
-            .chars()
-            .take_while(|c| c.is_ascii_hexdigit())
-            .collect();
-        u32::from_str_radix(&hex_part, 16).ok()
-    } else if slot.len() == 10 {
-        let chars: Vec<char> = slot.chars().collect();
-        chars[8].to_digit(16)
-    } else {
-        let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
-        u32::from_str_radix(&imm_digits, 16).ok()
-    }
+    crate::cl_lang::parse_slot_immediate(slot)
 }
 
 /// Transpiles .cl VLIW microcode to standalone, ISO C23 compliant source code with
@@ -464,7 +452,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         op if op.starts_with('=') || slot.prefix == '\'' => {
                             out.push_str(&format!("    core->r[{}] = {:#010X}u;\n", d, imm_val));
                         }
-                        "OP" | "WD" => {
+                        "OP" | "WD" | "CB" => {
                             out.push_str("    core->optical_gemm_count++;\n");
                             out.push_str(&format!("    core->r[{}] = cron_photonic_simd_dot(core->r[{}], core->r[{}]);\n", d, d, s));
                         }
@@ -590,7 +578,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str("    core->stdp_updates_count++;\n");
                             out.push_str(&format!("    core->r[{}] = (core->r[{}] > 100 ? 1u : 0u);\n", d, s));
                         }
-                        "TX" | "SB" | "aa" => {
+                        "TX" | "aa" => {
                             out.push_str("    core->spatial_broadcast_count++;\n");
                         }
                         "RX" => {
@@ -734,6 +722,9 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         // Extended Arithmetic & Logical Operations
                         "AD" => {
                             out.push_str(&format!("    core->r[{}] = core->r[{}] + core->r[{}];\n", d, d, s));
+                        }
+                        "SU" | "SB" => {
+                            out.push_str(&format!("    core->r[{}] = core->r[{}] - core->r[{}];\n", d, d, s));
                         }
                         "ML" => {
                             out.push_str(&format!("    core->r[{}] = core->r[{}] * core->r[{}];\n", d, d, s));
@@ -893,7 +884,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         "SH" => {
                             out.push_str(&format!("    core->r[{}] = 180u;\n", d));
                         }
-                        "DW" | "DD" | "EE" | "CC" => {}
+                        "DW" | "DD" | "EE" | "CC" | "PW" => {}
                         // Macro Opcodes (M0..MF, A0..AF, B0..BF, S0..SF)
                         op if op.starts_with('M') && op.len() == 2 => {
                             out.push_str(&format!("    core->r[{}] = cron_subbyte_ternary_dot(core->r[{}], core->r[{}]);\n", d, d, s));
@@ -919,7 +910,7 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             let reg = if d > 0 { d } else { s };
                             out.push_str(&format!("    if (core->r[{}] != 0) goto bundle_{:04X};\n", reg, imm_val));
                         }
-                        "BL" | "LT" => {
+                        "BL" | "LT" | "JL" => {
                             let reg = if d > 0 { d } else { s };
                             out.push_str(&format!("    if ((int32_t)core->r[{}] < 0) goto bundle_{:04X};\n", reg, imm_val));
                         }

@@ -112,42 +112,7 @@ impl Default for ClJitCore {
 }
 
 fn parse_imm_val(slot: &str) -> Option<u32> {
-    if slot.len() == 10 {
-        if let Some(hash_pos) = slot.find('#') {
-            let part3: String = slot[hash_pos + 1..]
-                .chars()
-                .take(3)
-                .take_while(|c| c.is_ascii_hexdigit())
-                .collect();
-            let v3 = u32::from_str_radix(&part3, 16).ok();
-
-            // If v3 is Some(0) or empty, but 4 characters exist and parse to non-zero,
-            // support 4-hex-digit immediate/targets like #0003 or #0001
-            let part4: String = slot[hash_pos + 1..]
-                .chars()
-                .take(4)
-                .take_while(|c| c.is_ascii_hexdigit())
-                .collect();
-            if let Ok(v4) = u32::from_str_radix(&part4, 16) {
-                if v3 == Some(0) && v4 > 0 {
-                    return Some(v4);
-                }
-            }
-            v3
-        } else {
-            let chars: Vec<char> = slot.chars().collect();
-            chars[8].to_digit(16)
-        }
-    } else if let Some(hash_pos) = slot.find('#') {
-        let hex_part: String = slot[hash_pos + 1..]
-            .chars()
-            .take_while(|c| c.is_ascii_hexdigit())
-            .collect();
-        u32::from_str_radix(&hex_part, 16).ok()
-    } else {
-        let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
-        u32::from_str_radix(&imm_digits, 16).ok()
-    }
+    crate::cl_lang::parse_slot_immediate(slot)
 }
 
 #[inline(always)]
@@ -360,7 +325,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             };
                             core.r[d] = val1.wrapping_add(val2);
                         }
-                        "SB" => {
+                        "SB" | "SU" => {
                             core.spatial_broadcast_count += 1;
                             let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
                                 (core.r[s], core.r[imm_nibble])
@@ -640,7 +605,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                                 crate::cl_esoteric::TritWord(core.r[s]),
                             ) as u32;
                         }
-                        "DE" | "DW" | "DN" | "DS" => {
+                        "DE" | "DW" | "PW" | "DN" | "DS" => {
                             core.systolic_hops_count += 1;
                             core.esoteric_energy_pj += 0.04;
                         }
@@ -758,7 +723,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                                 core.branch_target = Some(imm_val as usize);
                             }
                         }
-                        "BL" | "LT" => {
+                        "BL" | "JL" | "LT" => {
                             let reg = if d > 0 { d } else { s };
                             if (core.r[reg] as i32) < 0 {
                                 core.branch_target = Some(imm_val as usize);
@@ -821,6 +786,313 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
     Ok(())
 }
 
+/// Execute ClProgramIR directly on a ClJitCore
+pub fn execute_cl_ir_on_core(ir: &crate::cl_ir::ClProgramIR, core: &mut ClJitCore) -> Result<(), String> {
+    for w in &ir.weights {
+        core.load_weights(w);
+    }
+
+    if ir.bundles.is_empty() {
+        return Err("No valid VLIW bundles found in ClProgramIR to execute".to_string());
+    }
+
+    let mut pc = 0;
+    let mut total_cycles = 0;
+
+    while pc < ir.bundles.len() && !core.is_halted && total_cycles < 10_000_000 {
+        total_cycles += 1;
+        core.cycle_count += 1;
+        let bundle = &ir.bundles[pc];
+
+        for op in &bundle.ops {
+            if core.is_halted {
+                break;
+            }
+            match op {
+                crate::cl_ir::MicroOp::Nop => {}
+                crate::cl_ir::MicroOp::ImmediateLoad { dest, val } => {
+                    core.r[*dest as usize % 16] = *val;
+                }
+                crate::cl_ir::MicroOp::Alu { op, dest, src, imm, .. } => {
+                    let d = *dest as usize % 16;
+                    let s = *src as usize % 16;
+                    let imm_val = *imm;
+                    let imm_nibble = (imm_val & 0xF) as usize;
+                    let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                        (core.r[s], core.r[imm_nibble])
+                    } else {
+                        (core.r[d], core.r[s])
+                    };
+
+                    match op {
+                        crate::cl_ir::AluOp::Add => core.r[d] = val1.wrapping_add(val2),
+                        crate::cl_ir::AluOp::Sub => {
+                            core.spatial_broadcast_count += 1;
+                            core.r[d] = val1.wrapping_sub(val2);
+                        }
+                        crate::cl_ir::AluOp::Mul => core.r[d] = val1.wrapping_mul(val2),
+                        crate::cl_ir::AluOp::Div => core.r[d] = val1.checked_div(val2).unwrap_or(0),
+                        crate::cl_ir::AluOp::Mod => core.r[d] = if val2 != 0 { val1 % val2 } else { 0 },
+                        crate::cl_ir::AluOp::And => core.r[d] = val1 & val2,
+                        crate::cl_ir::AluOp::Or => core.r[d] = val1 | val2,
+                        crate::cl_ir::AluOp::Xor => core.r[d] = val1 ^ val2,
+                        crate::cl_ir::AluOp::Shl => core.r[d] = val1 << (val2 & 31),
+                        crate::cl_ir::AluOp::Shr => core.r[d] = val1 >> (val2 & 31),
+                        crate::cl_ir::AluOp::CountOnes => core.r[d] = core.r[s].count_ones(),
+                        crate::cl_ir::AluOp::Exp => {
+                            let input_val = core.r[s];
+                            let scaled = ((input_val as f32 / 100.0).exp() * 100.0) as u32;
+                            core.r[d] = scaled & 0xFFFF;
+                        }
+                        crate::cl_ir::AluOp::Sqrt => {
+                            let input_val = core.r[s];
+                            core.r[d] = (input_val as f64).sqrt() as u32;
+                        }
+                        crate::cl_ir::AluOp::FixedPoint => core.r[d] = (core.r[s] << 8) | (imm_val & 0xFF),
+                        crate::cl_ir::AluOp::Bitmask => {
+                            let mask = if imm_val != 0 { imm_val } else { 0x00FF_FFFF };
+                            core.r[d] = (core.r[d] & !mask) | (core.r[s] & mask);
+                        }
+                        crate::cl_ir::AluOp::Compare => core.r[d] = if val1 == val2 { 1 } else { 0 },
+                        crate::cl_ir::AluOp::Copy => core.r[d] = core.r[s],
+                        crate::cl_ir::AluOp::SubbyteTernaryDot => {
+                            core.r[d] = subbyte_ternary_dot(core.r[d], core.r[s]);
+                        }
+                        crate::cl_ir::AluOp::TileTranspose => core.r[d] = tile_transpose(core.r[s]),
+                        crate::cl_ir::AluOp::CordicRotate => {
+                            let x = (core.r[d] & 0xFFFF) as i16 as i32;
+                            let y = ((core.r[d] >> 16) & 0xFFFF) as i16 as i32;
+                            let angle = (core.r[s] & 0xFF) as f64 * (std::f64::consts::PI / 128.0);
+                            let (sin_a, cos_a) = angle.sin_cos();
+                            let nx = ((x as f64 * cos_a - y as f64 * sin_a) as i32) & 0xFFFF;
+                            let ny = ((x as f64 * sin_a + y as f64 * cos_a) as i32) & 0xFFFF;
+                            core.r[d] = (ny << 16) as u32 | (nx as u32);
+                        }
+                        crate::cl_ir::AluOp::PrngStep => {
+                            let feedback = core.lfsr_state & 1;
+                            core.lfsr_state >>= 1;
+                            if feedback == 1 {
+                                core.lfsr_state ^= 0xA000_0003;
+                            }
+                            core.r[d] = core.lfsr_state;
+                        }
+                    }
+                }
+                crate::cl_ir::MicroOp::Memory { op, dest, src, offset, .. } => {
+                    let d = *dest as usize % 16;
+                    let s = *src as usize % 16;
+                    let imm_val = *offset;
+                    match op {
+                        crate::cl_ir::MemOp::LoadWord => {
+                            let addr = (core.r[s].wrapping_add(imm_val) as usize) % 16384;
+                            core.r[d] = core.dmem[addr];
+                        }
+                        crate::cl_ir::MemOp::BankLoad => {
+                            let bank = s % 16;
+                            let off = (imm_val as usize) % 16;
+                            core.r[d] = core.bank_r[bank][off];
+                        }
+                        crate::cl_ir::MemOp::StoreWord => {
+                            let addr = (core.r[s].wrapping_add(imm_val) as usize) % 16384;
+                            core.dmem[addr] = core.r[d];
+                        }
+                        crate::cl_ir::MemOp::BankStore => {
+                            let bank = d % 16;
+                            let off = (imm_val as usize) % 16;
+                            core.bank_r[bank][off] = core.r[s];
+                        }
+                        crate::cl_ir::MemOp::LoadByte => {
+                            let byte_addr = (core.r[s].wrapping_add(imm_val) as usize) % 65536;
+                            let word_idx = byte_addr / 4;
+                            let byte_shift = (byte_addr % 4) * 8;
+                            core.r[d] = (core.dmem[word_idx] >> byte_shift) & 0xFF;
+                        }
+                        crate::cl_ir::MemOp::StoreByte => {
+                            let byte_addr = (core.r[s].wrapping_add(imm_val) as usize) % 65536;
+                            let word_idx = byte_addr / 4;
+                            let byte_shift = (byte_addr % 4) * 8;
+                            let mask = !(0xFF << byte_shift);
+                            let b_val = (core.r[d] & 0xFF) << byte_shift;
+                            core.dmem[word_idx] = (core.dmem[word_idx] & mask) | b_val;
+                        }
+                    }
+                }
+                crate::cl_ir::MicroOp::Branch { cond, reg, target_bundle } => {
+                    let r = *reg as usize % 16;
+                    let should_branch = match cond {
+                        crate::cl_ir::BranchCond::Always => true,
+                        crate::cl_ir::BranchCond::Zero => core.r[r] == 0,
+                        crate::cl_ir::BranchCond::NonZero => core.r[r] != 0,
+                        crate::cl_ir::BranchCond::Less => (core.r[r] as i32) < 0,
+                        crate::cl_ir::BranchCond::Greater => (core.r[r] as i32) > 0,
+                        crate::cl_ir::BranchCond::Call => {
+                            core.ras.push(bundle.cycle + 1);
+                            true
+                        }
+                        crate::cl_ir::BranchCond::Return => {
+                            if let Some(ret) = core.ras.pop() {
+                                core.branch_target = Some(ret);
+                            }
+                            false
+                        }
+                    };
+                    if should_branch {
+                        core.branch_target = Some(*target_bundle);
+                    }
+                }
+                crate::cl_ir::MicroOp::SphereGeodesic { head, w, lat_x, lon_z, quad, alu_op, reg, val, is_err, is_rd, is_wr, .. } => {
+                    let s_id = *head as usize % 4;
+                    let curvature_weight = ((*lat_x + *lon_z) >> 5) + 1;
+                    let radial_shift = (*w % 4) + 1;
+                    let q_sign: i32 = if *quad == 1 || *quad == 4 { 1 } else { -1 };
+                    let geo_term = q_sign * (((*val * curvature_weight) >> radial_shift) as i32);
+                    core.sphere_matrix_acc[s_id] += geo_term;
+                    core.sphere_curvature_ops_count += 1;
+                    core.sphere_coords[s_id] = [*w, *lat_x, *lon_z, *quad as u32];
+                    core.sphere_errors[s_id] = *is_err;
+
+                    let r = *reg as usize % 16;
+                    let cell_addr = ((*w * 360 + *lat_x * 90 + *lon_z) as usize) % core.dmem.len();
+                    if *is_rd {
+                        core.r[r] = core.dmem[cell_addr];
+                    }
+                    if *is_wr {
+                        core.dmem[cell_addr] = core.r[r];
+                    }
+
+                    match alu_op {
+                        '+' => core.r[r] = core.r[r].wrapping_add(*val * curvature_weight),
+                        '-' => core.r[r] = core.r[r].wrapping_sub(*val * curvature_weight),
+                        '*' => core.r[r] ^= (*val * curvature_weight) << radial_shift,
+                        '^' => core.r[r] ^= *val * curvature_weight,
+                        '=' => core.r[r] = *val * curvature_weight,
+                        '!' => core.is_halted = true,
+                        _ => {}
+                    }
+                }
+                crate::cl_ir::MicroOp::Neuromorphic { op, dest, src } => {
+                    let d = *dest as usize % 16;
+                    let s = *src as usize % 16;
+                    match op {
+                        crate::cl_ir::NeuroOp::LifStep => {
+                            core.stdp_updates_count += 1;
+                            core.r[d] = if core.r[s] >= 50 { 1 } else { 0 };
+                        }
+                        crate::cl_ir::NeuroOp::LifSpike => {
+                            core.stdp_updates_count += 1;
+                            core.r[d] = if core.r[s] > 100 { 1 } else { 0 };
+                        }
+                        crate::cl_ir::NeuroOp::StdpUpdate => {
+                            core.stdp_updates_count += 1;
+                            for w in core.stdp_weights.iter_mut() {
+                                *w = w.saturating_add(2);
+                            }
+                            core.r[d] = 0x0000_0084;
+                        }
+                        crate::cl_ir::NeuroOp::OpticalGemm => {
+                            core.optical_gemm_count += 1;
+                            let val_a = core.r[d];
+                            let val_b = core.r[s];
+                            let a_lo = (val_a & 0xFFFF) as i16 as i32;
+                            let a_hi = ((val_a >> 16) & 0xFFFF) as i16 as i32;
+                            let b_lo = (val_b & 0xFFFF) as i16 as i32;
+                            let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
+                            let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
+                            core.r[d] = (optical_dot.unsigned_abs() & 0xFFFF) | 0x00FF_0000;
+                        }
+                        crate::cl_ir::NeuroOp::ReversibleSwap => {
+                            core.reversible_ops_count += 1;
+                            core.r.swap(d, s);
+                        }
+                        crate::cl_ir::NeuroOp::ReversibleToffoli => {
+                            core.reversible_ops_count += 1;
+                            if (core.r[10] & 1 != 0) && (core.r[11] & 1 != 0) {
+                                core.r[d] ^= 1;
+                            }
+                        }
+                        crate::cl_ir::NeuroOp::ReversibleInvert => {
+                            core.reversible_ops_count += 1;
+                            core.r[d] = core.rev_stack.pop().map(|v| v ^ 0xFFFFFFFF).unwrap_or(0);
+                        }
+                        crate::cl_ir::NeuroOp::RmsNorm => {
+                            core.ai_isa_ops_count += 1;
+                            let x = f32::from_bits(core.r[s]);
+                            let rms = (x * x + 1.0e-5f32).sqrt();
+                            core.r[d] = (x / rms).to_bits();
+                        }
+                        crate::cl_ir::NeuroOp::Softmax => {
+                            core.ai_isa_ops_count += 1;
+                            core.r[d] = 1.0f32.to_bits();
+                        }
+                        crate::cl_ir::NeuroOp::Silu => {
+                            core.ai_isa_ops_count += 1;
+                            let x = f32::from_bits(core.r[s]);
+                            let sig = 1.0f32 / (1.0f32 + (-x).exp());
+                            core.r[d] = (x * sig).to_bits();
+                        }
+                        crate::cl_ir::NeuroOp::Gelu => {
+                            core.ai_isa_ops_count += 1;
+                            let x = f32::from_bits(core.r[s]);
+                            let res = 0.5f32 * x * (1.0f32 + (0.7978846f32 * (x + 0.044715f32 * x * x * x)).tanh());
+                            core.r[d] = res.to_bits();
+                        }
+                        _ => {}
+                    }
+                }
+                crate::cl_ir::MicroOp::Sync { is_barrier, is_halt, .. } => {
+                    if *is_halt {
+                        core.is_halted = true;
+                        return Ok(());
+                    }
+                    if *is_barrier {
+                        core.barrier_count += 1;
+                    }
+                }
+                crate::cl_ir::MicroOp::Print { reg, imm_char } => {
+                    let ch = if let Some(c) = imm_char {
+                        *c
+                    } else {
+                        (core.r[*reg as usize % 16] & 0xFF) as u8 as char
+                    };
+                    print!("{}", ch);
+                    use std::io::Write;
+                    let _ = std::io::stdout().flush();
+                }
+                crate::cl_ir::MicroOp::Raw { raw } => {
+                    if let Ok(slot) = parse_slot(raw) {
+                        if slot.opcode == "HL" {
+                            core.is_halted = true;
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(target) = core.branch_target.take() {
+            let tgt_idx = ir.bundles.iter().position(|b| b.cycle == target).unwrap_or(target);
+            pc = tgt_idx;
+        } else {
+            pc += 1;
+        }
+    }
+
+    Ok(())
+}
+
+/// Execute ClProgramIR from scratch and return the resulting ClJitCore
+pub fn run_cl_ir(ir: &crate::cl_ir::ClProgramIR) -> Result<ClJitCore, String> {
+    let mut core = ClJitCore::new();
+    execute_cl_ir_on_core(ir, &mut core)?;
+    Ok(core)
+}
+
+/// Execute 128-bit VLIW binary bytecode directly in memory without disk I/O
+pub fn run_clb_jit(clb_bytes: &[u8]) -> Result<ClJitCore, String> {
+    let ir = crate::cl_ir::ClProgramIR::from_clb(clb_bytes)?;
+    run_cl_ir(&ir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -865,6 +1137,32 @@ mod tests {
         assert_eq!(core.r[3], 15, "Accumulator R3 should equal 15");
         assert_eq!(core.dmem[0], 15, "SRAM[0] should store final accumulator 15");
         assert_eq!(core.r[4], 15, "R4 loaded from SRAM[0] should equal 15");
+    }
+
+    #[test]
+    fn test_cl_jit_executes_ir_and_clb() {
+        let code = r#"
+            B0000: '==01#0400 '==02#0200 _AD03M1020 _SU04M1020
+            B0001: _ML05M3040 _CP06M5000 _MA07M6000 !HL00#0000
+        "#;
+
+        let ir = crate::cl_ir::ClProgramIR::from_cl_text(code).expect("IR lowering should succeed");
+        let core_ir = run_cl_ir(&ir).expect("IR JIT execution should succeed");
+        assert!(core_ir.is_halted);
+        assert_eq!(core_ir.r[1], 0x40);
+        assert_eq!(core_ir.r[2], 0x20);
+        assert_eq!(core_ir.r[3], 0x60); // AD 0x40 + 0x20
+        assert_eq!(core_ir.r[4], 0x20); // SU 0x40 - 0x20
+        assert_eq!(core_ir.r[5], 0x60 * 0x20);
+
+        // Test running 128-bit VLIW binary directly in JIT
+        let clb = ir.to_clb().expect("Assembly to CLB should succeed");
+        let core_clb = run_clb_jit(&clb).expect("CLB JIT execution should succeed");
+        assert!(core_clb.is_halted);
+        assert_eq!(core_clb.r[1], core_ir.r[1]);
+        assert_eq!(core_clb.r[3], core_ir.r[3]);
+        assert_eq!(core_clb.r[4], core_ir.r[4]);
+        assert_eq!(core_clb.r[5], core_ir.r[5]);
     }
 }
 

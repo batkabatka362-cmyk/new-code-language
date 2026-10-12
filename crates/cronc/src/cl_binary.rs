@@ -52,6 +52,14 @@ pub const OP_TABLE: &[&str] = &[
     "SE", "NE", "RV", "LD", "SR", "LB", "BY", "JS", "LT", "BG", // 100..109
     "BZ", "BN", "JP", "CI", "CF", "PR", "FU", "FE", "cc", "co", // 110..119
     "dd", "ff", "_N", "M0", "M1", "M2", "A0", "B0",             // 120..127
+    // Matrix 4.1 4D Topological & Canonical ISA Extensions (128..255)
+    "TP", "WF", "CN", "HP", "LY", "SU", "JL", "PW", "CB", "GF", // 128..137
+    "CG", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "MB", "MC", // 138..147
+    "ME", "MF", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", // 148..157
+    "A9", "AA", "AB", "AE", "AF", "B1", "B2", "B3", "B4", "B5", // 158..167
+    "B6", "B7", "B8", "B9", "BA", "BC", "BD", "BE", "BF", "S0", // 168..177
+    "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "SA", // 178..187
+    "SD", "SF",                                                 // 188..189
 ];
 
 pub const MODE_TABLE: &[char] = &[
@@ -92,8 +100,8 @@ pub fn id_to_mode(id: u8) -> char {
 pub fn prefix_to_bits(prefix: char) -> u32 {
     match prefix {
         '\'' => 1,
-        '~' => 2,
-        '@' => 3,
+        '!' => 2,
+        '~' => 3,
         _ => 0, // '_'
     }
 }
@@ -101,8 +109,8 @@ pub fn prefix_to_bits(prefix: char) -> u32 {
 pub fn bits_to_prefix(bits: u32) -> char {
     match bits & 0x3 {
         1 => '\'',
-        2 => '~',
-        3 => '@',
+        2 => '!',
+        3 => '~',
         _ => '_',
     }
 }
@@ -169,21 +177,21 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
         };
 
         return (prefix_bits << 30)
-            | ((op_id as u32 & 0x7F) << 23)
-            | ((dest_bank & 0x7) << 20)
-            | ((dest_reg & 0xF) << 16)
-            | (imm16 as u32);
+            | ((op_id as u32 & 0xFF) << 22)
+            | ((dest_bank & 0xF) << 18)
+            | ((dest_reg & 0xF) << 14)
+            | (imm16 as u32 & 0x3FFF);
     }
 
     // Standard Slot Encoding:
     // [31:30] Prefix (2 bits)
-    // [29:23] Opcode ID (7 bits, 0..127)
-    // [22:19] Dest Bank (4 bits)
-    // [18:15] Dest Reg (4 bits)
-    // [14:10] Mode Symbol ID (5 bits, 0..31)
-    // [9:6]   Src Reg (4 bits)
-    // [5:2]   Immediate Nibble (4 bits)
-    // [1:0]   Terminator (2 bits)
+    // [29:22] Opcode ID (8 bits, 0..255)
+    // [21:18] Dest Bank (4 bits, 0..15)
+    // [17:14] Dest Reg (4 bits, 0..15)
+    // [13:9]  Mode Symbol ID (5 bits, 0..31)
+    // [8:5]   Src Reg (4 bits, 0..15)
+    // [4:1]   Immediate Nibble (4 bits, 0..15)
+    // [0]     Terminator (1 bit, 0='>', 1='!')
     let op_str: String = if chars.len() >= 3 {
         chars[1..3].iter().collect()
     } else {
@@ -215,43 +223,46 @@ pub fn encode_slot_to_u32(slot: &str) -> u32 {
     };
 
     let terminator = chars.get(9).copied().unwrap_or('>');
-    let term_bits = terminator_to_bits(terminator);
+    let term_bits = if terminator == '!' { 1u32 } else { 0u32 };
 
     (prefix_bits << 30)
-        | ((op_id as u32 & 0x7F) << 23)
-        | ((dest_bank & 0xF) << 19)
-        | ((dest_reg & 0xF) << 15)
-        | ((mode_id as u32 & 0x1F) << 10)
-        | ((src_reg & 0xF) << 6)
-        | ((imm_nibble & 0xF) << 2)
-        | (term_bits & 0x3)
+        | ((op_id as u32 & 0xFF) << 22)
+        | ((dest_bank & 0xF) << 18)
+        | ((dest_reg & 0xF) << 14)
+        | ((mode_id as u32 & 0x1F) << 9)
+        | ((src_reg & 0xF) << 5)
+        | ((imm_nibble & 0xF) << 1)
+        | (term_bits & 0x1)
 }
 
 /// Decode a 32-bit binary slot back into a valid 10-character .cl slot
 pub fn decode_u32_to_slot(encoded: u32) -> String {
     let prefix_bits = (encoded >> 30) & 0x3;
     let prefix = bits_to_prefix(prefix_bits);
-    let op_id = ((encoded >> 23) & 0x7F) as u8;
+    let op_id = ((encoded >> 22) & 0xFF) as u8;
     let op_str = id_to_opcode(op_id);
 
     // Check for Immediate Load Slot
     if prefix == '\'' && (op_str == "==" || op_str == "=0" || op_str == "=1") {
-        let dest_bank = (encoded >> 20) & 0x7;
-        let dest_reg = (encoded >> 16) & 0xF;
-        let imm16 = (encoded & 0xFFFF) as u16;
-        let op_c = if op_str == "==" { '=' } else if op_str == "=1" { '1' } else { '0' };
-        return format!("'={}{:1X}{:1X}#{:03X}>", op_c, dest_bank, dest_reg, imm16 & 0xFFF);
+        let dest_bank = (encoded >> 18) & 0xF;
+        let dest_reg = (encoded >> 14) & 0xF;
+        let imm16 = (encoded & 0x3FFF) as u16;
+        if op_str == "==" {
+            return format!("'=={:1X}{:1X}#{:03X}>", dest_bank, dest_reg, imm16 & 0xFFF);
+        } else {
+            return format!("'={:1X}{:1X}#{:04X}>", dest_bank, dest_reg, imm16);
+        }
     }
 
     // Standard Slot Decoding
-    let dest_bank = (encoded >> 19) & 0xF;
-    let dest_reg = (encoded >> 15) & 0xF;
-    let mode_id = ((encoded >> 10) & 0x1F) as u8;
+    let dest_bank = (encoded >> 18) & 0xF;
+    let dest_reg = (encoded >> 14) & 0xF;
+    let mode_id = ((encoded >> 9) & 0x1F) as u8;
     let mode_char = id_to_mode(mode_id);
-    let src_reg = (encoded >> 6) & 0xF;
-    let imm_nibble = (encoded >> 2) & 0xF;
-    let term_bits = encoded & 0x3;
-    let terminator = bits_to_terminator(term_bits);
+    let src_reg = (encoded >> 5) & 0xF;
+    let imm_nibble = (encoded >> 1) & 0xF;
+    let term_bits = encoded & 0x1;
+    let terminator = if term_bits == 1 { '!' } else { '>' };
 
     let dest_hex = format!("{:1X}{:1X}", dest_bank, dest_reg);
     let src_char = format!("{:1X}", src_reg).chars().next().unwrap();
@@ -424,5 +435,17 @@ mod tests {
         assert!(disasm.contains("_XR"));
         assert!(disasm.contains("_PF"));
         assert!(disasm.contains("_HB"));
+    }
+
+    #[test]
+    fn test_clb_topological_matrix4_opcodes_roundtrip() {
+        let opcodes = ["_TP01$000>", "_WF02$100>", "_CN03$200>", "_HP04$300>", "_LY05$400>", "_SU06$500>", "!JL00#000>"];
+        for slot in opcodes {
+            let encoded = encode_slot_to_u32(slot);
+            assert_ne!(encoded, 0);
+            let decoded = decode_u32_to_slot(encoded);
+            assert_eq!(&decoded[0..3], &slot[0..3], "Prefix and Opcode mismatch for {}", slot);
+            assert_eq!(&decoded[3..5], &slot[3..5], "Dest register mismatch for {}", slot);
+        }
     }
 }

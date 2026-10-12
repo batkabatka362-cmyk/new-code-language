@@ -163,7 +163,7 @@ pub fn transpile_cl_to_wgsl(cl_source: &str) -> Result<String, String> {
                 match parsed.opcode.as_str() {
                     "==" => wgsl.push_str(&format!("    r[{}] = {}u;\n", d, imm)),
                     "AD" => wgsl.push_str(&format!("    r[{}] = r[{}] + r[{}];\n", d, d, s)),
-                    "SB" => wgsl.push_str(&format!("    r[{}] = r[{}] - r[{}];\n", d, d, s)),
+                    "SB" | "SU" => wgsl.push_str(&format!("    r[{}] = r[{}] - r[{}];\n", d, d, s)),
                     "ML" => wgsl.push_str(&format!("    r[{}] = r[{}] * r[{}];\n", d, d, s)),
                     "MD" | "PK" => wgsl.push_str(&format!("    r[{}] = bitcast<u32>(cron_wgsl_ternary_dot(r[{}], r[{}]));\n", d, d, s)),
                     "OP" => wgsl.push_str(&format!("    r[{}] = bitcast<u32>(bitcast<f32>(r[{}]) * bitcast<f32>(r[{}]));\n", d, d, s)),
@@ -282,7 +282,7 @@ pub fn transpile_cl_to_ptx(cl_source: &str) -> Result<String, String> {
                 match parsed.opcode.as_str() {
                     "==" => ptx.push_str(&format!("    mov.b32 %r{}, 0x{:08X};\n", d, imm)),
                     "AD" => ptx.push_str(&format!("    add.u32 %r{}, %r{}, %r{};\n", d, d, s)),
-                    "SB" => ptx.push_str(&format!("    sub.u32 %r{}, %r{}, %r{};\n", d, d, s)),
+                    "SB" | "SU" => ptx.push_str(&format!("    sub.u32 %r{}, %r{}, %r{};\n", d, d, s)),
                     "ML" => ptx.push_str(&format!("    mul.lo.u32 %r{}, %r{}, %r{};\n", d, d, s)),
                     "MD" | "PK" => {
                         // Subbyte Ternary Dot via PTX popc.b32
