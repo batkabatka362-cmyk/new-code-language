@@ -111,6 +111,7 @@ fn print_help() {
     println!("    cl-forge <prompt> [-o file.cl] Autonomous golden microcode kernel synthesis engine");
     println!("    cl-transpile <file.cl> [opts]  Cross-transpile .cl to C++20, CUDA, C# (.NET), Python, WGSL, PTX, C23");
     println!("    cl-bridge <subcommand> [opts]  Export C++20/CUDA single-headers, C# bindings, or Python runtime");
+    println!("    import-fx <model_fx.json> [opts] Lower PyTorch FX symbolic graph into 128-bit VLIW microcode (.cl)");
     println!("    debug <file.cl> [--core N] [--batch \"...\"] Interactive Photonic & Torus Debugger TUI");
     println!("    asm <file.cl> [-o <out.clb>]   Assemble .cl into 128-bit binary bytecode (.clb)");
     println!("    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl");
@@ -266,6 +267,24 @@ fn print_subcommand_help(cmd: &str) {
             println!("USAGE:\n    cron cl-clifford-sim [bundle_ascii] [OPTIONS]\n");
             println!("DESCRIPTION:\n    320-bit (40-char) Clifford Rotor 4-slot VLIW microcode hardware emulation HUD.\n");
             println!("OPTIONS:\n    --json              Output machine-readable registers and emitted characters\n    -h, --help          Display this help message\n");
+        }
+        "cl-transpile" | "transpile" => {
+            println!("USAGE:\n    cron cl-transpile <file.cl> [--target <cpp|cuda|csharp|python|wgsl|ptx|c23>] [-o <out>]\n");
+            println!("DESCRIPTION:\n    Universal cross-transpiler converting .cl VLIW kernels into C++20, CUDA, C# (.NET 8/9), Python 3/NumPy, WGSL, PTX, and C23.\n");
+            println!("OPTIONS:\n    -t, --target <tgt>  Target language: cpp20, cuda, csharp, python, wgsl, ptx, c23\n    --cpp, --cuda, --csharp, --python  Shorthand target flags\n    -o <path>           Output file path\n    -h, --help          Display this help message\n");
+            println!("EXAMPLE:\n    cron cl-transpile kernel.cl --target cpp20 -o kernel.hpp");
+        }
+        "cl-bridge" | "bridge" => {
+            println!("USAGE:\n    cron cl-bridge <subcommand> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Export single-header C++20, CUDA warp-cooperative headers, C# P/Invoke bindings, and Python DLPack runtime.\n");
+            println!("SUBCOMMANDS:\n    export-c-headers [-o <cron.hpp>]     Export single-header C++20 library\n    export-cuda-headers [-o <cron.cuh>]  Export CUDA SM_80+ cooperative header\n    export-csharp [-o <CronNative.cs>]   Export C# .NET 8/9 Native AOT bindings\n    export-python [-o <cron_runtime.py>] Export Python ctypes runtime & DLPack bridge\n    dlpack-info                          Display DLPack protocol specifications\n");
+            println!("EXAMPLE:\n    cron cl-bridge export-c-headers -o cron.hpp");
+        }
+        "import-fx" => {
+            println!("USAGE:\n    cron import-fx <model_fx.json> [-o <out.cl>] [--name <model_name>]\n");
+            println!("DESCRIPTION:\n    Lower PyTorch FX symbolic trace graphs into 128-bit 4-slot VLIW microcode with BitNet b1.58 ternary GEMV.\n");
+            println!("OPTIONS:\n    -o <path>           Output .cl microcode file path\n    --name <name>       Logical model name identifier\n    -h, --help          Display this help message\n");
+            println!("EXAMPLE:\n    cron import-fx resnet_fx.json -o resnet.cl");
         }
         other => {
             println!("CRON Command: {}\n", other);
@@ -1168,6 +1187,51 @@ fn main() {
             if out_path.is_empty() {
                 let stem = Path::new(input_file).file_stem().unwrap().to_str().unwrap();
                 out_path = format!("{}.cr", stem);
+            }
+
+            if input_file.ends_with(".json") {
+                let stem = Path::new(input_file).file_stem().unwrap().to_str().unwrap();
+                let cl_out = if out_path.ends_with(".cr") { format!("{}.cl", stem) } else { out_path.clone() };
+                println!("================================================================================");
+                println!(" CRON PYTORCH FX GRAPH TO 128-BIT VLIW LOWERING ENGINE");
+                println!(" Input FX JSON   : {}", input_file);
+                println!(" Target Microcode: {}", cl_out);
+                println!("================================================================================");
+                match fs::read_to_string(input_file) {
+                    Ok(json_content) => {
+                        let start_time = std::time::Instant::now();
+                        match cronc::lower_pytorch_fx_graph(&json_content, stem) {
+                            Ok(lowered) => {
+                                let elapsed = start_time.elapsed();
+                                if let Err(e) = fs::write(&cl_out, &lowered.cl_source) {
+                                    eprintln!("[ERROR] Failed to write .cl file '{}': {}", cl_out, e);
+                                    std::process::exit(1);
+                                }
+                                println!("[SUCCESS] Model successfully ingested and lowered in {:.2} ms!", elapsed.as_secs_f64() * 1000.0);
+                                println!("--------------------------------------------------------------------------------");
+                                println!(" TELEMETRY & SILICON OPTIMIZATION REPORT:");
+                                println!("   - Source Format:            PyTorch FX Graph");
+                                println!("   - Ingested Model Name:      {}", stem);
+                                println!("   - Total Neural Layers:      {}", lowered.total_layers);
+                                println!("   - 128-bit VLIW Bundles:     {}", lowered.total_bundles);
+                                println!("   - BitNet b1.58 Parameters:  {}", lowered.total_parameters);
+                                println!("   - Quantization Compression: {:.1}x", lowered.quantization_ratio);
+                                println!("   - Estimated Speedup vs CPU: {:.1}x", lowered.estimated_speedup);
+                                println!("   - Synthesized Microcode:    '{}' ({} bytes)", cl_out, lowered.cl_source.len());
+                                println!("--------------------------------------------------------------------------------");
+                                return;
+                            }
+                            Err(e) => {
+                                eprintln!("[ERROR] PyTorch FX graph lowering failed: {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[ERROR] Failed to read JSON model '{}': {}", input_file, e);
+                        std::process::exit(1);
+                    }
+                }
             }
 
             println!("================================================================================");

@@ -21,7 +21,8 @@ pub fn start_cl_repl() {
    :opt <cl_code>     Run VLIW slot compaction super-optimizer
    :lint <cl_code>    Run static hazard & thermal linter
    :forge <prompt>    Synthesize golden VLIW microcode from prompt
-   :transpile <t> <c> Transpile .cl code to target (wgsl, ptx, c23)
+   :transpile <t> <c> Transpile .cl to target (cpp, cuda, csharp, python, wgsl, ptx, c23)
+   :bridge <target>   Inspect language bridge headers & FFI (c, cuda, csharp, python, dlpack)
    :help              Display this help menu
    :exit / :quit      Exit the interactive console
 
@@ -70,7 +71,7 @@ pub fn start_cl_repl() {
         }
 
         if trimmed == ":help" {
-            println!("Commands: :regs, :state, :reset, :heal <bundle>, :opt <bundle>, :lint <code>, :forge <prompt>, :transpile <target> <code>, :exit");
+            println!("Commands: :regs, :state, :reset, :heal <bundle>, :opt <bundle>, :lint <code>, :forge <prompt>, :transpile <target> <code>, :bridge <target>, :exit");
             continue;
         }
 
@@ -95,12 +96,38 @@ pub fn start_cl_repl() {
         if let Some(rest) = trimmed.strip_prefix(":transpile ") {
             let parts: Vec<&str> = rest.splitn(2, ' ').collect();
             if parts.len() < 2 {
-                println!("Usage: :transpile <wgsl|ptx|c23> <.cl code>");
+                println!("Usage: :transpile <cpp|cuda|csharp|python|wgsl|ptx|c23> <.cl code>");
             } else {
                 let target = cronc::TranspileTarget::parse(parts[0]).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
                 match cronc::transpile_cl(parts[1], target) {
                     Ok(rep) => println!("{}", rep.generated_code),
                     Err(e) => eprintln!("[TRANSPILE ERROR] {}", e),
+                }
+            }
+            continue;
+        }
+
+        if let Some(arg) = trimmed.strip_prefix(":bridge ") {
+            let target = arg.trim().to_lowercase();
+            match target.as_str() {
+                "c" | "cpp" | "c++" | "h" | "hpp" => {
+                    println!("{}", cronc::generate_cron_hpp());
+                }
+                "cuda" | "cu" | "cuh" => {
+                    println!("{}", cronc::generate_cron_cuda_cuh());
+                }
+                "csharp" | "cs" | "dotnet" => {
+                    println!("{}", cronc::generate_csharp_bindings());
+                }
+                "python" | "py" => {
+                    println!("{}", cronc::generate_python_runtime());
+                }
+                "dlpack" => {
+                    println!("DLPack Protocol: v0.8+ (Zero-Copy DLTensor & DLManagedTensor sharing)");
+                    println!("C-ABI Entry: cron_dlpack_tensor_export(data_ptr, rows, cols) -> *mut DLManagedTensor");
+                }
+                _ => {
+                    println!("Usage: :bridge <c|cuda|csharp|python|dlpack>");
                 }
             }
             continue;

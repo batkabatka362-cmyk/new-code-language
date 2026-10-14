@@ -315,3 +315,49 @@ cargo test -p cronc --test test_cl_topological_capabilities
 
 > 📖 **Албан ёсны дэлгэрэнгүй техникийн цагаан номтой танилцах**: [docs/TOPOLOGICAL_CL_SPECIFICATION.md](docs/TOPOLOGICAL_CL_SPECIFICATION.md)
 
+---
+
+## 7. Бүх Төрлийн AI Хэлнүүдийн Хослол ба Хөрвүүлэлт (Universal AI Interoperability)
+
+CRON нь орчин үеийн AI үйлдвэрлэлийн тэргүүлэх хэлнүүдтэй (**Python/PyTorch**, **C++20**, **NVIDIA CUDA**, **C# / .NET 8/9**) 100% тэг санах ойн хуулбартай (Zero-Copy DLPack), хоёр талын шууд хөрвүүлэлттэй (Bidirectional Transpilation) ажилладаг.
+
+### Дөрвөн Гол Тулгуур:
+1. **Python & PyTorch Хөдөлгүүр**:
+   - `export_model_to_fx_json` ашиглан PyTorch FX графийг экспортлож, `cron import-fx` командаар 128-бит VLIW микрокод руу шууд буулгана.
+   - `CronLinear` болон `CronAutogradFunction` нь PyTorch загвар дотор 0-FLOP BitNet b1.58 үржүүлэгчгүй давхаргыг жинхэнэ C-ABI түвшинд ажиллуулна.
+   - Стандарт `DLPack v0.8+` протоколоор CRON санах ойг PyTorch (`torch.from_dlpack`) болон JAX-тай хуулбарлахгүйгээр шууд хуваалцана.
+2. **C++20 Single-Header Сан (`cron.hpp`)**:
+   - Гадны ямар ч хамааралгүй цэвэр C++20 толгой сан (`#include "cron.hpp"`).
+   - Техник хангамжийн `std::popcount` болон `cron::BitNetTensor`-ээр CPU дээр 3,100+ MTOPS өндөр хурдтай тооцоолол хийнэ.
+3. **NVIDIA CUDA SM_80+ Сан (`cron.cuh`)**:
+   - `cron::bitnet_gemv_kernel<<<...>>>` варп хоорондын `__shfl_down_sync` редукцээр sub-byte ternary матрицыг GPU дээр хурдасгана.
+4. **C# / .NET 8/9 Turnkey Төсөл (`dotnet/Cron.NET`)**:
+   - .NET Native AOT болон `System.Numerics.BitOperations.PopCount`-ээр 100% цэвэр, өндөр хурдтай P/Invoke интеграци.
+
+### Хэрэглэх Командууд:
+```bash
+# 1. .cl микрокодыг C++20, CUDA, C#, Python руу хөрвүүлэх
+cron cl-transpile kernel.cl --target cpp20 -o kernel.hpp
+cron cl-transpile kernel.cl --target cuda  -o kernel.cu
+cron cl-transpile kernel.cl --target csharp -o Kernel.cs
+cron cl-transpile kernel.cl --target python -o kernel.py
+
+# 2. Хэл бүрийн толгой файл, холбоос экспортлох
+cron cl-bridge export-c-headers -o cron.hpp
+cron cl-bridge export-cuda-headers -o cron.cuh
+cron cl-bridge export-csharp -o CronNative.cs
+cron cl-bridge export-python -o cron_runtime.py
+cron cl-bridge dlpack-info
+
+# 3. PyTorch FX Graph-ийг 128-бит VLIW микрокод болгон буулгах
+cron import-fx model_fx.json -o model.cl --name MyModel
+
+# 4. Интерактив REPL дотор шууд хөрвүүлэлт хийж толгой файлууд шалгах
+cron cl-repl
+cron-cl [0]> :transpile cpp B0000: '==01#005> '==02#003> _PO01+000> _NO00#000>
+cron-cl [0]> :bridge c
+```
+
+> 📖 **Бүрэн хэмжээний дэлгэрэнгүй зааварчилгааг үзэх**: [docs/cron_ai_interoperability_guide.md](docs/cron_ai_interoperability_guide.md)
+
+
