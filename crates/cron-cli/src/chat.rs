@@ -12,7 +12,7 @@
 
 use cron_rt::PagedWeightStreamer;
 use cronc::bpe_tokenizer::BpeTokenizer;
-use cronc::cl_infer::{generate_tokens_autoregressive_paged, TransformerConfig};
+use cronc::cl_infer::{generate_tokens_autoregressive_paged, ComputePrecisionMode, TransformerConfig};
 use cronc::constrained_sampler::{ConstrainedSampler, GrammarMode};
 use cronc::speculative_decoding::SpeculativeEngine;
 use std::io::{self, BufRead, Write};
@@ -27,6 +27,17 @@ pub struct ChatConfig {
     pub k_speculative: usize,
     pub grammar_mode: String,
     pub weights_path: Option<String>,
+    pub precision_mode: ComputePrecisionMode,
+    pub use_mla: bool,
+    pub kv_latent_dim: usize,
+    pub use_ssm: bool,
+    pub use_moe: bool,
+    pub num_experts: usize,
+    pub num_active_experts: usize,
+    pub reasoning_mode: bool,
+    pub use_clifford: bool,
+    pub use_reversible: bool,
+    pub use_snn: bool,
 }
 
 impl Default for ChatConfig {
@@ -38,6 +49,17 @@ impl Default for ChatConfig {
             k_speculative: 4,
             grammar_mode: "unconstrained".to_string(),
             weights_path: None,
+            precision_mode: ComputePrecisionMode::TernaryZeroFlop,
+            use_mla: false,
+            kv_latent_dim: 16,
+            use_ssm: false,
+            use_moe: false,
+            num_experts: 8,
+            num_active_experts: 2,
+            reasoning_mode: false,
+            use_clifford: false,
+            use_reversible: false,
+            use_snn: false,
         }
     }
 }
@@ -93,8 +115,19 @@ impl ChatSession {
             head_dim: 16,
             intermediate_dim: 128,
             max_seq_len: 256,
-            is_ternary_bitnet: true,
+            is_ternary_bitnet: config.precision_mode == ComputePrecisionMode::TernaryZeroFlop,
             enable_2_4_sparsity: true,
+            compute_mode: config.precision_mode,
+            use_mla: config.use_mla,
+            kv_latent_dim: config.kv_latent_dim,
+            use_ssm: config.use_ssm,
+            use_moe: config.use_moe,
+            num_experts: config.num_experts,
+            num_active_experts: config.num_active_experts,
+            reasoning_mode: config.reasoning_mode,
+            use_clifford: config.use_clifford,
+            use_reversible: config.use_reversible,
+            use_snn: config.use_snn,
         };
 
         Self {
@@ -218,11 +251,18 @@ pub fn run_interactive_chat_loop(config: ChatConfig) -> io::Result<()> {
 
     writeln!(handle, "================================================================================")?;
     writeln!(handle, " CRON INTERACTIVE AI TERMINAL (cron chat v1.0)")?;
-    writeln!(handle, " Model:       {} (7.544B Parameters)", config.model_name)?;
-    writeln!(handle, " Memory:      Strictly Bounded (RSS < {} MB)", config.page_size_mb)?;
-    writeln!(handle, " Acceleration:Speculative Decoding (K = {} Draft Tokens)", config.k_speculative)?;
-    writeln!(handle, " Constraint:  {}", config.grammar_mode)?;
-    writeln!(handle, " Commands:    Type ':quit' to exit, ':clear' to reset, ':stats' for HUD")?;
+    writeln!(handle, " Model:         {} (7.544B Parameters)", config.model_name)?;
+    writeln!(handle, " Memory:        Strictly Bounded (RSS < {} MB)", config.page_size_mb)?;
+    writeln!(handle, " Precision:     {:?} (Multiplier-Free / Hardware Multipliers)", session.tf_config.compute_mode)?;
+    writeln!(
+        handle,
+        " Architecture:  MLA: {}, SSM: {}, MoE: {}, Think: {}",
+        if session.tf_config.use_mla { "ON (Compressed KV)" } else { "OFF" },
+        if session.tf_config.use_ssm { "ON (O(1) Mamba)" } else { "OFF" },
+        if session.tf_config.use_moe { "ON (Top-K Sparse)" } else { "OFF" },
+        if session.tf_config.reasoning_mode { "ON (<think>)" } else { "OFF" }
+    )?;
+    writeln!(handle, " Commands:      :quit, :clear, :stats, :arch, :think, :mode, :mla, :ssm, :moe")?;
     writeln!(handle, "================================================================================")?;
     writeln!(handle)?;
 
@@ -260,6 +300,84 @@ pub fn run_interactive_chat_loop(config: ChatConfig) -> io::Result<()> {
             writeln!(handle, "| Active Memory (RSS):  {:<40} |", format!("{} MB", session.config.page_size_mb))?;
             writeln!(handle, "| Speculative Speedup:  {:<40} |", format!("{:.2}x Bandwidth Boost", session.spec_engine.telemetry.effective_speedup))?;
             writeln!(handle, "+----------------------------------------------------------------+")?;
+            continue;
+        }
+        if input == ":arch" || input == ":status" {
+            writeln!(handle, "+----------------------------------------------------------------+")?;
+            writeln!(handle, "|                    ACTIVE AI COMPUTE ARCHITECTURE              |")?;
+            writeln!(handle, "+----------------------------------------------------------------+")?;
+            writeln!(handle, "| Precision Mode:       {:<40} |", format!("{:?}", session.tf_config.compute_mode))?;
+            writeln!(handle, "| Latent Attention:     {:<40} |", if session.tf_config.use_mla { format!("ACTIVE (latent_dim={})", session.tf_config.kv_latent_dim) } else { "Standard MHA".to_string() })?;
+            writeln!(handle, "| SSM / Mamba Recurr:   {:<40} |", if session.tf_config.use_ssm { "ACTIVE (O(1) Memory)" } else { "DISABLED" })?;
+            writeln!(handle, "| Mixture-of-Experts:   {:<40} |", if session.tf_config.use_moe { format!("ACTIVE ({}/{} Experts)", session.tf_config.num_active_experts, session.tf_config.num_experts) } else { "DISABLED (Dense FFN)".to_string() })?;
+            writeln!(handle, "| Test-Time Reasoning:  {:<40} |", if session.tf_config.reasoning_mode { "ACTIVE (<think> Trajectory)" } else { "DISABLED (Direct Answer)" })?;
+            writeln!(handle, "| Clifford 4D Rotor:    {:<40} |", if session.tf_config.use_clifford { "ACTIVE (Spacetime Rotor)" } else { "RoPE Standard" })?;
+            writeln!(handle, "| Landauer Reversible:  {:<40} |", if session.tf_config.use_reversible { "ACTIVE (0.17 pJ / tok)" } else { "DISABLED" })?;
+            writeln!(handle, "| Neuromorphic SNN:     {:<40} |", if session.tf_config.use_snn { "ACTIVE (LIF Event-Spiking)" } else { "DISABLED" })?;
+            writeln!(handle, "+----------------------------------------------------------------+")?;
+            continue;
+        }
+        if input == ":think" || input == ":reasoning" {
+            session.tf_config.reasoning_mode = !session.tf_config.reasoning_mode;
+            writeln!(handle, "[Reasoning Mode: {}]", if session.tf_config.reasoning_mode { "ENABLED (<think> active)" } else { "DISABLED" })?;
+            continue;
+        }
+        if input.starts_with(":mode") {
+            let parts: Vec<&str> = input.split_whitespace().collect();
+            if parts.len() > 1 {
+                match parts[1].to_lowercase().as_str() {
+                    "float" | "fp32" | "simd" => {
+                        session.tf_config.compute_mode = ComputePrecisionMode::FloatSimd;
+                        session.tf_config.is_ternary_bitnet = false;
+                        writeln!(handle, "[Precision switched to: Float SIMD (Hardware Multipliers)]")?;
+                    }
+                    "ternary" | "bitnet" => {
+                        session.tf_config.compute_mode = ComputePrecisionMode::TernaryZeroFlop;
+                        session.tf_config.is_ternary_bitnet = true;
+                        writeln!(handle, "[Precision switched to: Multiplier-Free BitNet b1.58 Ternary]")?;
+                    }
+                    "hybrid" | "mixed" => {
+                        session.tf_config.compute_mode = ComputePrecisionMode::Hybrid;
+                        session.tf_config.is_ternary_bitnet = false;
+                        writeln!(handle, "[Precision switched to: Hybrid (Float Attention + Ternary FFN)]")?;
+                    }
+                    other => {
+                        writeln!(handle, "[Unknown precision mode '{}'. Use: float, ternary, hybrid]", other)?;
+                    }
+                }
+            } else {
+                writeln!(handle, "[Current precision: {:?}. Use :mode float|ternary|hybrid]", session.tf_config.compute_mode)?;
+            }
+            continue;
+        }
+        if input == ":mla" {
+            session.tf_config.use_mla = !session.tf_config.use_mla;
+            writeln!(handle, "[Multi-Head Latent Attention (MLA): {}]", if session.tf_config.use_mla { "ENABLED (Compressed KV-cache)" } else { "DISABLED" })?;
+            continue;
+        }
+        if input == ":ssm" || input == ":mamba" {
+            session.tf_config.use_ssm = !session.tf_config.use_ssm;
+            writeln!(handle, "[Mamba SSM Recurrence: {}]", if session.tf_config.use_ssm { "ENABLED (O(1) memory)" } else { "DISABLED" })?;
+            continue;
+        }
+        if input == ":moe" {
+            session.tf_config.use_moe = !session.tf_config.use_moe;
+            writeln!(handle, "[Mixture-of-Experts (MoE): {}]", if session.tf_config.use_moe { "ENABLED (Top-2 Sparse Routing)" } else { "DISABLED" })?;
+            continue;
+        }
+        if input == ":clifford" {
+            session.tf_config.use_clifford = !session.tf_config.use_clifford;
+            writeln!(handle, "[Clifford 4D Spacetime Rotor: {}]", if session.tf_config.use_clifford { "ENABLED" } else { "DISABLED" })?;
+            continue;
+        }
+        if input == ":reversible" {
+            session.tf_config.use_reversible = !session.tf_config.use_reversible;
+            writeln!(handle, "[Reversible Landauer Thermodynamic Computing: {}]", if session.tf_config.use_reversible { "ENABLED" } else { "DISABLED" })?;
+            continue;
+        }
+        if input == ":snn" {
+            session.tf_config.use_snn = !session.tf_config.use_snn;
+            writeln!(handle, "[Neuromorphic LIF Spiking: {}]", if session.tf_config.use_snn { "ENABLED" } else { "DISABLED" })?;
             continue;
         }
 

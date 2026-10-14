@@ -13,6 +13,7 @@ fn test_chat_session_unconstrained_turn() {
         k_speculative: 4,
         grammar_mode: "unconstrained".to_string(),
         weights_path: None,
+        ..Default::default()
     };
 
     let mut session = ChatSession::new(config);
@@ -42,6 +43,7 @@ fn test_chat_session_multiple_turns_bounded_memory() {
         k_speculative: 4,
         grammar_mode: "unconstrained".to_string(),
         weights_path: None,
+        ..Default::default()
     };
 
     let mut session = ChatSession::new(config);
@@ -69,6 +71,7 @@ fn test_chat_session_json_constrained_mode() {
         k_speculative: 2,
         grammar_mode: "json".to_string(),
         weights_path: None,
+        ..Default::default()
     };
 
     let mut session = ChatSession::new(config);
@@ -95,6 +98,7 @@ fn test_chat_session_history_accumulation_and_clear() {
         k_speculative: 2,
         grammar_mode: "unconstrained".to_string(),
         weights_path: None,
+        ..Default::default()
     };
 
     let mut session = ChatSession::new(config);

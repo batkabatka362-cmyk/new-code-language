@@ -174,7 +174,8 @@ pub use cl_dpsta::{CompactDatasetEngine, SubByteTernaryDataset, TernaryWeight, p
 pub use cl_rtl_dpsta::{export_dpsta_rtl_package, export_dpsta_asic_tapeout};
 pub use cl_dpsta_sleep::{DpstaSleepEngine, DpstaSleepReport, SleepParameters, FrozenEngram};
 pub use cl_multimodal_dpsta::{RetinalVisionTransducer, CochlearAuditoryTransducer, ThalamicSensoryHub, SensoryFrame, SensoryModality};
-pub use cl_ingest::{BigDataIngestEngine, IngestOptions, IngestReport};
+pub use cl_ingest::{BigDataIngestEngine, ClDataBatch, ClDataLoader, IngestOptions, IngestReport, TokenizerMode};
+pub use cl_autograd::{train_cl_dataset, train_cl_mlp, ClAdamOptimizer, ClMlpModel, ClTape, ClTapeOp, ClTensor, ClTrainingReport};
 pub use cl_sovereign_corpus::{SovereignCorpusEngine, SovereignMorphTokenizer, SOVEREIGN_MORPH_TOKENS, SOVEREIGN_KNOWLEDGE_BASE};
 pub use cl_multi_wafer::{
     Coord9D, DualWaferPacket, DualWaferReport, DualWaferRouter, DualWaferSwarmEngine,
@@ -182,7 +183,7 @@ pub use cl_multi_wafer::{
     CORPUS_CALLOSUM_BW_TBPS, DUAL_WAFER_LASER_POWER_WATTS, HUMAN_CORTEX_OPS_TARGET,
 };
 pub use cl_clifford_isa::{CliffordBundle, CliffordRotorEmulator, MicroOp as CliffordMicroOp, MicroOpCode as CliffordMicroOpCode};
-pub use cl_sovereign_mind::{CorticalColumn, LifNeuron, SovereignMind};
+pub use cl_sovereign_mind::{CorticalColumn, LifNeuron, SovereignMind, SynthesizedClRoutine};
 pub use cl_topological_attention::{PhaseResonanceAttention, PhaseResonanceConfig, TokenPhase4D};
 pub use cl_homeostatic_plasticity::HomeostaticDPSTACore;
 pub use cl_snake_discrete::{PhaseOnlyKVCache, PhaseKVCacheEntry, Sphere4DSnake, Sphere4DSnakeEngine};
@@ -419,7 +420,7 @@ pub use cl_infer::{
     sample_token_advanced, synthesize_transformer_cl, transformer_forward_step,
     transformer_forward_step_paged, transformer_forward_step_with_embedding, GenerationResult,
     GgufWeightProvider, GoldenBitNetWeightProvider, InferenceTelemetry, KVCache, LayerWeightProvider,
-    SafeTensorsWeightProvider, SamplingConfig, TransformerConfig,
+    SafeTensorsWeightProvider, SamplingConfig, StreamingGgufWeightProvider, TransformerConfig, ComputePrecisionMode,
 };
 pub use cl_snn::{
     simulate_snn, synthesize_snn_kernel, synthesize_cortical_column_kernel,
@@ -443,7 +444,13 @@ pub use cl_power::{
     MAX_CHIP_TDP_WATTS, THROTTLE_TEMPERATURE_CELSIUS,
 };
 pub use cl_tile::{tile_gemm, tile_conv2d, derive_optimal_gemm_tiles, TileOptions, TileResult};
-pub use cl_cluster::{ClusterCoord, CollectiveSchedule, CollectiveType, synthesize_collective_schedule, render_cluster_topology_ascii, generate_distributed_c23_harness};
+pub use cl_cluster::{
+    ClusterCoord, CollectiveSchedule, CollectiveType, HardwareSynthesisEstimate,
+    estimate_hardware_synthesis, generate_cluster_verilog_testbench,
+    generate_cluster_yosys_synth_script, generate_distributed_c23_harness,
+    generate_openlane_asic_config, render_cluster_topology_ascii,
+    synthesize_collective_schedule,
+};
 pub use cl_lang::{
     verify_cl_program, audit_alphabet_coverage, parse_slot, parse_weights_directive,
     parse_directive, ClDirective, ClReport, ClSlot, ClWeightBinding,

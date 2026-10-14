@@ -121,3 +121,16 @@ fn test_generate_distributed_c23_harness_and_execution() {
     let _ = fs::remove_file(c_file);
     let _ = fs::remove_file(exe_file);
 }
+
+#[test]
+fn test_cluster_verilog_testbench_generation() {
+    let tb_verilog = cronc::generate_cluster_verilog_testbench(4, 256);
+    assert!(tb_verilog.contains("module tb_cluster_4d;"));
+    assert!(tb_verilog.contains("parameter NUM_DIES = 4;"));
+    assert!(tb_verilog.contains("parameter TOTAL_CORES = 1024;"));
+    assert!(tb_verilog.contains("optical_ring_tx"));
+    assert!(tb_verilog.contains("optical_ring_rx"));
+    assert!(tb_verilog.contains("noc_packet_inj"));
+    assert!(tb_verilog.contains("AllReduce Gradient Synchronization Complete"));
+    assert!(tb_verilog.contains("CRON RTL CO-EMULATION SUCCESS"));
+}

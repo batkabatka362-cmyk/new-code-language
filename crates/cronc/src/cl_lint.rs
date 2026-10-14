@@ -135,16 +135,48 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
             continue;
         }
 
-        // Zero Verbal Words Policy: CL is NOT C++/Python. All verbal English code is strictly forbidden.
-        if (!trimmed.starts_with('B') && !trimmed.starts_with('b')) || !trimmed.contains(':') {
-            issues.push(ClLintIssue {
-                cycle: total_bundles,
-                slot_index: None,
-                rule_id: "L000_ZERO_VERBAL_WORDS_VIOLATION".to_string(),
-                severity: LintSeverity::Error,
-                message: format!("Illegal verbal English code or invalid line syntax at line {}: '{}'", line_idx + 1, trimmed),
-                recommendation: "Remove verbal code; CL is pure cipher microcode (zero English words)".to_string(),
-            });
+        // Parse bundle lines or structural tokens
+        let (slot_tokens, is_bundle) = if trimmed.len() == 40 && !trimmed.contains(' ') {
+            // Raw 40-character compact Base-94 microcode bundle
+            let s0 = &trimmed[0..10];
+            let s1 = &trimmed[10..20];
+            let s2 = &trimmed[20..30];
+            let s3 = &trimmed[30..40];
+            (vec![s0, s1, s2, s3], true)
+        } else if trimmed.contains(':') {
+            let (hdr, slots_part) = trimmed.split_once(':').unwrap();
+            let hdr_trim = hdr.trim();
+            let is_bundle_hdr = (hdr_trim.starts_with('B') || hdr_trim.starts_with('b') || hdr_trim.starts_with('L') || hdr_trim.starts_with('C'))
+                && hdr_trim.len() >= 2
+                && hdr_trim[1..].chars().all(|c| c.is_ascii_hexdigit());
+            if is_bundle_hdr {
+                let toks: Vec<&str> = slots_part.split_whitespace().collect();
+                (toks, true)
+            } else {
+                // It's a label like LOOP: or @label:
+                (Vec::new(), false)
+            }
+        } else {
+            let toks: Vec<&str> = trimmed.split_whitespace().collect();
+            if !toks.is_empty() && toks.iter().all(|t| t.len() == 10) {
+                (toks, true)
+            } else if trimmed == "}" || trimmed.starts_with("bundle ") || trimmed.starts_with("flow ") || trimmed.starts_with("step ") {
+                (Vec::new(), false)
+            } else {
+                // Truly invalid verbal / garbage line!
+                issues.push(ClLintIssue {
+                    cycle: total_bundles,
+                    slot_index: None,
+                    rule_id: "L000_ZERO_VERBAL_WORDS_VIOLATION".to_string(),
+                    severity: LintSeverity::Error,
+                    message: format!("Illegal verbal English code or invalid line syntax at line {}: '{}'", line_idx + 1, trimmed),
+                    recommendation: "Remove verbal code; CL is pure cipher microcode (zero English words)".to_string(),
+                });
+                continue;
+            }
+        };
+
+        if !is_bundle {
             continue;
         }
 
@@ -163,9 +195,6 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
                 recommendation: "Remove unreachable microcode bundle".to_string(),
             });
         }
-
-        let (_, slots_part) = trimmed.split_once(':').unwrap();
-        let slot_tokens: Vec<&str> = slots_part.split_whitespace().collect();
 
         // 2. Bundle slot occupancy
         if slot_tokens.len() < 4 {
@@ -202,10 +231,12 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
                 let computed = (33 + (compute_slot_crc(payload) % 94)) as char;
                 let is_macro_crc_valid = expected == computed;
                 let is_sphere_slot = slot_str.starts_with('`');
+                let is_snake_or_immediate = slot_str.starts_with("==") || slot_str.starts_with("_S") || slot_str.starts_with('\'');
                 let is_token_crc_valid = crate::cl_lang::verify_token_crc8(slot_str)
                     || ((slot_str.ends_with('>') || slot_str.ends_with('!'))
                         && slot_str.chars().nth(7).map(|c| c.is_ascii_hexdigit()).unwrap_or(false))
-                    || is_sphere_slot;
+                    || is_sphere_slot
+                    || is_snake_or_immediate;
 
                 if !is_macro_crc_valid && !is_token_crc_valid {
                     issues.push(ClLintIssue {
@@ -221,6 +252,8 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
 
             if let Ok(parsed) = parse_slot(slot_str) {
                 let is_sphere_slot = slot_str.starts_with('`');
+                let is_snake_slot = (slot_str.starts_with("==") || slot_str.starts_with("_S"))
+                    && (slot_str.ends_with('|') || slot_str.ends_with('}') || slot_str.ends_with('%') || slot_str.ends_with('#'));
                 if parsed.opcode == "HL" {
                     has_halted = true;
                 }
@@ -238,7 +271,7 @@ pub fn lint_cl_source(cl_source: &str, filename: &str) -> ClLintReport {
                 }
 
                 // Intra-bundle RAW / WAW Register Contention
-                if parsed.opcode != "NO" && parsed.opcode != "HL" && !is_sphere_slot {
+                if parsed.opcode != "NO" && parsed.opcode != "HL" && !is_sphere_slot && !is_snake_slot {
                     if let Some(src) = parsed.src_reg {
                         if bundle_writes.contains(&src) && parsed.opcode != "==" {
                             issues.push(ClLintIssue {

@@ -1,0 +1,1073 @@
+<!-- Copied from crates/cron-cli/src/sovereign_dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRON Sovereign Mind AGI - 3D Neuromorphic Silicon Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Outfit:wght@300;400;600;800&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #070a13;
+            --bg-card: rgba(13, 20, 38, 0.75);
+            --bg-card-hover: rgba(20, 32, 60, 0.85);
+            --border-glow: rgba(56, 189, 248, 0.25);
+            --border-active: rgba(56, 189, 248, 0.6);
+            --cyan: #00f2fe;
+            --blue: #4facfe;
+            --magenta: #e024c3;
+            --purple: #8b5cf6;
+            --emerald: #10b981;
+            --amber: #f59e0b;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            height: 64px;
+            background: rgba(11, 16, 30, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 18px;
+            color: #070a13;
+        }
+
+        .brand-title {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 18px;
+            letter-spacing: 0.5px;
+            background: linear-gradient(90deg, #ffffff, var(--cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 11px;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .header-telemetry {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .badge {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 6px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--emerald);
+            box-shadow: 0 0 10px var(--emerald);
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        .dashboard-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 340px 1fr 400px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .panel {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border-right: 1px solid var(--border-glow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 10;
+        }
+
+        .panel.right {
+            border-right: none;
+            border-left: 1px solid var(--border-glow);
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-glow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-content {
+            padding: 18px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stage-container {
+            position: relative;
+            background: radial-gradient(circle at center, #0f172a 0%, #070a13 70%);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas#cortex3d {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
+
+        canvas#cortex3d:active {
+            cursor: grabbing;
+        }
+
+        .stage-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .stage-card {
+            background: rgba(13, 20, 38, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            padding: 12px 18px;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+        }
+
+        .wave-meter-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+
+        .wave-canvas {
+            width: 220px;
+            height: 38px;
+            display: block;
+        }
+
+        .bank-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .bank-cell {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .bank-cell.active {
+            border-color: var(--cyan);
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.3);
+        }
+
+        .bank-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-dim);
+        }
+
+        .bank-heat {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--cyan);
+            margin-top: 4px;
+        }
+
+        .vault-stats {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-glow);
+            border-radius: 10px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .metric-label {
+            color: var(--text-dim);
+        }
+
+        .metric-val {
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .progress-bar-bg {
+            height: 6px;
+            background: rgba(51, 65, 85, 0.5);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan), var(--blue));
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+
+        .gauge-container {
+            display: flex;
+            justify-content: space-around;
+            gap: 12px;
+            padding: 10px 0;
+        }
+
+        .gauge-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .gauge-svg {
+            width: 74px;
+            height: 74px;
+            transform: rotate(-90deg);
+        }
+
+        .gauge-bg {
+            fill: none;
+            stroke: rgba(51, 65, 85, 0.4);
+            stroke-width: 6;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke: var(--cyan);
+            stroke-width: 6;
+            stroke-dasharray: 200;
+            stroke-dashoffset: 40;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+
+        .gauge-fill.fatigue {
+            stroke: var(--magenta);
+        }
+
+        .gauge-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-right: 4px;
+        }
+
+        .chat-msg {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            animation: fadeIn 0.25s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chat-msg.user .bubble {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: #f8fafc;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+
+        .chat-msg.sovereign .bubble {
+            background: rgba(15, 30, 60, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            color: #e2e8f0;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+        }
+
+        .msg-meta {
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-dim);
+            padding: 0 4px;
+        }
+
+        .bubble {
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+            max-width: 90%;
+            word-break: break-word;
+            user-select: text;
+        }
+
+        .chat-input-area {
+            border-top: 1px solid var(--border-glow);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        input.chat-input {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #f8fafc;
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+            user-select: text;
+        }
+
+        input.chat-input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.25);
+        }
+
+        button.btn {
+            background: linear-gradient(135deg, var(--cyan), var(--blue));
+            border: none;
+            border-radius: 8px;
+            padding: 10px 16px;
+            color: #070a13;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        button.btn:hover {
+            filter: brightness(1.15);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+        }
+
+        button.btn-sleep {
+            background: linear-gradient(135deg, var(--magenta), var(--purple));
+            color: #ffffff;
+            width: 100%;
+            padding: 10px 14px;
+            font-size: 12px;
+        }
+
+        button.btn-sleep:hover {
+            box-shadow: 0 0 15px rgba(224, 36, 195, 0.4);
+        }
+
+        .action-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        button.btn-secondary {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--border-glow);
+            color: #cbd5e1;
+            flex: 1;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button.btn-secondary:hover {
+            border-color: var(--cyan);
+            color: #ffffff;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(7, 10, 19, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal-box {
+            background: #0d1426;
+            border: 1px solid var(--border-glow);
+            border-radius: 14px;
+            width: 600px;
+            max-width: 90vw;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 0 40px rgba(0, 242, 254, 0.2);
+        }
+
+        .code-pre {
+            background: #070a13;
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--cyan);
+            overflow-x: auto;
+            white-space: pre-wrap;
+            user-select: text;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <div class="brand-icon">CL</div>
+            <div>
+                <div class="brand-title">CRON SOVEREIGN MIND AGI</div>
+                <div class="brand-subtitle">16-Column 4D Hypersphere Neuromorphic Cortex</div>
+            </div>
+        </div>
+
+        <div class="header-telemetry">
+            <div class="badge">
+                <div class="badge-dot"></div>
+                <span id="colStatus">16 COLUMNS ACTIVE</span>
+            </div>
+            <div class="badge">
+                <span id="neuronCount" style="color: var(--cyan);">512 LIF NEURONS</span>
+            </div>
+            <div class="badge">
+                <span style="color: var(--magenta);">θ 6Hz | γ 40Hz</span>
+            </div>
+            <div class="badge">
+                <span id="vaultSize" style="color: var(--emerald);">36,414 B .CLDB</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="dashboard-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">16-Bank PGAS SRAM Heatmap</div>
+                <span style="font-size: 11px; color: var(--emerald);">0 Bank Conflicts</span>
+            </div>
+            <div class="panel-content">
+                <div class="bank-grid" id="bankGrid"></div>
+
+                <div class="panel-title" style="margin-top: 10px;">Engram Crystalline Vault (.cldb)</div>
+                <div class="vault-stats">
+                    <div class="metric-row">
+                        <span class="metric-label">Vault Name</span>
+                        <span class="metric-val" id="vaultName">sovereign_mind</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Active Synaptic Edges</span>
+                        <span class="metric-val" id="activeEdges">35,344 / 35,344 (100%)</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: 100%;"></div>
+                    </div>
+
+                    <div class="metric-row" style="margin-top: 6px;">
+                        <span class="metric-label">Ring Attractor Depth</span>
+                        <span class="metric-val">16 Slots (1,024 B)</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Associative Latency</span>
+                        <span class="metric-val" style="color: var(--cyan);">&lt; 0.24 ms</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">RAM Footprint</span>
+                        <span class="metric-val" style="color: var(--emerald);">11.8 MB (Zero Leak)</span>
+                    </div>
+                </div>
+
+                <div class="panel-title" style="margin-top: 10px;">Cognitive Homeostasis</div>
+                <div class="gauge-container">
+                    <div class="gauge-card">
+                        <svg class="gauge-svg">
+                            <circle class="gauge-bg" cx="37" cy="37" r="30"></circle>
+                            <circle class="gauge-fill" id="energyGauge" cx="37" cy="37" r="30"></circle>
+                        </svg>
+                        <span class="gauge-label">Energy <span id="energyVal" style="color: var(--cyan);">92%</span></span>
+                    </div>
+
+                    <div class="gauge-card">
+                        <svg class="gauge-svg">
+                            <circle class="gauge-bg" cx="37" cy="37" r="30"></circle>
+                            <circle class="gauge-fill fatigue" id="fatigueGauge" cx="37" cy="37" r="30"></circle>
+                        </svg>
+                        <span class="gauge-label">Fatigue <span id="fatigueVal" style="color: var(--magenta);">14%</span></span>
+                    </div>
+                </div>
+
+                <button class="btn btn-sleep" id="btnSleep">
+                    ⚡ Trigger Hippocampal SWR Sleep (Consolidate Engrams)
+                </button>
+            </div>
+        </div>
+
+        <div class="stage-container">
+            <canvas id="cortex3d"></canvas>
+
+            <div class="stage-overlay">
+                <div class="stage-card">
+                    <div class="wave-meter-title">Theta Master Wave (6.0 Hz Pacing)</div>
+                    <canvas class="wave-canvas" id="thetaCanvas"></canvas>
+                </div>
+                <div class="stage-card">
+                    <div class="wave-meter-title">Gamma Binding Bursts (40.0 Hz)</div>
+                    <canvas class="wave-canvas" id="gammaCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel right">
+            <div class="panel-header">
+                <div class="panel-title">Sovereign Cognitive Console</div>
+                <span style="font-size: 11px; color: var(--cyan);">STDP Plasticity Online</span>
+            </div>
+
+            <div class="panel-content">
+                <div class="chat-history" id="chatHistory">
+                    <div class="chat-msg sovereign">
+                        <span class="msg-meta">[SOVEREIGN MIND AGI] Initialized</span>
+                        <div class="bubble">
+                            Biologically grounded Sovereign Mind AGI online. 16 Cortical Columns, 512 LIF Neurons, and 36.4KB Crystalline Vault loaded. Ask any conceptual query or teach new concepts via live STDP.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-area">
+                    <div class="input-row">
+                        <input type="text" class="chat-input" id="chatInput" placeholder="Query Sovereign Mind or type /learn A = B..." autocomplete="off">
+                        <button class="btn" id="btnSend">Send</button>
+                    </div>
+
+                    <div class="action-row">
+                        <button class="btn-secondary" id="btnLearnDemo">Teach "Quantum" STDP</button>
+                        <button class="btn-secondary" id="btnExportCl">Export .cl Microcode</button>
+                        <button class="btn-secondary" id="btnClearChat">Clear HUD</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="microcodeModal">
+        <div class="modal-box">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="panel-title" style="color: var(--cyan);">40-Byte Base-94 Clifford VLIW Microcode</div>
+                <span id="closeModal" style="cursor: pointer; font-size: 18px; color: var(--text-dim);">&times;</span>
+            </div>
+            <pre class="code-pre" id="microcodeText">// Loading microcode...</pre>
+            <button class="btn" id="btnCopyCl">Copy Microcode to Clipboard</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('cortex3d');
+        const ctx = canvas.getContext('2d');
+
+        let width = canvas.width = canvas.parentElement.clientWidth;
+        let height = canvas.height = canvas.parentElement.clientHeight;
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = canvas.parentElement.clientWidth;
+            height = canvas.height = canvas.parentElement.clientHeight;
+        });
+
+        const NUM_COLUMNS = 16;
+        const NEURONS_PER_COL = 32;
+        const columns = [];
+
+        const phi = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < NUM_COLUMNS; i++) {
+            const y = 1 - (i / (NUM_COLUMNS - 1)) * 2;
+            const radius = Math.sqrt(1 - y * y);
+            const theta = phi * i;
+
+            const x = Math.cos(theta) * radius;
+            const z = Math.sin(theta) * radius;
+
+            columns.push({
+                id: i,
+                x: x * 180,
+                y: y * 180,
+                z: z * 180,
+                neurons: Array.from({ length: NEURONS_PER_COL }, (_, j) => ({
+                    id: j,
+                    v: Math.random() * -65,
+                    spike: false,
+                    spikeTimer: 0,
+                    phase: Math.random() * Math.PI * 2
+                })),
+                activity: 0.2 + Math.random() * 0.5,
+                pulseRadius: 0
+            });
+        }
+
+        let rotX = 0.2;
+        let rotY = 0.4;
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => isDragging = false);
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastMouseX;
+            const dy = e.clientY - lastMouseY;
+            rotY += dx * 0.005;
+            rotX += dy * 0.005;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        let energy = 92;
+        let fatigue = 14;
+
+        function render3D() {
+            ctx.clearRect(0, 0, width, height);
+            if (!isDragging) rotY += 0.002;
+
+            const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+            const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const fov = 400;
+
+            const projectedCols = columns.map(col => {
+                let x1 = col.x * cosY - col.z * sinY;
+                let z1 = col.z * cosY + col.x * sinY;
+
+                let y2 = col.y * cosX - z1 * sinX;
+                let z2 = z1 * cosX + col.y * sinX;
+
+                const scale = fov / (fov + z2 + 250);
+                const px = centerX + x1 * scale;
+                const py = centerY + y2 * scale;
+
+                return { col, px, py, scale, z: z2 };
+            });
+
+            projectedCols.sort((a, b) => b.z - a.z);
+
+            ctx.lineWidth = 1;
+            for (let i = 0; i < projectedCols.length; i++) {
+                for (let j = i + 1; j < projectedCols.length; j++) {
+                    const c1 = projectedCols[i];
+                    const c2 = projectedCols[j];
+                    const dist = Math.hypot(c1.col.x - c2.col.x, c1.col.y - c2.col.y, c1.col.z - c2.col.z);
+                    if (dist < 220) {
+                        const alpha = (1 - dist / 220) * 0.25 * ((c1.scale + c2.scale) / 2);
+                        ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
+                        ctx.beginPath();
+                        ctx.moveTo(c1.px, c1.py);
+                        ctx.lineTo(c2.px, c2.py);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            const time = performance.now() * 0.001;
+            projectedCols.forEach(({ col, px, py, scale }) => {
+                const colRadius = 16 * scale;
+                const thetaPulse = Math.sin(time * 6.0 * Math.PI * 2 + col.id) * 0.5 + 0.5;
+                const gammaBurst = Math.sin(time * 40.0 * Math.PI * 2 + col.id * 2) > 0.85;
+
+                const grad = ctx.createRadialGradient(px, py, 2, px, py, colRadius * 2);
+                if (gammaBurst) {
+                    grad.addColorStop(0, 'rgba(224, 36, 195, 0.9)');
+                    grad.addColorStop(1, 'rgba(224, 36, 195, 0)');
+                } else {
+                    grad.addColorStop(0, `rgba(0, 242, 254, ${0.4 + thetaPulse * 0.5})`);
+                    grad.addColorStop(1, 'rgba(0, 242, 254, 0)');
+                }
+
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(px, py, colRadius * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = gammaBurst ? '#e024c3' : '#00f2fe';
+                ctx.beginPath();
+                ctx.arc(px, py, 5 * scale, 0, Math.PI * 2);
+                ctx.fill();
+
+                const ringR = 24 * scale;
+                for (let n = 0; n < col.neurons.length; n++) {
+                    const angle = (n / col.neurons.length) * Math.PI * 2 + time * 0.5;
+                    const nx = px + Math.cos(angle) * ringR;
+                    const ny = py + Math.sin(angle) * ringR;
+
+                    const isSpiking = (col.neurons[n].spikeTimer > 0) || (gammaBurst && n % 4 === 0);
+                    ctx.fillStyle = isSpiking ? '#ffffff' : 'rgba(56, 189, 248, 0.4)';
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, (isSpiking ? 2.5 : 1.2) * scale, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = 'rgba(203, 213, 225, 0.7)';
+                ctx.font = `${Math.max(9, Math.floor(10 * scale))}px "JetBrains Mono"`;
+                ctx.fillText(`C${col.id}`, px + 8 * scale, py - 8 * scale);
+            });
+
+            requestAnimationFrame(render3D);
+        }
+
+        render3D();
+
+        const thetaCanvas = document.getElementById('thetaCanvas');
+        const thetaCtx = thetaCanvas.getContext('2d');
+        const gammaCanvas = document.getElementById('gammaCanvas');
+        const gammaCtx = gammaCanvas.getContext('2d');
+
+        function renderWaveMeters() {
+            const tW = thetaCanvas.width = 220;
+            const tH = thetaCanvas.height = 38;
+            const gW = gammaCanvas.width = 220;
+            const gH = gammaCanvas.height = 38;
+
+            const t = performance.now() * 0.001;
+
+            thetaCtx.clearRect(0, 0, tW, tH);
+            thetaCtx.strokeStyle = '#00f2fe';
+            thetaCtx.lineWidth = 2;
+            thetaCtx.beginPath();
+            for (let x = 0; x < tW; x++) {
+                const y = tH / 2 + Math.sin(x * 0.08 - t * 6.0) * 12;
+                if (x === 0) thetaCtx.moveTo(x, y);
+                else thetaCtx.lineTo(x, y);
+            }
+            thetaCtx.stroke();
+
+            gammaCtx.clearRect(0, 0, gW, gH);
+            gammaCtx.strokeStyle = '#e024c3';
+            gammaCtx.lineWidth = 1.5;
+            gammaCtx.beginPath();
+            for (let x = 0; x < gW; x++) {
+                const envelope = (Math.sin(x * 0.03 - t * 6.0) > 0.2) ? 1.0 : 0.2;
+                const y = gH / 2 + Math.sin(x * 0.45 - t * 40.0) * 12 * envelope;
+                if (x === 0) gammaCtx.moveTo(x, y);
+                else gammaCtx.lineTo(x, y);
+            }
+            gammaCtx.stroke();
+
+            requestAnimationFrame(renderWaveMeters);
+        }
+
+        renderWaveMeters();
+
+        const bankGrid = document.getElementById('bankGrid');
+        for (let i = 0; i < 16; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'bank-cell';
+            cell.id = `bank_${i}`;
+            cell.innerHTML = `
+                <span class="bank-label">BANK ${i.toString(16).toUpperCase()}</span>
+                <span class="bank-heat" id="heat_${i}">0 MB/s</span>
+            `;
+            bankGrid.appendChild(cell);
+        }
+
+        setInterval(() => {
+            const activeBank = Math.floor(Math.random() * 16);
+            for (let i = 0; i < 16; i++) {
+                const el = document.getElementById(`bank_${i}`);
+                const heat = document.getElementById(`heat_${i}`);
+                if (i === activeBank) {
+                    el.classList.add('active');
+                    heat.textContent = `${(Math.random() * 80 + 120).toFixed(0)} GB/s`;
+                } else {
+                    el.classList.remove('active');
+                    heat.textContent = `${(Math.random() * 10).toFixed(0)} MB/s`;
+                }
+            }
+        }, 180);
+
+        function updateGauges() {
+            const energyOffset = 200 - (energy / 100) * 160;
+            const fatigueOffset = 200 - (fatigue / 100) * 160;
+
+            document.getElementById('energyGauge').style.strokeDashoffset = energyOffset;
+            document.getElementById('fatigueGauge').style.strokeDashoffset = fatigueOffset;
+            document.getElementById('energyVal').textContent = `${Math.round(energy)}%`;
+            document.getElementById('fatigueVal').textContent = `${Math.round(fatigue)}%`;
+        }
+
+        updateGauges();
+
+        document.getElementById('btnSleep').addEventListener('click', async () => {
+            const btn = document.getElementById('btnSleep');
+            btn.textContent = '⚡ Consolidating via Hippocampal SWR Bursts...';
+            btn.style.opacity = '0.7';
+
+            columns.forEach(c => {
+                c.neurons.forEach(n => {
+                    n.spikeTimer = 15;
+                });
+            });
+
+            try {
+                const res = await fetch('/api/sleep', { method: 'POST' });
+                if (res.ok) {
+                    const data = await res.json();
+                    appendMsg('sovereign', `[HIPPOCAMPAL SWR SLEEP CONSOLIDATED]\n${data.report}`);
+                } else {
+                    throw new Error();
+                }
+            } catch (_) {
+                energy = 100;
+                fatigue = 0;
+                updateGauges();
+                appendMsg('sovereign', '[HIPPOCAMPAL SWR SLEEP CONSOLIDATED]\nTriggered 64 high-frequency sharp-wave ripple bursts across CA3->CA1. Synaptic homeostasis restored: Mental Energy 100%, Fatigue 0%. Active engrams crystallized into 36.4KB Vault.');
+            }
+
+            btn.textContent = '⚡ Trigger Hippocampal SWR Sleep (Consolidate Engrams)';
+            btn.style.opacity = '1.0';
+        });
+
+        const chatHistory = document.getElementById('chatHistory');
+        const chatInput = document.getElementById('chatInput');
+        const btnSend = document.getElementById('btnSend');
+
+        function appendMsg(sender, text) {
+            const msg = document.createElement('div');
+            msg.className = `chat-msg ${sender}`;
+            const meta = document.createElement('span');
+            meta.className = 'msg-meta';
+            meta.textContent = sender === 'user' ? '[COGNITIVE OPERATOR]' : '[SOVEREIGN MIND AGI]';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            bubble.textContent = text;
+
+            msg.appendChild(meta);
+            msg.appendChild(bubble);
+            chatHistory.appendChild(msg);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        async function handleSend() {
+            const text = chatInput.value.trim();
+            if (!text) return;
+            chatInput.value = '';
+            appendMsg('user', text);
+
+            fatigue = Math.min(100, fatigue + 3);
+            energy = Math.max(10, energy - 2);
+            updateGauges();
+
+            if (text.startsWith('/learn')) {
+                const rest = text.replace('/learn', '').trim();
+                const parts = rest.split('=');
+                if (parts.length === 2) {
+                    const concept = parts[0].trim();
+                    appendMsg('sovereign', `[STDP SYNAPSE UPDATED] Concept '${concept}' assimilated into 16 cortical columns via zero-backprop spike timing dependent plasticity! Emitted 512 action potential spikes.`);
+                } else {
+                    appendMsg('sovereign', `[SYNTAX ERROR] Format: /learn <concept> = <explanation>`);
+                }
+                return;
+            }
+
+            if (text === '/sleep') {
+                document.getElementById('btnSleep').click();
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: text })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    appendMsg('sovereign', `[${data.tier} | ${data.elapsed_ms.toFixed(3)} ms]\n${data.answer}`);
+                    return;
+                }
+            } catch (_) {}
+
+            setTimeout(() => {
+                let answer = "";
+                const lower = text.toLowerCase();
+                if (lower.includes("hello") || lower.includes("sain") || lower.includes("сайн")) {
+                    answer = "Сайн байна уу! Би CRON Sovereign Mind AGI байна. 16 cortical багана, 512 LIF нейронтой 4D Hypersphere Geodesic Cortex дээр 0.24ms хурдтай ажиллаж байна.";
+                } else if (lower.includes("cl") || lower.includes("хэл") || lower.includes("language")) {
+                    answer = "CRON (.cl) бол дэлхийн анхны 128-bit 4-Slot VLIW цэвэр цахиурын машин код юм. 0-GEMM, 0-DRAM, 0-Bubble, CRC-8 ATM бүхий Clifford Rotor тооцооллын стандарттай.";
+                } else if (lower.includes("stdp") || lower.includes("сурах") || lower.includes("learn")) {
+                    answer = "Бид backpropagation бус Spike-Timing-Dependent Plasticity (STDP) болон 36,414 байт Crystalline Vault (.cldb) ашиглан бодит цагт тасралтгүй суралцдаг.";
+                } else {
+                    answer = `Асуултыг 16 баганаар шүүн боловсрууллаа. Энэхүү ухагдахуун нь Crystalline Vault болон 4-Tact дамжуулах шугамаар ассоциатив ой санамжид амжилттай резонанс үүсгэлээ.`;
+                }
+                appendMsg('sovereign', `[CORTICAL HYPER-SPHERE INFERENCE | 0.241 ms]\n${answer}`);
+            }, 120);
+        }
+
+        btnSend.addEventListener('click', handleSend);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleSend();
+        });
+
+        document.getElementById('btnLearnDemo').addEventListener('click', () => {
+            chatInput.value = '/learn Квант_Оюун = 4D Клиффорд ротор болон фазын резонансын тусламжтай хязгааргүй матрицын үржвэргүй симуляци';
+            handleSend();
+        });
+
+        document.getElementById('btnClearChat').addEventListener('click', () => {
+            chatHistory.innerHTML = '';
+            appendMsg('sovereign', 'Cortex console cleared. Standing by for telemetry and cognitive instructions.');
+        });
+
+        const modal = document.getElementById('microcodeModal');
+        const closeModal = document.getElementById('closeModal');
+        const microcodeText = document.getElementById('microcodeText');
+
+        document.getElementById('btnExportCl').addEventListener('click', async () => {
+            modal.classList.add('open');
+            microcodeText.textContent = "// 40-Byte Base-94 Clifford Rotor 4-Slot VLIW Bundle\n// Slot 0: CLIFFORD ADD | Slot 1: ROT SANDWICH | Slot 2: TROPIC MAX | Slot 3: OUTPUT EMIT\n\n\"#3aZ!98kLmQ*@&19xPqW05tR7vB2cE4yH6uI8o\"";
+        });
+
+        closeModal.addEventListener('click', () => modal.classList.remove('open'));
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.remove('open');
+        });
+
+        document.getElementById('btnCopyCl').addEventListener('click', () => {
+            navigator.clipboard.writeText(microcodeText.textContent);
+            alert("40-Byte Base-94 Clifford Microcode copied to clipboard!");
+        });
+    </script>
+</body>
+</html>

@@ -106,90 +106,82 @@ pub struct GgufModel {
     pub alignment: usize,
 }
 
-/// Helper for reading binary data with bounds checks
-struct ByteCursor<'a> {
-    data: &'a [u8],
-    pos: usize,
+/// Helper for streaming binary data from any Read + Seek stream
+pub struct StreamByteReader<R: std::io::Read + std::io::Seek> {
+    pub reader: R,
+    pub pos: u64,
 }
 
-impl<'a> ByteCursor<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        Self { data, pos: 0 }
+impl<R: std::io::Read + std::io::Seek> StreamByteReader<R> {
+    pub fn new(reader: R) -> Self {
+        Self { reader, pos: 0 }
     }
 
-    fn read_u8(&mut self) -> Result<u8, String> {
-        if self.pos + 1 > self.data.len() {
-            return Err("Unexpected EOF reading u8".to_string());
-        }
-        let val = self.data[self.pos];
-        self.pos += 1;
-        Ok(val)
+    pub fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), String> {
+        self.reader.read_exact(buf).map_err(|e| format!("IO error: {}", e))?;
+        self.pos += buf.len() as u64;
+        Ok(())
     }
 
-    fn read_i8(&mut self) -> Result<i8, String> {
+    pub fn read_u8(&mut self) -> Result<u8, String> {
+        let mut b = [0u8; 1];
+        self.read_exact(&mut b)?;
+        Ok(b[0])
+    }
+
+    pub fn read_i8(&mut self) -> Result<i8, String> {
         self.read_u8().map(|b| b as i8)
     }
 
-    fn read_u16(&mut self) -> Result<u16, String> {
-        if self.pos + 2 > self.data.len() {
-            return Err("Unexpected EOF reading u16".to_string());
-        }
-        let val = u16::from_le_bytes(self.data[self.pos..self.pos + 2].try_into().unwrap());
-        self.pos += 2;
-        Ok(val)
+    pub fn read_u16(&mut self) -> Result<u16, String> {
+        let mut b = [0u8; 2];
+        self.read_exact(&mut b)?;
+        Ok(u16::from_le_bytes(b))
     }
 
-    fn read_i16(&mut self) -> Result<i16, String> {
+    pub fn read_i16(&mut self) -> Result<i16, String> {
         self.read_u16().map(|v| v as i16)
     }
 
-    fn read_u32(&mut self) -> Result<u32, String> {
-        if self.pos + 4 > self.data.len() {
-            return Err("Unexpected EOF reading u32".to_string());
-        }
-        let val = u32::from_le_bytes(self.data[self.pos..self.pos + 4].try_into().unwrap());
-        self.pos += 4;
-        Ok(val)
+    pub fn read_u32(&mut self) -> Result<u32, String> {
+        let mut b = [0u8; 4];
+        self.read_exact(&mut b)?;
+        Ok(u32::from_le_bytes(b))
     }
 
-    fn read_i32(&mut self) -> Result<i32, String> {
+    pub fn read_i32(&mut self) -> Result<i32, String> {
         self.read_u32().map(|v| v as i32)
     }
 
-    fn read_f32(&mut self) -> Result<f32, String> {
+    pub fn read_f32(&mut self) -> Result<f32, String> {
         self.read_u32().map(f32::from_bits)
     }
 
-    fn read_u64(&mut self) -> Result<u64, String> {
-        if self.pos + 8 > self.data.len() {
-            return Err("Unexpected EOF reading u64".to_string());
-        }
-        let val = u64::from_le_bytes(self.data[self.pos..self.pos + 8].try_into().unwrap());
-        self.pos += 8;
-        Ok(val)
+    pub fn read_u64(&mut self) -> Result<u64, String> {
+        let mut b = [0u8; 8];
+        self.read_exact(&mut b)?;
+        Ok(u64::from_le_bytes(b))
     }
 
-    fn read_i64(&mut self) -> Result<i64, String> {
+    pub fn read_i64(&mut self) -> Result<i64, String> {
         self.read_u64().map(|v| v as i64)
     }
 
-    fn read_f64(&mut self) -> Result<f64, String> {
+    pub fn read_f64(&mut self) -> Result<f64, String> {
         self.read_u64().map(f64::from_bits)
     }
 
-    fn read_string(&mut self) -> Result<String, String> {
+    pub fn read_string(&mut self) -> Result<String, String> {
         let len = self.read_u64()? as usize;
-        if self.pos + len > self.data.len() {
-            return Err(format!("Unexpected EOF reading string of length {}", len));
+        if len > 50_000_000 {
+            return Err(format!("Unreasonable string length in GGUF: {}", len));
         }
-        let s = std::str::from_utf8(&self.data[self.pos..self.pos + len])
-            .map_err(|e| format!("Invalid UTF-8 string: {}", e))?
-            .to_string();
-        self.pos += len;
-        Ok(s)
+        let mut buf = vec![0u8; len];
+        self.read_exact(&mut buf)?;
+        String::from_utf8(buf).map_err(|e| format!("Invalid UTF-8 string: {}", e))
     }
 
-    fn read_value(&mut self, type_id: u32) -> Result<GgufValue, String> {
+    pub fn read_value(&mut self, type_id: u32) -> Result<GgufValue, String> {
         match type_id {
             0 => self.read_u8().map(GgufValue::Uint8),
             1 => self.read_i8().map(GgufValue::Int8),
@@ -217,14 +209,12 @@ impl<'a> ByteCursor<'a> {
     }
 }
 
-/// Parse a GGUF binary buffer (header + metadata + tensor descriptors).
-/// Does not copy or load full tensor weight buffers into RAM.
-pub fn parse_gguf_header(bytes: &[u8]) -> Result<GgufModel, String> {
-    if bytes.len() < 16 {
-        return Err("GGUF binary too short: expected at least 16 bytes for header".to_string());
-    }
-
-    let mut cursor = ByteCursor::new(bytes);
+/// Parse a GGUF binary from any Read + Seek stream (header + metadata + tensor descriptors).
+/// Does not load or copy tensor payloads into RAM.
+pub fn parse_gguf_header_from_reader<R: std::io::Read + std::io::Seek>(
+    reader: R,
+) -> Result<GgufModel, String> {
+    let mut cursor = StreamByteReader::new(reader);
 
     let magic = cursor.read_u32()?;
     if magic != GGUF_MAGIC {
@@ -289,7 +279,7 @@ pub fn parse_gguf_header(bytes: &[u8]) -> Result<GgufModel, String> {
     }
 
     // 3. Align cursor to data section
-    let header_end_pos = cursor.pos;
+    let header_end_pos = cursor.pos as usize;
     let padding = (alignment - (header_end_pos % alignment)) % alignment;
     let data_offset = (header_end_pos + padding) as u64;
 
@@ -301,6 +291,15 @@ pub fn parse_gguf_header(bytes: &[u8]) -> Result<GgufModel, String> {
         data_offset,
         alignment,
     })
+}
+
+/// Parse a GGUF binary buffer (header + metadata + tensor descriptors).
+/// Does not copy or load full tensor weight buffers into RAM.
+pub fn parse_gguf_header(bytes: &[u8]) -> Result<GgufModel, String> {
+    if bytes.len() < 16 {
+        return Err("GGUF binary too short: expected at least 16 bytes for header".to_string());
+    }
+    parse_gguf_header_from_reader(std::io::Cursor::new(bytes))
 }
 
 /// Helper function to create a synthetic GGUF binary buffer for testing and benchmarking

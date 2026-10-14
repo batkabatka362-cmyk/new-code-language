@@ -98,6 +98,7 @@ pub struct Hover {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompletionItem {
     pub label: String,
     pub kind: u32, // 1=Text, 3=Function, 7=Class, 14=Keyword, 21=Constant, etc.
@@ -108,6 +109,7 @@ pub struct CompletionItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TextEdit {
     pub range: Range,
     pub new_text: String,
@@ -120,6 +122,7 @@ pub struct WorkspaceEdit {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeAction {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -161,6 +164,7 @@ pub struct SignatureHelp {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DocumentSymbol {
     pub name: String,
     pub kind: u32,  // 5=Class, 6=Method, 12=Function, 23=Struct
@@ -361,6 +365,7 @@ pub fn is_cl_document(uri: &str, text: &str) -> bool {
 pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let lines: Vec<&str> = source.lines().collect();
+    let has_extended_registers = source.contains(".clifford") || source.contains("4d_torus") || source.contains("Rotor");
 
     for (line_idx, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
@@ -368,11 +373,23 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
             continue;
         }
 
+        // Strip inline comments if preceded by whitespace or standard comment marker
+        let code_line = if let Some(pos) = trimmed.find(" //") {
+            trimmed[..pos].trim()
+        } else if let Some(pos) = trimmed.find(" ;") {
+            trimmed[..pos].trim()
+        } else {
+            trimmed
+        };
+        if code_line.is_empty() {
+            continue;
+        }
+
         let line_u32 = line_idx as u32;
 
-        // Check @CORE directive
-        if trimmed.starts_with("@CORE") {
-            if !trimmed.starts_with("@CORE(") || !trimmed.ends_with(')') {
+        // 1. Check @CORE directive syntax
+        if code_line.starts_with("@CORE") {
+            if !code_line.starts_with("@CORE(") || !code_line.ends_with(')') {
                 diagnostics.push(Diagnostic {
                     range: Range {
                         start: Position { line: line_u32, character: 0 },
@@ -387,9 +404,94 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
             continue;
         }
 
-        // Check bundle lines with slot separators '|'
-        if trimmed.contains('|') {
-            let parts: Vec<&str> = trimmed.split('|').collect();
+        // 2. Directives starting with '@' or '.' (e.g. @kernel, .target, .core, .stage, .clifford, .ipc_target)
+        if code_line.starts_with('@') || code_line.starts_with('.') {
+            continue;
+        }
+
+        // 3. Closing brace of topological bundles
+        if code_line == "}" {
+            continue;
+        }
+
+        // 4. Labels (e.g. "LOOP:", "INIT:", "MAIN:", "DONE:")
+        if code_line.ends_with(':') && !code_line.contains(' ') {
+            continue;
+        }
+
+        // 5. Raw 40-character continuous Base-94 microcode bundle (e.g. cortex_4snake_output.cl, sovereign_mind_vliw.cl)
+        if code_line.len() == 40 && !code_line.contains(' ') {
+            continue;
+        }
+
+        // 6. Space-separated 10-char Base-94 microcode slots without prefix
+        let space_tokens: Vec<&str> = code_line.split_whitespace().collect();
+        if space_tokens.len() >= 3 && space_tokens.iter().all(|t| t.len() == 10) {
+            continue;
+        }
+
+        // 7. Check if line starts with bundle header B####: / b####: / L####: / C####:
+        let first_word = code_line.split_whitespace().next().unwrap_or("");
+        let is_bundle_line = if first_word.ends_with(':') && first_word.len() >= 3 {
+            let p = first_word.chars().next().unwrap();
+            (p == 'B' || p == 'b' || p == 'L' || p == 'l' || p == 'C' || p == 'c')
+                && first_word[1..first_word.len() - 1].chars().all(|c| c.is_ascii_hexdigit())
+        } else {
+            false
+        };
+
+        if is_bundle_line {
+            if let Some((_hdr, rest)) = code_line.split_once(':') {
+                let rest_trim = rest.trim();
+                // Check if it's an explicit pipe-delimited VLIW line (e.g. "LOAD | NOP | NOP | NOP")
+                if rest_trim.contains(" | ") {
+                    let parts: Vec<&str> = rest_trim.split('|').collect();
+                    if parts.len() != 4 {
+                        diagnostics.push(Diagnostic {
+                            range: Range {
+                                start: Position { line: line_u32, character: 0 },
+                                end: Position { line: line_u32, character: line.len() as u32 },
+                            },
+                            severity: 1,
+                            code: Some("CL001".to_string()),
+                            source: Some("cron-lsp".to_string()),
+                            message: format!(
+                                "Invalid VLIW bundle slot count (found {} slots, expected exactly 4: ALU0 | ALU1 | MEM | NOC)",
+                                parts.len()
+                            ),
+                        });
+                    } else {
+                        validate_vliw_pipe_slots(&parts, line_u32, line.len() as u32, has_extended_registers, &mut diagnostics);
+                    }
+                    continue;
+                }
+
+                // Otherwise it's space-separated Base-94 microcode slots
+                let slots: Vec<&str> = rest_trim.split_whitespace().collect();
+                for (s_idx, s) in slots.iter().enumerate() {
+                    if s.starts_with('_') && s.ends_with('>') && s.len() != 10 {
+                        diagnostics.push(Diagnostic {
+                            range: Range {
+                                start: Position { line: line_u32, character: 0 },
+                                end: Position { line: line_u32, character: line.len() as u32 },
+                            },
+                            severity: 2, // Warning
+                            code: Some("CL002".to_string()),
+                            source: Some("cron-lsp".to_string()),
+                            message: format!(
+                                "Raw slot #{} '{}' length is {} chars. Canonical fixed slot width is 10 chars (_XXYY#ZZZ>)",
+                                s_idx + 1, s, s.len()
+                            ),
+                        });
+                    }
+                }
+            }
+            continue;
+        }
+
+        // 8. Pipe-delimited VLIW without bundle header (e.g. "ADD R1, R2 | NOP | LOAD [R3] | SEND (1,0,0,0)")
+        if code_line.contains(" | ") {
+            let parts: Vec<&str> = code_line.split('|').collect();
             if parts.len() != 4 {
                 diagnostics.push(Diagnostic {
                     range: Range {
@@ -405,137 +507,77 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
                     ),
                 });
             } else {
-                let slot_names = ["ALU0", "ALU1", "MEM", "NOC"];
-                for (slot_idx, part) in parts.iter().enumerate() {
-                    let p_raw = if let Some((_hdr, content)) = part.split_once(':') {
-                        content.trim()
-                    } else {
-                        part.trim()
-                    };
-                    let p_trim = p_raw;
-                    if p_trim.is_empty() {
-                        continue;
-                    }
-
-                    // Check for invalid registers like R16..R99
-                    for token in p_trim.split(|c: char| !c.is_alphanumeric()) {
-                        if token.starts_with('R') || token.starts_with('r') {
-                            if let Ok(reg_num) = token[1..].parse::<u32>() {
-                                if reg_num > 15 {
-                                    diagnostics.push(Diagnostic {
-                                        range: Range {
-                                            start: Position { line: line_u32, character: 0 },
-                                            end: Position { line: line_u32, character: line.len() as u32 },
-                                        },
-                                        severity: 1,
-                                        code: Some("CL004".to_string()),
-                                        source: Some("cron-lsp".to_string()),
-                                        message: format!(
-                                            "Register 'R{}' in {} slot exceeds 4-bit hardware limit (valid: R0..R15)",
-                                            reg_num, slot_names[slot_idx]
-                                        ),
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    // Check opcode port compatibility
-                    let upper = p_trim.to_ascii_uppercase();
-                    let op = upper.split_whitespace().next().unwrap_or("");
-                    if (slot_idx == 0 || slot_idx == 1) && (op == "LOAD" || op == "STORE" || op == "SWIZZLE") {
-                        diagnostics.push(Diagnostic {
-                            range: Range {
-                                start: Position { line: line_u32, character: 0 },
-                                end: Position { line: line_u32, character: line.len() as u32 },
-                            },
-                            severity: 1,
-                            code: Some("CL003".to_string()),
-                            source: Some("cron-lsp".to_string()),
-                            message: format!(
-                                "Memory opcode '{}' cannot execute on {}. Must be placed in MEM slot (slot #3)",
-                                op, slot_names[slot_idx]
-                            ),
-                        });
-                    }
-                    if (slot_idx < 3) && (op == "ROUTE_DOR" || op == "SEND" || op == "RECV" || op == "BROADCAST" || op == "COLLECTIVE") {
-                        diagnostics.push(Diagnostic {
-                            range: Range {
-                                start: Position { line: line_u32, character: 0 },
-                                end: Position { line: line_u32, character: line.len() as u32 },
-                            },
-                            severity: 1,
-                            code: Some("CL003".to_string()),
-                            source: Some("cron-lsp".to_string()),
-                            message: format!(
-                                "NoC opcode '{}' cannot execute on {}. Must be placed in NOC slot (slot #4)",
-                                op, slot_names[slot_idx]
-                            ),
-                        });
-                    }
-                    if (slot_idx > 0) && (op == "ATTN_STEP" || op == "LIF_STEP" || op == "STDP_STEP" || op == "DOT_I2" || op == "DOT_I4" || op == "SWIGLU_STEP" || op == "ROPE_STEP" || op == "RMSNORM_STEP") {
-                        diagnostics.push(Diagnostic {
-                            range: Range {
-                                start: Position { line: line_u32, character: 0 },
-                                end: Position { line: line_u32, character: line.len() as u32 },
-                            },
-                            severity: 1,
-                            code: Some("CL003".to_string()),
-                            source: Some("cron-lsp".to_string()),
-                            message: format!(
-                                "Advanced neural/photonic opcode '{}' requires primary ALU0 execution lane",
-                                op
-                            ),
-                        });
-                    }
-
-                    // Check slot width warning (CL002) for raw slots (e.g. '_AD00$000>')
-                    if p_trim.starts_with('_') && p_trim.ends_with('>') && p_trim.len() != 10 {
-                        diagnostics.push(Diagnostic {
-                            range: Range {
-                                start: Position { line: line_u32, character: 0 },
-                                end: Position { line: line_u32, character: line.len() as u32 },
-                            },
-                            severity: 2, // Warning
-                            code: Some("CL002".to_string()),
-                            source: Some("cron-lsp".to_string()),
-                            message: format!(
-                                "Raw slot '{}' length is {} chars. Canonical fixed slot width is 10 chars (_XXYY#ZZZ>)",
-                                p_trim, p_trim.len()
-                            ),
-                        });
-                    }
-                }
+                validate_vliw_pipe_slots(&parts, line_u32, line.len() as u32, has_extended_registers, &mut diagnostics);
             }
-        } else if !(trimmed.starts_with('B') || trimmed.starts_with('b') || trimmed.starts_with('L'))
-               && !trimmed.starts_with('_') && !trimmed.starts_with('\'') && !trimmed.starts_with('~') && !trimmed.starts_with('!')
-               && !trimmed.starts_with('@') && !trimmed.starts_with('.')
-               && !trimmed.starts_with("bundle")
-               && !trimmed.starts_with('}')
-               && !trimmed.starts_with("S0:") && !trimmed.starts_with("S1:") && !trimmed.starts_with("S2:") && !trimmed.starts_with("S3:")
-               && !trimmed.starts_with("s0:") && !trimmed.starts_with("s1:") && !trimmed.starts_with("s2:") && !trimmed.starts_with("s3:")
-               && !trimmed.starts_with("transfer") && !trimmed.starts_with("attend") && !trimmed.starts_with("resonate")
-               && !trimmed.starts_with("step") && !trimmed.starts_with("flow") {
-            diagnostics.push(Diagnostic {
-                range: Range {
-                    start: Position { line: line_u32, character: 0 },
-                    end: Position { line: line_u32, character: line.len() as u32 },
-                },
-                severity: 1,
-                code: Some("CL001".to_string()),
-                source: Some("cron-lsp".to_string()),
-                message: format!("Unrecognized statement in .cl microcode: '{}'. Expected 4-slot VLIW bundle", trimmed),
-            });
+            continue;
         }
+
+        // 9. Valid standalone microcode slot prefixes:
+        let first_char = code_line.chars().next().unwrap();
+        let is_slot_prefix = matches!(first_char, '_' | '\'' | '~' | '!' | '`' | '=' | '+' | '-' | '*' | '/' | '%' | '&' | '^' | '$' | '#' | '?' | '<' | '>' | '(' | ')');
+        if is_slot_prefix {
+            continue;
+        }
+
+        // 10. Topological bundle & keyword statements
+        let is_topo = code_line.starts_with("bundle ")
+            || code_line.starts_with("flow ")
+            || code_line.starts_with("step ")
+            || code_line.starts_with("transfer")
+            || code_line.starts_with("attend")
+            || code_line.starts_with("resonate")
+            || code_line.starts_with("spin")
+            || code_line.starts_with("vol")
+            || code_line.starts_with("WRAP")
+            || code_line.starts_with("TUNNEL")
+            || code_line.starts_with("FLUID")
+            || code_line.starts_with("ANCHOR")
+            || code_line.starts_with("let ")
+            || code_line.starts_with("barrier")
+            || code_line.starts_with("return")
+            || code_line.starts_with("S0:") || code_line.starts_with("S1:") || code_line.starts_with("S2:") || code_line.starts_with("S3:")
+            || code_line.starts_with("s0:") || code_line.starts_with("s1:") || code_line.starts_with("s2:") || code_line.starts_with("s3:");
+        if is_topo {
+            continue;
+        }
+
+        // 11. Recognized assembly mnemonics (single instruction or macro line)
+        let first_ident = code_line.split(|c: char| !c.is_alphanumeric() && c != '_').next().unwrap_or("").to_ascii_uppercase();
+        let is_known_mnemonic = matches!(
+            first_ident.as_str(),
+            "ADD" | "SUB" | "MUL" | "DIV" | "MOD" | "AND" | "OR" | "XOR" | "NOT" | "SHL" | "SHR"
+            | "MOV" | "LOAD" | "STORE" | "NOP" | "HALT" | "RET" | "JMP" | "BRA" | "CALL" | "SWIZZLE"
+            | "SEND" | "RECV" | "ROUTE_DOR" | "BROADCAST" | "COLLECTIVE"
+            | "ATTN_STEP" | "LIF_STEP" | "STDP_STEP" | "DOT_I2" | "DOT_I4" | "SWIGLU_STEP"
+            | "ROPE_STEP" | "RMSNORM_STEP" | "ROT_SANDWICH" | "CLIFFORD_ADD" | "TROPIC_MAX"
+            | "LAYER_SHIFT" | "STDP_LEARN" | "WAVE_SPREAD" | "EMIT_CHAR"
+            | "PACK_TRITS" | "OP_GEMM" | "TERNARY_MAC"
+        );
+        if is_known_mnemonic {
+            continue;
+        }
+
+        // 12. Truly unrecognized statement -> Error CL001
+        diagnostics.push(Diagnostic {
+            range: Range {
+                start: Position { line: line_u32, character: 0 },
+                end: Position { line: line_u32, character: line.len() as u32 },
+            },
+            severity: 1,
+            code: Some("CL001".to_string()),
+            source: Some("cron-lsp".to_string()),
+            message: format!("Unrecognized statement in .cl microcode: '{}'. Expected 4-slot VLIW bundle", code_line),
+        });
     }
 
     // If source contains topological bundles, perform full semantic invariant check
     if source.contains("bundle ") {
         if let Err(err_msg) = cronc::cl_topological::ClTopologicalCompiler::compile_source(source) {
+            let err_line = lines.iter().position(|l| l.contains("bundle ")).unwrap_or(0) as u32;
             diagnostics.push(Diagnostic {
                 range: Range {
-                    start: Position { line: 0, character: 0 },
-                    end: Position { line: 0, character: 10 },
+                    start: Position { line: err_line, character: 0 },
+                    end: Position { line: err_line, character: lines.get(err_line as usize).map(|l| l.len()).unwrap_or(10) as u32 },
                 },
                 severity: 1,
                 code: Some("TOPO_INV".to_string()),
@@ -548,20 +590,131 @@ pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
     diagnostics
 }
 
+/// Helper function to validate port compatibility and registers in a 4-slot pipe VLIW bundle
+fn validate_vliw_pipe_slots(
+    parts: &[&str],
+    line_u32: u32,
+    line_len: u32,
+    has_extended_registers: bool,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let slot_names = ["ALU0", "ALU1", "MEM", "NOC"];
+    let max_reg = if has_extended_registers { 63 } else { 15 };
+
+    for (slot_idx, part) in parts.iter().enumerate() {
+        let p_raw = if let Some((_hdr, content)) = part.split_once(':') {
+            content.trim()
+        } else {
+            part.trim()
+        };
+        let p_trim = p_raw;
+        if p_trim.is_empty() {
+            continue;
+        }
+
+        // Check for invalid registers
+        for token in p_trim.split(|c: char| !c.is_alphanumeric()) {
+            if token.starts_with('R') || token.starts_with('r') {
+                if let Ok(reg_num) = token[1..].parse::<u32>() {
+                    if reg_num > max_reg {
+                        diagnostics.push(Diagnostic {
+                            range: Range {
+                                start: Position { line: line_u32, character: 0 },
+                                end: Position { line: line_u32, character: line_len },
+                            },
+                            severity: 1,
+                            code: Some("CL004".to_string()),
+                            source: Some("cron-lsp".to_string()),
+                            message: format!(
+                                "Register 'R{}' in {} slot exceeds hardware limit (valid: R0..R{})",
+                                reg_num, slot_names[slot_idx], max_reg
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check opcode port compatibility
+        let upper = p_trim.to_ascii_uppercase();
+        let op = upper.split_whitespace().next().unwrap_or("");
+        if (slot_idx == 0 || slot_idx == 1) && (op == "LOAD" || op == "STORE" || op == "SWIZZLE") {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position { line: line_u32, character: 0 },
+                    end: Position { line: line_u32, character: line_len },
+                },
+                severity: 1,
+                code: Some("CL003".to_string()),
+                source: Some("cron-lsp".to_string()),
+                message: format!(
+                    "Memory opcode '{}' cannot execute on {}. Must be placed in MEM slot (slot #3)",
+                    op, slot_names[slot_idx]
+                ),
+            });
+        }
+        if (slot_idx < 3) && (op == "ROUTE_DOR" || op == "SEND" || op == "RECV" || op == "BROADCAST" || op == "COLLECTIVE") {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position { line: line_u32, character: 0 },
+                    end: Position { line: line_u32, character: line_len },
+                },
+                severity: 1,
+                code: Some("CL003".to_string()),
+                source: Some("cron-lsp".to_string()),
+                message: format!(
+                    "NoC opcode '{}' cannot execute on {}. Must be placed in NOC slot (slot #4)",
+                    op, slot_names[slot_idx]
+                ),
+            });
+        }
+        if (slot_idx > 0) && (op == "ATTN_STEP" || op == "LIF_STEP" || op == "STDP_STEP" || op == "DOT_I2" || op == "DOT_I4" || op == "SWIGLU_STEP" || op == "ROPE_STEP" || op == "RMSNORM_STEP") {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position { line: line_u32, character: 0 },
+                    end: Position { line: line_u32, character: line_len },
+                },
+                severity: 1,
+                code: Some("CL003".to_string()),
+                source: Some("cron-lsp".to_string()),
+                message: format!(
+                    "Advanced neural/photonic opcode '{}' requires primary ALU0 execution lane",
+                    op
+                ),
+            });
+        }
+        if (slot_idx >= 2) && (op == "ROT_SANDWICH" || op == "CLIFFORD_ADD" || op == "TROPIC_MAX" || op == "LAYER_SHIFT") {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position { line: line_u32, character: 0 },
+                    end: Position { line: line_u32, character: line_len },
+                },
+                severity: 1,
+                code: Some("CL003".to_string()),
+                source: Some("cron-lsp".to_string()),
+                message: format!(
+                    "Clifford arithmetic opcode '{}' cannot execute on {}. Must be placed in ALU0 or ALU1 slot",
+                    op, slot_names[slot_idx]
+                ),
+            });
+        }
+    }
+}
+
 // === Silicon Micro-Architecture Hover Tooltips (.cl & .cr) ===
 
 pub fn get_cl_hover_documentation(word: &str) -> Option<String> {
     let upper = word.to_ascii_uppercase();
 
-    // Check register R0..R15
+    // Check register R0..R63
     if (upper.starts_with('R') || upper.starts_with("REG")) && upper.len() >= 2 {
         let num_part = upper.strip_prefix("REG").unwrap_or_else(|| &upper[1..]);
         if let Ok(reg_idx) = num_part.parse::<u32>() {
-            if reg_idx <= 15 {
+            if reg_idx <= 63 {
                 return Some(format!(
-                    "### Register `R{}` (CRON 256-Core 4D-Torus)\n\n\
-                    - **Register Bank**: 32-bit General-Purpose Architectural Register File\n\
-                    - **Addressable Width**: 4-bit Index (0x{:X})\n\
+                    "### Register `R{}` (CRON 256-Core 4D-Torus & Clifford ISA)\n\n\
+                    - **Register Bank**: 32-bit General-Purpose Architectural Register File (R0..R63 extended)\n\
+                    - **Addressable Width**: 6-bit Physical Index (0x{:02X})\n\
                     - **Read Ports**: 2 read ports per execution ALU\n\
                     - **Write Ports**: 1 dedicated write port per cycle\n\
                     - **Silicon Hazard**: 0-cycle forwarding bypass network enabled",
@@ -571,15 +724,18 @@ pub fn get_cl_hover_documentation(word: &str) -> Option<String> {
         }
     }
 
-    // Check bundle header B0000..B9999
-    if upper.starts_with('B') && upper.len() == 5 && upper[1..].chars().all(|c| c.is_ascii_digit()) {
-        let cycle: u32 = upper[1..].parse().unwrap_or(0);
+    // Check bundle header B0000..B9999999 or L0000.. or C0000..
+    if (upper.starts_with('B') || upper.starts_with('L') || upper.starts_with('C'))
+        && upper.len() >= 3
+        && upper[1..].chars().all(|c| c.is_ascii_hexdigit())
+    {
+        let cycle = u64::from_str_radix(&upper[1..], 16).unwrap_or(0);
         return Some(format!(
             "### VLIW Microcode Bundle `{}`\n\n\
             - **Target Execution Cycle**: Cycle {}\n\
             - **Parallel Issue**: 4 independent execution slots `[ALU0 | ALU1 | MEM | NOC]`\n\
             - **Theoretical Peak**: 4.0 Instructions Per Cycle (IPC)\n\
-            - **Instruction Width**: 94 characters (canonical 4-slot fixed alignment)",
+            - **Instruction Width**: 40 bytes / 94 characters (canonical 4-slot fixed alignment)",
             upper, cycle
         ));
     }
@@ -749,6 +905,56 @@ pub fn get_cl_hover_documentation(word: &str) -> Option<String> {
             - **Execution Latency**: 3 Cycles\n\
             - **Scaling**: Up to 16 Dies, 4,096 cores\n\
             - **Canonical Encoding**: `_CO00@000>`".to_string()
+        ),
+        "ROT_SANDWICH" => Some(
+            "### Micro-Op: `ROT_SANDWICH` (Clifford Cl(4,0) Space-Time Spindle Sandwich)\n\n\
+            - **Silicon Port**: ALU0 / ALU1\n\
+            - **Formula**: $v' = R \\cdot v \\cdot \\tilde{R}$\n\
+            - **Execution Latency**: 1 Cycle\n\
+            - **Dynamic Energy**: 0.28 pJ (Curvature Geometric Transformation)\n\
+            - **Canonical Encoding**: `_RS00$000>`".to_string()
+        ),
+        "CLIFFORD_ADD" => Some(
+            "### Micro-Op: `CLIFFORD_ADD` (Geometric Multivector Grade Addition)\n\n\
+            - **Silicon Port**: ALU0 / ALU1\n\
+            - **Parallelism**: 16-element Cl(4,0) blade superposition in 1 cycle\n\
+            - **Dynamic Energy**: 0.35 pJ\n\
+            - **Canonical Encoding**: `_CA00$000>`".to_string()
+        ),
+        "TROPIC_MAX" => Some(
+            "### Micro-Op: `TROPIC_MAX` (Tropical Semiring (max, +) Unit)\n\n\
+            - **Silicon Port**: ALU0 / ALU1\n\
+            - **Semantics**: $c_k = \\max_j (a_{kj} + b_j)$ (Multiplier-Free Geodesic)\n\
+            - **Execution Latency**: 1 Cycle\n\
+            - **Dynamic Energy**: 0.05 pJ\n\
+            - **Canonical Encoding**: `_TM00$000>`".to_string()
+        ),
+        "LAYER_SHIFT" => Some(
+            "### Micro-Op: `LAYER_SHIFT` (4D Hyper-Sphere Layer IV Sensory Clamping)\n\n\
+            - **Silicon Port**: ALU0 / ALU1\n\
+            - **Execution Latency**: 1 Cycle\n\
+            - **Dynamic Energy**: 0.10 pJ\n\
+            - **Canonical Encoding**: `_LY00$000>`".to_string()
+        ),
+        "STDP_LEARN" => Some(
+            "### Micro-Op: `STDP_LEARN` (Spike-Timing-Dependent Plasticity Online Weight Patch)\n\n\
+            - **Silicon Port**: ALU0 / Brain 4 AER Synapse Crossbar\n\
+            - **Execution Latency**: 1 Cycle\n\
+            - **Dynamic Energy**: 0.12 pJ\n\
+            - **Canonical Encoding**: `_SL00$000>`".to_string()
+        ),
+        "WAVE_SPREAD" => Some(
+            "### Micro-Op: `WAVE_SPREAD` (Astrocytic Glial Wave Diffusion & Interference)\n\n\
+            - **Silicon Port**: ALU0 / Brain 5 Glial Workspace\n\
+            - **Execution Latency**: 1 Cycle\n\
+            - **Dynamic Energy**: 0.15 pJ\n\
+            - **Canonical Encoding**: `_WF00$000>`".to_string()
+        ),
+        "EMIT_CHAR" => Some(
+            "### Micro-Op: `EMIT_CHAR` (Sovereign Mind Autonomous Character Emission)\n\n\
+            - **Silicon Port**: NOC / Terminal Host Port\n\
+            - **Execution Latency**: 1 Cycle\n\
+            - **Canonical Encoding**: `_EC00@000>`".to_string()
         ),
         _ => None,
     }
@@ -1458,41 +1664,84 @@ impl LspServer {
         None
     }
 
+pub fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
+    if let Some(stripped) = uri.strip_prefix("file:///") {
+        let decoded = stripped.replace("%20", " ");
+        Some(std::path::PathBuf::from(decoded))
+    } else if let Some(stripped) = uri.strip_prefix("file://") {
+        let decoded = stripped.replace("%20", " ");
+        Some(std::path::PathBuf::from(decoded))
+    } else {
+        None
+    }
+}
+
     // === DocumentSymbol — file outline (functions, structs, brains, .cl labels) ===
     fn compute_document_symbols(&self, params: &Option<serde_json::Value>) -> Vec<DocumentSymbol> {
         let mut symbols: Vec<DocumentSymbol> = Vec::new();
         let p = match params { Some(p) => p, None => return symbols };
         let uri = p.get("textDocument").and_then(|td| td.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
-        let doc = match self.documents.get(uri) { Some(d) => d, None => return symbols };
+        
+        let doc_content = if let Some(d) = self.documents.get(uri) {
+            d.clone()
+        } else if let Some((_, d)) = self.documents.iter().find(|(k, _)| k.eq_ignore_ascii_case(uri)) {
+            d.clone()
+        } else if let Some(path) = Self::uri_to_path(uri) {
+            std::fs::read_to_string(path).unwrap_or_default()
+        } else {
+            return symbols;
+        };
 
-        if is_cl_document(uri, doc) {
-            // .cl: emit every bundle header B#### and @CORE as symbols
-            for (i, line) in doc.lines().enumerate() {
+        if doc_content.is_empty() {
+            return symbols;
+        }
+
+        if is_cl_document(uri, &doc_content) {
+            // .cl: emit @kernel, @entry, bundle, @CORE, .core, labels, and bundle headers B#### as symbols
+            for (i, line) in doc_content.lines().enumerate() {
                 let t = line.trim();
                 let line_u32 = i as u32;
-                let is_bundle = t.len() >= 5
-                    && (t.starts_with('B') || t.starts_with('b'))
-                    && t[1..5].chars().all(|c| c.is_ascii_digit());
-                let is_core = t.starts_with("@CORE");
-                if is_bundle || is_core {
-                    let name = t.split([':', ' ']).next().unwrap_or(t).to_string();
+                let is_bundle = t.len() >= 3
+                    && (t.starts_with('B') || t.starts_with('b') || t.starts_with('L') || t.starts_with('C'))
+                    && t.chars().nth(1).map(|c| c.is_ascii_hexdigit()).unwrap_or(false)
+                    && t.contains(':');
+                let is_core = t.starts_with("@CORE") || t.starts_with(".core");
+                let is_kernel = t.starts_with("@kernel") || t.starts_with("@entry") || t.starts_with("@macro");
+                let is_topo_bundle = t.starts_with("bundle ");
+                let is_label = t.ends_with(':') && !t.contains(' ') && !t.starts_with(';') && !t.starts_with("//");
+
+                if is_bundle || is_core || is_kernel || is_topo_bundle || is_label {
+                    let (name, kind, detail) = if is_kernel {
+                        let k_name = t.split_whitespace().nth(1).unwrap_or(t).trim_end_matches(':').to_string();
+                        (k_name, 12, "Kernel Function") // 12=Function
+                    } else if is_topo_bundle {
+                        let b_name = t.strip_prefix("bundle ").unwrap_or(t).split(['{', ' ']).next().unwrap_or(t).trim().to_string();
+                        (b_name, 5, "Topological Bundle") // 5=Class
+                    } else if is_core {
+                        (t.split([':', ' ']).next().unwrap_or(t).to_string(), 5, "CORE Directive")
+                    } else if is_label {
+                        (t.trim_end_matches(':').to_string(), 12, "Label")
+                    } else {
+                        (t.split([':', ' ']).next().unwrap_or(t).to_string(), 12, "VLIW Bundle")
+                    };
+
                     let r = Range {
                         start: Position { line: line_u32, character: 0 },
                         end: Position { line: line_u32, character: line.len() as u32 },
                     };
                     symbols.push(DocumentSymbol {
                         name,
-                        kind: if is_core { 5 } else { 12 }, // 5=Class, 12=Function
+                        kind,
                         range: r.clone(),
                         selection_range: r,
-                        detail: if is_core { Some("CORE Directive".to_string()) } else { Some("VLIW Bundle".to_string()) },
+                        detail: Some(detail.to_string()),
                         children: None,
                     });
                 }
             }
         } else {
             // .cr: simple line-based scan for def, struct, trait, brain, region
-            for (i, line) in doc.lines().enumerate() {
+            for (i, line) in doc_content.lines().enumerate() {
                 let t = line.trim();
                 let line_u32 = i as u32;
                 let make_range = |l: u32, len: u32| Range {
@@ -2545,7 +2794,7 @@ mod tests {
         let f_resp: serde_json::Value = serde_json::from_str(&f_resp_str).unwrap();
         let edits = f_resp["result"].as_array().unwrap();
         assert_eq!(edits.len(), 1);
-        let new_text = edits[0]["new_text"].as_str().unwrap();
+        let new_text = edits[0].get("newText").or_else(|| edits[0].get("new_text")).and_then(|v| v.as_str()).unwrap();
         assert!(new_text.contains("B0000:"));
     }
 

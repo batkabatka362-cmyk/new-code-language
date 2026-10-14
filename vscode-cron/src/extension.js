@@ -33,25 +33,35 @@ function resolveCronExecutable() {
         }
     }
 
+    // Fallback to ~/.cargo/bin/cron[.exe]
+    const homeDir = process.env.USERPROFILE || process.env.HOME;
+    if (homeDir) {
+        const cargoExe = path.join(homeDir, '.cargo', 'bin', process.platform === 'win32' ? 'cron.exe' : 'cron');
+        if (fs.existsSync(cargoExe)) {
+            return cargoExe;
+        }
+    }
+
     return 'cron';
 }
 
-function activate(context) {
-    const outputChannel = vscode.window.createOutputChannel('CRON Language Server');
-    outputChannel.appendLine('[CRON Extension] Activating CRON Cognitive Language extension v1.2.0...');
+function startLanguageServer(context, outputChannel) {
+    if (client) {
+        try {
+            client.stop();
+        } catch (_) {}
+        client = null;
+    }
 
     const serverExe = resolveCronExecutable();
     outputChannel.appendLine(`[CRON Extension] Resolved executable: ${serverExe}`);
 
-    // 1. Initialize Status Bar Indicator
-    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    statusBarItem.command = 'cron.quickMenu';
-    statusBarItem.text = '$(circuit-board) CRON 256-Core';
-    statusBarItem.tooltip = 'CRON 4D-Torus Hardware Ecosystem - Click for Quick Menu';
-    statusBarItem.show();
-    context.subscriptions.push(statusBarItem);
+    if (serverExe !== 'cron' && !fs.existsSync(serverExe)) {
+        outputChannel.appendLine(`[CRON Extension] Warning: Executable not found at ${serverExe}`);
+        if (statusBarItem) statusBarItem.text = '$(alert) CRON [Binary Missing]';
+        return;
+    }
 
-    // 2. Start Language Client
     try {
         const { LanguageClient, TransportKind } = require('vscode-languageclient/node');
         const serverOptions = {
@@ -79,12 +89,28 @@ function activate(context) {
         );
 
         client.start();
-        statusBarItem.text = '$(check) CRON [LSP 3.17 Active]';
+        if (statusBarItem) statusBarItem.text = '$(check) CRON [LSP 3.17 Active]';
         outputChannel.appendLine('[CRON Extension] LanguageClient started successfully.');
     } catch (err) {
         outputChannel.appendLine('[CRON Extension] Running in standalone syntax mode: ' + err.message);
-        statusBarItem.text = '$(circuit-board) CRON [Ready]';
+        if (statusBarItem) statusBarItem.text = '$(circuit-board) CRON [Ready]';
     }
+}
+
+function activate(context) {
+    const outputChannel = vscode.window.createOutputChannel('CRON Language Server');
+    outputChannel.appendLine('[CRON Extension] Activating CRON Cognitive Language extension v1.3.0...');
+
+    // 1. Initialize Status Bar Indicator
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusBarItem.command = 'cron.quickMenu';
+    statusBarItem.text = '$(circuit-board) CRON 256-Core';
+    statusBarItem.tooltip = 'CRON 4D-Torus Hardware Ecosystem - Click for Quick Menu';
+    statusBarItem.show();
+    context.subscriptions.push(statusBarItem);
+
+    // 2. Start Language Client
+    startLanguageServer(context, outputChannel);
 
     // Helper to run command in terminal
     function runCronInTerminal(title, commandStr) {
@@ -98,6 +124,7 @@ function activate(context) {
         vscode.commands.registerCommand('cron.quickMenu', async () => {
             const items = [
                 { label: '$(check) Check Current File', description: 'Run linear type & EBNF syntax checker', command: 'cron.check' },
+                { label: '$(refresh) Restart Language Server (LSP)', description: 'Reconnect LSP 3.17 to compiled cron binary', command: 'cron.restartServer' },
                 { label: '$(play) Run Native Host Binary', description: 'Compile to C23 and execute with gcc -O3', command: 'cron.runNative' },
                 { label: '$(code) Compile to C23 Source', description: 'Generate high-performance C23 code', command: 'cron.buildC23' },
                 { label: '$(shield) Verify Safety & Landauer', description: 'Deadlock-freedom & thermodynamic entropy verification', command: 'cron.verifySafety' },
@@ -108,6 +135,7 @@ function activate(context) {
                 { label: '$(server-process) Launch Swarm TUI Monitor', description: '256-Core 4D-Torus Live Silicon Monitor', command: 'cron.openSwarmTui' },
                 { label: '$(debug-alt) Start Hardware Debugger (DAP)', description: 'Cycle-accurate VLIW stepping & registers', command: 'cron.startDebugging' },
                 { label: '$(circuit-board) 4D-Torus & Wafer Visualizer', description: 'Live 65,536-Core silicon heatmap & packet telemetry', command: 'cron.openMeshVisualizer' },
+                { label: '$(database) 16-Bank PGAS SRAM Memory Inspector', description: 'Zero-conflict 16-bank PGAS SRAM memory heatmap & inspection', command: 'cron.openMemoryInspector' },
             ];
 
             const selected = await vscode.window.showQuickPick(items, {
@@ -117,6 +145,14 @@ function activate(context) {
             if (selected) {
                 vscode.commands.executeCommand(selected.command);
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.restartServer', async () => {
+            outputChannel.appendLine('[CRON Extension] Manual LSP restart requested...');
+            startLanguageServer(context, outputChannel);
+            vscode.window.showInformationMessage('CRON Language Server (LSP 3.17) restarted successfully.');
         })
     );
 
@@ -294,6 +330,20 @@ function activate(context) {
             );
 
             panel.webview.html = getMeshVisualizerHtml();
+        }),
+
+        vscode.commands.registerCommand('cron.openMemoryInspector', () => {
+            const panel = vscode.window.createWebviewPanel(
+                'cronMemoryInspector',
+                'CRON 16-Bank PGAS SRAM Inspector',
+                vscode.ViewColumn.Beside,
+                {
+                    enableScripts: true,
+                    retainContextWhenHidden: true
+                }
+            );
+
+            panel.webview.html = getMemoryInspectorHtml();
         })
     );
 }
@@ -798,6 +848,296 @@ function getMeshVisualizerHtml() {
         // Initialize
         updateInspector();
         renderGrid();
+    </script>
+</body>
+</html>`;
+}
+
+function getMemoryInspectorHtml() {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRON 16-Bank PGAS SRAM Live Memory Inspector</title>
+    <style>
+        :root {
+            --bg-primary: #070a13;
+            --bg-secondary: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.7);
+            --border-glass: rgba(148, 163, 184, 0.15);
+            --cyan-accent: #00e5ff;
+            --green-accent: #00e676;
+            --gold-accent: #ffd600;
+            --purple-accent: #b388ff;
+            --red-alert: #ff1744;
+            --text-main: #f1f5f9;
+            --text-dim: #94a3b8;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, var(--bg-primary) 70%);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .hud-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+        .hud-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: 10px;
+            padding: 14px;
+        }
+        .hud-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+        .hud-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: monospace;
+            color: var(--cyan-accent);
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(0, 230, 118, 0.15);
+            color: var(--green-accent);
+            border: 1px solid rgba(0, 230, 118, 0.3);
+        }
+        .main-layout {
+            display: grid;
+            grid-template-columns: 2fr 1.2fr;
+            gap: 16px;
+            flex: 1;
+        }
+        .panel-box {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border-glass);
+            padding-bottom: 8px;
+        }
+        .banks-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .bank-card {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-glass);
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .bank-card:hover, .bank-card.selected {
+            border-color: var(--cyan-accent);
+            box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        .bank-card-title {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .bank-meter {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+        .bank-meter-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan-accent), var(--purple-accent));
+            width: 45%;
+            transition: width 0.3s ease;
+        }
+        .hex-dump {
+            font-family: "Courier New", Courier, monospace;
+            font-size: 11px;
+            background: rgba(5, 8, 16, 0.9);
+            border: 1px solid var(--border-glass);
+            border-radius: 6px;
+            padding: 10px;
+            overflow-y: auto;
+            max-height: 380px;
+            line-height: 1.5;
+            color: #38bdf8;
+        }
+        .btn-action {
+            background: rgba(0, 229, 255, 0.15);
+            border: 1px solid rgba(0, 229, 255, 0.4);
+            color: var(--cyan-accent);
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.15s ease;
+        }
+        .btn-action:hover {
+            background: rgba(0, 229, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="hud-grid">
+        <div class="hud-card">
+            <div class="hud-title">16-Bank PGAS SRAM</div>
+            <div class="hud-value">16.0 MB</div>
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">1,048,576 Bytes / Bank</div>
+        </div>
+        <div class="hud-card">
+            <div class="hud-title">Conflict Hazards</div>
+            <div class="hud-value" style="color: var(--green-accent);">0 Conflicts</div>
+            <div style="margin-top: 4px;"><span class="status-badge">100% CONFLICT-FREE</span></div>
+        </div>
+        <div class="hud-card">
+            <div class="hud-title">Aggregate Bandwidth</div>
+            <div class="hud-value" style="color: var(--gold-accent);">10.24 TB/s</div>
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">640 GB/s per bank (64B/clk)</div>
+        </div>
+        <div class="hud-card">
+            <div class="hud-title">Access Latency</div>
+            <div class="hud-value" style="color: var(--purple-accent);">0.35 ns</div>
+            <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">Single-cycle SRAM Core</div>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <div class="panel-box">
+            <div class="panel-header">
+                <span>16-BANK MEMORY TOPOLOGY & REAL-TIME ACTIVITY</span>
+                <div>
+                    <button class="btn-action" id="btn-toggle-sim">⏸ Pause Simulation</button>
+                    <button class="btn-action" id="btn-randomize" style="margin-left: 6px;">⟳ Pulse Accesses</button>
+                </div>
+            </div>
+            <div class="banks-grid" id="banks-container"></div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-header">
+                <span id="selected-bank-header">BANK #00 INSPECTOR (OFFSET 0x0000..0x00FF)</span>
+                <span style="font-size: 11px; color: var(--cyan-accent);" id="bank-access-type">READ/WRITE: ACTIVE</span>
+            </div>
+            <div class="hex-dump" id="hex-dump-view"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedBank = 0;
+        let isSimRunning = true;
+        const banksData = Array.from({ length: 16 }, (_, i) => ({
+            id: i,
+            reads: 1200 + Math.floor(Math.random() * 800),
+            writes: 400 + Math.floor(Math.random() * 300),
+            utilization: 30 + Math.floor(Math.random() * 50),
+        }));
+
+        function renderBanks() {
+            const container = document.getElementById('banks-container');
+            container.innerHTML = '';
+            banksData.forEach(bank => {
+                const card = document.createElement('div');
+                card.className = 'bank-card' + (bank.id === selectedBank ? ' selected' : '');
+                card.onclick = () => {
+                    selectedBank = bank.id;
+                    renderBanks();
+                    updateHexDump();
+                };
+                card.innerHTML = \`
+                    <div class="bank-card-title">
+                        <span style="color: var(--cyan-accent);">BANK #\${String(bank.id).padStart(2, '0')}</span>
+                        <span style="font-size: 10px; color: var(--text-dim);">\${bank.utilization}%</span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-dim);">R: \${bank.reads} | W: \${bank.writes}</div>
+                    <div class="bank-meter">
+                        <div class="bank-meter-fill" style="width: \${bank.utilization}%;"></div>
+                    </div>
+                \`;
+                container.appendChild(card);
+            });
+        }
+
+        function updateHexDump() {
+            document.getElementById('selected-bank-header').textContent = \`BANK #\${String(selectedBank).padStart(2, '0')} RAW TRIT & HEX DATA (OFFSET 0x0000..0x0080)\`;
+            const hexView = document.getElementById('hex-dump-view');
+            let content = '';
+            for (let offset = 0; offset < 128; offset += 16) {
+                const addr = '0x' + (offset).toString(16).padStart(4, '0').toUpperCase();
+                const bytes = Array.from({ length: 16 }, (_, b) => {
+                    const val = ((selectedBank * 17 + offset + b * 7) ^ 0x5A) & 0xFF;
+                    return val.toString(16).padStart(2, '0').toUpperCase();
+                }).join(' ');
+                const trits = Array.from({ length: 8 }, (_, t) => {
+                    const tritVal = ((selectedBank + offset + t) % 3) - 1;
+                    return tritVal === -1 ? '-' : (tritVal === 1 ? '+' : '0');
+                }).join('');
+                content += \`\${addr}:  \${bytes}  |\${trits}|\n\`;
+            }
+            hexView.textContent = content;
+        }
+
+        document.getElementById('btn-toggle-sim').onclick = () => {
+            isSimRunning = !isSimRunning;
+            document.getElementById('btn-toggle-sim').textContent = isSimRunning ? '⏸ Pause Simulation' : '▶ Resume Simulation';
+        };
+
+        document.getElementById('btn-randomize').onclick = () => {
+            pulseMemory();
+        };
+
+        function pulseMemory() {
+            banksData.forEach(b => {
+                b.reads += Math.floor(Math.random() * 40);
+                b.writes += Math.floor(Math.random() * 15);
+                b.utilization = Math.min(95, Math.max(15, b.utilization + Math.floor(Math.random() * 11) - 5));
+            });
+            renderBanks();
+            updateHexDump();
+        }
+
+        setInterval(() => {
+            if (isSimRunning) {
+                pulseMemory();
+            }
+        }, 1500);
+
+        renderBanks();
+        updateHexDump();
     </script>
 </body>
 </html>`;

@@ -27,7 +27,7 @@
     "semantic_directives": {
       "patterns": [
         {
-          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include|target|ipc_target|data|pgas|circuit|sync|align))\\b",
+          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include|target|ipc_target|data|pgas|circuit|sync|align|clifford))\\b",
           "captures": {
             "1": { "name": "keyword.control.directive.cron-cl" }
           }
@@ -60,7 +60,7 @@
       "patterns": [
         {
           "name": "entity.name.section.bundle.cron-cl",
-          "match": "\\b[BCLbcl][0-9A-Fa-f]{2,4}:"
+          "match": "\\b[BCLbcl][0-9A-Fa-f]{2,8}:"
         },
         {
           "match": "\\b(bundle)\\s+([A-Za-z0-9_]+)",
@@ -76,13 +76,17 @@
         {
           "name": "entity.name.function.label.cron-cl",
           "match": "@[A-Za-z0-9_]+:?"
+        },
+        {
+          "name": "entity.name.function.label.cron-cl",
+          "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*):(?!=)"
         }
       ]
     },
     "clm_macro_keywords": {
       "patterns": [
         {
-          "match": "\\b(let|barrier|op_gemm|ternary_mac|stdp_learn|pack_trits|send_noc|recv_noc|return|halt|nop|WRAP|TUNNEL|FLUID|ANCHOR|spin|vol|transfer|attend|resonate)\\b",
+          "match": "\\b(let|barrier|op_gemm|ternary_mac|stdp_learn|pack_trits|send_noc|recv_noc|return|halt|nop|WRAP|TUNNEL|FLUID|ANCHOR|spin|vol|transfer|attend|resonate|ROT_SANDWICH|CLIFFORD_ADD|TROPIC_MAX|LAYER_SHIFT|WAVE_SPREAD|EMIT_CHAR|DOT_I2|DOT_I4|ATTN_STEP|LIF_STEP|STDP_STEP|SWIGLU_STEP|ROPE_STEP|RMSNORM_STEP)\\b",
           "name": "keyword.control.instruction.cron-cl"
         }
       ]
@@ -110,7 +114,7 @@
     "cl2_slot_structured": {
       "patterns": [
         {
-          "match": "([_'~@%&^|$#\\\\=!:\\-+/*?<>\\.\\(\\)])([A-Za-z0-9=_]{1,2})([0-9A-Fa-f]{2})([#$M@~!=+\\-*&|^/%<>?.:_])([A-Za-z0-9#_]{3,4})([\\S])",
+          "match": "([_'~@%&^|$#\\\\=!:\\-+/*?<>\\.\\(\\)`])([A-Za-z0-9=_]{1,2})([0-9A-Fa-f]{2})([#$M@~!=+\\-*&|^/%<>?.:_])([A-Za-z0-9#_]{3,4})([\\S])",
           "captures": {
             "1": { "name": "punctuation.definition.prefix.cron-cl" },
             "2": { "name": "keyword.operator.opcode.cron-cl" },
@@ -125,7 +129,7 @@
     "cl2_slot_fallback": {
       "patterns": [
         {
-          "match": "([_'~@%&^|$#\\\\=!:\\-+/*?<>\\.\\(\\)])([A-Za-z0-9=_#$M@~!=+\\-*&|^/%<>?.:]{8})([\\S])",
+          "match": "([_'~@%&^|$#\\\\=!:\\-+/*?<>\\.\\(\\)`])([A-Za-z0-9=_#$M@~!=+\\-*&|^/%<>?.:]{8})([\\S])",
           "captures": {
             "1": { "name": "punctuation.definition.prefix.cron-cl" },
             "2": { "name": "keyword.operator.opcode.cron-cl" },

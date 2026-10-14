@@ -56,6 +56,7 @@ fn test_safetensors_real_file_paged_streaming() {
         k_speculative: 4,
         grammar_mode: "unconstrained".to_string(),
         weights_path: Some(st_path.to_str().unwrap().to_string()),
+        ..Default::default()
     };
 
     let mut session = ChatSession::new(config);

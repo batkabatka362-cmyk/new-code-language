@@ -16,6 +16,7 @@ fn test_transformer_forward_pass_logits() {
         max_seq_len: 64,
         is_ternary_bitnet: true,
         enable_2_4_sparsity: true,
+        ..Default::default()
     };
 
     let mut kv_cache = KVCache::new(config.num_layers, config.max_seq_len, config.hidden_dim);
@@ -40,6 +41,7 @@ fn test_autoregressive_generation_kv_cache() {
         max_seq_len: 64,
         is_ternary_bitnet: true,
         enable_2_4_sparsity: true,
+        ..Default::default()
     };
 
     let res = generate_tokens("CRON", 6, 0.0, &config);
@@ -67,6 +69,7 @@ fn test_cl_transformer_microcode_synthesis_and_jit() {
         max_seq_len: 32,
         is_ternary_bitnet: true,
         enable_2_4_sparsity: true,
+        ..Default::default()
     };
 
     let cl_code = synthesize_transformer_cl(&config);
@@ -153,6 +156,7 @@ fn test_golden_bitnet_weight_provider_and_gguf_export() {
         max_seq_len: 64,
         is_ternary_bitnet: true,
         enable_2_4_sparsity: true,
+        ..Default::default()
     };
 
     let golden = GoldenBitNetWeightProvider::new(
@@ -250,6 +254,7 @@ fn test_multimodal_vision_audio_autoregressive_inference() {
         max_seq_len: 64,
         is_ternary_bitnet: true,
         enable_2_4_sparsity: true,
+        ..Default::default()
     };
 
     // 1. Synthesize synthetic 32x32 RGB image patches
@@ -311,5 +316,272 @@ fn test_multimodal_vision_audio_autoregressive_inference() {
     assert!(res.telemetry.prompt_tokens >= multimodal_prefix.len());
     assert!(!res.generated_text.contains('\u{FFFD}'));
 }
+
+#[test]
+fn test_frontier_compute_paradigms() {
+    use cronc::{
+        generate_tokens_autoregressive_paged, BpeTokenizer, ComputePrecisionMode,
+        TransformerConfig,
+    };
+
+    let tokenizer = BpeTokenizer::from_default_vocab();
+
+    // 1. Test FloatSimd Multipliers Mode (Exact math with hardware multipliers)
+    let float_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        compute_mode: ComputePrecisionMode::FloatSimd,
+        ..Default::default()
+    };
+    let res_float = generate_tokens_autoregressive_paged(
+        "CRON math test",
+        4,
+        0.0,
+        &float_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_float.telemetry.generated_tokens > 0 && res_float.telemetry.generated_tokens <= 4);
+
+    // 2. Test Hybrid Mode (Float multipliers for Attention + Multiplier-free Ternary for FFN)
+    let hybrid_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        compute_mode: ComputePrecisionMode::Hybrid,
+        ..Default::default()
+    };
+    let res_hybrid = generate_tokens_autoregressive_paged(
+        "CRON hybrid precision",
+        4,
+        0.0,
+        &hybrid_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_hybrid.telemetry.generated_tokens > 0 && res_hybrid.telemetry.generated_tokens <= 4);
+
+    // 3. Test MLA Mode (Multi-Head Latent Attention KV-Cache compression)
+    let mla_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        use_mla: true,
+        kv_latent_dim: 8,
+        ..Default::default()
+    };
+    let res_mla = generate_tokens_autoregressive_paged(
+        "CRON MLA test",
+        4,
+        0.0,
+        &mla_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_mla.telemetry.generated_tokens > 0 && res_mla.telemetry.generated_tokens <= 4);
+    assert!(res_mla.telemetry.kv_cache_occupancy_pct < 10.0, "MLA must compress KV-cache footprint");
+
+    // 4. Test Mamba-style SSM Recurrence Mode
+    let ssm_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        use_ssm: true,
+        ..Default::default()
+    };
+    let res_ssm = generate_tokens_autoregressive_paged(
+        "CRON SSM state",
+        4,
+        0.0,
+        &ssm_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_ssm.telemetry.generated_tokens > 0 && res_ssm.telemetry.generated_tokens <= 4);
+    assert_eq!(res_ssm.telemetry.kv_cache_occupancy_pct, 0.0, "SSM recurrence has 0 sequence KV footprint");
+
+    // 5. Test-Time Reasoning / Tree-of-Thoughts Stream (<think>)
+    let reason_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        reasoning_mode: true,
+        ..Default::default()
+    };
+    let res_reason = generate_tokens_autoregressive_paged(
+        "Solve logic puzzle",
+        4,
+        0.0,
+        &reason_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_reason.generated_text.contains("<think>"), "Reasoning mode must emit <think> stream");
+    assert!(res_reason.generated_text.contains("</think>"), "Reasoning mode must close </think> stream");
+
+    // 6. Test Fine-Grained Sparse Mixture-of-Experts (MoE)
+    let moe_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        use_moe: true,
+        num_experts: 8,
+        num_active_experts: 2,
+        ..Default::default()
+    };
+    let res_moe = generate_tokens_autoregressive_paged(
+        "CRON MoE test",
+        4,
+        0.0,
+        &moe_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_moe.telemetry.generated_tokens > 0 && res_moe.telemetry.generated_tokens <= 4);
+
+    // 7. Test Clifford Cl(4,0) Spacetime Rotor Positional Encoding
+    let clifford_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        use_clifford: true,
+        ..Default::default()
+    };
+    let res_clifford = generate_tokens_autoregressive_paged(
+        "CRON 4D Rotor test",
+        4,
+        0.0,
+        &clifford_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_clifford.telemetry.generated_tokens > 0 && res_clifford.telemetry.generated_tokens <= 4);
+
+    // 8. Test Reversible Thermodynamic Landauer Computing & Neuromorphic SNN
+    let thermo_config = TransformerConfig {
+        vocab_size: tokenizer.vocab_size(),
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        use_reversible: true,
+        use_snn: true,
+        ..Default::default()
+    };
+    let res_thermo = generate_tokens_autoregressive_paged(
+        "CRON Landauer SNN test",
+        4,
+        0.0,
+        &thermo_config,
+        &tokenizer,
+        None,
+        |_id, _s| {},
+    );
+    assert!(res_thermo.telemetry.generated_tokens > 0 && res_thermo.telemetry.generated_tokens <= 4);
+    assert!(res_thermo.telemetry.energy_per_token_pj < 0.5, "Reversible Landauer + SNN must dramatically reduce pJ/token energy");
+}
+
+#[test]
+fn test_streaming_gguf_weight_provider_zero_ram() {
+    use cronc::{
+        export_synthetic_bitnet_gguf, generate_tokens_autoregressive_paged,
+        BpeTokenizer, LayerWeightProvider, StreamingGgufWeightProvider, TransformerConfig,
+    };
+
+    let config = TransformerConfig {
+        vocab_size: 256,
+        hidden_dim: 32,
+        num_layers: 2,
+        num_heads: 2,
+        head_dim: 16,
+        intermediate_dim: 64,
+        max_seq_len: 64,
+        ..Default::default()
+    };
+    let tokenizer = BpeTokenizer::from_default_vocab();
+
+    let tmp_gguf = std::env::temp_dir().join("test_stream_bitnet.gguf");
+    let tmp_dpdata = std::env::temp_dir().join("test_stream_bitnet.dpdata");
+
+    // 1. Export synthetic model to disk
+    let export_res = export_synthetic_bitnet_gguf(&tmp_gguf, &config);
+    assert!(export_res.is_ok(), "Synthetic GGUF export failed");
+
+    // 2. Open via StreamingGgufWeightProvider (zero full-RAM allocation)
+    let provider = StreamingGgufWeightProvider::from_file(&tmp_gguf)
+        .expect("StreamingGgufWeightProvider must load header cleanly");
+
+    let names = provider.tensor_names();
+    assert!(!names.is_empty(), "Tensor names should be parsed from header");
+
+    // 3. Query individual tensors on-demand from disk
+    let q_proj = provider.get_tensor(0, "q_proj");
+    assert!(q_proj.is_some(), "Layer 0 q_proj should be retrieved on demand");
+    let (packed, scales) = q_proj.unwrap();
+    assert!(!packed.is_empty(), "Packed ternary weights should be present");
+    assert!(!scales.is_empty(), "Quantization scales should be present");
+
+    // 4. Run autoregressive paged inference using streamed weights
+    let mut tokens = Vec::new();
+    let gen = generate_tokens_autoregressive_paged(
+        "CRON Silicon",
+        4,
+        0.0,
+        &config,
+        &tokenizer,
+        Some(&provider),
+        |_id, s| tokens.push(s.to_string()),
+    );
+    assert_eq!(gen.telemetry.generated_tokens, 4);
+
+    // 5. Stream all tensors directly to .dpdata with bounded RAM
+    let stream_bytes = provider.stream_to_dpdata(&tmp_dpdata)
+        .expect("stream_to_dpdata must succeed");
+    assert!(stream_bytes > 0, "dpdata stream must write packed bytes");
+    assert!(tmp_dpdata.exists(), ".dpdata file must exist on disk");
+
+    // Clean up
+    let _ = std::fs::remove_file(tmp_gguf);
+    let _ = std::fs::remove_file(tmp_dpdata);
+}
+
 
 

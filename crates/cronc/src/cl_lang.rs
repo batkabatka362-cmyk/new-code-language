@@ -192,8 +192,10 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "RT", // Return from Hardware Trap (MRET)
     "HL", // Halt Execution
     "NO", // NOP (No Operation)
-    "=0", // Immediate Load Low
-    "=1", // Immediate Load High
+    "=0", // Immediate Load Low / Core 0
+    "=1", // Immediate Load High / Core 1
+    "=2", // Immediate Load Core 2
+    "=3", // Immediate Load Core 3
     "==", // Generic Immediate Load
     "JP", // Unconditional Branch/Jump
     "BZ", // Branch if Zero

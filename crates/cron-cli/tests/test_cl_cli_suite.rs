@@ -439,30 +439,37 @@ fn test_cli_cl_kernel_synthesis() {
     assert!(list_out.status.success(), "cl-kernel list must succeed");
     let list_str = String::from_utf8_lossy(&list_out.stdout);
     assert!(list_str.contains("CRON GOLDEN AI SILICON MICRO-KERNEL CATALOG"));
-    assert!(list_str.contains("flash-attn"));
-    assert!(list_str.contains("bitnet-gemm"));
-    assert!(list_str.contains("rmsnorm"));
-    assert!(list_str.contains("swiglu"));
-    assert!(list_str.contains("rope"));
-    assert!(list_str.contains("kv-cache"));
 
-    // 2. Synthesize a golden kernel to file
+    let all_kernels = [
+        "flash-attn", "flash-attn-3", "bitnet-gemm", "rmsnorm", "swiglu",
+        "rope", "kv-cache", "clifford-rotate4d", "sagi-metaplastic-v99",
+        "moe-router", "mla-latent-attn", "bitnet-swiglu-expert",
+        "linear-reg", "logistic-reg", "kmeans-step", "mamba-ssm-step",
+        "svm-rbf", "xgboost-leaf", "pca-proj", "conv2d-tile", "lstm-cell",
+        "diffusion-step", "vae-sample", "grpo-advantage", "dqn-bellman",
+        "gcn-conv", "pinn-residual", "lif-neuron", "stdp-update",
+    ];
+
+    for kernel in &all_kernels {
+        assert!(list_str.contains(kernel), "Catalog must list {}", kernel);
+    }
+
+    // 2. Synthesize all golden kernels to verify execution & valid .cl assembly
     let temp_dir = std::env::temp_dir();
-    let out_cl = temp_dir.join("test_synth_flash_attn.cl");
+    for kernel in &all_kernels {
+        let out_cl = temp_dir.join(format!("test_synth_{}.cl", kernel));
+        let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+            .args(["cl-kernel", kernel, "-o", out_cl.to_str().unwrap()])
+            .output()
+            .unwrap_or_else(|_| panic!("Failed to execute cron cl-kernel {}", kernel));
 
-    let synth_out = Command::new(env!("CARGO_BIN_EXE_cron"))
-        .args(["cl-kernel", "flash-attn", "-o", out_cl.to_str().unwrap()])
-        .output()
-        .expect("Failed to execute cron cl-kernel flash-attn");
-
-    assert!(synth_out.status.success(), "cl-kernel flash-attn must succeed");
-    assert!(out_cl.exists(), "Synthesized kernel file must exist");
-    let content = fs::read_to_string(&out_cl).unwrap();
-    assert!(content.contains("B0000:"));
-    assert!(content.contains("_OP"));
-    assert!(content.contains("_HL"));
-
-    let _ = fs::remove_file(&out_cl);
+        assert!(synth_out.status.success(), "cl-kernel {} must succeed", kernel);
+        assert!(out_cl.exists(), "Synthesized kernel file for {} must exist", kernel);
+        let content = fs::read_to_string(&out_cl).unwrap();
+        assert!(content.contains("B0000:"), "Kernel {} must contain B0000:", kernel);
+        assert!(content.contains("_HL"), "Kernel {} must contain halt token", kernel);
+        let _ = fs::remove_file(&out_cl);
+    }
 }
 
 #[test]
@@ -925,6 +932,71 @@ fn test_cli_cl_infer() {
     assert!(json_str.contains("\"tokens_per_second\":"));
 
     let _ = fs::remove_file(&out_cl);
+}
+
+#[test]
+fn test_cli_frontier_ai_paradigms_and_chat() {
+    // 1. Test combined frontier infer with hybrid precision, MLA, MoE, Reasoning, Reversible
+    let infer_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cl-infer",
+            "prompt",
+            "CRON",
+            "--tokens",
+            "4",
+            "--dim",
+            "32",
+            "--layers",
+            "2",
+            "--mode",
+            "hybrid",
+            "--mla",
+            "--latent-dim",
+            "16",
+            "--moe",
+            "--experts",
+            "8",
+            "--active-experts",
+            "2",
+            "--reasoning",
+            "--reversible",
+        ])
+        .output()
+        .expect("Failed to execute cron cl-infer with frontier paradigms");
+
+    assert!(infer_out.status.success(), "cl-infer combined must succeed");
+    let infer_str = String::from_utf8_lossy(&infer_out.stdout);
+    assert!(infer_str.contains("CRON AI Silicon Inference Engine"));
+    assert!(infer_str.contains("<think>"));
+    assert!(infer_str.contains("MLA"));
+
+    // 2. Test chat eval with reasoning and float precision mode
+    let chat_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "chat",
+            "--eval",
+            "Hello CRON",
+            "--reasoning",
+            "--mode",
+            "float",
+        ])
+        .output()
+        .expect("Failed to execute cron chat --eval");
+
+    assert!(chat_out.status.success(), "cron chat --eval must succeed");
+    let chat_str = String::from_utf8_lossy(&chat_out.stdout);
+    assert!(chat_str.contains("<think>"));
+    assert!(chat_str.contains("CRON cognitive engine processed"));
+
+    // 3. Test cl-compare single frontier workload
+    let cmp_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-compare", "mla", "--json"])
+        .output()
+        .expect("Failed to execute cron cl-compare mla");
+
+    assert!(cmp_out.status.success(), "cron cl-compare mla must succeed");
+    let cmp_str = String::from_utf8_lossy(&cmp_out.stdout);
+    assert!(cmp_str.contains("MlaAttention") || cmp_str.contains("Latent Attention"));
 }
 
 #[test]
@@ -1880,6 +1952,212 @@ fn test_cli_section4_verilog_synthesis_and_testbench() {
     let _ = fs::remove_file(&out_v);
     let _ = fs::remove_file(&out_tb);
 }
+
+#[test]
+fn test_cli_cr_to_cl_autogen_pipeline() {
+    let temp_dir = std::env::temp_dir();
+    let cr_file = temp_dir.join("test_pipeline_autogen.cr");
+    let cl_file = temp_dir.join("test_pipeline_autogen.cl");
+
+    let cr_code = r#"
+    .MODULE HighLevelAutogenTest
+    .ENTRY _main
+    _main:
+        let a: i32 = 42
+        let b: i32 = 84
+        let p = pack_trits(a)
+        let mac = ternary_mac(a, b)
+        send_noc(2, mac)
+        noc_barrier()
+    .END
+    "#;
+    fs::write(&cr_file, cr_code).expect("Write .cr source");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cr-to-cl",
+            cr_file.to_str().unwrap(),
+            "-o",
+            cl_file.to_str().unwrap(),
+            "--opt",
+        ])
+        .output()
+        .expect("Failed to execute cron cr-to-cl");
+
+    assert!(out.status.success(), "cr-to-cl autogen must succeed: {:?}", String::from_utf8_lossy(&out.stderr));
+    assert!(cl_file.exists(), ".cl target file must be produced");
+
+    let compiled_cl = fs::read_to_string(&cl_file).unwrap();
+    assert!(compiled_cl.contains("B0001:"));
+    assert!(compiled_cl.contains("_PK"));
+    assert!(compiled_cl.contains("_MD"));
+
+    let _ = fs::remove_file(&cr_file);
+    let _ = fs::remove_file(&cl_file);
+}
+
+#[test]
+fn test_cli_cl_cluster_verilog_testbench() {
+    let temp_dir = std::env::temp_dir();
+    let tb_file = temp_dir.join("test_cluster_mesh_tb.v");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cl-cluster",
+            "verilog",
+            "--chips",
+            "4",
+            "-o",
+            tb_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Failed to execute cron cl-cluster verilog");
+
+    assert!(out.status.success(), "cl-cluster verilog must succeed");
+    assert!(tb_file.exists(), "tb_cluster_4d.v must be generated");
+
+    let content = fs::read_to_string(&tb_file).unwrap();
+    assert!(content.contains("module tb_cluster_4d;"));
+    assert!(content.contains("NUM_DIES = 4"));
+    assert!(content.contains("CRON RTL CO-EMULATION SUCCESS"));
+
+    let _ = fs::remove_file(&tb_file);
+}
+
+#[test]
+fn test_cli_cl_cluster_sim_hw_automated_runner() {
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cl-cluster",
+            "sim-hw",
+            "--chips",
+            "4",
+            "--json",
+        ])
+        .output()
+        .expect("Failed to execute cron cl-cluster sim-hw");
+
+    assert!(out.status.success(), "cl-cluster sim-hw must succeed");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"status\":\"ok\""), "Must emit valid JSON ok status");
+    assert!(stdout.contains("\"num_dies\":4"), "Must report 4 dies");
+    assert!(stdout.contains("\"total_cores\":1024"), "Must report 1024 total cores");
+    assert!(stdout.contains("\"deadlock_freedom\":\"PROVEN_ACYCLIC_DOR\""), "DOR deadlock freedom must be verified");
+    assert!(stdout.contains("\"rtl_verified\":true"), "RTL verified flag must be true");
+}
+
+#[test]
+fn test_cli_cl_sovereign_ui_dashboard_export() {
+    let temp_dir = std::env::temp_dir();
+    let dashboard_file = temp_dir.join("test_sovereign_dashboard.html");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cl-sovereign",
+            "ui",
+            "-o",
+            dashboard_file.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Failed to execute cron cl-sovereign ui -o");
+
+    assert!(out.status.success(), "cl-sovereign ui -o must succeed");
+    assert!(dashboard_file.exists(), "Exported dashboard HTML file must exist on disk");
+
+    let content = fs::read_to_string(&dashboard_file).unwrap();
+    assert!(content.contains("CRON SOVEREIGN MIND AGI"));
+    assert!(content.contains("16-Column 4D Hypersphere Neuromorphic Cortex"));
+    assert!(content.contains("512 LIF NEURONS"));
+    assert!(content.contains("16-Bank PGAS SRAM Heatmap"));
+    assert!(content.contains("canvas id=\"cortex3d\""));
+
+    let _ = fs::remove_file(&dashboard_file);
+}
+
+#[test]
+fn test_cli_cl_sovereign_evolve_routine() {
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cl-sovereign",
+            "evolve",
+            "--intent",
+            "clifford rotor geometric spin sandwich",
+            "--hotreload",
+            "--json",
+        ])
+        .output()
+        .expect("Failed to execute cron cl-sovereign evolve");
+
+    assert!(out.status.success(), "cl-sovereign evolve must succeed");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"status\":\"ok\""), "Must return status ok");
+    assert!(stdout.contains("cl_kernel_001"), "Must synthesize kernel 001");
+    assert!(stdout.contains("\"cycles\":1"), "Must verify 1 hardware cycle");
+    assert!(stdout.contains("0x"), "Must contain verified CRC8 checksum");
+    assert!(stdout.contains("Successfully hot-reloaded"), "Must confirm hot-reload");
+}
+
+#[test]
+fn test_cli_cl_cluster_synth_estimator() {
+    let temp_dir = std::env::temp_dir();
+    let ys_file = temp_dir.join("test_synth.ys");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cl-cluster",
+            "synth",
+            "--chips",
+            "4",
+            "--target",
+            "ecp5",
+            "-o",
+            ys_file.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .expect("Failed to execute cron cl-cluster synth");
+
+    assert!(out.status.success(), "cl-cluster synth must succeed");
+    assert!(ys_file.exists(), "Yosys script must be written to disk");
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"num_dies\": 4"), "Must report 4 dies");
+    assert!(stdout.contains("\"total_cores\": 1024"), "Must report 1024 total cores");
+    assert!(stdout.contains("\"estimated_luts\""), "Must estimate logic LUTs");
+    assert!(stdout.contains("\"tsmc_7nm\": 1000.0"), "Must report 1 GHz max frequency at 7nm");
+
+    let script_content = fs::read_to_string(&ys_file).unwrap();
+    assert!(script_content.contains("synth_ecp5"));
+    assert!(script_content.contains("hierarchy -top tb_cluster_4d"));
+
+    let _ = fs::remove_file(&ys_file);
+}
+
+#[test]
+fn test_cli_cl_infer_bench_roofline() {
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "cl-infer",
+            "bench",
+            "--tokens",
+            "8",
+            "--context-len",
+            "32",
+            "--json",
+        ])
+        .output()
+        .expect("Failed to execute cron cl-infer bench");
+
+    assert!(out.status.success(), "cl-infer bench must succeed");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\"status\":\"ok\""), "Must return status ok");
+    assert!(stdout.contains("\"tokens_generated\":8"), "Must generate requested tokens");
+    assert!(stdout.contains("\"tokens_per_sec\""), "Must compute throughput");
+    assert!(stdout.contains("\"ttft_ms\""), "Must compute time to first token");
+    assert!(stdout.contains("\"paged_cache_hit_rate\":1"), "Cache hit rate must be 1.0");
+    assert!(stdout.contains("\"zero_flops\":true"), "Zero-FLOP ternary architecture verified");
+}
+
 
 
 

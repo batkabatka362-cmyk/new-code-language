@@ -115,6 +115,7 @@ fn test_transformer_forward_step_paged_with_weights() {
         max_seq_len: 64,
         is_ternary_bitnet: true,
         enable_2_4_sparsity: true,
+        ..Default::default()
     };
 
     let mut kv_cache = KVCache::new(config.num_layers, config.max_seq_len, config.hidden_dim);
@@ -145,6 +146,7 @@ fn test_autoregressive_paged_generation_streaming() {
         max_seq_len: 64,
         is_ternary_bitnet: true,
         enable_2_4_sparsity: true,
+        ..Default::default()
     };
 
     let weight_provider = MockPagedWeightProvider::new(config.hidden_dim, config.hidden_dim);

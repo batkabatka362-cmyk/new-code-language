@@ -11,7 +11,10 @@ pub mod quantize;
 pub mod safetensors;
 pub mod ternary;
 
-pub use gguf::{create_synthetic_gguf, parse_gguf_header, GgufModel, GgufTensorInfo, GgufTensorType, GgufValue};
+pub use gguf::{
+    create_synthetic_gguf, parse_gguf_header, parse_gguf_header_from_reader, GgufModel,
+    GgufTensorInfo, GgufTensorType, GgufValue,
+};
 pub use graph_lowering::{lower_gguf_model, lower_onnx_graph, lower_safetensors_model, LoweredCode, LoweringOptions};
 pub use onnx::{parse_onnx_model, OnnxGraph, OnnxModel, OnnxNode, OnnxTensor};
 pub use quantize::{
