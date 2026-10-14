@@ -2305,6 +2305,39 @@ fn test_cli_import_fx_graph() {
     let _ = std::fs::remove_file(out_cl_path);
 }
 
+#[test]
+fn test_cli_hf_models_and_catalog() {
+    // 1. Test 'cron models' output
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .arg("models")
+        .output()
+        .expect("Failed to run cron models");
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("CRON OPEN-WEIGHT MODEL VAULT"));
+    assert!(stdout.contains("bitnet"));
+    assert!(stdout.contains("deepseek-r1"));
+    assert!(stdout.contains("llama3"));
+
+    // 2. Test 'cron pull --help' output
+    let pull_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["pull", "--help"])
+        .output()
+        .expect("Failed to run cron pull --help");
+    assert!(pull_out.status.success());
+    let pull_str = String::from_utf8_lossy(&pull_out.stdout);
+    assert!(pull_str.contains("cron pull <alias|repo_id>"));
+
+    // 3. Test 'cron run-hf --help' output
+    let run_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["run-hf", "--help"])
+        .output()
+        .expect("Failed to run cron run-hf --help");
+    assert!(run_out.status.success());
+    let run_str = String::from_utf8_lossy(&run_out.stdout);
+    assert!(run_str.contains("cron run-hf <alias|repo_id>"));
+}
+
 
 
 

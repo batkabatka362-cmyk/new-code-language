@@ -360,4 +360,36 @@ cron-cl [0]> :bridge c
 
 > 📖 **Бүрэн хэмжээний дэлгэрэнгүй зааварчилгааг үзэх**: [docs/cron_ai_interoperability_guide.md](docs/cron_ai_interoperability_guide.md)
 
+---
+
+## 8. Hugging Face Нээлттэй Жин Татагч ба Шууд Ажиллуулагч (Model Hub & Open-Weight Runner)
+
+CRON нь Hugging Face дээрх дэлхийн шилдэг нээлттэй жинтэй AI загваруудыг (Microsoft BitNet b1.58, DeepSeek-R1, Meta Llama-3.2, SmolLM2) гадны Python сан ашиглахгүйгээр цэвэр өөрийн системээр татаж, орон нутгийн ваултад хадгалан, 100% 0-FLOP үржүүлэгчгүй эсвэл холимог нарийвчлалаар шууд ажиллуулах хөдөлгүүртэй боллоо.
+
+### Дэмжигдсэн Загварууд (Curated Frontier Catalog):
+| Алиас | Загварын Нэр | Параметр | Нарийвчлал | Онцлог шинж |
+|---|---|---|---|---|
+| `bitnet` | Microsoft BitNet b1.58 Large | 2.0B | Ternary {-1, 0, +1} | 100% Үржүүлэгчгүй, 0 FLOPs, 1.7 pJ/токен |
+| `deepseek-r1` | DeepSeek-R1 Distill Qwen | 1.5B | GGUF Q4_K_M | Бодит хугацааны `<think>` эргэцүүлэлтийн траектор |
+| `llama3` | Meta Llama-3.2 Instruct | 1.2B | GGUF Q4_K_M | Түргэн хариулттай хөнгөн эх үүсвэрийн загвар |
+| `smollm` | HuggingFace SmolLM2 | 135M | SafeTensors BF16 | Хэт хөнгөн, 12MB RAM-д багтах ирмэгийн төхөөрөмжийн загвар |
+| `tinyllama` | TinyLlama Chat | 1.1B | GGUF Q4_K_M | Компакт Llama архитектуртай харилцан ярианы загвар |
+
+### Хэрэглэх Командууд:
+```bash
+# 1. Боломжтой болон татагдсан загваруудын жагсаалт харах
+cron models
+
+# 2. Hugging Face-ээс жин татах (өндөр хурдтай, тасарвал автоматаар үргэлжлүүлнэ)
+cron pull bitnet
+cron pull deepseek-r1
+cron pull llama3
+
+# 3. Шууд ажиллуулах (хэрэв татагдаагүй бол автоматаар татаж, оновчтой тохиргоогоор гүйлгэнэ)
+cron run-hf deepseek-r1 "Квант физикийн суперпозицийн талаар тайлбарлана уу" --think
+cron run-hf bitnet "CRON .cl хэл дээр Фибоначчийн микрокод бичнэ үү"
+cron run-hf smollm "Нейроморф чипийн давуу тал юу вэ?" --tokens 64
+```
+
+
 

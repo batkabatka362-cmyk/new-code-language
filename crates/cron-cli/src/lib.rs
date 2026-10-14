@@ -13,3 +13,4 @@ pub mod sphere_commands;
 pub mod topological_commands;
 pub mod matrix4_commands;
 pub mod sovereign_commands;
+pub mod hf_commands;

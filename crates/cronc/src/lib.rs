@@ -35,6 +35,7 @@ pub mod cl_jit;
 pub mod cl_heal;
 pub mod cl_opt;
 pub mod model_importer;
+pub mod model_hub;
 pub mod comptime;
 pub mod silicon_flash;
 pub mod formal_verify;
@@ -497,6 +498,11 @@ pub use model_importer::{
     QuantizationMode, QuantizationReport, QuantizedTensor,
     SafeTensorDType, SafeTensorData, SafeTensorsModel,
     OnnxGraph, OnnxModel, OnnxNode, OnnxTensor,
+};
+pub use model_hub::{
+    download_hf_file, ensure_model_available, get_cache_dir, get_local_model_path,
+    get_model_catalog, is_model_cached, list_cached_models, resolve_model,
+    CachedModelInfo, HfModel,
 };
 
 pub use checker::{InlayHintInfo, SemanticChecker};

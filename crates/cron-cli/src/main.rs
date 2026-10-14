@@ -112,6 +112,9 @@ fn print_help() {
     println!("    cl-transpile <file.cl> [opts]  Cross-transpile .cl to C++20, CUDA, C# (.NET), Python, WGSL, PTX, C23");
     println!("    cl-bridge <subcommand> [opts]  Export C++20/CUDA single-headers, C# bindings, or Python runtime");
     println!("    import-fx <model_fx.json> [opts] Lower PyTorch FX symbolic graph into 128-bit VLIW microcode (.cl)");
+    println!("    pull <alias|repo> [--file f]   High-speed resumable model downloader from Hugging Face");
+    println!("    models                         List available open-weight frontier models and local vault status");
+    println!("    run-hf <alias|repo> [prompt]   Auto-download model weights and execute live streaming inference");
     println!("    debug <file.cl> [--core N] [--batch \"...\"] Interactive Photonic & Torus Debugger TUI");
     println!("    asm <file.cl> [-o <out.clb>]   Assemble .cl into 128-bit binary bytecode (.clb)");
     println!("    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl");
@@ -285,6 +288,22 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    Lower PyTorch FX symbolic trace graphs into 128-bit 4-slot VLIW microcode with BitNet b1.58 ternary GEMV.\n");
             println!("OPTIONS:\n    -o <path>           Output .cl microcode file path\n    --name <name>       Logical model name identifier\n    -h, --help          Display this help message\n");
             println!("EXAMPLE:\n    cron import-fx resnet_fx.json -o resnet.cl");
+        }
+        "pull" | "hf-pull" => {
+            println!("USAGE:\n    cron pull <alias|repo_id> [--file <filename>] [--force]\n");
+            println!("DESCRIPTION:\n    High-speed resumable model downloader for Hugging Face open weights (BitNet, DeepSeek-R1, Llama-3, etc.)\n");
+            println!("OPTIONS:\n    --file <filename>   Download specific file instead of default\n    --force             Force re-download even if cached\n    -h, --help          Display this help message\n");
+            println!("EXAMPLE:\n    cron pull bitnet\n    cron pull deepseek-r1");
+        }
+        "models" | "list-models" => {
+            println!("USAGE:\n    cron models\n");
+            println!("DESCRIPTION:\n    List curated frontier open-weight models, download statuses, precision, and local vault cache files.\n");
+        }
+        "run-hf" | "hf-run" => {
+            println!("USAGE:\n    cron run-hf <alias|repo_id> [prompt] [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Auto-downloads weights (if missing) and executes inference with optimal silicon hardware flags.\n");
+            println!("OPTIONS:\n    --tokens <N>        Maximum new tokens to generate (default: 32)\n    --temp <F>          Sampling temperature (default: 0.7)\n    --think             Enable DeepSeek-R1 test-time reasoning stream (<think>...)\n    --mode <t|f|h>      Compute precision mode (ternary, float, hybrid)\n    -h, --help          Display this help message\n");
+            println!("EXAMPLE:\n    cron run-hf deepseek-r1 \"Explain quantum mechanics\"\n    cron run-hf bitnet \"Write Fibonacci in .cl\"");
         }
         other => {
             println!("CRON Command: {}\n", other);
@@ -979,6 +998,15 @@ fn main() {
         }
         "cl-bridge" | "bridge" => {
             handle_cl_bridge_command(&args[2..]);
+        }
+        "pull" | "hf-pull" => {
+            cron_cli::hf_commands::handle_pull_command(&args[2..]);
+        }
+        "models" | "list-models" | "hf-models" => {
+            cron_cli::hf_commands::handle_models_command(&args[2..]);
+        }
+        "run-hf" | "hf-run" => {
+            cron_cli::hf_commands::handle_run_hf_command(&args[2..]);
         }
         "cl-dpsta-rtl" | "dpsta-rtl" => {
             handle_cl_dpsta_rtl_command(&args[2..]);
@@ -4379,7 +4407,24 @@ fn main() {
                     "--top-p" if i + 1 < args.len() => { top_p = args[i + 1].parse().unwrap_or(0.95); i += 2; }
                     "--top-k" if i + 1 < args.len() => { top_k = args[i + 1].parse().unwrap_or(40); i += 2; }
                     "--repeat-penalty" if i + 1 < args.len() => { repetition_penalty = args[i + 1].parse().unwrap_or(1.15); i += 2; }
-                    "--model" | "-m" if i + 1 < args.len() => { model_path = Some(args[i + 1].clone()); i += 2; }
+                    "--model" | "-m" if i + 1 < args.len() => {
+                        let m_raw = args[i + 1].clone();
+                        let p = std::path::Path::new(&m_raw);
+                        if p.exists() {
+                            model_path = Some(m_raw);
+                        } else if cronc::resolve_model(&m_raw).is_some() {
+                            match cronc::ensure_model_available(&m_raw, None, true) {
+                                Ok((_, local_p)) => model_path = Some(local_p.to_str().unwrap().to_string()),
+                                Err(e) => {
+                                    eprintln!("[WARN] Auto-resolve model failed: {}. Using raw path.", e);
+                                    model_path = Some(m_raw);
+                                }
+                            }
+                        } else {
+                            model_path = Some(m_raw);
+                        }
+                        i += 2;
+                    }
                     "--mode" if i + 1 < args.len() => {
                         match args[i + 1].to_lowercase().as_str() {
                             "float" | "fp32" | "simd" => compute_mode = cronc::ComputePrecisionMode::FloatSimd,
