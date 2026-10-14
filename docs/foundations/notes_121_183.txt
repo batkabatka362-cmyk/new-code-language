@@ -1,0 +1,269 @@
+﻿=== ХУУДАС 121–183: НАРИЙН ТЭМДЭГЛЭЛ ===
+Эх: matrix4.1.2.pdf | Зохиогч: Хэрэглэгч | 2026-10-11
+
+================================================================================
+ХЭСЭГ I: СИНАПСЫН ЦАРЦААХ БА НОЙРНЫ ГОРИМ (хуудас 121–132)
+Sleep and Synaptic Consolidation
+================================================================================
+
+### Асуудал: Catastrophic Forgetting (Мартлын гацаа)
+Одоогийн сул тал: Текст тасралтгүй урсах тусам шинэ огүүлбэрүүдийн LTD/LTP нь
+хуучин сурсан сүйр дүрмүүдийн жинг дарж устгах (Catastrophic Forgetting) эрсдэлтэй.
+
+### Шийдэл: Синапсын Нэгтгэл ба Нойрны Тайралт — 3 түвшний логик
+
+Түвшин 1: Синапс Ангилагч (Synapse Classifier)
+- Бага жин (W <= 3): "Энгийн сурсан" — мартагдаж болно
+- Дунд жин (4 <= W <= 12): "Суурийн мэдлэг" — идэвхтэй хадгалагдана
+- Өндөр жин (W >= 13) ба Frozen=1: "Царцсан энграм" — ХЭЗЭЭ Ч устгагдахгүй
+
+Түвшин 2: Нойрны Горим (Sleep Mode) — sym_valid = 0 үед
+- "Biological Sleep Cycle" гэж нэрлэсэн: Оролтын өгөгдлийн урсгал зогсох үед
+  (sym_valid = 0 үед) цем "нойрны горим"-д шилжинэ.
+- W >= 15 жингүүдийг "Царцсан жин" (Frozen Core) болгож дархлаажуулна.
+- Бага жинтэй (W <= 3) синапсуудыг тэглэж (Synaptic Pruning), санах ойн орон зайг
+  шинэ мэдээлэлд зориулан дахин чөлөөлнэ.
+
+Түвшин 3: Хамгийн зайн тэнцвэр (Homeostatic Balance)
+- Хэммингийн зайн маск (Hamming/Hyperdimensional Proximity): Төлөв бүрт 128-битийн
+  бинар вектор оноож, Хэммингийн зай нь <= 2 бит зөрүүтэй төсөөтэй төлөвүүдийг нэг
+  резонансын бүсэд унагаж сургах.
+- Ингэснээр загвар өмнө нь хэзээ ч харж байгаагүй үг орж ирсэн ч утгын ерөнхий
+  агуулгаар нь зөв дараагийн төлөвт үсэрч чаддаг жинхэнэ хиймэл оюуны чанартай болно.
+
+================================================================================
+ХЭСЭГ II: ОЛОН ЦӨМТ СҮЛЖЭЭ — Multi-Core Mesh and NoC Scaling (хуудас 132–140)
+================================================================================
+
+### Асуудал:
+Бидний 1 цөм ердөө 17.6 KB санах ойтой, 1 өгөгдлийн урсгалыг боловсруулна.
+Бүхэл бүтэн номын сан, толь бичиг, эсвэл олон хэрэглэгчийн хүсэлтийг ганц цөмөөр дийлэхгүй.
+
+### Шийдэл: Tile-Based NoC (Network-on-Chip)
+- 1 чип дээр энэ жижиг 17.6 KB цөмийг 8x8 = 64 ширхэгт эсвэл 16x16 = 256 ширхэгт
+  зэрэг байрлуулах (нийт хэмжээ нь ердөө ~4.5 MB болно).
+- Цэмүүд өөр хооронд хөнгөн жинтэй цагираг шугамаар (Ring Bus / 2D Mesh) өөрсдийн
+  ялагч winner_id-г солилцож, цэм бүр текстийн өөр өөр сэдэв, салбарт бие мэргэшдэг сүлжээ үүсгэх.
+
+### C++ MeshCluster Архитектур (хуудас 140–155)
+
+    class MeshCluster {
+    private:
+        std::array<std::array<DPSTACore, GRID_SIZE>, GRID_SIZE> grid;
+    public:
+        MeshCluster() = default;
+        DPSTACore& get_core(int x, int y) {
+            if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) {
+                throw std::out_of_range("Координат 0..7 зайнаас хэтэрсэн байна.");
+            }
+            return grid[x][y];
+        }
+        double train_tile(int x, int y, const std::string& text, int epochs = 5) {
+            auto& core = get_core(x, y);
+            std::vector<uint8_t> tokens;
+            tokens.reserve(text.size());
+            for (char c : text) tokens.push_back(char_to_id(c));
+            if (tokens.size() < 10) return 0.0;
+            double final_acc = 0.0;
+            for (int ep = 0; ep < epochs; ++ep) {
+                int correct = 0, total = 0;
+                for (size_t i = 8; i < tokens.size() - 1; ++i) {
+                    if (core.train_step(tokens, i, tokens[i + 1])) correct++;
+                    total++;
+                }
+                final_acc = (total > 0) ? (correct * 100.0 / total) : 0.0;
+            }
+            return final_acc;
+        }
+        std::string generate_consensus(const std::string& prompt, size_t max_len = 50) {
+            std::vector<uint8_t> hist;
+            hist.reserve(prompt.size() + max_len);
+            for (char c : prompt) hist.push_back(char_to_id(c));
+            if (hist.size() < 8) hist.insert(hist.begin(), 8 - hist.size(), 0);
+            std::string result;
+            for (size_t step = 0; step < max_len; ++step) {
+                size_t pos = hist.size() - 1;
+                uint16_t votes[NUM_STATES] = {0};
+                for (int y = 0; y < GRID_SIZE; ++y)
+                    for (int x = 0; x < GRID_SIZE; ++x) {
+                        uint8_t pred = grid[x][y].predict(hist, pos);
+                        votes[pred]++;
+                    }
+                uint8_t winner = std::max_element(votes, votes + NUM_STATES) - votes;
+                result += id_to_char(winner);
+                hist.push_back(winner);
+            }
+            return result;
+        }
+    };
+
+### sleep_cycle() — Нойрны горимын C++ хэрэгжилт:
+
+    void sleep_cycle() {
+        for (int h = 0; h < NUM_HEADS; ++h)
+            for (int i = 0; i < NUM_STATES; ++i)
+                for (int j = 0; j < NUM_STATES; ++j)
+                    if (!Frozen[h][i][j] && W[h][i][j] <= 2)
+                        W[h][i][j] = 0;
+    }
+
+================================================================================
+ХЭСЭГ III: ӨНДӨР ТҮВШНИЙ SDK (хуудас 140–145)
+================================================================================
+
+### Python C-Extension / PyBind11 интерфейс:
+
+    import dpsta
+    model = dpsta.DPSTACore(heads=4)
+    model.train_file("dataset.txt")
+    response = model.generate("Hello", length=50)
+    model.save_weights("brain.bin")
+
+================================================================================
+ХЭСЭГ IV: VLIW АССЕМБЛЕР, ROM ЗААВРЫН САНАХ ОЙ (хуудас 110–120)
+================================================================================
+
+### dpsta_asm.py — Ажиллуулах:
+    python3 dpsta_asm.py init_dpsta.asm -o dpsta_rom
+
+### dpsta_rom.lst — 128-бит VLIW хоёртын хүснэгт:
+    ADDR | 128-BIT HEX                      | ASM SOURCE
+    0000 | 0403140E...                       | CFG_CAYLEY 0, 3, 5, 7
+    0001 | 04151C16...                       | CFG_CAYLEY 1, 5, 7, 11
+    0002 | 04272C1A...                       | CFG_CAYLEY 2, 7, 11, 13
+    0003 | 043B3422...                       | CFG_CAYLEY 3, 11, 13, 17
+    0004 | 08000000...                       | CFG_DYN 0, 3, 1
+    0008 | 00000000...4199A6F0...            | SET_WEIGHT 0x1, 51, 39, 15
+    0009 | FC000000...10000000               | RESET_CORE | FLUSH_PIPE
+    000A | 0C000001...08000080               | SET_PERM 0x0F, 1 | TRAIN_STEP 0, 1, 0x80
+
+### Verilog Instruction ROM:
+    reg [127:0] vliw_rom [0:1023];
+    initial begin
+        ("dpsta_rom.hex", vliw_rom);
+    end
+    always @(posedge clk) begin
+        slot0_bundle <= vliw_rom[pc][127:80];  // 48-бит Слот 0
+        slot1_bundle <= vliw_rom[pc][79:36];   // 44-бит Слот 1
+        slot2_bundle <= vliw_rom[pc][35:0];    // 36-бит Слот 2
+    end
+
+================================================================================
+ХЭСЭГ V: UART ИНТЕРФЕЙС ба NoC ХОЛБОЛТ (хуудас 160–177)
+================================================================================
+
+### UART Rx/Tx Engine:
+    uart_rx_engine #(.CLK_FREQ(CLK_FREQ_HZ), .BAUD_RATE(BAUD_RATE)) u_rx (
+        .clk(clk), .rst_n(rst_n), .rxd(uart_rx), .dout(rx_byte), .valid(rx_valid)
+    );
+    uart_tx_engine #(.CLK_FREQ(CLK_FREQ_HZ), .BAUD_RATE(BAUD_RATE)) u_tx (
+        .clk(clk), .rst_n(rst_n), .din(tx_byte), .start(tx_start),
+        .txd(uart_tx), .busy(tx_busy)
+    );
+
+### 32-бит NoC Пакетын Byte-to-Packet FSM:
+    reg [1:0] byte_rx_idx;
+    reg [31:0] rx_shift_reg;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            byte_rx_idx <= 2'd0; rx_shift_reg <= 32'd0;
+            host_tx_pkt <= 32'd0; host_tx_val <= 1'b0;
+        end else begin
+            host_tx_val <= 1'b0;
+            if (rx_valid) begin
+                rx_shift_reg <= {rx_shift_reg[23:0], rx_byte};
+                if (byte_rx_idx == 2'd3) begin
+                    byte_rx_idx <= 2'd0;
+                    host_tx_pkt <= {rx_shift_reg[23:0], rx_byte};
+                    host_tx_val <= 1'b1;  // 4 байт бүтэн болж 32-бит NoC багц болов
+                end else
+                    byte_rx_idx <= byte_rx_idx + 2'd1;
+            end
+        end
+    end
+
+### 8x8 Mesh Grid Top Verilog:
+    dpsta_mesh_grid_top #(.GRID_COLS(8), .GRID_ROWS(8)) u_mesh_grid (
+        .clk(clk), .rst_n(rst_n), .host_tx_data(host_tx_pkt), ...
+    );
+
+================================================================================
+ХЭСЭГ VI: СУРГАЛТЫН КОРПУС ба МЕТРИК (хуудас 178–183)
+================================================================================
+
+### Домэйн 1: Техникийн Англи хэл (NL / Architecture Prose)
+
+    ENGLISH_TRAIN = (
+        "The discrete synaptic architecture replaces conventional floating point matrix "
+        "multiplications with tropic semiring algebra. In modern neuromorphic hardware, "
+        "memory bandwidth is the primary bottleneck during continuous sequence evaluation. "
+        "By mapping transition tuples through Cayley quasigroups, the memory footprint "
+        "scales sub-linearly while retaining structural grammatical context. "
+        "Self-stabilizing Hebbian mechanisms dynamically adjust synaptic efficacy "
+        "without backpropagation. "
+    ) * 80  # ~32 KB
+
+    ENGLISH_VAL = (
+        "Neuromorphic processors leverage local synaptic plasticity to bypass the "
+        "von Neumann memory wall. "
+        "Experimental evaluation confirms high throughput sequence generation "
+        "with minimal energy dissipation. "
+    )
+
+### Домэйн 2: C++ ба Verilog Системийн эх код
+
+    CODE_TRAIN = (
+        "template <typename T> struct SynapticNode {\n"
+        "    uint8_t weight : 4;\n"
+        "    bool is_frozen;\n"
+        "    void apply_hebbian(int delta) { weight = std::clamp(weight + delta, 0, 15); }\n"
+        "};\n"
+        "always @(posedge clk or negedge rst_n) begin\n"
+        "    if (!rst_n) out_reg <= 32'h0;\n"
+        "    else if (pkt_val && pkt_rdy) out_reg <= in_payload;\n"
+        "end\n"
+    ) * 70  # ~30 KB
+
+    CODE_VAL = (
+        "module noc_router_arbiter (input wire clk, input wire rst_n, output reg grant);\n"
+        "    assign active_flag = (weight_val > 4'd12);\n"
+        "endmodule\n"
+    )
+
+### PPL ба Нарийвчлал Тооцооллын Функц:
+
+    def calculate_metrics(cluster, text, sample_step=1):
+        """64 цэмийн консенсус таамаглалыг Top-1 Accuracy ба PPL-ээр шалгана."""
+        if len(text) < 12:
+            return 0.0, float('inf')
+        total_tokens = correct_tokens = 0
+        total_nll = 0.0
+        for i in range(8, len(text) - 1, sample_step):
+            prompt = text[max(0, i - 8):i + 1]
+            target = text[i + 1]
+            pred = cluster.generate(prompt=prompt, max_tokens=1)
+            if not pred: continue
+            total_tokens += 1
+            if pred[0] == target:
+                correct_tokens += 1
+                prob = 0.85  # Зөв таасан үеийн магадлал
+            else:
+                prob = 0.15  # Буруу таасан үеийн магадлал
+            total_nll -= math.log(max(prob, 1e-6))
+        top1 = (correct_tokens / max(total_tokens, 1)) * 100.0
+        ppl = math.exp(total_nll / max(total_tokens, 1))
+        return top1, ppl
+
+================================================================================
+ХУУДАС 121–183 ГАРЧГИЙН БҮТЭЦ
+================================================================================
+
+Хуудас  | Агуулга
+--------|------------------------------------------------------------------------
+121-130 | Синапсын Царцаах, Нойрны Горим (Sleep & Synaptic Consolidation)
+130-140 | Multi-Core Mesh, C++ MeshCluster, sleep_cycle() хэрэгжилт
+140-145 | High-Level SDK (Python C-Extension / PyBind11)
+145-160 | VLIW Assembler, ROM encoding, Verilog Instruction Decoder
+160-175 | UART Rx/Tx Engine, 32-бит NoC FSM, 8x8 Mesh Grid Top-Level Verilog
+175-180 | dpsta_mesh_grid_top параметр дэлгэрэнгүй тохиргоо
+180-183 | Сургалтын корпус (ENGLISH_TRAIN, CODE_TRAIN), PPL & Accuracy метрик

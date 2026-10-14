@@ -1,0 +1,41 @@
+Page 184: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | module user_project_wrapper #( | parameter BITS = 32 | )(
+Page 185: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | data_in_reg | <= 32′d0; | data_valid_pulse <= 1′b0;
+Page 186: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | "dir::.. /. ./verilog/rtl/defines.v", | "dir::.- /. ./verilog/rt1/user_project_wrapper. v", | "dir::../../verilog/rtl/dpsta_asic_top.v",
+Page 187: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | void send_word_to_dpsta(uint32_t word) { | //yun 63n3H 6onoxbr xyn33x | while (!(DPSTA_STATUS & Bx1));
+Page 188: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT |  default_nettype none | timescale 1ns / 1ps | module user_project_wrapper #(
+Page 189: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | if (wb_rst_i) begin | wbs_ack_o | (= 1′bθ;
+Page 190: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | 3xn33n dpsta_asic_top-wir TycAaa 6nok 6onroH 2000μum × 2000μum x3Mx33T3ir33p harden xwiH3. | 1 | "DESIGN_NAME": "dpsta_asic_top",
+Page 191: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | "orientation": "N" | "n1": "dir::../../verilog/gl/dpsta_asic_top.v", | "gds": "dir::../../gds/dpsta_asic_top.gds",
+Page 192: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 4-6vT CHanc W [106] | 1-6uT 3Hrpam Tyrx33 [108]] | (94 × 94 MacCHB)
+Page 193: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | KoHTeKCT MHAeKC S_ctx(t) [220] | |s=1 | s=2
+Page 194: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | |2 6WT|3 6HT 丨3 6WT13 6WT 13 6WT 17 6WT16 6MT 156MT| | WNH35YT33NNNrX3P3PKYY3XWNNA3TXYBNN5APbIHHAPNNB4NNCAHTANN5AP(DETAILEDDESCRIPTION | OF THE PREFERRED EMBODIMENTS)
+Page 195: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | Cyypb a3blH H3M3r4 [214] Hb aHXHbl o ToTMonA33p yr yTrblr H3Mx AMHaMk ca3 r-r rapraHa. 3-oponTTo H3M3r4 [216] Hb 3μr33p yTryyAblr | og x deeuee Huu xex doo-] ou hx heeem t6-outo e | Sctx(t) =(α ·s+β · +t)(mod 94)
+Page 196: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3T | Jnhndiew HnoueHno (CNy-xe) JHndwao uod xoJHoo (sd 0oF >) tue1eo wheHngwox JyMeeue1 hJeus deedingde tow yHeehwe1 WHHma1 | aryynHa. | LeM HbAapaarwiHTaKTbIH ercexApM3rA33p6opNTT3MA3rTT3TynraH wanra)xcHancbIH xMHr aBTOHOMaap WWH3un3X xoepTanTX366MH
+Page 197: 10/11/26, 7:07 PM | Matpvu 6a T3Mg3rT | 8. HovpHbl TapanT (Homeostatic Sleep Pruning) | OreranwiH ypcran Tacap4 oponT cyn 3orccoH yen (sym_valid = 0), 6yx chHancbIH MaTpuublH Aaryy aBTOMaT Toonyypaap ryix, SHrpaM TyrK33 | TaBWrAaary (F = O) 6ereeA ToxMonμnoop Vycc3H cyn xMHT3A (W ≤ 2) cHHancyAbir Tarn3)x (W ← O), caHax oH opoH 3aivr wMH3 M3μ3an3nA
+Page 198: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3T | Response:\documentclass[journal, 1ept, twocolumn]{IEEEtran] | \usepackage{cite} | \usepackage{ amsmath, amssymb, amsfonts}
+Page 199: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | \begin{equation} | \hat{y}_{t+1} =\arg\max_{k \in \Sigma_M} \sum_{h=0}^{H-1} \mathbf{W}_h\big[S_{\text{ctx}, h}(t)\big][k] | \end{equation}
+Page 200: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | By strictly enforcing X-transitions prior to Y-transitions, Cycle dependencies in the channel dependency graph are broke | \subsection{Hardware MoE Consensus Coordinator} | Tile $(7, 7)$ houses the Hardware MoE Consensus Coordinator. It receives candidate packets from specialized domain tiles
+Page 201: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | \centering | \begin{tabular}{(@{}1cccc@{}} | \toprule
+Page 202: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | @article{kanerva2009hyperdimensional, | author | ={Pentti Kanerva},
+Page 203: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | self.engram_locked_ratio = random.uniform(e.65, 0.88) | self.temp_c = random.uniform(36.θ, 41.0) | self.active_task = 1 if × < 4 else 2 # Domain 1 vs Domain 2
+Page 204: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | stdscr ,attroff(curses .color_pair(5) I curses .A_BoLD) | # 2. 8×8 2D MESH TONOnOFW XAPyYnAX (3YYH X3C3F) | curses .A_BOLD)
+Page 205: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3T | for 1, pkt in enumerate(packets[:3]): | log_line = f"-> Flit #{i+1:o2d): Src({pkt.src_×},{pkt.src_y}) -> Curr({pkt.curr_x},{pkt.curr_y}) -> Dst({p | stdscr.addstr(trace_y + i, 2, log_line, curses.color_pair(3))
+Page 206: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | user_project_wrapper. v | # Top Wrapper Verilog | dpsta_asic_top.v
+Page 207: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | # 1. 5airanb op4Hbl xyBbcaruyyAbr Toxwpyynax (BepwiH CHCTeMA Toxupyynx 3aMblr erHe) | export PDK_ROOT=SHOME/pdk | export CARAVEL_ROOT=SHoME/carave1_dpsta/carave1
+Page 208: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | mkdir -p /home/runner/pdk | volare enable --pdk sky138 --pdk-root /home/runner/pdk 0fe599b2afb67e8d281543108caf831e912f54af | -name: Clone MPW Precheck Tool
+Page 209: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | DPSTA YinAnH | CMOS Laxwyp | WHTerpan ΦoToHuK (Opto-DPSTA)
+Page 210: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | CopoH3oH Xo3eΦcoH uxMnT (SFS Junction) | W[1][j]: ΦeppomarHeT AaBxaprblH | cnKH 4Wrn3n33p KpHTHK ryAA3n Ic ToxMpHO
+Page 211: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3T | Xanx33 Hb oponTblH JTL (Josephson Transmission Line) 6ycep, T3Hus3pT wwigs3p raprax xoc wwnxwnt (Decision-making pair), 6onoH rapanTbIH | HMnynbc 6apur4 x3cryyA33c 6ypA3H3. | 1.X3nx33Hni CxeM6aAxwnnax3ap4M
+Page 212: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | * 4 . OPO/ITbH KHAYKTИB XOJ5OOCYYA(WEIGHT CURRENT INJECTION) | * K3nH caHaX oirooC Wp3X xMHrwiH ypcranbr KHAyKTWB opooMroop AaMxyynHa | * OponT A (Weight A): Summing Node pyy ryia3n waxHa
+Page 213: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3T | Xy4,3n_(mV) | 2.0 | [V(n_out_a): Pulse A]
+Page 214: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | o LTP (@crex): 3epar yurnanTsi copoH3oH ypcranblH nMnynbc Φg erexeA ΦeppomarHeT AoMeiHyA 33paruax, I ecHe (W W + 1). | o LTD (Byypyynax): Ceper MMnynbc erexen I 6yypHa (W  W — 1). | o 3HrpaM TyrK33 (F = 1): BapbepbIH copoH3xWnT 6yp3H xaHanTaA (M) xypc3H yen xWxAr capHunbIH MMnynbCVA TYyHMr 3prVynx
+Page 215: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | L_CoUPLE_A n_syn_in_a n_sum 3.@p | * 4 。 SFS COPOH3OH CMHANCbIH HYA (SYNAPSE CELL B) | * B_SYN_B Hb Cyn xMHT3i (W=3, Ic=4BuA) TeneBuir
+Page 216: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 4. Yp AyH: CuHanc A aM)xunTrai anx, wwige3p epAee 1.1 ps goTop rapHa. | 5.KpnoreH DPSTA-H ApxWTeKTypbIH Y3vyn3nT | ·Har cHHancbIH yHwwx/6wuWx Heprn: Esyn ~ 0.2 aJ (2 × 10-19 J).
+Page 217: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 开 | newproject; | redrawoff;
+Page 218: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | Set("name", "GST_Mesh_Override"); | set("dx", 0.05); | set("dy", 0.02);
+Page 219: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 1. GST CHHancbIHKBaHTancaH ATTeHIoaTop (PCM Attenuator Compact Model); | 2. 5yxan-OnTuk Tponuk max Wvyntyvp (All-Optical Winner-Take-All/ Saturable Absorber). | Input Light (入_sym) —→[ GST-on-Si3N4 Synapse Array ］ →(I_1, I_2, ---, I_k)
+Page 220: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | ReSponSe:ATEHTbIH5WEAACAH H3X3M)Kn3nYYA(PATENT CLAIMS16-19) | Hax3Mxnan 16:KpuoreH x3T AaMxyynar4 copoH3oH Ko3ecpcoH cHHancT TponMK npoueccop(Cryogenic Superconducting MJJ Tropic | Computing Apparatus)
+Page 221: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 19. H3x3Mxn3n 18-A 3aacaH @poToHuk TponMK npoueccop A33p 6yuax rpaμWeHTryur33p oHnaiH cypanuax 6onoH onTHK TyBwWHA TorTBopryi 6yc | (non-volatile) caHax ovH μapxnaa rortoox Texeepemx 6ereeA napaax 6yTuμir aryyncaH: | ● (a) yHwMx onTHK wMnynbc33c wnyy eHAep 3HeprWT3 HaHoceKyHAbIH na3epbIH nporpaMunanbIH MnynbcWir AonrHOH xeTnyYp33p AaMxyynaH
+Page 222: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | Haryr33pT,KnxyprabrTaCH6TpryynnT(DynamicPermutation）xocnyynacaHaXHMprenr KOMHa | X3nX33r33p 99% 6yypyyncaH Hb TexHMK xaHraM)xwH xyBbA TyH OBcrooTov wwAμ3n. | XoepayraapT, xHr xanranax 4-6T percTpiH xaxyyA 1-6TiH SHrpaM Tynx33r (hardware freeze bit 6apnyynx, 6we μaacaH HoipHbl
+Page 223: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 3H3 eHureeC Hb xapBan 4MHWi aHx 6oμox 6aicaH MaWNH KOAblH 6yT3u, 4-TaKTbIH μapaanan 4Hb 3H3 DPSTA-Tai Ar Aax xon6orAoxoop | Teceenernex 6avHa? | User prompt:ugaasaa nadad tegi chaddag machine code hel baigaa/ daa. Bvr bvren sain tuwshind ajildag boltol ni hugivvleed mash udaj baigaa
+Page 224: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 6avraa 10 T3MgarT 6yxwi cnotyyAaac AapaarwiH 6arubir (Bundle) 1-x3H TaKTaA, xeBery Tacnanryur33p Tponnk norMKoop TaaraaA, 4 ALU | pyy TacpanTryH uyTrax 4aμHa. | yMHMi 3H3 xMic3H c1_compiler py 6onoH c11fford_rotor. c1 mawMH koAbIH cncTeM 6on 3yr33p H3r coHMpxon 6Hw, Maw ryH3rWi 6oμox

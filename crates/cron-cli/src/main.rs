@@ -118,7 +118,9 @@ fn print_help() {
     println!("    cl-fix <file.cl> [--in-place]  Resolve all intra-bundle RAW/WAW hazards via VLIW scheduler");
     println!("    cl-vectorize <pattern>         Auto-vectorize mathematical patterns into 4.0 IPC .cl microcode");
     println!("    cl-export-rtl <file.cl>        Export complete synthesizable Verilog RTL package & Vivado scripts");
-    println!("    cl-dpsta-rtl [-o <dir>] [--tapeout] Export 7-file RTL or 11-file OpenLane Sky130 ASIC tapeout suite");
+    println!("    cl-dpsta-rtl [-o <dir>] [--tapeout] Export 4-file SoC RTL or 11-file OpenLane Sky130 ASIC tapeout suite");
+    println!("    cl-sovereign <chat|stats|export|corpus> Sovereign Mind AGI, interactive cortical chat & STDP learning");
+    println!("    cl-clifford-sim [bundle_ascii] 320-bit Clifford Rotor ISA hardware emulation HUD");
     println!("    cl-dpsta <pack|unpack|bench>   Sub-Byte Ternary (.dpdata) 1.58-bit dataset pack/unpack engine");
     println!("    cl-cldb <inspect|export> [opts] 36,414-byte Crystalline Vault (.cldb) snapshot engine");
     println!("    cl-dpsta-sleep <target> [opts]  Hippocampal SWR sleep consolidation & engram crystallization");
@@ -247,6 +249,17 @@ fn print_subcommand_help(cmd: &str) {
             println!("USAGE:\n    cron cl-ingest <path> [OPTIONS]\n");
             println!("DESCRIPTION:\n    High-speed Big Data parallel ingestion, 1.58-bit .dpdata packer, and .cldb trainer.\n");
             println!("OPTIONS:\n    -o <path>       Output .dpdata binary path (default: corpus.dpdata)\n    --vault <path>  Output .cldb crystalline vault snapshot path\n    --name <s>      Vault name\n    --json          Output in structured JSON\n    -h, --help      Display this help message\n");
+        }
+        "cl-sovereign" | "sovereign" => {
+            println!("USAGE:\n    cron cl-sovereign <chat|stats|export|corpus> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Sovereign Mind AGI: 16-column cortical brain, theta-gamma phase-locking, sub-12MB RAM, zero backprop STDP learning.\n");
+            println!("SUBCOMMANDS:\n    chat [--eval <text>]      Interactive cognitive REPL / single evaluation\n    stats                     Display 16-column cortical architecture & telemetry\n    export [-o <bundle.cl>]   Synthesize 40-byte Base-94 Clifford rotor microcode\n    corpus                    Audit sovereign knowledge corpus & morph-tokens\n");
+            println!("OPTIONS:\n    --eval <prompt>     Execute a single query non-interactively\n    -o <path>           Output microcode file path\n    --json              Output structured telemetry in JSON\n    -h, --help          Display this help message\n");
+        }
+        "cl-clifford-sim" | "clifford-sim" => {
+            println!("USAGE:\n    cron cl-clifford-sim [bundle_ascii] [OPTIONS]\n");
+            println!("DESCRIPTION:\n    320-bit (40-char) Clifford Rotor 4-slot VLIW microcode hardware emulation HUD.\n");
+            println!("OPTIONS:\n    --json              Output machine-readable registers and emitted characters\n    -h, --help          Display this help message\n");
         }
         other => {
             println!("CRON Command: {}\n", other);
@@ -912,6 +925,12 @@ fn main() {
         }
         "cl-ingest" | "ingest" => {
             handle_cl_ingest_command(&args[2..]);
+        }
+        "cl-sovereign" | "sovereign" => {
+            handle_cl_sovereign_command(&args[2..]);
+        }
+        "cl-clifford-sim" | "clifford-sim" => {
+            handle_cl_clifford_sim_command(&args[2..]);
         }
         "add" => {
             if args.len() < 3 {
@@ -8485,6 +8504,7 @@ fn handle_cl_transpile_command(args: &[String]) {
 fn handle_cl_dpsta_rtl_command(args: &[String]) {
     let mut out_dir = "dpsta_rtl".to_string();
     let mut emit_json = false;
+    let mut asic_mode = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -8494,8 +8514,14 @@ fn handle_cl_dpsta_rtl_command(args: &[String]) {
         } else if args[i] == "--json" {
             emit_json = true;
             i += 1;
+        } else if args[i] == "--asic" || args[i] == "--tapeout" {
+            asic_mode = true;
+            i += 1;
         } else if args[i] == "-h" || args[i] == "--help" {
-            println!("USAGE: cron cl-dpsta-rtl [-o <out_dir>] [--json]");
+            println!("USAGE: cron cl-dpsta-rtl [-o <out_dir>] [--json] [--asic]");
+            println!("  -o <dir>   Target directory for generated files (default: dpsta_rtl)");
+            println!("  --json     Emit JSON output");
+            println!("  --asic     Export complete SkyWater 130nm ASIC tapeout package (11 files)");
             return;
         } else {
             i += 1;
@@ -8503,17 +8529,29 @@ fn handle_cl_dpsta_rtl_command(args: &[String]) {
     }
 
     let out_path = std::path::Path::new(&out_dir);
-    match cronc::export_dpsta_rtl_package(out_path) {
+    let result = if asic_mode {
+        cronc::export_dpsta_asic_tapeout(out_path)
+    } else {
+        cronc::export_dpsta_rtl_package(out_path)
+    };
+
+    match result {
         Ok(files) => {
             if emit_json {
-                println!(r#"{{"status":"ok","output_dir":"{}","files_count":{},"files":{:?}}}"#,
-                    out_dir, files.len(), files);
+                println!(r#"{{"status":"ok","mode":"{}","output_dir":"{}","files_count":{},"files":{:?}}}"#,
+                    if asic_mode { "asic_tapeout" } else { "fpga_rtl" }, out_dir, files.len(), files);
             } else {
+                let title = if asic_mode {
+                    "DPSTA SkyWater 130nm ASIC Tapeout & RTL Package Exported"
+                } else {
+                    "DPSTA Neuromorphic SoC & Vivado Synthesis Package Exported"
+                };
                 println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
-                println!("║         DPSTA Neuromorphic SoC & Vivado Synthesis Package Exported                    ║");
+                println!("║ {:<85} ║", title);
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Target Directory : {:<66} ║", out_dir);
-                println!("║ Total RTL Files  : {:<66} ║", files.len());
+                println!("║ Target Flow      : {:<66} ║", if asic_mode { "OpenLane Sky130 + Yosys ASIC" } else { "FPGA Verilog + Vivado TCL" });
+                println!("║ Total Files      : {:<66} ║", files.len());
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 for f in &files {
                     let path = std::path::Path::new(f);
@@ -8522,12 +8560,17 @@ fn handle_cl_dpsta_rtl_command(args: &[String]) {
                     println!("║  • {:<32} ({:>6} bytes)                                  ║", fname, size);
                 }
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
-                println!("\nVivado synthesis ready: vivado -mode batch -source {}/synth_dpsta.tcl", out_dir);
+                if asic_mode {
+                    println!("\nOpenLane Sky130 flow: cd {} && ./run_openlane.sh", out_dir);
+                } else {
+                    println!("\nVivado synthesis ready: cd {} && vivado -mode batch -source synth_dpsta.tcl", out_dir);
+                }
             }
         }
         Err(e) => eprintln!("[ERROR] DPSTA RTL package export failed: {}", e),
     }
 }
+
 
 fn handle_cl_dpsta_command(args: &[String]) {
     if args.is_empty() || args[0] == "-h" || args[0] == "--help" {
@@ -8978,5 +9021,249 @@ fn handle_cl_ingest_command(args: &[String]) {
         println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
     }
 }
+
+fn handle_cl_sovereign_command(args: &[String]) {
+    if args.is_empty() || args[0] == "-h" || args[0] == "--help" {
+        println!("USAGE: cron cl-sovereign <chat|stats|export|corpus> [OPTIONS]");
+        println!("SUBCOMMANDS:");
+        println!("    chat [--eval <text>]      Interactive cognitive REPL session or single evaluation");
+        println!("    stats [--json]            Display 16-column cortical brain architecture and telemetry");
+        println!("    export [-o out.cl]        Synthesize 40-byte Base-94 Clifford rotor microcode bundle");
+        println!("    corpus [--json]           Inspect sovereign knowledge corpus and morph-tokens");
+        return;
+    }
+
+    match args[0].as_str() {
+        "chat" => {
+            let mut eval_prompt: Option<String> = None;
+            let mut emit_json = false;
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "--eval" && i + 1 < args.len() {
+                    eval_prompt = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "--json" {
+                    emit_json = true;
+                    i += 1;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let mut mind = cronc::SovereignMind::new();
+
+            if let Some(prompt) = eval_prompt {
+                let (answer, elapsed, tier) = mind.query(&prompt);
+                if emit_json {
+                    println!(r#"{{"status":"ok","prompt":{:?},"answer":{:?},"time_ms":{:.3},"tier":"{}"}}"#,
+                        prompt, answer, elapsed.as_secs_f64() * 1000.0, tier);
+                } else {
+                    println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
+                    println!("║                      SOVEREIGN MIND CORTICAL INFERENCE                                 ║");
+                    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+                    println!("║ Prompt       : {:<71} ║", prompt);
+                    println!("║ Strategy     : {:<71} ║", tier);
+                    println!("║ Latency      : {:<71} ║", format!("{:.3} ms", elapsed.as_secs_f64() * 1000.0));
+                    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+                    println!("║ Answer:                                                                               ║");
+                    for line in answer.lines() {
+                        println!("║  {:<85} ║", line);
+                    }
+                    println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+                }
+                return;
+            }
+
+            println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
+            println!("║             SOVEREIGN MIND AGI - INTERACTIVE COGNITIVE REPL                           ║");
+            println!("║  16 Columns | 512 LIF Neurons | Theta-Gamma (6Hz/40Hz) | Zero-Backprop STDP Plasticity ║");
+            println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+            println!("║ Commands:                                                                             ║");
+            println!("║   /learn <concept> = <explanation>  Teach new concept via live STDP synaptic update   ║");
+            println!("║   /stats                            Display cortical telemetry and spike count        ║");
+            println!("║   /cl                               Export 40-byte Base-94 Clifford VLIW microcode    ║");
+            println!("║   /exit or /quit                    Exit interactive session                          ║");
+            println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝\n");
+
+            let stdin = std::io::stdin();
+            loop {
+                print!("Sovereign> ");
+                use std::io::Write;
+                let _ = std::io::stdout().flush();
+
+                let mut input = String::new();
+                if stdin.read_line(&mut input).is_err() || input.trim().is_empty() {
+                    continue;
+                }
+                let line = input.trim();
+                if line == "/exit" || line == "/quit" || line == "exit" || line == "quit" {
+                    println!("[REPL] Exiting Sovereign Mind session.");
+                    break;
+                } else if line == "/stats" {
+                    println!("{}", mind.get_stats_report());
+                } else if line == "/cl" {
+                    let bundle = mind.export_microcode_bundle();
+                    println!("[CL MICROCODE] 40-Byte Base-94 VLIW Bundle: \"{}\"", bundle.to_ascii_bundle());
+                } else if line.starts_with("/learn") {
+                    let rest = line.trim_start_matches("/learn").trim();
+                    if let Some((concept, expl)) = rest.split_once('=') {
+                        let spikes = mind.learn_fact(concept.trim(), expl.trim());
+                        println!("[STDP LEARNED] Concept '{}' assimilated! Emitted {} spikes across 16 columns.",
+                            concept.trim(), spikes);
+                    } else {
+                        println!("[ERROR] Format: /learn <concept> = <explanation>");
+                    }
+                } else {
+                    let (answer, elapsed, tier) = mind.query(line);
+                    println!("\n[{}] ({:.3} ms)", tier, elapsed.as_secs_f64() * 1000.0);
+                    println!("{}\n", answer);
+                }
+            }
+        }
+        "stats" => {
+            let emit_json = args.iter().any(|a| a == "--json");
+            let mind = cronc::SovereignMind::new();
+            if emit_json {
+                println!(r#"{{"status":"ok","columns":16,"neurons":512,"theta_hz":6.0,"gamma_hz":40.0,"learned_concepts":{},"memory_mb":{:.2}}}"#,
+                    mind.learned_concepts, (mind.memory_allocated_bytes as f64) / (1024.0 * 1024.0));
+            } else {
+                println!("{}", mind.get_stats_report());
+            }
+        }
+        "export" => {
+            let mut out_path = "sovereign_bundle.cl".to_string();
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "-o" && i + 1 < args.len() {
+                    out_path = args[i + 1].clone();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            let mind = cronc::SovereignMind::new();
+            let bundle = mind.export_microcode_bundle();
+            let ascii_bundle = bundle.to_ascii_bundle();
+            if let Err(e) = std::fs::write(&out_path, format!("// Sovereign Mind 40-byte Base-94 VLIW Microcode Bundle\n{}\n", ascii_bundle)) {
+                eprintln!("[ERROR] Failed to write bundle to '{}': {}", out_path, e);
+            } else {
+                println!("[SUCCESS] Exported 40-byte Base-94 Clifford VLIW Bundle to '{}':\n  {}", out_path, ascii_bundle);
+            }
+        }
+        "corpus" => {
+            let emit_json = args.iter().any(|a| a == "--json");
+            let tokens_count = cronc::SOVEREIGN_MORPH_TOKENS.len();
+            let knowledge_count = cronc::SOVEREIGN_KNOWLEDGE_BASE.len();
+            if emit_json {
+                println!(r#"{{"status":"ok","morph_tokens":{},"knowledge_topics":{}}}"#,
+                    tokens_count, knowledge_count);
+            } else {
+                println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
+                println!("║                     SOVEREIGN KNOWLEDGE CORPUS AUDIT                                  ║");
+                println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Morph-Tokens     : {:<66} ║", format!("{} discrete tokens (94-character Base-94)", tokens_count));
+                println!("║ Core Topics      : {:<66} ║", format!("{} foundation AGI engrams & knowledge entries", knowledge_count));
+                println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Sample Knowledge Topics:                                                              ║");
+                for (prompt, answer) in cronc::SOVEREIGN_KNOWLEDGE_BASE.iter().take(5) {
+                    let preview: String = answer.chars().take(35).collect();
+                    println!("║  • {:<20} -> {:<55} ║", prompt, preview);
+                }
+                println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+            }
+        }
+        other => {
+            eprintln!("[ERROR] Unknown sovereign subcommand '{}'. Supported: chat, stats, export, corpus", other);
+        }
+    }
+}
+
+fn handle_cl_clifford_sim_command(args: &[String]) {
+    let mut bundle_str: Option<String> = None;
+    let mut emit_json = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--json" {
+            emit_json = true;
+            i += 1;
+        } else if args[i] == "-h" || args[i] == "--help" {
+            println!("USAGE: cron cl-clifford-sim [bundle_ascii] [--json]");
+            return;
+        } else if !args[i].starts_with('-') && bundle_str.is_none() {
+            bundle_str = Some(args[i].clone());
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    let bundle = if let Some(ref s) = bundle_str {
+        match cronc::CliffordBundle::from_ascii_bundle(s) {
+            Some(b) => b,
+            None => {
+                eprintln!("[ERROR] Invalid 40-byte Base-94 Clifford bundle: expected at least 40 ASCII chars (33..=126)");
+                return;
+            }
+        }
+    } else {
+        cronc::CliffordBundle::new(
+            cronc::CliffordMicroOp { opcode: cronc::CliffordMicroOpCode::CliffordAdd, rd: 1, rs1: 0, rs2: 0, imm: 42 },
+            cronc::CliffordMicroOp { opcode: cronc::CliffordMicroOpCode::RotSandwich, rd: 2, rs1: 1, rs2: 0, imm: 8192 },
+            cronc::CliffordMicroOp { opcode: cronc::CliffordMicroOpCode::TropicMax, rd: 3, rs1: 1, rs2: 2, imm: 0 },
+            cronc::CliffordMicroOp { opcode: cronc::CliffordMicroOpCode::EmitChar, rd: 0, rs1: 0, rs2: 0, imm: (b'K' - 33) as i16 },
+        )
+    };
+
+    let mut emu = cronc::CliffordRotorEmulator::new();
+    emu.execute_bundle(&bundle);
+
+    let ascii_str = bundle.to_ascii_bundle();
+
+    if emit_json {
+        let non_zero_regs: Vec<(usize, i64)> = emu.regs.iter().copied().enumerate().filter(|&(_, v)| v != 0).collect();
+        let emitted: String = emu.emitted_chars.iter().collect();
+        println!(r#"{{"status":"ok","bundle":"{}","cycles":{},"emitted":{:?},"regs":{:?}}}"#,
+            ascii_str, emu.cycle_count, emitted, non_zero_regs);
+    } else {
+        println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
+        println!("║             CLIFFORD ROTOR 320-BIT VLIW HARDWARE EMULATION HUD                        ║");
+        println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+        println!("║ 40-Byte Bundle   : {:<66} ║", ascii_str);
+        println!("║ Cycle Count      : {:<66} ║", emu.cycle_count);
+        println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+        println!("║ VLIW SLOTS DISASSEMBLY (4-Tact Parallel Issue):                                       ║");
+        let slots = [
+            ("SLOT 0 [CLIFFORD ADD] ", bundle.slot0),
+            ("SLOT 1 [ROT SANDWICH] ", bundle.slot1),
+            ("SLOT 2 [TROPIC MAX]   ", bundle.slot2),
+            ("SLOT 3 [OUTPUT EMIT]  ", bundle.slot3),
+        ];
+        for (name, op) in &slots {
+            println!("║  • {} -> {:<14} rd: {:>2}, rs1: {:>2}, rs2: {:>2}, imm: {:>6} ║",
+                name, op.opcode.mnemonic(), op.rd, op.rs1, op.rs2, op.imm);
+        }
+        println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+        println!("║ REGISTER STATE (Non-Zero):                                                            ║");
+        let mut reg_line = String::new();
+        for (i, &v) in emu.regs.iter().enumerate() {
+            if v != 0 {
+                if !reg_line.is_empty() {
+                    reg_line.push_str("  ");
+                }
+                reg_line.push_str(&format!("R{}: {}", i, v));
+            }
+        }
+        if reg_line.is_empty() {
+            println!("║  (all registers zero)                                                                 ║");
+        } else {
+            println!("║  {:<85} ║", reg_line);
+        }
+        let emitted: String = emu.emitted_chars.iter().collect();
+        println!("║ Emitted Stream   : {:<66} ║", if emitted.is_empty() { "(none)" } else { &emitted });
+        println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+    }
+}
+
 
 

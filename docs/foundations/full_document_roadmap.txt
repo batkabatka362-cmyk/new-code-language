@@ -1,0 +1,23 @@
+Page 1: 10/11/26, 7:07 PM | Matpvu 6a T3Mg3rT | https:/gemini.google.com/app/846420b95cfe83dd | User prompt: Nadad neg zvil sonirholtoi baina. Matrix gej helegdeed baidag terig 94 temdegt vseg ashiglaj mathematic gehdee bas mathematic bish
+Page 11: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | print(f"'{c1}' ○ '{c2}′ ='{c3}"") | print(f"'{c2}* ○'{c1}′ =*{c_rev}′(KomMyTaTws 6yc: {c3 != c_rev}))
+Page 21: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | // OμoorwiH ypcranaac 6onoBcpyynax 7-6uT T3MA3rT | assign current_active_sym = stream_out[6:0];
+Page 31: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | weights_flat [375:0] | weighted_state_arbiter
+Page 41: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | make -j$(nproc) -C obj_dir -f Vvliw_state_core.mk Vvliw_state_core | # 3. 5eHumapkwir axwnnyynax
+Page 51: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3T | Output FIFO / DMA Buffer | <-- PCIe / RAM / μ3nr9u pYY CTaHAapT 6aiTaap rapraHa
+Page 61: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 3.TexHMK xaHraMxnH 6ypsH Huan: predict_next() cyHKuniH max yAnAan Hb 6WAHi eMHe 6yT33c3H 7-level Tournament Arbiter-T3 | xapKH W MaCCMB Hb VLIW μeMMiH RULE_LUT MaCCMBTa 1:1 TerC HMAuH3.
+Page 71: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | 2. KanurwiH koM6uHaun 6nok: Xyeaax yingan (divider) awurnaxryir33p epnee 6uTwH wunxvynar4 (shift 6onoH H3M3r433p ≥ 60 ps AOTop | Sctx-Hir 6ogox u383p kom6uHaun nornk.
+Page 81: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | return θ; | 5.AxWnnyynaxKoMMaHA6aYpAyH
+Page 91: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | output wire | m_axis_tvalid,
+Page 101: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | Cycle t-1 (mHex TaKT): | x_{t-2} opx μpH3 —→ [ 3-bit Rotate & xOR ] —→ gamma_next 6ypTr3r4nA TyrxurA3H3
+Page 111: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | vliw_decoder_unit (Hsr TaKTblH 3aμnaru) | CNOT e [127:80]
+Page 121: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | wire [6:e] rot3 = ((hist[9] << h_rot[3]) | (hist[9] >> (7 - h_rot[3]))) % NUM_STATES; | assign eff_gamma[3] = h_dyn_en[3] ? ((h_base_gamma[3] + rot3) % NUM_STATES) : h_base_gamma[3];
+Page 131: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3T | [T3M3FTИRH YPCFAJ ] | ▼
+Page 141: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | wire | w_out_val
+Page 151: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | // Ap6WTp: OnoHXbIH CaHan aBCaH T3MA3rT | uint8_t winner = @;
+Page 161: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3T | Hnwex Hinthodox teeueg yeidA ing zT9 = C dAg doxeg lundxo uoud xetueg Jnuye xau ztssououe opu xetiereehe bquAtow | 3a Hb ≈ 256 6uT (50%) 6aixaap aBToMaTaap oHoBunorμoHo:
+Page 171: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | .host_tx_val (host_tx_val), | host_tx_rdy (host_tx_rdy),
+Page 181: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | else: | # 6ypyy TaacaH yewH ynμ3rA3n Maraμnan (93 TeneBT xyBaapunarAax)
+Page 191: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | "orientation": "N" | "n1": "dir::../../verilog/gl/dpsta_asic_top.v",
+Page 201: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3rT | \centering | \begin{tabular}{(@{}1cccc@{}}
+Page 211: 10/11/26, 7:07 PM | MaTpuu 6a T3Mg3T | Xanx33 Hb oponTblH JTL (Josephson Transmission Line) 6ycep, T3Hus3pT wwigs3p raprax xoc wwnxwnt (Decision-making pair), 6onoH rapanTbIH | HMnynbc 6apur4 x3cryyA33c 6ypA3H3.
+Page 221: 10/11/26, 7:07 PM | Matpuu 6a T3Mg3rT | 19. H3x3Mxn3n 18-A 3aacaH @poToHuk TponMK npoueccop A33p 6yuax rpaμWeHTryur33p oHnaiH cypanuax 6onoH onTHK TyBwWHA TorTBopryi 6yc | (non-volatile) caHax ovH μapxnaa rortoox Texeepemx 6ereeA napaax 6yTuμir aryyncaH:

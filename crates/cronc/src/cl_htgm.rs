@@ -279,6 +279,24 @@ impl HierarchicalTBTMemory {
             self.train_char(ch);
         }
     }
+
+    /// Predicts the next character based on recent context and attractor resonance.
+    pub fn predict_next_char(&mut self, context: &str) -> char {
+        if !context.is_empty() {
+            for ch in context.chars() {
+                self.train_char(ch);
+            }
+        }
+        let probe = self.probe_resonance();
+        if probe.is_resonant && probe.target_token > 0 {
+            crate::cl_matrix94::state_to_char(probe.target_token)
+        } else if let Some(last) = context.chars().last() {
+            let next_cid = ((crate::cl_matrix94::char_to_state(last) as usize + 1) % 94) as u8;
+            crate::cl_matrix94::state_to_char(next_cid)
+        } else {
+            ' '
+        }
+    }
 }
 
 #[cfg(test)]

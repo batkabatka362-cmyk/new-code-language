@@ -161,6 +161,8 @@ pub mod cl_multimodal_dpsta;
 pub mod cl_ingest;
 pub mod cl_sovereign_corpus;
 pub mod cl_multi_wafer;
+pub mod cl_clifford_isa;
+pub mod cl_sovereign_mind;
 
 pub use cl_matrix94::{FourTactPipeline94, PipelineOutput, NUM_STATES};
 pub use cl_htgm::{HierarchicalTBTMemory, AttractorResonanceOutput, D_BITS};
@@ -176,6 +178,8 @@ pub use cl_multi_wafer::{
     DualWaferTelemetry, Hemisphere, DistributedClusterFrame, DUAL_WAFER_TOTAL_CORES,
     CORPUS_CALLOSUM_BW_TBPS, DUAL_WAFER_LASER_POWER_WATTS, HUMAN_CORTEX_OPS_TARGET,
 };
+pub use cl_clifford_isa::{CliffordBundle, CliffordRotorEmulator, MicroOp as CliffordMicroOp, MicroOpCode as CliffordMicroOpCode};
+pub use cl_sovereign_mind::{CorticalColumn, LifNeuron, SovereignMind};
 
 pub use cl_sphere_infer::{
     compile_weights_to_sphere_cl, HyperspherePoint4D, SphereCompileOptions, SphereCoreNode, SphereGenerationResult,

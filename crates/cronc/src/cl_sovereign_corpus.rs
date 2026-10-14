@@ -2174,49 +2174,35 @@ pub static SOVEREIGN_MORPH_TOKENS: &[&str] = &[
     "morph_0166",
     "morph_0167",
     "morph_0168",
-    "morph_0169",
-    "morph_0170",
-    "morph_0171",
-    "morph_0172",
-    "morph_0173",
-    "morph_0174",
-    "morph_0175",
-    "morph_0176",
-    "morph_0177",
-    "morph_0178",
-    "morph_0179",
-    "morph_0180",
-    "morph_0181",
-    "morph_0182",
-    "morph_0183",
-    "morph_0184",
-    "morph_0185",
-    "morph_0186",
-    "morph_0187",
-    "morph_0188",
-    "morph_0189",
-    "morph_0190",
-    "morph_0191",
-    "morph_0192",
-    "morph_0193",
-    "morph_0194",
-    "morph_0195",
-    "morph_0196",
-    "morph_0197",
-    "morph_0198",
-    "morph_0199",
-    "morph_0200",
-    "morph_0201",
-    "morph_0202",
-    "morph_0203",
-    "morph_0204",
-    "morph_0205",
-    "morph_0206",
-    "morph_0207",
-    "morph_0208",
+    // 205 Hardware, Semiconductor, Native C23/C++/C#/Verilog/Rust, Physics & Mongolian Grammar Morph-Tokens (Total = 2,405)
+    "verilog", "systemverilog", "wire", "reg", "assign", "always_ff", "always_comb", "posedge", "negedge", "module",
+    "endmodule", "generate", "endgenerate", "input", "output", "inout", "parameter", "localparam", "timescale", "defparam",
+    "initial", "always", "begin", "end", "fork", "join", "task", "endtask", "function", "endfunction",
+    "rst_n", "clk", "clock_gating", "metastability", "glitch", "setup_time", "hold_time", "fanout", "netlist", "synthesis",
+    "place_and_route", "sta", "tapeout", "gdsii", "lef", "def_file", "skywater130", "tsmc_n3", "finfet", "gaafet",
+    "backside_power", "csharp", "dotnet", "pinvoke", "unsafe", "fixed", "stackalloc", "spans", "readonly_ref", "unmanaged",
+    "native_int", "c23", "avx512", "avx512vnni", "avx512bw", "avx512f", "avx512dq", "neon", "rvv", "zve64x",
+    "rustc", "llvm_ir", "cl_rotor", "s3_sphere", "tbt_memory", "cldb_vault", "dpdata_trit", "dwdm_laser", "siph_waveguide", "crooked_needle",
+    "optical_crossbar", "clifford_bivector", "trivector", "pseudoscalar", "rotor_sandwich", "isoclinic", "left_isoclinic", "right_isoclinic", "quaternion_spin", "dirac_spinor",
+    "weyl_spinor", "majorana", "topological_phase", "braid_group", "anyonic", "quantum_zeno_gate", "landauer_limit", "lyapunov_stable", "hopfield_energy", "free_energy_principle",
+    "active_inference", "generative_model", "surprise_minimization", "predictive_coding", "precision_weight", "neuromodulator", "dopamine_surge", "serotonin_calm", "acetylcholine_att", "norepinephrine_alr",
+    "theta_phase", "gamma_burst", "phase_locking", "attractor_basin", "limit_cycle", "hyperbolic_manifold", "poincare_ball", "lorentz_group", "minkowski_metric", "ricci_curvature",
+    "christoffel_symbol", "geodesic_flow", "hamiltonian_flow", "symplectic_integrator", "poisson_bracket", "noether_charge", "gauge_invariance", "ward_identity", "feynman_path", "wilson_loop",
+    "chern_number", "berry_phase", "aharonov_bohm", "majorana_zero_mode", "fractional_quantum_hall", "skyrmion", "magnetic_monopole", "dirac_string", "instantons", "solitons",
+    "kink_antikink", "sine_gordon", "korteweg_de_vries", "non_linear_schrodinger", "vlasov_maxwell", "boltzmann_entropy", "gibbs_ensemble", "microcanonical", "canonical_partition", "grand_canonical",
+    "ising_model", "potts_model", "percolation_threshold", "conformal_invariance", "renormalization_group", "fixed_point", "beta_function", "asymptotic_freedom", "confinement_scale", "lattice_gauge",
+    "monte_carlo", "metropolis_hastings", "hamiltonian_monte_carlo", "langevin_dynamics", "fokker_planck", "ito_calculus", "stratonovich", "wiener_process", "ornstein_uhlenbeck", "levy_flight",
+    "fractional_brownian", "hurst_exponent", "multifractal_spectrum", "strange_attractor", "mandelbrot_boundary", "julia_quaternion", "arnold_cat_map", "smale_horseshoe", "baker_map", "ulam_matrix",
+    "perron_frobenius", "spectral_gap", "quantum_chaos", "wigner_dyson", "circular_unitary_ensemble", "gaussian_orthogonal_ensemble", "random_matrix_theory", "тай", "тэй", "той",
+    "аар", "ээр", "оор", "өөр", "аас", "ээс", "оос", "өөс", "ын", "ийн",
+    "ны", "ний", "руу", "рүү", "дуу", "дүү", "лан", "лэн", "лон", "лөн",
+    "чих", "чихлээ", "вөл", "вэл", "вч", "магц", "мэгц", "могц", "мөгц", "нгаа",
+    "нгээ", "нгоо", "нгөө", "саар", "сээр", "соор", "сөөр", "уут", "үүт", "тал",
+    "тэл", "тол", "төл", "аарай", "ээрэй", "оорой", "өөрөй", "тугай", "түгэй", "гтүн",
+    "уузай", "үүзэй", "цахиур", "синапс", "тархи",
 ];
 
-/// Multi-domain foundational knowledge base dialogues
+/// Multi-domain foundational knowledge base dialogues (53 core topics)
 pub static SOVEREIGN_KNOWLEDGE_BASE: &[(&str, &str)] = &[
     ("сайн байна уу", "Сайн байна уу! Би бол 4D Torus цахиур дээр 0-FLOP, Backprop-гүй STDP-ээр ажилладаг Sovereign Sphere AI бие даасан оюун байна."),
     ("чи хэн бэ", "Би бол хүний их тархины 6-давхаргат кортикал бүтэц, S^3 бөмбөрцгийн дискрет геометр бүхий бие даасан үндэсний цахиур AI модель мөн."),
@@ -2261,11 +2247,17 @@ pub static SOVEREIGN_KNOWLEDGE_BASE: &[(&str, &str)] = &[
     ("what is the crooked needle theorem", "In 4-dimensional space, optical routing paths can bypass each other without topological intersection, guaranteeing 0.00% packet collision across 131,072 wafer-scale cores."),
     ("хэрхэн шинэ мэдлэг сурах вэ", "Та /learn <асуулт> -> <хариулт> тушаалыг ашиглан надад шинэ мэдлэг зааж болно. Би түүнийг агшин зуурт STDP синапсдаа сурч, энграм болгон бэхжүүлнэ."),
     ("ямар командуудыг дэмждэг вэ", "/learn нь шинэ мэдлэг заах, /stats нь тархины импульс ба синапсын тоог харах, /cl нь шинэчлэгдсэн CL микрокодыг экспортлох, /exit нь гарах команд юм."),
-    ("код бичиж чадах уу", "Тийм ээ, би C23, Rust, Python, болон 128-битийн Base-94 VLIW CL бичил код бичих болон алгоритмын оновчлол хийх чадвартай."),
+    ("код бичиж чадах уу", "Тийм ээ, би C23, C++, C#, Rust, Verilog, болон 128-битийн Base-94 VLIW CL бичил код бичих болон алгоритмын оновчлол хийх чадвартай."),
     ("монгол улсын цахиур төсөл", "Энэ бол монгол инженерийн 0-FLOP ба STDP-ээр бүтээсэн дэлхийн анхны цахиур тархи мөн."),
     ("хэтийн төлөв", "Энэхүү загвар нь Монгол улсын өөрийн бие даасан цахиур оюун төдийгүй, дэлхийн ногоон, эрчим хүчний хэмнэлттэй AI хувьсгалын суурь болох бүрэн боломжтой."),
+    ("verilog dpsta soc гэж юу вэ", "DPSTA SoC нь 4-такт шугамт дараалал бүхий 94-төлөвт машин, D=1024-bit бинар синаптик матрицтай санах ой, 512-bit Clifford ротор цөм болон 320-bit шууд талбарт комманд задагч агуулсан 0-DSP ASIC/FPGA чип мөн."),
+    ("c23 ба avx-512 яагаад python-оос 1000 дахин хурдан бэ", "Python нь динамик төрөлтэй, GIL цоожтой, санах ойн байнга хуваарилалт хийдэг бол C23 + AVX-512 нь шууд регистр дээр 512-битийн векторыг 1 такт буюу 0.3 наносекундэд нэгэн зэрэг гүйцэтгэж, тооцооллыг дээд хурдад хүргэдэг."),
+    ("c# .net хөгжүүлэгчид cron ашиглаж чадах уу", "Тийм ээ, cron_cortex.dll нь цэвэр C-ABI стандарт FFI экспорттой тул C# дээр [DllImport] буюу P/Invoke ашиглан миллисекундэд сая сая импульсийг санах ойн хуулбар хийхгүйгээр 0-FLOP дуудан ажиллуулах бүрэн боломжтой."),
+    ("биологийн theta-gamma хэмнэл яагаад хэрэгтэй вэ", "4-8Hz Theta долгион нь бодлын багцыг үечилж, 30-80Hz Gamma хэмнэл нь синапсуудыг миллисекундийн нарийвчлалтай зохион байгуулснаар хүний тархи шиг олон бодлыг зэрэг эмх цэгцтэй санах боломж олгодог."),
+    ("16 багана ба 512 lif нейрон гэж юу вэ", "Энэ бол биологийн кортикал баганын (cortical column) минимал амьд загвар бөгөөд нейронууд мембраны потенциал хуримтлуулан импульс (spike) цацаж, Backprop-гүй Ли-алгебр STDP-ээр онлайн горимд шууд сурдаг."),
+    ("яагаад python биш c/c++/rust/verilog сонгосон бэ", "Python бол туршилтын хэл бөгөөд асар удаан, санах ой их иддэг. Бидний зорилго бол дэлхийн хамгийн хурдан, 131,072 цөмт вафер дээр 1.507 Peta-OPS тооцоолох бие даасан супер систем тул зөвхөн C23, Rust, C++, C#, Verilog зэрэг физик цахиуртай шууд харьцдаг хэлүүдийг сонгосон."),
+    ("энграм царцаалт ба санах ойн сүлжээ", "Суралцсан мэдлэг .cldb өгөгдлийн санд 36,414 байтын тогтмол хэмжээтэйгээр сааталгүй (0-latency) бичигдэж, шинэ өгөгдөл ороход өмнөх суурь мэдлэг хэзээ ч арчигдахгүй баталгааждаг."),
 ];
-
 
 /// Sovereign Morph-Tokenizer with fast longest-match dictionary lookups
 #[derive(Debug, Clone)]
@@ -2422,8 +2414,8 @@ mod tests {
 
     #[test]
     fn test_sovereign_corpus_tokens_and_dialogues_count() {
-        assert_eq!(SOVEREIGN_MORPH_TOKENS.len(), 2200);
-        assert_eq!(SOVEREIGN_KNOWLEDGE_BASE.len(), 46);
+        assert_eq!(SOVEREIGN_MORPH_TOKENS.len(), 2405);
+        assert_eq!(SOVEREIGN_KNOWLEDGE_BASE.len(), 53);
     }
 
     #[test]

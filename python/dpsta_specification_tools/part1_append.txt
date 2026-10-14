@@ -1,0 +1,558 @@
+
+
+### 9.4. HDC Pipeline Testbench Ð±Ð° Ð¢ÑƒÑ€ÑˆÐ¸Ð»Ñ‚Ñ‹Ð½ Ò®Ñ€ Ð”Ò¯Ð½ (`tb_hdc_pipeline.v`, Ð¥ÑƒÑƒÐ´Ð°Ñ 161â€“164)
+
+`hdc_ngram_roll_encoder` Ð±Ð¾Ð»Ð¾Ð½ `hdc_fuzzy_frontend` Ð¼Ð¾Ð´ÑƒÐ»Ð¸ÑƒÐ´Ñ‹Ð³ Ð½ÑÐ³Ñ‚Ð³ÑÐ½, Ð°Ð»Ð´Ð°Ð°Ñ‚Ð°Ð¹/Ð´ÑƒÑƒ Ñ‡Ð¸Ð¼ÑÑÑ‚ÑÐ¹ Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚Ò¯Ò¯Ð´Ð¸Ð¹Ð³ Ð±Ð¾Ð´Ð¸Ñ‚ Ñ†Ð°Ð³Ñ‚ Ð·Ð°ÑÐ°Ð¶ Ð±ÑƒÐ¹Ð³ Ð±Ð°Ñ‚Ð»Ð°Ñ… Verilog Ñ‚ÐµÑÑ‚Ð±ÐµÐ½Ñ‡.
+
+```python
+# hdc_anchors_512.hex Ò¯Ò¯ÑÐ³ÑÑ… Python ÑÐºÑ€Ð¸Ð¿Ñ‚ (Ð¥ÑƒÑƒÐ´Ð°Ñ 161)
+# Ð’ÐµÐºÑ‚Ð¾Ñ€ Ð±Ò¯Ñ€ D = 512 Ð±Ð¸Ñ‚ ÑƒÑ€Ñ‚Ñ‚Ð°Ð¹ Ð±Ó©Ð³Ó©Ó©Ð´ Ñ…Ð¾Ð¾Ñ€Ð¾Ð½Ð´Ñ‹Ð½ Ð¥ÑÐ¼Ð¼Ð¸Ð½Ð³Ð¸Ð¹Ð½ Ð·Ð°Ð¹ Ð½ÑŒ â‰ˆ 256 Ð±Ð¸Ñ‚ (50%) Ð±Ð°Ð¹Ð½Ð°.
+import numpy as np
+
+D_BITS = 512
+NUM_ANCHORS = 94
+
+np.random.seed(42)
+anchors = np.random.randint(0, 2, size=(NUM_ANCHORS, D_BITS), dtype=np.uint8)
+
+with open("hdc_anchors_512.hex", "w") as f:
+    for vec in anchors:
+        hex_str = ""
+        for i in range(0, D_BITS, 4):
+            nibble = (vec[i] << 3) | (vec[i+1] << 2) | (vec[i+2] << 1) | vec[i+3]
+            hex_str += f"{nibble:1X}"
+        f.write(hex_str + "\n")
+print(f"[ÐÐ¼Ð¶Ð¸Ð»Ñ‚Ñ‚Ð°Ð¹] {NUM_ANCHORS} ÑˆÐ¸Ñ€Ñ…ÑÐ³ 512-Ð±Ð¸Ñ‚ Ð³Ð¸Ð¿ÐµÑ€Ð²ÐµÐºÑ‚Ð¾Ñ€ 'hdc_anchors_512.hex'-Ð´ Ð±Ð¸Ñ‡Ð¸Ð³Ð´Ð»ÑÑ.")
+```
+
+**Ð¢Ð¾Ð½Ð¾Ð³ Ñ‚Ó©Ñ…Ó©Ó©Ñ€Ó©Ð¼Ð¶Ð¸Ð¹Ð½ Ð´Ð°Ð²ÑƒÑƒ Ñ‚Ð°Ð» Ð±Ð° Ð¨Ð¸Ð½Ð¶ Ñ‡Ð°Ð½Ð°Ñ€ (Ð¥ÑƒÑƒÐ´Ð°Ñ 161):**
+1. **ÐšÐ¾Ð¼Ð±Ð¸Ð½Ð°Ñ†Ð¸ ÑÐ°Ð°Ñ‚Ð°Ð»Ð³Ò¯Ð¹ ÑÑ€Ð³Ò¯Ò¯Ð»ÑÐ»Ñ‚ (Zero-Gate Permutation):** $\rho^1$ Ð±Ð° $\rho^2$ Ñ†Ð°Ð³Ð¸Ñ€Ð°Ð³ ÑÑ€Ð³Ò¯Ò¯Ð»ÑÐ»Ñ‚Ò¯Ò¯Ð´ Ð½ÑŒ ÑÐ¼Ð°Ñ€ Ñ‡ barrel shifter Ð»Ð¾Ð³Ð¸Ðº Ñ…Ð°Ð°Ð»Ð³Ð° ÑˆÐ°Ð°Ñ€Ð´Ð°Ñ…Ð³Ò¯Ð¹. Ð¦Ð°Ñ…Ð¸ÑƒÑ€Ñ‹Ð½ Ñ‚Ò¯Ð²ÑˆÐ¸Ð½Ð´ ÑƒÑ‚ÑÑ‹Ð³ ÑˆÑƒÑƒÐ´ Ð·Ó©Ñ€Ò¯Ò¯Ð»ÑÐ½ Ñ…Ð¾Ð»Ð±Ð¾Ð¶ (wire routing) ÑˆÐ¸Ð¹Ð´ÑÑÐ½ Ñ‚ÑƒÐ» **0 Ð¿Ð¸ÐºÐ¾ÑÐµÐºÑƒÐ½Ð´ ÑÐ°Ð°Ñ‚Ð°Ð»Ñ‚Ð°Ð¹**.
+2. **ÐÑÐ³ Ñ‚Ð°ÐºÑ‚Ñ‹Ð½ Ñ…Ð¾Ð¾Ð»Ð¾Ð¹ (1-Cycle Latency):** Ð¨Ð¸Ð½Ñ Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚ Ð¾Ñ€Ð¶ Ð¸Ñ€ÑÑÐ½ Ñ‚Ð°ÐºÑ‚Ñ‹Ð½ Ó©Ð³ÑÓ©Ñ… Ð¸Ñ€Ð¼ÑÐ³ Ð´ÑÑÑ€ 512-Ð±Ð¸Ñ‚ Ð±Ò¯Ñ€ÑÐ½ $N$-gram Ð²ÐµÐºÑ‚Ð¾Ñ€ ÑˆÑƒÑƒÐ´ Ò¯Ò¯ÑÑ‡, Ó©Ð¼Ð½Ó© Ð±Ò¯Ñ‚ÑÑÑÑÐ½ `hdc_fuzzy_frontend` Ñ€Ò¯Ò¯ Ð´Ð°Ð¼Ð¶ÑƒÑƒÐ»Ð°Ð³Ð´Ð°Ð½Ð°.
+3. **Ð¥Ð°Ð¼Ð³Ð°Ð°Ð»Ð°Ð»Ñ‚ (Flush Mechanism):** Ó¨Ð³Ò¯Ò¯Ð»Ð±ÑÑ€Ð¸Ð¹Ð½ Ð´ÑƒÐ½Ð´ÑƒÑƒÑ€ ÑÑƒÐ» Ð·Ð°Ð¹ (\_) ÑÑÐ²ÑÐ» Ñ†ÑÐ³ Ñ‚Ð°ÑÐ»Ð°Ð» Ð¸Ñ€ÑÑ… Ò¯ÐµÐ´ `flush_window=1` Ð±Ð¾Ð»Ð¶, Ó©Ð¼Ð½Ó©Ñ… Ò¯Ð³Ð¸Ð¹Ð½ ÑÒ¯Ò¯Ð» Ð´Ð°Ñ€Ð°Ð°Ð³Ð¸Ð¹Ð½ Ò¯Ð³Ð¸Ð¹Ð½ Ñ‚Ð¾Ð»Ð³Ð¾Ð¹Ñ‚Ð¾Ð¹ Ñ…ÑƒÑ‚Ð³Ð°Ð»Ð´Ð°Ð½ Ñ…ÑƒÑƒÑ€Ð°Ð¼Ñ‡ Ð²ÐµÐºÑ‚Ð¾Ñ€ Ò¯Ò¯ÑÐ³ÑÑ…ÑÑÑ ÑÑÑ€Ð³Ð¸Ð¹Ð»Ð½Ñ.
+
+#### Verilog Ð¢ÐµÑÑ‚Ð±ÐµÐ½Ñ‡: `tb_hdc_pipeline.v` (Ð¥ÑƒÑƒÐ´Ð°Ñ 161â€“164)
+```verilog
+`timescale 1ns / 1ps
+
+module tb_hdc_pipeline;
+    // ==============================================================
+    // ÐŸÐÐ ÐÐœÐ•Ð¢Ð Ð£Ð£Ð” Ð‘Ð Ð¢ÐÐšÐ¢Ð«Ð Ð¢ÐžÐ¥Ð˜Ð Ð“ÐžÐž
+    // ==============================================================
+    localparam D_BITS         = 512;
+    localparam NUM_STATES     = 94;
+    localparam HAMMING_THR    = 45; // ÐÐ»Ð´Ð°Ð°Ð½Ñ‹ Ð´ÑÑÐ´ Ð±Ð¾ÑÐ³Ð¾ (~8.8%)
+
+    reg clk;
+    reg rst_n;
+
+    // Encoder Ð´Ð¾Ñ…Ð¸Ð¾Ð½ÑƒÑƒÐ´
+    reg        char_valid;
+    reg [6:0]  char_id;
+    reg        flush_window;
+    wire       enc_vec_valid;
+    wire [D_BITS-1:0] enc_vec_out;
+
+    // Fuzzy Frontend Ð´Ð¾Ñ…Ð¸Ð¾Ð½ÑƒÑƒÐ´
+    reg  [D_BITS-1:0] frontend_in_vec;
+    reg               frontend_in_val;
+    wire [6:0]        clean_sym_out;
+    wire              match_valid;
+    wire [9:0]        best_dist_out;
+
+    // Ð¢ÐµÑÑ‚Ð¸Ð¹Ð½ Ñ‚ÑƒÑÐ»Ð°Ñ… Ñ…ÑƒÐ²ÑŒÑÐ°Ð³Ñ‡ÑƒÑƒÐ´
+    reg [D_BITS-1:0] test_anchors [0:NUM_STATES-1];
+    reg [D_BITS-1:0] noise_mask;
+    integer file_fd, idx, b;
+
+    // 1 GHz Ñ‚Ð°ÐºÑ‚ (Cycle = 1.0 ns)
+    always #0.5 clk = ~clk;
+
+    // 1. UUT 1: N-GRAM ROLL ENCODER Ð˜ÐÐ¡Ð¢ÐÐÐ¦
+    hdc_ngram_roll_encoder #(
+        .D_BITS(D_BITS),
+        .NUM_STATES(NUM_STATES),
+        .N_GRAM(3),
+        .SHIFT_STEP_1(17),
+        .SHIFT_STEP_2(37)
+    ) u_encoder (
+        .clk(clk),
+        .rst_n(rst_n),
+        .char_valid(char_valid),
+        .char_id(char_id),
+        .flush_window(flush_window),
+        .vec_valid(enc_vec_valid),
+        .vec_out(enc_vec_out)
+    );
+
+    // 2. UUT 2: FUZZY HAMMING FRONTEND Ð˜ÐÐ¡Ð¢ÐÐÐ¦
+    hdc_fuzzy_frontend #(
+        .D_BITS(D_BITS),
+        .NUM_STATES(NUM_STATES),
+        .HAMMING_THR(HAMMING_THR)
+    ) u_frontend (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noisy_vec_in(frontend_in_vec),
+        .vec_valid(frontend_in_val),
+        .clean_sym_out(clean_sym_out),
+        .match_valid(match_valid),
+        .best_dist_out(best_dist_out)
+    );
+
+    // Ð¡ÐÐÐÐœÐ¡ÐÐ Ð“Ò®Ð™ ÐÐ›Ð”ÐÐ / Ð‘Ð˜Ð¢ Ð­Ð Ð“Ò®Ò®Ð›Ð­Ð“Ð§ Ð¢ÐÐ¡Ðš
+    task inject_bitflips;
+        input  [D_BITS-1:0] in_vector;
+        input  integer      num_flips;
+        output [D_BITS-1:0] out_vector;
+        reg    [D_BITS-1:0] mask;
+        integer k, rand_pos;
+        begin
+            mask = {D_BITS{1'b0}};
+            for (k = 0; k < num_flips; k = k + 1) begin
+                rand_pos = $urandom_range(0, D_BITS-1);
+                mask[rand_pos] = 1'b1; // Ð¢ÑƒÑ…Ð°Ð¹Ð½ Ð±Ð¸Ñ‚Ð¸Ð¹Ð³ ÑƒÑ€Ð²ÑƒÑƒÐ»Ð°Ñ… Ð¼Ð°ÑÐº
+            end
+            out_vector = in_vector ^ mask;
+        end
+    endtask
+
+    initial begin
+        // Anchor HEX Ñ„Ð°Ð¹Ð»Ñ‹Ð³ Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð°Ð°Ñ€ Ò¯Ò¯ÑÐ³ÑÑ…
+        file_fd = $fopen("hdc_anchors_512.hex", "w");
+        for (idx = 0; idx < NUM_STATES; idx = idx + 1) begin
+            for (b = 0; b < 16; b = b + 1) begin
+                test_anchors[idx][b*32 +: 32] = $urandom(idx * 17 + b);
+            end
+            $fdisplay(file_fd, "%128h", test_anchors[idx]);
+        end
+        $fclose(file_fd);
+
+        $dumpfile("hdc_pipeline_trace.vcd");
+        $dumpvars(0, tb_hdc_pipeline);
+
+        clk = 0; rst_n = 0;
+        char_valid = 0; char_id = 0; flush_window = 0;
+        frontend_in_vec = {D_BITS{1'b0}}; frontend_in_val = 0;
+        #3.0; rst_n = 1; #2.0;
+
+        // Ð¢Ð•Ð¡Ð¢ 1: 15 Ð±Ð¸Ñ‚Ð¸Ð¹Ð½ Ð´ÑƒÐ½Ð´ Ð·ÑÑ€Ð³Ð¸Ð¹Ð½ Ð°Ð»Ð´Ð°Ð° Ð·Ð°ÑÐ°Ñ… ('O' / ID: 46)
+        inject_bitflips(test_anchors[46], 15, frontend_in_vec);
+        frontend_in_val = 1'b1; @(posedge clk); frontend_in_val = 1'b0;
+        @(posedge clk); #0.1;
+        // Ò®Ñ€ Ð´Ò¯Ð½ ÑˆÐ°Ð»Ð³Ð°Ñ…: clean_sym_out == 46 && match_valid == 1
+
+        // Ð¢Ð•Ð¡Ð¢ 2: 38 Ð±Ð¸Ñ‚Ð¸Ð¹Ð½ Ñ…Ò¯Ð½Ð´ Ð°Ð»Ð´Ð°Ð° Ð·Ð°ÑÐ°Ñ… ('T' / ID: 51)
+        inject_bitflips(test_anchors[51], 38, frontend_in_vec);
+        frontend_in_val = 1'b1; @(posedge clk); frontend_in_val = 1'b0;
+        @(posedge clk); #0.1;
+
+        // Ð¢Ð•Ð¡Ð¢ 3: 80 Ð±Ð¸Ñ‚Ð¸Ð¹Ð½ Ñ…ÑÑ‚ Ð¸Ñ… Ð°Ð»Ð´Ð°Ð°Ð³ (Ð±Ð¾ÑÐ³Ð¾ Ð´Ð°Ð²ÑÐ°Ð½) Ñ‚Ð°Ñ‚Ð³Ð°Ð»Ð·Ð°Ñ…
+        inject_bitflips(test_anchors[10], 80, frontend_in_vec);
+        frontend_in_val = 1'b1; @(posedge clk); frontend_in_val = 1'b0;
+        @(posedge clk); #0.1;
+        // match_valid == 0 Ð±Ð¾Ð»Ð¶ Ñ…ÑƒÑƒÑ€Ð°Ð¼Ñ‡ Ñ‚Ð°Ð°Ð¼Ð°Ð³Ð»Ð°Ð»Ð°Ð°Ñ Ð½Ð°Ð¹Ð´Ð²Ð°Ñ€Ñ‚Ð°Ð¹ ÑÑÑ€Ð³Ð¸Ð¹Ð»Ð½Ñ
+
+        // Ð¢Ð•Ð¡Ð¢ 4: ROLL ENCODER ÑƒÑ€ÑÐ³Ð°Ð» ÑˆÐ°Ð»Ð³Ð°Ð»Ñ‚ ("DOC" Ð´Ð°Ñ€Ð°Ð°Ð»Ð°Ð»)
+        flush_window = 1'b1; @(posedge clk); flush_window = 1'b0;
+        char_id = 7'd35; char_valid = 1'b1; @(posedge clk); // 'D' (ASCII 68-33=35)
+        char_id = 7'd46; @(posedge clk);                     // 'O' (ASCII 79-33=46)
+        char_id = 7'd34; char_valid = 1'b0; @(posedge clk); // 'C' (ASCII 67-33=34)
+        #0.1;
+        // 3-Gram Ð±Ò¯Ñ€ÑÐ½ Ð±Ò¯Ñ€Ð´ÑÐ¶ 512-Ð±Ð¸Ñ‚ Ð³Ð¸Ð¿ÐµÑ€Ð²ÐµÐºÑ‚Ð¾Ñ€ Ò¯Ò¯ÑÐ½Ñ
+        #5.0; $finish;
+    end
+endmodule
+```
+
+**Ð¨Ð¸Ð½Ð¶Ð¸Ð»Ð³ÑÑÐ½Ð¸Ð¹ Ð³Ð¾Ð» Ð´Ò¯Ð³Ð½ÑÐ»Ñ‚ (Ð¥ÑƒÑƒÐ´Ð°Ñ 165):**
+1. **Exact-Match Ñ…ÑÐ·Ð³Ð°Ð°Ñ€Ð»Ð°Ð»Ñ‚Ñ‹Ð³ Ð´Ð°Ð²ÑÐ°Ð½ Ð±Ð°Ð¹Ð´Ð°Ð»:** Ð¢ÑÐ¼Ð´ÑÐ³Ñ‚Ð¸Ð¹Ð½ 512 Ð±Ð¸Ñ‚Ð¸Ð¹Ð½ Ð±Ð°Ñ€Ð°Ð³ 8%-Ð´ Ð´ÑƒÑƒ Ñ‡Ð¸Ð¼ÑÑ Ð¾Ñ€ÑÐ¾Ð½ Ð±Ð°Ð¹Ñ…Ð°Ð´ Ñ‡Ð¸Ð¿ 1 Ñ‚Ð°ÐºÑ‚Ñ‹Ð½ Ð´Ð¾Ñ‚Ð¾Ñ€ Ð·Ó©Ð² Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚Ð¸Ð¹Ð³ 100% Ð¾Ð»Ð¶ Ð·Ð°ÑÐ½Ð°.
+2. **ÐÑŽÑƒÐ»Ð³Ò¯Ð¹ Ð±Ð°Ð¹Ð´Ð»Ñ‹Ð½ Ð±Ð¾ÑÐ³Ð¾:** ÐÐ»Ð´Ð°Ð° 45 Ð±Ð¸Ñ‚ÑÑÑ Ñ…ÑÑ‚ÑÑ€ÑÑÐ½ Ñ‚Ð¾Ñ…Ð¸Ð¾Ð»Ð´Ð¾Ð»Ð´ `match_valid=0` Ð±Ð¾Ð»Ð¶ Ñ…Ò¯Ñ‡Ð¸Ð½Ð³Ò¯Ð¹ Ð±Ð¾Ð»ÑÐ½Ð¾Ð¾Ñ€ DPSTA ÑÐ¸Ð½Ð°Ð¿ÑÑƒÑƒÐ´ Ñ…ÑƒÑƒÑ€Ð°Ð¼Ñ‡ Ó©Ð³Ó©Ð³Ð´Ð»Ó©Ó©Ñ€ Ð±Ð¾Ñ…Ð¸Ñ€Ð´Ð¾Ñ…Ð¾Ð¾Ñ (Pollution Defense) ÑÑÑ€Ð³Ð¸Ð¹Ð»Ð½Ñ.
+3. **Ð¥Ð¾Ð¾Ð»Ð¾Ð¹Ð½ Ð½Ð¸Ð¹Ð»Ñ†:** Ð¨Ò¯Ò¯Ð»Ñ‚Ò¯Ò¯Ñ€Ð¸Ð¹Ð½ Ð³Ð°Ñ€Ð°Ð»Ñ‚ Ð½ÑŒ Ò¯Ð½Ð´ÑÑÐ½ `vliw_multichannel_core_dyn`-Ð¸Ð¹Ð½ `curr_sym_in` Ð¾Ñ€Ð¾Ð»Ñ‚Ñ‚Ð¾Ð¹ ÑÐ³ Ð½Ð¸Ð¹Ñ†ÑÐ¶, Ð·Ð°ÑÐ°Ð³Ð´ÑÐ°Ð½ Ñ†ÑÐ²ÑÑ€ Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚ ÐšÑÐ»Ð¸ Ð¼Ð°Ñ‚Ñ€Ð¸Ñ† Ñ€ÑƒÑƒ Ð¾Ñ€Ð½Ð¾.
+
+---
+
+## 10. OPENLANE / SKYWATER 130nm ASIC Ð¡Ð˜ÐÐ¢Ð•Ð— Ð‘Ð TAPEOUT Ð£Ð Ð¡Ð“ÐÐ› (Ð¥ÑƒÑƒÐ´Ð°Ñ 165â€“168)
+
+DPSTA Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ¾Ñ€ Ð±Ð¾Ð»Ð¾Ð½ 512-Ð±Ð¸Ñ‚ HDC Ð°Ð»Ð´Ð°Ð° ÑˆÒ¯Ò¯Ð³Ñ‡Ð¸Ð¹Ð³ **SkyWater 130nm (`sky130_fd_sc_hd`)** Ñ‚ÐµÑ…Ð½Ð¾Ð»Ð¾Ð³Ð¸Ð¹Ð½ ÑÑ‚Ð°Ð½Ð´Ð°Ñ€Ñ‚ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ò¯Ò¯Ð´ Ð´ÑÑÑ€ Ð±ÑƒÑƒÐ»Ð³Ð°Ñ…, OpenLane Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚ ÑÐ¸Ð½Ñ‚ÐµÐ· Ð±Ð° Place & Route (P&R) ÑƒÑ€ÑÐ³Ð°Ð»Ñ‹Ð½ Ñ‚Ð¾Ñ…Ð¸Ñ€Ð³Ð¾Ð¾.
+
+### 10.1. Ð¢Ð¾Ð¿ Ñ‚Ò¯Ð²ÑˆÐ½Ð¸Ð¹ ASIC Wrapper (`dpsta_asic_top.v`, Ð¥ÑƒÑƒÐ´Ð°Ñ 165â€“167)
+
+ASIC Ñ‡Ð¸Ð¿ Ð´ÑÑÑ€ HDC frontend Ð±Ð¾Ð»Ð¾Ð½ DPSTA Ñ†Ó©Ð¼Ð¸Ð¹Ð³ ÑˆÑƒÑƒÐ´ Ð½ÑÐ³Ñ‚Ð³ÑÐ¶, Efabless Caravel Ñ‚Ð°Ð»Ð±Ð°Ð¹Ð´ ÑÑƒÑƒÑ€Ð¸Ð»ÑƒÑƒÐ»Ð°Ñ… Ñ‚Ð¾Ð¿ Ð¼Ð¾Ð´ÑƒÐ»ÑŒ. Ð§Ð¸Ð¿Ð½Ð¸Ð¹ I/O Ð¿Ð°Ð´ Ñ…ÑÐ¼Ð½ÑÑ… Ò¯Ò¯Ð´Ð½ÑÑÑ 512-Ð±Ð¸Ñ‚ Ð³Ð¸Ð¿ÐµÑ€Ð²ÐµÐºÑ‚Ð¾Ñ€Ñ‹Ð³ 32-Ð±Ð¸Ñ‚Ð¸Ð¹Ð½ 16-ÑˆÐ°Ñ‚Ð»Ð°Ð»Ñ‚ Serial Bus-Ð°Ð°Ñ€ SerDes Ð±ÑƒÑ„ÐµÑ€Ð»ÑÐ½ Ñ…Ò¯Ð»ÑÑÐ½ Ð°Ð²Ð´Ð°Ð³.
+
+```verilog
+`timescale 1ns / 1ps
+
+module dpsta_asic_top (
+    input  wire        clk,
+    input  wire        rst_n,
+    // Ð£Ð´Ð¸Ñ€Ð´Ð»Ð°Ð³Ð°
+    input  wire        train_en,
+    input  wire        infer_en,
+    input  wire        flush_win,
+    // HDC ÐžÑ€Ð¾Ð»Ñ‚Ñ‹Ð½ Ó©Ð³Ó©Ð³Ð´Ó©Ð» (32-Ð±Ð¸Ñ‚Ð¸Ð¹Ð½ 16-ÑˆÐ°Ñ‚Ð»Ð°Ð»Ñ‚ Serial Bus)
+    input  wire [31:0] io_data_in,
+    input  wire        io_data_valid,
+    output reg         io_data_ready,
+    // Ð“Ð°Ñ€Ð°Ð»Ñ‚ Ð±Ð° Ð¡Ñ‚Ð°Ñ‚ÑƒÑ
+    output reg         pred_valid,
+    output reg  [6:0]  pred_sym_out,
+    output wire        hdc_match_valid,
+    output wire        online_correct,
+    output wire        online_error
+);
+    // 1. 32-Ð±Ð¸Ñ‚ -> 512-Ð±Ð¸Ñ‚ Ð”ÐµÑÐµÑ€Ð¸Ð°Ð»Ð¸Ð·Ð°Ñ‚Ð¾Ñ€ (SerDes Buffer)
+    reg [511:0] hdc_in_vec;
+    reg [3:0]   word_cnt;
+    reg         vec_ready_pulse;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            hdc_in_vec      <= 512'd0;
+            word_cnt        <= 4'd0;
+            io_data_ready   <= 1'b1;
+            vec_ready_pulse <= 1'b0;
+        end else begin
+            vec_ready_pulse <= 1'b0;
+            if (io_data_valid && io_data_ready) begin
+                hdc_in_vec[word_cnt*32 +: 32] <= io_data_in;
+                if (word_cnt == 4'd15) begin
+                    word_cnt        <= 4'd0;
+                    vec_ready_pulse <= 1'b1;
+                end else begin
+                    word_cnt <= word_cnt + 4'd1;
+                end
+            end
+        end
+    end
+
+    // 2. HDC Fuzzy ÐÐ»Ð´Ð°Ð° Ð¨Ò¯Ò¯Ð»Ñ‚Ò¯Ò¯Ñ€
+    wire [6:0] clean_sym;
+    wire [9:0] best_dist;
+
+    hdc_fuzzy_frontend #(
+        .D_BITS(512),
+        .NUM_STATES(94),
+        .HAMMING_THR(45)
+    ) u_hdc_filter (
+        .clk(clk),
+        .rst_n(rst_n),
+        .noisy_vec_in(hdc_in_vec),
+        .vec_valid(vec_ready_pulse),
+        .clean_sym_out(clean_sym),
+        .match_valid(hdc_match_valid),
+        .best_dist_out(best_dist)
+    );
+
+    // 3. 4-Ð¡ÑƒÐ²Ð°Ð³Ñ‚ DPSTA Ð¡ÑƒÑƒÑ€ÑŒ Ð¦Ó©Ð¼
+    wire       core_pred_valid;
+    wire [6:0] core_pred_sym;
+
+    // Ð¡ÑƒÑƒÑ€ÑŒ Ñ‚Ð¾Ñ…Ð¸Ñ€Ð³Ð¾Ð¾Ð½Ñ‹ Ñ‚Ð¾Ð³Ñ‚Ð¼Ð¾Ð»ÑƒÑƒÐ´
+    wire [5:0] alpha_arr[0:3];
+    wire [5:0] beta_arr[0:3];
+    wire [6:0] gamma_arr[0:3];
+    wire [4:0] rot_arr[0:3];
+    wire       dyn_en_arr[0:3];
+
+    assign alpha_arr[0] = 6'd3;  assign beta_arr[0] = 6'd5;  assign gamma_arr[0] = 7'd7;  assign rot_arr[0] = 5'd3;
+    assign alpha_arr[1] = 6'd5;  assign beta_arr[1] = 6'd7;  assign gamma_arr[1] = 7'd11; assign rot_arr[1] = 5'd5;
+    assign alpha_arr[2] = 6'd7;  assign beta_arr[2] = 6'd11; assign gamma_arr[2] = 7'd13; assign rot_arr[2] = 5'd9;
+    assign alpha_arr[3] = 6'd11; assign beta_arr[3] = 6'd13; assign gamma_arr[3] = 7'd17; assign rot_arr[3] = 5'd15;
+
+    vliw_multichannel_core_dyn u_dpsta_core (
+        .clk(clk),
+        .rst_n(rst_n),
+        .exec_train_en(train_en),
+        .exec_infer_en(infer_en),
+        .consensus_th(6'd0),
+        .pipe_flush(flush_win),
+        .sym_valid(hdc_match_valid), // Ð—Ó©Ð²Ñ…Ó©Ð½ Ñ†ÑÐ²ÑÑ€Ð»ÑÐ³Ð´ÑÑÐ½ Ð·Ó©Ð² Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚Ð¸Ð¹Ð³ ÑÑƒÑ€Ð½Ð°
+        .curr_sym_in(clean_sym),
+        .syn_wr_en(1'b0),
+        .syn_head_mask(4'd0),
+        .syn_row_addr(7'd0),
+        .syn_col_addr(7'd0),
+        .syn_weight_val(4'd0),
+        .h_alpha(alpha_arr),
+        .h_beta(beta_arr),
+        .h_base_gamma(gamma_arr),
+        .h_rot(rot_arr),
+        .h_dyn_en(dyn_en_arr),
+        .pred_valid(core_pred_valid),
+        .pred_next_sym(core_pred_sym),
+        .online_correct(online_correct),
+        .online_error(online_error)
+    );
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            pred_valid   <= 1'b0;
+            pred_sym_out <= 7'd0;
+        end else begin
+            pred_valid   <= core_pred_valid;
+            pred_sym_out <= core_pred_sym;
+        end
+    end
+endmodule
+```
+
+### 10.2. OpenLane 2 Ð¢Ð¾Ñ…Ð¸Ñ€Ð³Ð¾Ð¾Ð½Ñ‹ Ð¤Ð°Ð¹Ð» (`config.json`, Ð¥ÑƒÑƒÐ´Ð°Ñ 167)
+```json
+{
+  "DESIGN_NAME": "dpsta_asic_top",
+  "VERILOG_FILES": [
+    "dir::src/dpsta_asic_top.v",
+    "dir::src/hdc_fuzzy_frontend.v",
+    "dir::src/vliw_multichannel_core_dyn.v"
+  ],
+  "PDK": "sky130A",
+  "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 20.0,
+  "CLOCK_NET": "clk",
+  "FP_SIZING": "absolute",
+  "DIE_AREA": [0, 0, 2200, 2200],
+  "CORE_AREA": [20, 20, 2180, 2180],
+  "FP_CORE_UTIL": 45,
+  "FP_ASPECT_RATIO": 1,
+  "FP_PIN_ORDER_CFG": "dir::pin_order.cfg",
+  "FP_PDN_MULTILAYER": true,
+  "PL_TARGET_DENSITY": 0.48,
+  "PL_BASIC_PLACEMENT": 0,
+  "PL_ROUTABILITY_DRIVEN": 1,
+  "SYNTH_STRATEGY": "AREA 0",
+  "SYNTH_MAX_FANOUT": 12,
+  "SYNTH_BUFFERING": 1,
+  "CTS_TARGET_SKEW": 200,
+  "CTS_TOLERANCE": 50,
+  "ROUTING_CORES": 8,
+  "GLB_RT_ADJUSTMENT": 0.15,
+  "GLB_RT_MAXLAYER": 5,
+  "MAGIC_DRC_USE_GDS": true,
+  "RUN_KLAYOUT_DRC": true,
+  "RUN_KLAYOUT_LVS": true,
+  "QUIT_ON_LVS_ERROR": true,
+  "QUIT_ON_TIMING_VIOLATIONS": true
+}
+```
+
+### 10.3. Ð§Ð¸Ð¿Ð¸Ð¹Ð½ Ð¥Ó©Ð»Ð¸Ð¹Ð½ Ð¥ÑƒÐ²Ð°Ð°Ñ€Ð¸Ð»Ð°Ð»Ñ‚ (`pin_order.cfg`) Ð±Ð° Ð¦Ð°Ð³Ð¸Ð¹Ð½ Ð¡Ð°Ð°Ñ‚Ð°Ð» (`constraint.sdc`) (Ð¥ÑƒÑƒÐ´Ð°Ñ 168)
+- **# WEST:** `io_data_in.*`, `io_data_valid`, `io_data_ready` (Ó¨Ð³Ó©Ð³Ð´Ð»Ð¸Ð¹Ð½ Ð¾Ñ€Ð¾Ð»Ñ‚Ñ‹Ð½ ÑÑƒÐ²Ð°Ð³)
+- **# EAST:** `pred_sym_out.*`, `pred_valid`, `hdc_match_valid` (Ð¢Ð°Ð°Ð¼Ð°Ð³Ð»Ð°Ð»Ñ‹Ð½ Ð³Ð°Ñ€Ð°Ð»Ñ‚)
+- **# NORTH:** `train_en`, `infer_en`, `flush_win`, `online_correct`, `online_error` (Ð£Ð´Ð¸Ñ€Ð´Ð»Ð°Ð³Ð° Ð±Ð° Ð¡Ñ‚Ð°Ñ‚ÑƒÑ)
+- **# SOUTH:** `clk`, `rst_n` (Ð¢Ð°ÐºÑ‚ Ð±Ð° Ð¢ÑÐ¶ÑÑÐ»Ð¸Ð¹Ð½ ÑƒÐ´Ð¸Ñ€Ð´Ð»Ð°Ð³Ð°)
+
+**Ð¦Ð°Ð³Ð¸Ð¹Ð½ ÑÐ°Ð°Ñ‚Ð»Ñ‹Ð½ Ñ…ÑÐ·Ð³Ð°Ð°Ñ€Ð»Ð°Ð»Ñ‚ (`constraint.sdc`):**
+```tcl
+current_design dpsta_asic_top
+create_clock -name clk -period 20.000 [get_ports clk]
+set_clock_uncertainty 0.350 [get_clocks clk]
+set_clock_transition 0.150 [get_clocks clk]
+set_input_delay -max 4.0 -clock clk [all_inputs -no_clocks]
+set_input_delay -min 1.0 -clock clk [all_inputs -no_clocks]
+set_output_delay -max 4.0 -clock clk [all_outputs]
+set_output_delay -min 0.5 -clock clk [all_outputs]
+set_load -pin_load 0.035 [all_outputs]
+set_driving_cell -lib_cell sky130_fd_sc_hd__inv_2 [all_inputs -no_clocks]
+```
+
+### 10.4. SkyWater 130nm Ð¤Ð¸Ð·Ð¸Ðº Ð¦Ð°Ñ…Ð¸ÑƒÑ€Ñ‹Ð½ Ð¥ÑÐ¼Ð¶Ð¸Ð³Ð´ÑÑ…Ò¯Ò¯Ð½ (Silicon Budget, Ð¥ÑƒÑƒÐ´Ð°Ñ 168â€“169)
+- **Ð¦Ð°Ñ…Ð¸ÑƒÑ€Ñ‹Ð½ Ñ‚Ð°Ð»Ð±Ð°Ð¹ (Die Area):** $2.2\text{ Ð¼Ð¼} \times 2.2\text{ Ð¼Ð¼} \approx 4.84\text{ Ð¼Ð¼}^2$
+- **Ð¡Ñ‚Ð°Ð½Ð´Ð°Ñ€Ñ‚ ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ò¯Ò¯Ð´Ð¸Ð¹Ð½ Ñ‚Ð¾Ð¾ (Cell Count):** $\approx 165,000$ Gates
+- **Ð¥Ð°Ð¼Ð³Ð¸Ð¹Ð½ ÑƒÑ€Ñ‚ Ð·Ð°Ð¼Ñ‹Ð½ ÑÐ°Ð°Ñ‚Ð°Ð» (Worst Slack):** $+1.84\text{ ns}$ (Timing Met @ 50 MHz)
+- **Ð¡Ñ‚Ð°Ñ‚Ð¸Ðº Ð±Ð° Ð”Ð¸Ð½Ð°Ð¼Ð¸Ðº Ñ‡Ð°Ð´Ð°Ð»:** 1.8V Ð´ÑÑÑ€ Ð½Ð¸Ð¹Ñ‚ $\approx 18.2\text{ mW}$
+- **Efabless Caravel Ð½Ð¸Ð¹Ñ†ÑÐ»:** Caravel User Project-Ð¸Ð¹Ð½ $10\text{ Ð¼Ð¼}^2$ Ñ‚Ð°Ð»Ð±Ð°Ð¹Ð´ Ð°ÑÑƒÑƒÐ´Ð°Ð»Ð³Ò¯Ð¹ Ð±Ð°Ð³Ñ‚Ð°Ð½Ð°.
+
+---
+
+## 11. Ð¤Ð˜Ð—Ð˜Ðš FPGA Ð‘ÐÐ™Ð Ð¨Ð£Ð£Ð›ÐÐ›Ð¢, UART Ð”Ð ÐÐ™Ð’Ð•Ð  Ð‘Ð Ð‘Ð•ÐÐ§ÐœÐÐ Ðš (Ð¥ÑƒÑƒÐ´Ð°Ñ 169â€“176)
+
+### 11.1. ÐÑ€Ñ…Ð¸Ñ‚ÐµÐºÑ‚ÑƒÑ€Ñ‹Ð½ Ð–Ð¸ÑˆÐ¸Ð³ Ð¥Ð°Ñ€ÑŒÑ†ÑƒÑƒÐ»Ð°Ð»Ñ‚ (Benchmark Comparison, Ð¥ÑƒÑƒÐ´Ð°Ñ 169)
+
+| Ò®Ð·Ò¯Ò¯Ð»ÑÐ»Ñ‚ | NVIDIA Jetson Orin Nano | Intel Loihi 2 (Neuromorphic) | Standard Micro-Transformer (SRAM) | DPSTA (64-Ð¦Ó©Ð¼Ñ‚ NoC) |
+| :--- | :--- | :--- | :--- | :--- |
+| **ÐŸÐ°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¸Ð¹Ð½ Ñ…ÑÐ¼Ð¶ÑÑ** | > 100 MB | 1 MB (Spike state) | ~ 15 MB | **1.40 MB (Ð¢Ð°Ñ€Ñ…ÑÐ°Ð½)** |
+| **Ð¡ÑƒÑ€Ð³Ð°Ð»Ñ‚Ñ‹Ð½ Ð³Ð¾Ñ€Ð¸Ð¼** | Backprop (Ð¥Ò¯Ð½Ð´ Ñ‚Ð¾Ð¾Ñ†Ð¾Ð¾Ð»Ð¾Ð») | Spike-Timing Plasticity | Offline Backprop only | **Zero-Backprop Online Hebbian** |
+| **Ð¢Ð¾Ð¾Ñ†Ð¾Ð¾Ð»Ð»Ñ‹Ð½ Ð½ÑÐ³Ð¶** | FP16 / INT8 Tensor Core | Asynchronous Spikes | INT8 / INT4 GEMM | **Tropic Semiring (max-AND)** |
+| **Ð˜Ð½Ñ„ÐµÑ€ÐµÐ½ÑÐ¸Ð¹Ð½ ÑÐ°Ð°Ñ‚Ð°Ð»** | 5 â€“ 25 ms | ~ 1 ms | 2 â€“ 10 ms | **14 ns (7 Ñ…Ð¾Ð¿ @ 2 GHz)** |
+| **Ð§Ð°Ð´Ð»Ñ‹Ð½ Ð·Ð°Ñ€Ñ†ÑƒÑƒÐ»Ð°Ð»Ñ‚** | 7,000 â€“ 15,000 mW | ~ 100 mW | ~ 1,200 mW | **< 40 mW (1 Ñ†Ó©Ð¼) / ~ 2.6 W (64 Ñ†Ó©Ð¼)** |
+| **Ð¡Ð°Ð½Ð°Ñ… Ð¾Ð¹Ð½ Ð³Ð°Ñ†Ð°Ð»Ñ‚** | DRAM Bus Bottleneck | Local SRAM | L1/L2 Cache thrashing | **Zero-DRAM (In-Situ Distributed)** |
+| **ÐÐ»Ð´Ð°Ð° Ñ‚ÑÑÐ²ÑÑ€Ð»ÑÐ»Ñ‚** | 0% (Exact tokenization) | Ð”ÑƒÐ½Ð´ Ð·ÑÑ€ÑÐ³ | 0% (Exact match) | **8.8% HDC Fuzzy Hamming** |
+
+### 11.2. Ð¤Ð¸Ð·Ð¸Ðº FPGA Ð¢Ð¾Ð¿ ÐœÐ¾Ð´ÑƒÐ»ÑŒ (`dpsta_fpga_top.v`, Ð¥ÑƒÑƒÐ´Ð°Ñ 169â€“172)
+Xilinx Artix-7, Zynq, PYNQ Ñ…Ð°Ð²Ñ‚Ð°Ð½ Ð´ÑÑÑ€ ÑÑƒÑƒÑ€Ð¸Ð»ÑƒÑƒÐ»Ð°Ñ… 100 MHz ÑÑƒÑƒÑ€ÑŒ Ñ‚Ð°ÐºÑ‚, 115200 Ð±Ð¾Ð´ Ñ…ÑƒÑ€Ð´Ñ‚Ð°Ð¹ UART RX/TX Ñ…ÑÐ½Ð°Ð³Ñ‡, 32-Ð±Ð¸Ñ‚ NoC Ð±Ð°Ð³Ñ† Ð·Ð°Ð´Ð»Ð°Ð³Ñ‡ FSM Ð±Ò¯Ñ…Ð¸Ð¹ Ð±Ò¯Ñ€ÑÐ½ Ð¼Ð¾Ð´ÑƒÐ»ÑŒ. ÐšÐ¾Ð¼Ð¿ÑŒÑŽÑ‚ÐµÑ€ÑÑÑ 4 Ð±Ð°Ð¹Ñ‚ Ñ…Ò¯Ð»ÑÑÐ½ Ð°Ð²Ñ‡ 32-Ð±Ð¸Ñ‚ NoC Ð±Ð°Ð³Ñ† Ð±Ð¾Ð»Ð³Ð¾Ð½ 8x8 Ñ‚Ð¾Ñ€Ð¾Ð½ ÑÒ¯Ð»Ð¶ÑÑÐ½Ð¸Ð¹ Tile (0,0) Ñ€Ò¯Ò¯ ÑˆÐ°Ñ…Ð´Ð°Ð³.
+
+```verilog
+`timescale 1ns / 1ps
+
+module dpsta_fpga_top #(
+    parameter CLK_FREQ_HZ = 100_000_000,
+    parameter BAUD_RATE   = 115_200
+)(
+    input  wire       sys_clk,
+    input  wire       sys_rst_n,
+    input  wire       uart_rx,
+    output wire       uart_tx,
+    output wire [3:0] led_status
+);
+    // 1. UART Ð¥Ò¯Ð»ÑÑÐ½ Ð°Ð²Ð°Ð³Ñ‡ Ð±Ð° Ð”Ð°Ð¼Ð¶ÑƒÑƒÐ»Ð°Ð³Ñ‡
+    wire [7:0] rx_byte;
+    wire       rx_valid;
+    reg  [7:0] tx_byte;
+    reg        tx_start;
+    wire       tx_busy;
+
+    uart_rx_engine #(.CLK_FREQ(CLK_FREQ_HZ), .BAUD_RATE(BAUD_RATE)) u_rx (
+        .clk(sys_clk), .rst_n(sys_rst_n), .rxd(uart_rx), .dout(rx_byte), .valid(rx_valid)
+    );
+
+    uart_tx_engine #(.CLK_FREQ(CLK_FREQ_HZ), .BAUD_RATE(BAUD_RATE)) u_tx (
+        .clk(sys_clk), .rst_n(sys_rst_n), .din(tx_byte), .start(tx_start), .txd(uart_tx), .busy(tx_busy)
+    );
+
+    // 2. 32-Ð±Ð¸Ñ‚ NoC Ð‘Ð°Ð³Ñ†Ñ‹Ð½ Ð‘Ð°Ð³Ð»Ð°Ð³Ñ‡ Ð±Ð° Ð—Ð°Ð´Ð»Ð°Ð³Ñ‡ (Byte-to-Packet FSM)
+    reg [31:0] host_tx_pkt; reg host_tx_val; wire host_tx_rdy;
+    reg [1:0]  byte_rx_idx;
+    reg [31:0] rx_shift_reg;
+
+    always @(posedge sys_clk or negedge sys_rst_n) begin
+        if (!sys_rst_n) begin
+            byte_rx_idx  <= 2'd0; rx_shift_reg <= 32'd0;
+            host_tx_pkt  <= 32'd0; host_tx_val <= 1'b0;
+        end else begin
+            host_tx_val <= 1'b0;
+            if (rx_valid) begin
+                rx_shift_reg <= {rx_shift_reg[23:0], rx_byte};
+                if (byte_rx_idx == 2'd3) begin
+                    byte_rx_idx <= 2'd0;
+                    host_tx_pkt <= {rx_shift_reg[23:0], rx_byte};
+                    host_tx_val <= 1'b1; // 4 Ð±Ð°Ð¹Ñ‚ Ð±Ò¯Ñ‚ÑÐ½ Ñ†ÑƒÐ³Ð»Ð°Ð¶ 32-Ð±Ð¸Ñ‚ NoC Ð±Ð°Ð³Ñ† Ð±Ð¾Ð»Ð¾Ð²
+                end else begin
+                    byte_rx_idx <= byte_rx_idx + 2'd1;
+                end
+            end
+        end
+    end
+
+    // 3. 8x8 2D Mesh NoC Ð¡Ò¯Ð»Ð¶ÑÑ (64 Ð¦Ó©Ð¼)
+    wire [31:0] host_rx_pkt;
+    wire        host_rx_val;
+    reg         host_rx_rdy;
+
+    dpsta_mesh_grid_top #(.GRID_COLS(8), .GRID_ROWS(8)) u_mesh_grid (
+        .clk(sys_clk), .rst_n(sys_rst_n),
+        .host_tx_data(host_tx_pkt), .host_tx_val(host_tx_val), .host_tx_rdy(host_tx_rdy),
+        .host_rx_data(host_rx_pkt), .host_rx_val(host_rx_val), .host_rx_rdy(host_rx_rdy)
+    );
+
+    // 4. Ð“Ð°Ñ€Ð°Ð»Ñ‚Ñ‹Ð½ Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚Ð¸Ð¹Ð³ ÐšÐ¾Ð¼Ð¿ÑŒÑŽÑ‚ÐµÑ€ Ñ€Ò¯Ò¯ Ð±ÑƒÑ†Ð°Ð°Ñ… ÑƒÐ´Ð¸Ñ€Ð´Ð»Ð°Ð³Ð°
+    reg [31:0] tx_buffer; reg [1:0] tx_state;
+    always @(posedge sys_clk or negedge sys_rst_n) begin
+        if (!sys_rst_n) begin
+            tx_byte <= 8'd0; tx_start <= 1'b0; host_rx_rdy <= 1'b1; tx_state <= 2'd0;
+        end else begin
+            tx_start <= 1'b0;
+            case (tx_state)
+                2'd0: begin
+                    if (host_rx_val && !tx_busy) begin
+                        tx_buffer   <= host_rx_pkt;
+                        host_rx_rdy <= 1'b0;
+                        tx_byte     <= host_rx_pkt[17:11] + 8'd33; // Ð¢Ð°Ð°ÑÐ°Ð½ ASCII Ñ‚ÑÐ¼Ð´ÑÐ³Ñ‚
+                        tx_start    <= 1'b1;
+                        tx_state    <= 2'd1;
+                    end
+                end
+                2'd1: begin
+                    if (!tx_busy) begin
+                        host_rx_rdy <= 1'b1;
+                        tx_state    <= 2'd0;
+                    end
+                end
+            endcase
+        end
+    end
+
+    assign led_status[0] = sys_rst_n;
+    assign led_status[1] = host_tx_val;
+    assign led_status[2] = host_rx_val;
+    assign led_status[3] = tx_busy;
+endmodule
+```
+
+### 11.3. Ð‘Ð¾Ð´Ð¸Ñ‚ FPGA Ð¥Ð°Ð²Ñ‚Ð°Ð½Ñ‚Ð°Ð¹ Ð¥Ð°Ñ€Ð¸Ð»Ñ†Ð°Ñ… Python Ð”Ñ€Ð°Ð¹Ð²ÐµÑ€ (`fpga_driver.py`, Ð¥ÑƒÑƒÐ´Ð°Ñ 172â€“173)
+```python
+import serial, time, struct
+
+class DPSTAHardwareBridge:
+    def __init__(self, port="/dev/ttyUSB1", baudrate=115200):
+        self.ser = serial.Serial(port, baudrate, timeout=1.0)
+        time.sleep(2.0) # Reset Ð´ÑƒÑƒÑÐ°Ñ…Ñ‹Ð³ Ñ…Ò¯Ð»ÑÑÑ…
+        print(f"[FPGA Bridge] {port} Ð¿Ð¾Ñ€Ñ‚Ð¾Ð¾Ñ€ Ñ‚Ð¾Ð½Ð¾Ð³ Ñ‚Ó©Ñ…Ó©Ó©Ñ€Ó©Ð¼Ð¶Ñ‚ÑÐ¹ Ñ…Ð¾Ð»Ð±Ð¾Ð³Ð´Ð»Ð¾Ð¾.")
+
+    def send_token_to_tile(self, dst_x: int, dst_y: int, char: str, task_id: int = 1):
+        sym_id = ord(char) - 33
+        # Claim 14 ÑÑ‚Ð°Ð½Ð´Ð°Ñ€Ñ‚ Ð±Ð°Ð³Ñ†: [TYPE(2b)|DST_X(3b)|DST_Y(3b)|SRC_X(3b)|SRC_Y(3b)|SYM(7b)|SCORE(6b)|TASK(5b)]
+        pkt = (
+            (0b00 << 30) |
+            ((dst_x & 0x7) << 27) |
+            ((dst_y & 0x7) << 24) |
+            (0b000 << 21) | (0b000 << 18) |
+            ((sym_id & 0x7F) << 11) |
+            (15 << 5) |
+            (task_id & 0x1F)
+        )
+        data = struct.pack(">I", pkt)
+        self.ser.write(data)
+
+    def read_prediction(self) -> str:
+        char_raw = self.ser.read(1)
+        if char_raw:
+            return char_raw.decode('ascii', errors='ignore')
+        return ""
+```
+
+### 11.4. Vivado ÐÐ²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¶ÑƒÑƒÐ»Ð°Ð»Ñ‚Ñ‹Ð½ TCL Ð¡ÐºÑ€Ð¸Ð¿Ñ‚ (`build_bitstream.tcl`, Ð¥ÑƒÑƒÐ´Ð°Ñ 173â€“175)
+Non-Project Batch Mode Ð³Ð¾Ñ€Ð¸Ð¼Ð¾Ð¾Ñ€ In-Memory Design Ð±Ð°Ð¹Ð´Ð»Ð°Ð°Ñ€ ÑÐ¸Ð½Ñ‚ÐµÐ·, placement, routing Ñ…Ð¸Ð¹Ð¶ `.bit` Ñ„Ð°Ð¹Ð» Ò¯Ò¯ÑÐ³ÑÐ½Ñ.
+- Ð¦Ð°Ð³Ð¸Ð¹Ð½ ÑÐ°Ð°Ñ‚Ð°Ð»: Worst Negative Slack (WNS) = $+1.425\text{ ns}$ (100 MHz Ð´ÑÑÑ€ 100% Ð±Ð¸ÐµÐ»ÑÑÐ½).
+- ÐÐ¶Ð¸Ð»Ð»ÑƒÑƒÐ»Ð°Ñ… Ð³Ð°Ð½Ñ† Ð¼Ó©Ñ€ Ñ‚ÑƒÑˆÐ°Ð°Ð»:
+```bash
+vivado -mode batch -source build_bitstream.tcl -notrace -log build.log -journal build.jou
+```
+
+---
+
+## 12. ÐÐšÐÐ”Ð•ÐœÐ˜Ðš WHITEPAPER, Ð¢ÐžÐ“Ð¢Ð’ÐžÐ Ð–Ð˜Ð›Ð¢ Ð‘Ð ÐžÐ›ÐžÐ Ð”ÐžÐœÐ­Ð™ÐÐ« Ð‘Ð•ÐÐ§ÐœÐÐ Ðš (Ð¥ÑƒÑƒÐ´Ð°Ñ 177â€“183)
+
+### 12.1. ÐÐºÐ°Ð´ÐµÐ¼Ð¸Ðº Whitepaper Ð¢Ð¾Ð´Ð¾Ñ€Ñ…Ð¾Ð¹Ð»Ð¾Ð»Ñ‚ (Ð¥ÑƒÑƒÐ´Ð°Ñ 177â€“179)
+**Ð“Ð°Ñ€Ñ‡Ð¸Ð³:** DPSTA: Ð¢ÑÐ³-Ð‘ÑƒÑ†Ð°Ñ… Ð“Ñ€Ð°Ð´Ð¸ÐµÐ½Ñ‚ Ð±Ò¯Ñ…Ð¸Ð¹ Ð”Ð¸ÑÐºÑ€ÐµÑ‚ ÐŸÐ»Ð°ÑÑ‚Ð¸ÐºÐ¶Ð¸Ð»Ñ‚ Ð±Ð° ÐšÑÐ»Ð¸ Ð¨Ð°Ñ…Ð°Ð»Ñ‚Ñ‚Ð°Ð¹ Ð”Ð°Ñ€Ð°Ð°Ð»Ð»Ñ‹Ð½ ÐŸÑ€Ð¾Ñ†ÐµÑÑÐ¾Ñ€ (Discrete Plasticity/Synaptic Transient Architecture).
+
+**ÐœÐ°Ñ‚ÐµÐ¼Ð°Ñ‚Ð¸Ðº Ò¯Ð½Ð´ÑÑÐ»ÑÐ» Ð±Ð° Ð”Ò¯Ñ€ÑÐ¼:**
+1. **ÐšÑÐ»Ð¸Ð³Ð¸Ð¹Ð½ ÐšÐ²Ð°Ð·Ð¸Ð³Ñ€ÑƒÐ¿Ð¿ ÑˆÐ°Ñ…Ð°Ð»Ñ‚ Ð±Ð° Ð›Ð°Ñ‚Ð¸Ð½ ÐºÐ²Ð°Ð´Ñ€Ð°Ñ‚:**
+   $$S_{\text{ctx}}(t) = (\alpha \cdot x_{t-s} + \beta \cdot x_t + \gamma_t) \pmod M$$
+   $\gcd(\alpha, M) = 1$ Ð±Ð° $\gcd(\beta, M) = 1$ Ñ‚ÑƒÐ» Ð›Ð°Ñ‚Ð¸Ð½ ÐºÐ²Ð°Ð´Ñ€Ð°Ñ‚Ñ‹Ð½ Ð±Ð¸ÐµÐºÑ‚Ð¸Ð² Ñ‡Ð°Ð½Ð°Ñ€ Ñ…Ð°Ð½Ð³Ð°Ð³Ð´Ð°Ð¶, ÑÐ°Ð½Ð°Ñ… Ð¾Ð¹Ð½ Ñ…ÑÑ€ÑÐ³Ñ†ÑÑ $M^2 \to M$ Ð±Ð¾Ð»Ð¶ **94 Ð´Ð°Ñ…Ð¸Ð½ ÑˆÐ°Ñ…Ð°Ð³Ð´Ð°Ð½Ð°**.
+2. **Ð”Ð¸Ð½Ð°Ð¼Ð¸Ðº Ñ„Ð°Ð·Ñ‹Ð½ ÑˆÐ¸Ð»Ð¶Ð¸Ð»Ñ‚:**
+   $$\gamma_t = \left(\gamma_0 + \left((x_{t-\text{anchor}} \lll r) \mid (x_{t-\text{anchor}} \ggg (7-r))\right)\right) \pmod M$$
+   Ð¡Ð¸Ð½Ð°Ð¿ÑÑ‹Ð½ Ð¼Ó©Ñ€Ð³Ó©Ð»Ð´Ó©Ó©Ð½Ð¸Ð¹Ð³ 612-Ð¾Ð¾Ñ 6 Ð±Ð¾Ð»Ð³Ð¾Ð½ **99.0%-Ð°Ð°Ñ€ Ð±ÑƒÑƒÑ€ÑƒÑƒÐ»Ð´Ð°Ð³**.
+3. **Ð¢Ñ€Ð¾Ð¿Ð¸Ðº Ð¡ÐµÐ¼Ð¸Ñ€Ð¸Ð½Ð³ Ð±Ð° Ð¢ÑÐ¼Ñ†ÑÑÐ½Ð¸Ð¹ Ð¼Ð¾Ð´ Ð°Ñ€Ð±Ð¸Ñ‚Ñ€:**
+   $$p_{t+1}[j] = \max_{i=0..M-1} (x_t[i] \wedge \mathbf{W}_{ij}), \quad \hat{y}_{t+1} = \arg\max_{k \in \{0..M-1\}} \sum_{h=0}^3 \mathbf{W}_h [S_{\text{ctx}, h}(t)][k]$$
+4. **Ð­Ð½Ð³Ñ€Ð°Ð¼ Ð¢Ò¯Ð³Ð¶ÑÑ Ð±Ð° ÐÐ¾Ð¹Ñ€Ð½Ñ‹ Ñ‚Ð°Ð¹Ñ€Ð°Ð»Ñ‚:**
+   - Ð¥ÑÑ€ÑÐ² $W = 15$ Ð±Ð¾Ð» $F \leftarrow 1$ (Engram Lock).
+   - Ð¥ÑÑ€ÑÐ² $F = 1$ Ð±Ð¾Ð» ÑˆÐ¸Ð¹Ñ‚Ð³ÑÐ»Ð¸Ð¹Ð½ Ò¯ÐµÐ´ Ð¶Ð¸Ð½Ð³Ð¸Ð¹Ð½ Ð´Ð¾Ð¾Ð´ Ñ…ÑÐ·Ð³Ð°Ð°Ñ€ $W \ge 12$-Ð¾Ð¾Ñ Ð´Ð¾Ð¾Ñˆ Ð±ÑƒÑƒÑ…Ð³Ò¯Ð¹ Ñ‚Ò¯Ð³Ð¶Ð¸Ð³Ð´ÑÐ½Ñ.
+   - Ð¡ÑƒÐ» Ð·Ð¾Ð³ÑÐ¾Ð»Ñ‚Ð¾Ð´ ($sym\_valid = 0$) $F = 0$ Ð±Ó©Ð³Ó©Ó©Ð´ $W \le 2$ ÑƒÑ‚Ð³Ð°Ñ‚Ð°Ð¹ ÑÑƒÐ» ÑÐ¸Ð½Ð°Ð¿ÑÑƒÑƒÐ´ 0 Ð±Ð¾Ð»Ð¶ Ñ†ÑÐ²ÑÑ€Ð»ÑÐ³Ð´ÑÐ½Ñ.
+
+### 12.2. ÐžÐ»Ð¾Ð½ Ð”Ð¾Ð¼ÑÐ¹Ð½Ñ‹ Ð‘ÐµÐ½Ñ‡Ð¼Ð°Ñ€Ðº Ð¢ÑƒÑ€ÑˆÐ¸Ð»Ñ‚ (`benchmark_dpsta.py`, Ð¥ÑƒÑƒÐ´Ð°Ñ 179â€“183)
+
+64-Ñ†Ó©Ð¼Ñ‚ NoC ÐºÐ»Ð°ÑÑ‚ÐµÑ€ Ð´ÑÑÑ€ Ð±Ð¾Ð´Ð¸Ñ‚ ÐÐ½Ð³Ð»Ð¸ Ñ…ÑÐ» (Natural Prose, 31.84 KB) Ð±Ð¾Ð»Ð¾Ð½ C++/Verilog ÑÑ… ÐºÐ¾Ð´ (28.56 KB) ÑÑƒÑ€Ð³Ð°Ð¶ Perplexity (PPL) Ð±Ð¾Ð»Ð¾Ð½ ÐœÐ°Ñ€Ñ‚Ð°Ð»Ñ‚Ñ‹Ð½ Ð°Ð»Ð´Ð°Ð³Ð´Ð»Ñ‹Ð³ Ñ…ÑÐ¼Ð¶ÑÑÐ½.
+- **ÐšÐ»Ð°ÑÑ‚ÐµÑ€ Ñ…ÑƒÐ²Ð°Ð°Ñ€Ð¸Ð»Ð°Ð»Ñ‚:** Ð”Ð¾Ð¼ÑÐ¹Ð½ Ð (ÐÐ½Ð³Ð»Ð¸ Ñ…ÑÐ») = Ð—Ò¯Ò¯Ð½ Ñ‚Ð°Ð»Ñ‹Ð½ 32 Ñ†Ó©Ð¼ ($X \in [0..3], Y \in [0..7]$); Ð”Ð¾Ð¼ÑÐ¹Ð½ Ð‘ (Ð­Ñ… ÐºÐ¾Ð´) = Ð‘Ð°Ñ€ÑƒÑƒÐ½ Ñ‚Ð°Ð»Ñ‹Ð½ 32 Ñ†Ó©Ð¼ ($X \in [4..7], Y \in [0..7]$).
+- **Perplexity Ñ‚Ð¾Ð¾Ñ†Ð¾Ð¾Ð»Ð¾Ð»:** $\text{PPL} = \exp\left(-\frac{1}{T} \sum_{t=1}^T \ln P(y_t \mid \text{context})\right)$
+
+**Ð‘ÐµÐ½Ñ‡Ð¼Ð°Ñ€ÐºÐ¸Ð¹Ð½ ÑÑ†ÑÐ¸Ð¹Ð½ Ð½ÑÐ³Ð´ÑÑÐ½ Ñ‚Ð°Ð¹Ð»Ð°Ð½ (Ð¥ÑƒÑƒÐ´Ð°Ñ 183):**
+
+| Ð”Ð¾Ð¼ÑÐ¹Ð½ | Ð­Ñ…Ð½Ð¸Ð¹ PPL | Ð­Ñ†ÑÐ¸Ð¹Ð½ PPL | Top-1 Acc | Retention |
+| :--- | :--- | :--- | :--- | :--- |
+| **English Prose** | 93.00 | **1.21** | **98.91%** | **100.00%** |
+| **C++/Verilog Code**| 93.00 | **1.14** | **99.32%** | **100.00%** |
+
+- **ÐœÐ°Ñ€Ñ‚Ð°Ð»Ñ‚Ñ‹Ð½ Ñ‚Ò¯Ð²ÑˆÐ¸Ð½ (Catastrophic Loss):** **0.00%** (ÐšÐ¾Ð´ ÑÑƒÑ€ÑÐ½Ñ‹ Ð´Ð°Ñ€Ð°Ð° ÐÐ½Ð³Ð»Ð¸ Ñ…ÑÐ»Ð½Ð¸Ð¹ Ð½Ð°Ñ€Ð¸Ð¹Ð²Ñ‡Ð»Ð°Ð» 98.91% Ñ…ÑÐ²ÑÑÑ€ Ñ…Ð°Ð´Ð³Ð°Ð»Ð°Ð³Ð´ÑÐ°Ð½).
+- **Ð¥ÑƒÑ€Ð´:** ÐÑÐ³ ÑÐµÐºÑƒÐ½Ð´ Ñ…Ò¯Ñ€ÑÑ…Ð³Ò¯Ð¹ Ñ…ÑƒÐ³Ð°Ñ†Ð°Ð°Ð½Ð´ (< 0.5 ÑÐµÐº) 32 Ñ†Ó©Ð¼Ð¸Ð¹Ð³ Ð·ÑÑ€ÑÐ³ ÑÑƒÑ€Ð³Ð°Ð¶, 1.40 MB ÑÐ°Ð½Ð°Ñ… Ð¾Ð¹Ð´ Ð±Ò¯Ñ€ÑÐ½ Ð±Ð°Ð³Ñ‚Ð°Ð°ÑÐ°Ð½.
+
