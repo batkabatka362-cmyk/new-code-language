@@ -61,6 +61,68 @@ impl SphereWeightMatrix {
     }
 }
 
+/// Exact 4D Hyperspherical Riemannian Geometry & S^3 Manifold Coordinates
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HyperspherePoint4D {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl HyperspherePoint4D {
+    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        let pt = Self { x, y, z, w };
+        pt.normalize()
+    }
+
+    /// Construct point from hyperspherical angles psi, theta, phi
+    pub fn from_angles(psi: f32, theta: f32, phi: f32) -> Self {
+        Self {
+            x: psi.cos(),
+            y: psi.sin() * theta.cos(),
+            z: psi.sin() * theta.sin() * phi.cos(),
+            w: psi.sin() * theta.sin() * phi.sin(),
+        }
+    }
+
+    /// Normalizes to unit 3-sphere: x^2 + y^2 + z^2 + w^2 = 1.0
+    pub fn normalize(&self) -> Self {
+        let norm_sq = self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w;
+        if norm_sq > 1e-9 {
+            let inv = 1.0 / norm_sq.sqrt();
+            Self {
+                x: self.x * inv,
+                y: self.y * inv,
+                z: self.z * inv,
+                w: self.w * inv,
+            }
+        } else {
+            Self { x: 1.0, y: 0.0, z: 0.0, w: 0.0 }
+        }
+    }
+
+    /// Exact Riemannian Great-Circle Geodesic Distance on S^3:
+    /// d(u, v) = arccos(clamp(<u, v>, -1.0, 1.0))
+    pub fn geodesic_distance(&self, other: &Self) -> f32 {
+        let dot = self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w;
+        dot.clamp(-1.0, 1.0).acos()
+    }
+
+    /// Exact Hopf Fibration mapping pi: S^3 -> S^2
+    /// Maps complex coordinates (z1, z2) = (x + i*y, z + i*w) to Cartesian coordinates (xi_1, xi_2, xi_3) on S^2:
+    /// xi_1 = 2 * (x*z + y*w)
+    /// xi_2 = 2 * (y*z - x*w)
+    /// xi_3 = (x^2 + y^2) - (z^2 + w^2)
+    pub fn hopf_projection(&self) -> [f32; 3] {
+        [
+            2.0 * (self.x * self.z + self.y * self.w),
+            2.0 * (self.y * self.z - self.x * self.w),
+            (self.x * self.x + self.y * self.y) - (self.z * self.z + self.w * self.w),
+        ]
+    }
+}
+
 /// Compilation options for lowering neural weights to 4D Sphere machine code (.cl)
 #[derive(Debug, Clone)]
 pub struct SphereCompileOptions {
@@ -135,29 +197,32 @@ pub fn compile_weights_to_sphere_cl(
                     0
                 };
 
-                let act_val = if c < input_activations.len() {
-                    input_activations[c].unsigned_abs() % 16
+                let act = if c < input_activations.len() {
+                    input_activations[c]
                 } else {
                     1
                 };
 
                 // Head Base64 Mode: (h_idx << 4) | flags
-                // mode_val = (h_idx << 4) | (0 if no err, 0 pen, 0 rd, 0 wr)
                 let mode_char = encode_base64((h_idx as u8) << 4);
 
                 let x_char = encode_base90((r % 90) as u8);
                 let z_char = encode_base90((c % 90) as u8);
 
-                // Quadrant & ALU op based on ternary weight
-                let (quad_char, alu_char) = match weight {
-                    1 => ('1', '+'),  // Quadrant 1 (North-East positive)
-                    -1 => ('2', '-'), // Quadrant 2 (North-West negative)
-                    _ => ('1', '='),  // Zero weight: identity/quiesce
+                // Exact signed arithmetic: effective product = weight * activation
+                let effective = (weight as i32) * act;
+                let (quad_char, alu_char) = if effective > 0 {
+                    ('1', '+')  // Positive accumulation
+                } else if effective < 0 {
+                    ('2', '-')  // Negative accumulation
+                } else {
+                    ('1', '=')  // Zero weight: identity/quiesce
                 };
 
                 let step_char = encode_base90(((c + r) % 90) as u8);
                 let reg_char = format!("{:X}", h_idx).chars().next().unwrap();
-                let val_char = format!("{:X}", act_val).chars().next().unwrap();
+                let mag = effective.unsigned_abs().min(15);
+                let val_char = format!("{:X}", mag).chars().next().unwrap();
 
                 // Exactly 10 characters: `[Mode][W][X][Z][Q][Step][ALU][Reg][Val]
                 let slot_str = format!(
@@ -213,11 +278,12 @@ pub struct SphereInferenceResult {
 pub struct SphereInferenceEngine;
 
 impl SphereInferenceEngine {
-    /// Execute multiplier-free 4D sphere matrix vector multiplication directly in Rust
+    /// Execute multiplier-free BitNet b1.58 ternary matrix vector multiplication directly in Rust.
+    /// Exact signed addition/subtraction: 0 DSP multipliers, 0 FLOPs, exact mathematical colinearity with float ref.
     pub fn infer_layer_native(
         matrix: &SphereWeightMatrix,
         input_activations: &[i32],
-        layer_depth: usize,
+        _layer_depth: usize,
     ) -> SphereInferenceResult {
         let start = std::time::Instant::now();
         let rows = matrix.rows;
@@ -226,13 +292,9 @@ impl SphereInferenceEngine {
         let mut head_accs = [0i32; 4];
         let mut total_ops = 0usize;
 
-        let w = (layer_depth % 90) as u32;
-        let radial_shift = (w % 4) + 1;
-
         for r in 0..rows {
             let h_id = r % 4;
             let mut row_sum = 0i32;
-            let lat_x = (r % 90) as u32;
 
             for c in 0..cols {
                 let w_idx = r * cols + c;
@@ -246,21 +308,21 @@ impl SphereInferenceEngine {
                     continue; // 0-skip structural sparsity
                 }
 
-                let act_val = if c < input_activations.len() {
-                    input_activations[c].unsigned_abs() % 16
+                let act = if c < input_activations.len() {
+                    input_activations[c]
                 } else {
                     1
                 };
 
-                let lon_z = (c % 90) as u32;
-                // Discrete Curvature Metric: ((X + Z) >> 5) + 1
-                let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
-                let q_sign: i32 = if weight > 0 { 1 } else { -1 };
+                // Exact BitNet b1.58 multiplier-free MAC:
+                let term = match weight {
+                    1 => act,
+                    -1 => -act,
+                    _ => 0,
+                };
 
-                // Geodesic Term = Q_sign * ((Val * Curvature) >> RadialShift)
-                let geo_term = q_sign * (((act_val * curvature_weight) >> radial_shift) as i32);
-                row_sum += geo_term;
-                head_accs[h_id] += geo_term;
+                row_sum += term;
+                head_accs[h_id] += term;
                 total_ops += 1;
             }
 
@@ -292,6 +354,97 @@ impl SphereInferenceEngine {
 
         let cos_sim = calculate_cosine_similarity(&output, &float_ref);
         let compression = 32.0 / 1.58; // 20.25x compression
+
+        SphereInferenceResult {
+            output_accumulators: head_accs,
+            full_layer_output: output,
+            total_geodesic_ops: total_ops,
+            total_bundles_executed: rows.div_ceil(4) * cols,
+            execution_time_us: elapsed,
+            compression_ratio: compression,
+            cosine_similarity_vs_float: cos_sim,
+            dsp_multipliers_used: 0,
+            flop_count: 0,
+        }
+    }
+
+    /// Execute 4D Hyperspherical Geodesic-modulated inference with S^3 Riemannian metric curvature.
+    pub fn infer_layer_geodesic(
+        matrix: &SphereWeightMatrix,
+        input_activations: &[i32],
+        layer_depth: usize,
+    ) -> SphereInferenceResult {
+        let start = std::time::Instant::now();
+        let rows = matrix.rows;
+        let cols = matrix.cols;
+        let mut output = vec![0i32; rows];
+        let mut head_accs = [0i32; 4];
+        let mut total_ops = 0usize;
+
+        let w = (layer_depth % 90) as u32;
+        let radial_shift = (w % 4) + 1;
+
+        for r in 0..rows {
+            let h_id = r % 4;
+            let mut row_sum = 0i32;
+            let lat_x = (r % 90) as u32;
+
+            for c in 0..cols {
+                let w_idx = r * cols + c;
+                let weight = if w_idx < matrix.ternary_weights.len() {
+                    matrix.ternary_weights[w_idx]
+                } else {
+                    0
+                };
+
+                if weight == 0 {
+                    continue;
+                }
+
+                let act = if c < input_activations.len() {
+                    input_activations[c]
+                } else {
+                    1
+                };
+
+                let lon_z = (c % 90) as u32;
+                let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
+                let term = match weight {
+                    1 => (act * curvature_weight as i32) >> radial_shift,
+                    -1 => -((act * curvature_weight as i32) >> radial_shift),
+                    _ => 0,
+                };
+                row_sum += term;
+                head_accs[h_id] += term;
+                total_ops += 1;
+            }
+
+            output[r] = row_sum;
+        }
+
+        let elapsed = start.elapsed().as_micros();
+        let mut float_ref = vec![0.0f32; rows];
+        for r in 0..rows {
+            let mut s = 0.0f32;
+            for c in 0..cols {
+                let w_idx = r * cols + c;
+                let w_val = if w_idx < matrix.ternary_weights.len() {
+                    matrix.ternary_weights[w_idx] as f32 * matrix.scale
+                } else {
+                    0.0
+                };
+                let a_val = if c < input_activations.len() {
+                    input_activations[c] as f32
+                } else {
+                    1.0
+                };
+                s += w_val * a_val;
+            }
+            float_ref[r] = s;
+        }
+
+        let cos_sim = calculate_cosine_similarity(&output, &float_ref);
+        let compression = 32.0 / 1.58;
 
         SphereInferenceResult {
             output_accumulators: head_accs,
@@ -454,12 +607,11 @@ impl SphereTorusCluster {
             let col_start = cz * cols_per_quad;
             let col_end = (col_start + cols_per_quad).min(cols);
 
-            let radial_shift = (cw % 4) + 1;
+            let _radial_shift = (cw % 4) + 1;
             let mut local_acc = 0i32;
             let mut local_count = 0usize;
 
             for r in row_start..row_end {
-                let lat_x = (r % 90) as u32;
                 for c in col_start..col_end {
                     let w_idx = r * cols + c;
                     let weight = if w_idx < matrix.ternary_weights.len() {
@@ -472,18 +624,18 @@ impl SphereTorusCluster {
                         continue; // 0-skip structural sparsity
                     }
 
-                    let act_val = if c < input_activations.len() {
-                        input_activations[c].unsigned_abs() % 16
+                    let act = if c < input_activations.len() {
+                        input_activations[c]
                     } else {
                         1
                     };
 
-                    let lon_z = (c % 90) as u32;
-                    let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
-                    let q_sign: i32 = if weight > 0 { 1 } else { -1 };
-
-                    let geo_term = q_sign * (((act_val * curvature_weight) >> radial_shift) as i32);
-                    local_acc += geo_term;
+                    let term = match weight {
+                        1 => act,
+                        -1 => -act,
+                        _ => 0,
+                    };
+                    local_acc += term;
                     local_count += 1;
                 }
             }

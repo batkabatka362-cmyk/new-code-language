@@ -101,6 +101,14 @@ pub struct CoreEngine {
     pub topological_parity_phase: usize,
     pub topological_deflections: usize,
     pub topological_resonance_acc: i64,
+
+    // === DPSTA & TBT Topological Brain Transformer State ===
+    pub dpsta_transitions_count: usize,
+    pub htgm_resonances_count: usize,
+    pub clifford_rotations_count: usize,
+    pub tropical_arbiter_count: usize,
+    pub dpsta_current_state: u8,
+    pub htgm_ring_memory: [u32; 16],
 }
 
 impl CoreEngine {
@@ -173,6 +181,13 @@ impl CoreEngine {
             topological_parity_phase: 0,
             topological_deflections: 0,
             topological_resonance_acc: 0,
+            // DPSTA & TBT Topological Brain Transformer state
+            dpsta_transitions_count: 0,
+            htgm_resonances_count: 0,
+            clifford_rotations_count: 0,
+            tropical_arbiter_count: 0,
+            dpsta_current_state: 0,
+            htgm_ring_memory: [0u32; 16],
         }
     }
 
@@ -1335,6 +1350,93 @@ impl CoreEngine {
                 };
                 self.topological_snakes[s_id][0] = clamped_w;
                 self.registers[d] = clamped_w as u32;
+            }
+            "DP" => {
+                // DPSTA 4-Tact Zero-FLOPs Discrete Transition Step (94-State Space)
+                self.dpsta_transitions_count += 1;
+                let d = if dest > 0 { dest } else { 1 };
+                let s = if src > 0 { src } else { 0 };
+                let input_raw = self.registers[s];
+                // Tact 1: Extract 7-bit discrete token (0..93)
+                let token = ((input_raw & 0x7F) % 94) as u8;
+                // Tact 2: Cayley Latin Square Transition Index
+                let prev = self.dpsta_current_state;
+                let cayley_idx = (((prev as u32) * 3 + (token as u32) * 7 + 1) % 94) as u8;
+                // Tact 3: State collapse
+                let collapsed = (cayley_idx ^ (input_raw.rotate_left(3) as u8)) % 94;
+                // Tact 4: Resolve next state & Homeostatic update
+                self.dpsta_current_state = collapsed;
+                self.registers[d] = collapsed as u32;
+            }
+            "HT" => {
+                // 3-Tier HTGM Attractor Resonance Ring (Pages 61-120)
+                self.htgm_resonances_count += 1;
+                let d = if dest > 0 { dest } else { 2 };
+                let s = if src > 0 { src } else { 0 };
+                let query = self.registers[s];
+                let mut best_score = 0u32;
+                let mut best_slot = 0usize;
+                for (idx, &slot_val) in self.htgm_ring_memory.iter().enumerate() {
+                    let score = 32 - (query ^ slot_val).count_ones();
+                    if score > best_score {
+                        best_score = score;
+                        best_slot = idx;
+                    }
+                }
+                if mode == 'W' || mode == '=' {
+                    let slot_to_write = (imm % 16).max(best_slot);
+                    self.htgm_ring_memory[slot_to_write] = query;
+                }
+                self.registers[d] = ((best_slot as u32) << 16) | (best_score & 0xFFFF);
+            }
+            "CR" => {
+                // 4D Clifford Algebra Cl(4,0) Spin(4) Vector Rotation: v' = R * v * ~R
+                self.clifford_rotations_count += 1;
+                let d = if dest > 0 { dest } else { 3 };
+                let s = if src > 0 { src } else { d };
+                let vec_val = self.registers[s];
+                let v0 = (vec_val & 0xFF) as i32;
+                let v1 = ((vec_val >> 8) & 0xFF) as i32;
+                let v2 = ((vec_val >> 16) & 0xFF) as i32;
+                let v3 = ((vec_val >> 24) & 0xFF) as i32;
+                let (r0, r1, r2, r3) = match imm % 4 {
+                    1 => (-v1, v0, -v3, v2),
+                    2 => (-v2, -v3, v0, v1),
+                    3 => (-v3, v2, -v1, v0),
+                    _ => (v0, v1, v2, v3),
+                };
+                let rot_out = ((r0 & 0xFF) as u32)
+                    | (((r1 & 0xFF) as u32) << 8)
+                    | (((r2 & 0xFF) as u32) << 16)
+                    | (((r3 & 0xFF) as u32) << 24);
+                self.registers[d] = rot_out;
+            }
+            "TS" => {
+                // Tropical Semi-Ring (Max, +) Winner-Take-All Selector
+                self.tropical_arbiter_count += 1;
+                let d = if dest > 0 { dest } else { 1 };
+                let s = if src > 0 { src } else { 0 };
+                let val_d = self.registers[d];
+                let val_s = self.registers[s];
+                let candidate = val_s.wrapping_add(imm as u32);
+                self.registers[d] = val_d.max(candidate);
+            }
+            "UP" => {
+                // Sub-Byte 1.58-bit Ternary Unpack (Inverse of PK)
+                let d = if dest > 0 { dest } else { 2 };
+                let s = if src > 0 { src } else { d };
+                let packed = self.registers[s];
+                let mut unpacked: u32 = 0;
+                for i in 0..4 {
+                    let trit_code = (packed >> (i * 2)) & 0x3;
+                    let trit_val: u8 = match trit_code {
+                        1 => 1,
+                        2 => 0xFF,
+                        _ => 0,
+                    };
+                    unpacked |= (trit_val as u32) << (i * 8);
+                }
+                self.registers[d] = unpacked;
             }
             _ => {}
         }

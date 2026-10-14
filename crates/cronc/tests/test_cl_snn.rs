@@ -102,3 +102,20 @@ fn test_snn_ascii_raster_and_json() {
     assert!(json.contains("\"final_membrane_potentials\":"));
     assert!(json.contains("\"sample_synaptic_weights\":"));
 }
+
+#[test]
+fn test_cortical_column_stdp_kernel_synthesis_and_validation() {
+    use cronc::{synthesize_cortical_column_kernel, verify_cl_program};
+
+    let kernel = synthesize_cortical_column_kernel(4);
+    assert!(kernel.contains("CRON CORTICAL COLUMN STDP & DPSTA TRANSITION MICROCODE KERNEL"));
+    assert!(kernel.contains(".core [0, 0, 0, 0]:"));
+    assert!(kernel.contains(".core [3, 0, 0, 0]:"));
+    assert!(kernel.contains("_DP01$200>"));
+    assert!(kernel.contains("_HT02$100>"));
+    assert!(kernel.contains("_CR03$201>"));
+    assert!(kernel.contains("_TS04$208>"));
+
+    let cl_rep = verify_cl_program(&kernel);
+    assert!(cl_rep.is_ok(), "Synthesized Cortical Column microcode must be valid .cl: {:?}", cl_rep.err());
+}

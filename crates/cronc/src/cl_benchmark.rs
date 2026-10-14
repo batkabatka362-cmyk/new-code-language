@@ -99,12 +99,8 @@ pub fn run_libcl_benchmarks(workspace_root: &Path, iterations: usize) -> Result<
         let total_slots = bundles_per_run * 4 * iterations;
         total_ops += total_slots;
 
-        let seconds = elapsed.as_secs_f64();
-        let throughput_mops = if seconds > 0.0 {
-            (total_slots as f64) / (seconds * 1.0e6)
-        } else {
-            0.0
-        };
+        let seconds = elapsed.as_secs_f64().max(1.0e-9);
+        let throughput_mops = (total_slots as f64) / (seconds * 1.0e6);
 
         let (op_name, op_count) = if k.name == "optical_gemm" {
             ("Photonic Tensor MZI".to_string(), core.optical_gemm_count * iterations)

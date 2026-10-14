@@ -157,6 +157,27 @@ fn test_vliw_base94_microcode_parsing_and_synthesis() {
 }
 
 #[test]
+fn test_dpsta_10_10_10_10_vliw_bundle_parsing() {
+    // 40-character bundle with DP, HT, CR, TS opcodes across 4 slots:
+    // Slot 0: _DP01$200> (10 chars)
+    // Slot 1: _HT02=100> (10 chars)
+    // Slot 2: _CR03$201> (10 chars)
+    // Slot 3: _TS04$208> (10 chars)
+    let vliw_line = "B0042:_DP01$200>_HT02=100>_CR03$201>_TS04$208>";
+    let bundle = CliffordVliwBundle::from_vliw_line(vliw_line).expect("DPSTA VLIW bundle parsing should succeed");
+
+    assert_eq!(bundle.label, "B0042");
+    assert_eq!(bundle.snakes[0].mode, TransitionMode::Wrap); // DP is Wrap mode
+    assert_eq!(bundle.snakes[1].mode, TransitionMode::Fluid); // HT is Fluid mode
+    assert_eq!(bundle.snakes[2].mode, TransitionMode::Tunnel); // CR is Tunnel mode
+    assert_eq!(bundle.snakes[3].mode, TransitionMode::Wrap); // TS is Wrap mode
+
+    // Check Hamiltonian volume sum (34 + 33 + 33 + 0 = 100%)
+    let total_vol: u8 = bundle.snakes.iter().map(|s| s.vol).sum();
+    assert_eq!(total_vol, 100, "Hamiltonian conservation invariant must hold");
+}
+
+#[test]
 fn test_wave_interference_attention_zero_gemm() {
     let snakes = [
         SnakeState::new(0, TransitionMode::Wrap, 10, 20, 30, 0, 25), // 0°

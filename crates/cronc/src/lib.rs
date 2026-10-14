@@ -151,9 +151,34 @@ pub mod docgen;
 pub mod cl_sphere_infer;
 pub mod cl_sphere_fpga;
 pub mod cl_convert;
+pub mod cl_matrix94;
+pub mod cl_htgm;
+pub mod cl_cldb;
+pub mod cl_dpsta;
+pub mod cl_rtl_dpsta;
+pub mod cl_dpsta_sleep;
+pub mod cl_multimodal_dpsta;
+pub mod cl_ingest;
+pub mod cl_sovereign_corpus;
+pub mod cl_multi_wafer;
+
+pub use cl_matrix94::{FourTactPipeline94, PipelineOutput, NUM_STATES};
+pub use cl_htgm::{HierarchicalTBTMemory, AttractorResonanceOutput, D_BITS};
+pub use cl_cldb::{CldbVault, CldbHeader, TOTAL_CLDB_SIZE};
+pub use cl_dpsta::{CompactDatasetEngine, SubByteTernaryDataset, TernaryWeight, pack_ternary_slice, unpack_ternary_slice};
+pub use cl_rtl_dpsta::{export_dpsta_rtl_package, export_dpsta_asic_tapeout};
+pub use cl_dpsta_sleep::{DpstaSleepEngine, DpstaSleepReport, SleepParameters, FrozenEngram};
+pub use cl_multimodal_dpsta::{RetinalVisionTransducer, CochlearAuditoryTransducer, ThalamicSensoryHub, SensoryFrame, SensoryModality};
+pub use cl_ingest::{BigDataIngestEngine, IngestOptions, IngestReport};
+pub use cl_sovereign_corpus::{SovereignCorpusEngine, SovereignMorphTokenizer, SOVEREIGN_MORPH_TOKENS, SOVEREIGN_KNOWLEDGE_BASE};
+pub use cl_multi_wafer::{
+    Coord9D, DualWaferPacket, DualWaferReport, DualWaferRouter, DualWaferSwarmEngine,
+    DualWaferTelemetry, Hemisphere, DistributedClusterFrame, DUAL_WAFER_TOTAL_CORES,
+    CORPUS_CALLOSUM_BW_TBPS, DUAL_WAFER_LASER_POWER_WATTS, HUMAN_CORTEX_OPS_TARGET,
+};
 
 pub use cl_sphere_infer::{
-    compile_weights_to_sphere_cl, SphereCompileOptions, SphereCoreNode, SphereGenerationResult,
+    compile_weights_to_sphere_cl, HyperspherePoint4D, SphereCompileOptions, SphereCoreNode, SphereGenerationResult,
     SphereInferenceEngine, SphereInferenceResult, SphereKVCache, SphereTorusCluster,
     SphereTransformerConfig, SphereTransformerModel, SphereWeightMatrix, TorusClusterExecutionReport,
 };
@@ -387,7 +412,7 @@ pub use cl_infer::{
     SafeTensorsWeightProvider, SamplingConfig, TransformerConfig,
 };
 pub use cl_snn::{
-    simulate_snn, synthesize_snn_kernel,
+    simulate_snn, synthesize_snn_kernel, synthesize_cortical_column_kernel,
     LifNeuronConfig, StdpConfig, SpikeEvent, SnnSimulationResult,
 };
 pub use cl_autotune::{

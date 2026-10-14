@@ -181,6 +181,11 @@ impl SnakeState {
                 "LY" => (TransitionMode::Wrap, match imm { 0 => 10, 1 => 25, 2 => 50, 3 => 70, _ => 85 }, 25, 35, 1),
                 "RS" | "SH" => (TransitionMode::Anchor, 0, 0, 0, 0),
                 "OP" | "MD" => (TransitionMode::Tunnel, 60, (dest * 8) % 100, (imm * 6) % 100, 2),
+                "DP" => (TransitionMode::Wrap, 10, (dest * 7) % 94, (imm * 3) % 94, 0),
+                "HT" => (TransitionMode::Fluid, 25, (dest * 11) % 94, (imm * 5) % 94, 1),
+                "CR" => (TransitionMode::Tunnel, 50, (dest * 13) % 94, (imm * 7) % 94, (imm % 4) as u8),
+                "TS" => (TransitionMode::Wrap, 40, (dest * 9) % 94, (imm * 4) % 94, 2),
+                "UP" => (TransitionMode::Anchor, 15, (dest * 6) % 94, (imm * 2) % 94, 0),
                 _ => (TransitionMode::Wrap, (dest * 10) % 100, (imm * 10) % 100, (dest + imm) % 100, 0),
             };
             let vol = match snake_id {

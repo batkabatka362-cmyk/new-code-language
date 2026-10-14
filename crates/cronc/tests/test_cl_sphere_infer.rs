@@ -81,8 +81,8 @@ fn test_sphere_inference_native_and_similarity() {
     assert_eq!(result.flop_count, 0);
     assert!(result.total_geodesic_ops > 0);
     assert!(result.compression_ratio > 10.0);
-    // Cosine similarity should be positive (meaningful alignment with float direction)
-    assert!(result.cosine_similarity_vs_float > 0.0);
+    // Cosine similarity must be exact (~1.0) under signed BitNet b1.58 multiplier-free MAC
+    assert!(result.cosine_similarity_vs_float > 0.999, "Cosine similarity must be > 0.999, got {}", result.cosine_similarity_vs_float);
 }
 
 #[test]
@@ -274,6 +274,30 @@ fn test_sphere_transformer_compile_to_sphere_cl() {
         }
     }
     assert!(bundle_count > 0, "Generated microcode must contain VLIW bundles");
+}
+
+#[test]
+fn test_4d_hypersphere_riemannian_geodesic_and_hopf_fibration() {
+    use cronc::cl_sphere_infer::HyperspherePoint4D;
+    use std::f32::consts::PI;
+
+    // 1. Great circle distance on unit S^3
+    let north_pole = HyperspherePoint4D::new(1.0, 0.0, 0.0, 0.0);
+    let equator_y = HyperspherePoint4D::new(0.0, 1.0, 0.0, 0.0);
+    let south_pole = HyperspherePoint4D::new(-1.0, 0.0, 0.0, 0.0);
+
+    let d_equator = north_pole.geodesic_distance(&equator_y);
+    assert!((d_equator - (PI / 2.0)).abs() < 1e-5, "Geodesic to equator must be PI/2, got {}", d_equator);
+
+    let d_antipodal = north_pole.geodesic_distance(&south_pole);
+    assert!((d_antipodal - PI).abs() < 1e-5, "Geodesic to antipodal point must be PI, got {}", d_antipodal);
+
+    // 2. Hopf fibration projection pi: S^3 -> S^2
+    // For any unit vector in S^3, the projected vector in R^3 must lie on unit sphere S^2 (norm == 1.0)
+    let p_arb = HyperspherePoint4D::from_angles(0.7, 1.2, 2.1);
+    let [xi1, xi2, xi3] = p_arb.hopf_projection();
+    let s2_norm = (xi1 * xi1 + xi2 * xi2 + xi3 * xi3).sqrt();
+    assert!((s2_norm - 1.0).abs() < 1e-5, "Hopf projection must lie on unit S^2, norm was {}", s2_norm);
 }
 
 

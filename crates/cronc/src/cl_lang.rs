@@ -236,6 +236,12 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "CN", // 4D Curved Needle Non-Collision Deflector Step (|Wi - Wj| >= 1)
     "HP", // 4D Homeostasis Parity Rotation [34, 33, 33] Cycle (H == 100%)
     "LY", // 4D Cortical Layer Transition / Clamp (Apical -> Sensory -> Motor)
+    // DPSTA & TBT Topological Brain Transformer Silicon Opcodes
+    "DP", // DPSTA 4-Tact Zero-FLOPs Discrete 94-State Transition Step
+    "HT", // Hierarchical TBT 3-Tier Attractor Memory Ring Resonance
+    "CR", // Clifford Algebra Cl(4,0) Spin(4) Multivector Rotor Rotation (v' = R*v*~R)
+    "TS", // Tropical Semi-Ring (Max, +) Winner-Take-All Arbiter Step
+    "UP", // Sub-Byte 1.58-bit Ternary Unpack / Decode into 8-bit registers
     // Extended Arithmetic, Logical & Neuromorphic Opcodes
     "AD", // Add
     "SU", // Subtract (Canonical 0-FLOPs Subtraction)

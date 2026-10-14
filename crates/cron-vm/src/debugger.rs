@@ -279,6 +279,26 @@ pub fn disassemble_slot(slot: &str) -> DisassembledSlot {
             "HALT".to_string(),
             "Core Execution Complete: enter quiescent low-power halt state".to_string(),
         ),
+        "DP" => (
+            format!("DPSTA_STEP R{}, R{}", dest_reg, src_reg),
+            "DPSTA 4-Tact Zero-FLOPs Discrete 94-State Transition Step".to_string(),
+        ),
+        "HT" => (
+            format!("HTGM_RESON R{}, R{}", dest_reg, src_reg),
+            "Hierarchical TBT 3-Tier Attractor Memory Ring Resonance".to_string(),
+        ),
+        "CR" => (
+            format!("CLIFFORD_ROT R{}, R{}, plane={}", dest_reg, src_reg, imm % 4),
+            "Clifford Algebra Cl(4,0) Spin(4) Multivector Rotor Rotation: v' = R*v*~R".to_string(),
+        ),
+        "TS" => (
+            format!("TROPICAL_MAX R{}, R{}, imm={}", dest_reg, src_reg, imm),
+            "Tropical Semi-Ring (Max, +) Winner-Take-All Arbiter Step".to_string(),
+        ),
+        "UP" => (
+            format!("TERNARY_UNPACK R{}, R{}", dest_reg, src_reg),
+            "Sub-Byte 1.58-bit Ternary Unpack / Decode into 8-bit registers".to_string(),
+        ),
 
         _ => (
             format!("{}{} R{}, R{}", op, mode, dest_reg, src_reg),
