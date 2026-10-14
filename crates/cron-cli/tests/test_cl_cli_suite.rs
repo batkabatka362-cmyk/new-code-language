@@ -2158,6 +2158,112 @@ fn test_cli_cl_infer_bench_roofline() {
     assert!(stdout.contains("\"zero_flops\":true"), "Zero-FLOP ternary architecture verified");
 }
 
+#[test]
+fn test_cli_cl_transpile_universal() {
+    let temp_dir = std::env::temp_dir();
+    let cl_path = temp_dir.join("test_transpile_in.cl");
+    let cl_code = "B0000: '==01#0408 '==02#020k _AD03M102: !HL00#0000\n";
+    std::fs::write(&cl_path, cl_code).expect("Failed to write cl test file");
+
+    // Test C++20
+    let cpp_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-transpile", cl_path.to_str().unwrap(), "--cpp"])
+        .output()
+        .expect("Failed to run cl-transpile --cpp");
+    assert!(cpp_out.status.success(), "cl-transpile --cpp must succeed");
+    let cpp_str = String::from_utf8_lossy(&cpp_out.stdout);
+    assert!(cpp_str.contains("namespace cron::generated"));
+
+    // Test CUDA
+    let cuda_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-transpile", cl_path.to_str().unwrap(), "--cuda"])
+        .output()
+        .expect("Failed to run cl-transpile --cuda");
+    assert!(cuda_out.status.success(), "cl-transpile --cuda must succeed");
+    let cuda_str = String::from_utf8_lossy(&cuda_out.stdout);
+    assert!(cuda_str.contains("cron_cl_cuda_kernel"));
+
+    // Test C#
+    let cs_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-transpile", cl_path.to_str().unwrap(), "--csharp"])
+        .output()
+        .expect("Failed to run cl-transpile --csharp");
+    assert!(cs_out.status.success(), "cl-transpile --csharp must succeed");
+    let cs_str = String::from_utf8_lossy(&cs_out.stdout);
+    assert!(cs_str.contains("namespace Cron.Generated"));
+
+    // Test Python
+    let py_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-transpile", cl_path.to_str().unwrap(), "--python"])
+        .output()
+        .expect("Failed to run cl-transpile --python");
+    assert!(py_out.status.success(), "cl-transpile --python must succeed");
+    let py_str = String::from_utf8_lossy(&py_out.stdout);
+    assert!(py_str.contains("execute_cl_kernel"));
+
+    let _ = std::fs::remove_file(cl_path);
+}
+
+#[test]
+fn test_cli_cl_bridge_exports() {
+    let temp_dir = std::env::temp_dir();
+    let hpp_path = temp_dir.join("test_cron.hpp");
+    let cuh_path = temp_dir.join("test_cron.cuh");
+    let cs_path = temp_dir.join("test_CronNative.cs");
+    let py_path = temp_dir.join("test_cron_runtime.py");
+
+    // 1. Export C++20 Header
+    let out_c = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-bridge", "export-c-headers", "-o", hpp_path.to_str().unwrap()])
+        .output()
+        .expect("Failed to run export-c-headers");
+    assert!(out_c.status.success());
+    let hpp_content = std::fs::read_to_string(&hpp_path).expect("Read exported hpp");
+    assert!(hpp_content.contains("class BitNetTensor"));
+
+    // 2. Export CUDA Header
+    let out_cu = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-bridge", "export-cuda-headers", "-o", cuh_path.to_str().unwrap()])
+        .output()
+        .expect("Failed to run export-cuda-headers");
+    assert!(out_cu.status.success());
+    let cuh_content = std::fs::read_to_string(&cuh_path).expect("Read exported cuh");
+    assert!(cuh_content.contains("bitnet_gemv_kernel"));
+
+    // 3. Export C# Bindings
+    let out_cs = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-bridge", "export-csharp", "-o", cs_path.to_str().unwrap()])
+        .output()
+        .expect("Failed to run export-csharp");
+    assert!(out_cs.status.success());
+    let cs_content = std::fs::read_to_string(&cs_path).expect("Read exported cs");
+    assert!(cs_content.contains("class CronNative"));
+
+    // 4. Export Python Runtime
+    let out_py = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-bridge", "export-python", "-o", py_path.to_str().unwrap()])
+        .output()
+        .expect("Failed to run export-python");
+    assert!(out_py.status.success());
+    let py_content = std::fs::read_to_string(&py_path).expect("Read exported py");
+    assert!(py_content.contains("class CronRuntime"));
+
+    // 5. DLPack Info
+    let out_dl = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cl-bridge", "dlpack-info"])
+        .output()
+        .expect("Failed to run dlpack-info");
+    assert!(out_dl.status.success());
+    let dl_str = String::from_utf8_lossy(&out_dl.stdout);
+    assert!(dl_str.contains("DLPack"));
+
+    let _ = std::fs::remove_file(hpp_path);
+    let _ = std::fs::remove_file(cuh_path);
+    let _ = std::fs::remove_file(cs_path);
+    let _ = std::fs::remove_file(py_path);
+}
+
+
 
 
 

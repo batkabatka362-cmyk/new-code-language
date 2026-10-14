@@ -109,7 +109,8 @@ fn print_help() {
     println!("    cl-verify-math [--json]        Golden reference mathematical precision & fidelity verifier");
     println!("    cl-lint <file.cl> [--json]     Deep static linter & hardware thermal/hazard analyzer");
     println!("    cl-forge <prompt> [-o file.cl] Autonomous golden microcode kernel synthesis engine");
-    println!("    cl-transpile <file.cl> [opts]  Cross-transpile .cl to WebGPU (WGSL), PTX, or C23 SIMD");
+    println!("    cl-transpile <file.cl> [opts]  Cross-transpile .cl to C++20, CUDA, C# (.NET), Python, WGSL, PTX, C23");
+    println!("    cl-bridge <subcommand> [opts]  Export C++20/CUDA single-headers, C# bindings, or Python runtime");
     println!("    debug <file.cl> [--core N] [--batch \"...\"] Interactive Photonic & Torus Debugger TUI");
     println!("    asm <file.cl> [-o <out.clb>]   Assemble .cl into 128-bit binary bytecode (.clb)");
     println!("    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl");
@@ -953,6 +954,9 @@ fn main() {
         }
         "cl-transpile" | "transpile" => {
             handle_cl_transpile_command(&args[2..]);
+        }
+        "cl-bridge" | "bridge" => {
+            handle_cl_bridge_command(&args[2..]);
         }
         "cl-dpsta-rtl" | "dpsta-rtl" => {
             handle_cl_dpsta_rtl_command(&args[2..]);
@@ -8851,7 +8855,7 @@ fn handle_cl_forge_command(args: &[String]) {
 
 fn handle_cl_transpile_command(args: &[String]) {
     if args.is_empty() {
-        println!("USAGE: cron cl-transpile <file.cl> [--target <wgsl|ptx|c23>] [-o <out>]");
+        println!("USAGE: cron cl-transpile <file.cl> [--target <cpp|cuda|csharp|python|wgsl|ptx|c23>] [-o <out>]");
         return;
     }
 
@@ -8861,9 +8865,21 @@ fn handle_cl_transpile_command(args: &[String]) {
 
     let mut i = 1;
     while i < args.len() {
-        if args[i] == "--target" && i + 1 < args.len() {
+        if (args[i] == "--target" || args[i] == "-t") && i + 1 < args.len() {
             target_str = args[i + 1].clone();
             i += 2;
+        } else if args[i] == "--cpp" || args[i] == "--cpp20" {
+            target_str = "cpp20".to_string();
+            i += 1;
+        } else if args[i] == "--cuda" || args[i] == "--cu" {
+            target_str = "cuda".to_string();
+            i += 1;
+        } else if args[i] == "--csharp" || args[i] == "--cs" || args[i] == "--dotnet" {
+            target_str = "csharp".to_string();
+            i += 1;
+        } else if args[i] == "--python" || args[i] == "--py" {
+            target_str = "python".to_string();
+            i += 1;
         } else if args[i] == "--c23" {
             target_str = "c23".to_string();
             i += 1;
@@ -8889,6 +8905,7 @@ fn handle_cl_transpile_command(args: &[String]) {
                 if let Some(ref path) = out_file {
                     let _ = std::fs::write(path, &report.generated_code);
                     println!("[SUCCESS] Transpiled {} to {} -> {}", input_path, target.as_str(), path);
+                    println!("          Speedup Estimate: {:.1}x over baseline emulator", report.estimated_speedup);
                 } else {
                     println!("{}", report.generated_code);
                 }
@@ -8896,6 +8913,78 @@ fn handle_cl_transpile_command(args: &[String]) {
             Err(e) => eprintln!("[ERROR] Transpilation failed: {}", e),
         },
         Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
+    }
+}
+
+fn handle_cl_bridge_command(args: &[String]) {
+    if args.is_empty() {
+        println!("USAGE: cron cl-bridge <subcommand> [OPTIONS]");
+        println!();
+        println!("SUBCOMMANDS:");
+        println!("    export-c-headers [-o <cron.hpp>]     Export single-header C++20 library with BitNet tensors");
+        println!("    export-cuda-headers [-o <cron.cuh>]  Export single-header CUDA warp-cooperative library");
+        println!("    export-csharp [-o <CronNative.cs>]   Export C# .NET 8/9 Native AOT P/Invoke bindings");
+        println!("    export-python [-o <cron_runtime.py>] Export standalone Python ctypes runtime & DLPack bridge");
+        println!("    dlpack-info                          Display DLPack zero-copy tensor protocol specifications");
+        return;
+    }
+
+    let subcmd = args[0].to_lowercase();
+    let mut out_file: Option<String> = None;
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "-o" && i + 1 < args.len() {
+            out_file = Some(args[i + 1].clone());
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    let (content, default_name, desc) = match subcmd.as_str() {
+        "export-c-headers" | "c" | "cpp" | "c++" => (
+            cronc::generate_cron_hpp(),
+            "cron.hpp",
+            "C++20 Single-Header Library",
+        ),
+        "export-cuda-headers" | "cuda" | "cu" | "cuh" => (
+            cronc::generate_cron_cuda_cuh(),
+            "cron.cuh",
+            "CUDA SM_80+ Header Library",
+        ),
+        "export-csharp" | "csharp" | "cs" | "dotnet" => (
+            cronc::generate_csharp_bindings(),
+            "CronNative.cs",
+            "C# Native AOT P/Invoke Bindings",
+        ),
+        "export-python" | "python" | "py" => (
+            cronc::generate_python_runtime(),
+            "cron_runtime.py",
+            "Python Standalone Runtime & DLPack Bridge",
+        ),
+        "dlpack-info" | "dlpack" => {
+            println!("================================================================================");
+            println!("CRON Universal DLPack Zero-Copy Protocol");
+            println!("================================================================================");
+            println!("Protocol: DLPack v0.8+ (kDLCPU / kDLCUDA)");
+            println!("Structs : DLTensor, DLManagedTensor, DLDevice, DLDataType");
+            println!("Zero-Copy: Direct pointer sharing with PyTorch (torch.from_dlpack)");
+            println!("           and JAX (jax.dlpack.from_dlpack)");
+            println!("Export FFI: cron_dlpack_tensor_export(data_ptr, rows, cols) -> *mut DLManagedTensor");
+            println!("================================================================================");
+            return;
+        }
+        _ => {
+            eprintln!("[ERROR] Unknown bridge subcommand: {}", args[0]);
+            eprintln!("Run 'cron cl-bridge' for available subcommands.");
+            return;
+        }
+    };
+
+    let target_path = out_file.unwrap_or_else(|| default_name.to_string());
+    match std::fs::write(&target_path, content) {
+        Ok(_) => println!("[SUCCESS] Exported {} -> {}", desc, target_path),
+        Err(e) => eprintln!("[ERROR] Failed to write {}: {}", target_path, e),
     }
 }
 

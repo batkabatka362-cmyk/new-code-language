@@ -233,7 +233,10 @@ pub use cl_forge::{
 };
 pub use cl_transpile::{
     transpile_cl, transpile_cl_to_c23_simd, transpile_cl_to_ptx,
-    transpile_cl_to_wgsl, TranspileReport, TranspileTarget,
+    transpile_cl_to_wgsl, transpile_cl_to_cpp20, transpile_cl_to_cuda,
+    transpile_cl_to_csharp, transpile_cl_to_python, generate_cron_hpp,
+    generate_cron_cuda_cuh, generate_csharp_bindings, generate_python_runtime,
+    TranspileReport, TranspileTarget,
 };
 
 pub use cl_macro::{MacroCompiler, MacroStmt, parse_clm, compute_slot_crc, build_valid_slot};

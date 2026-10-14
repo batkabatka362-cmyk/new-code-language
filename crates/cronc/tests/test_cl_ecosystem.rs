@@ -289,6 +289,40 @@ fn test_cl_cross_transpiler_wgsl_ptx_c23() {
         .expect("C23 transpile must succeed");
     assert!(c23_rep.generated_code.contains("#include <stdint.h>"));
     assert!(c23_rep.generated_code.contains("void cron_cl_c23_execute("));
+
+    // 4. ISO C++20
+    let cpp_rep = cronc::transpile_cl(cl_code, cronc::TranspileTarget::Cpp20)
+        .expect("C++20 transpile must succeed");
+    assert!(cpp_rep.generated_code.contains("namespace cron::generated"));
+    assert!(cpp_rep.generated_code.contains("std::popcount"));
+
+    // 5. NVIDIA CUDA
+    let cuda_rep = cronc::transpile_cl(cl_code, cronc::TranspileTarget::Cuda)
+        .expect("CUDA transpile must succeed");
+    assert!(cuda_rep.generated_code.contains("cron_cl_cuda_kernel"));
+    assert!(cuda_rep.generated_code.contains("__popc"));
+
+    // 6. C# (.NET 8/9 Native AOT)
+    let cs_rep = cronc::transpile_cl(cl_code, cronc::TranspileTarget::CSharp)
+        .expect("C# transpile must succeed");
+    assert!(cs_rep.generated_code.contains("namespace Cron.Generated"));
+    assert!(cs_rep.generated_code.contains("BitOperations.PopCount"));
+
+    // 7. Python 3 / NumPy
+    let py_rep = cronc::transpile_cl(cl_code, cronc::TranspileTarget::Python)
+        .expect("Python transpile must succeed");
+    assert!(py_rep.generated_code.contains("def cron_ternary_dot"));
+    assert!(py_rep.generated_code.contains("execute_cl_kernel"));
+
+    // 8. Generators verification
+    let hpp = cronc::generate_cron_hpp();
+    assert!(hpp.contains("class BitNetTensor"));
+    let cuh = cronc::generate_cron_cuda_cuh();
+    assert!(cuh.contains("bitnet_gemv_kernel"));
+    let cs_bind = cronc::generate_csharp_bindings();
+    assert!(cs_bind.contains("class CronNative"));
+    let py_rt = cronc::generate_python_runtime();
+    assert!(py_rt.contains("class CronRuntime"));
 }
 
 #[test]

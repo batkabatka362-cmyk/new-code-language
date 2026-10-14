@@ -240,3 +240,155 @@ pub extern "C" fn cron_sphere_convert_file(
         }
     }
 }
+
+/// Ultra-fast native C-ABI BitNet b1.58 ternary matrix-vector inference directly over raw buffers
+#[no_mangle]
+pub extern "C" fn cron_infer_forward_ffi(
+    packed_weights: *const u8,
+    inputs: *const c_float,
+    scale: c_float,
+    rows: usize,
+    cols: usize,
+    out_activations: *mut c_float,
+) -> i32 {
+    if packed_weights.is_null() || inputs.is_null() || out_activations.is_null() || rows == 0 || cols == 0 {
+        return -1;
+    }
+    unsafe {
+        let input_slice = std::slice::from_raw_parts(inputs, cols);
+        let out_slice = std::slice::from_raw_parts_mut(out_activations, rows);
+        let bytes_per_row = (cols + 3) / 4;
+
+        for r in 0..rows {
+            let row_bytes = std::slice::from_raw_parts(packed_weights.add(r * bytes_per_row), bytes_per_row);
+            let mut acc: i32 = 0;
+            for c in 0..cols {
+                let byte_val = row_bytes[c / 4];
+                let code = (byte_val >> ((c % 4) * 2)) & 0x03;
+                let trit: i8 = match code {
+                    1 => 1,
+                    2 => -1,
+                    _ => 0,
+                };
+                if trit > 0 {
+                    acc += input_slice[c] as i32;
+                } else if trit < 0 {
+                    acc -= input_slice[c] as i32;
+                }
+            }
+            out_slice[r] = (acc as f32) * scale;
+        }
+        0
+    }
+}
+
+// ============================================================================
+// DLPack Standard Protocol Types for Zero-Copy PyTorch / JAX Interoperability
+// ============================================================================
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum DLDeviceType {
+    KDLCpu = 1,
+    KDLCuda = 2,
+    KDLCudaHost = 3,
+    KDLOpenCl = 4,
+    KDLVulkan = 7,
+    KDLMetal = 8,
+    KDLVpi = 9,
+    KDLRocm = 10,
+    KDLExtDev = 12,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct DLDevice {
+    pub device_type: DLDeviceType,
+    pub device_id: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct DLDataType {
+    pub code: u8,
+    pub bits: u8,
+    pub lanes: u16,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct DLTensor {
+    pub data: *mut c_void,
+    pub device: DLDevice,
+    pub ndim: i32,
+    pub dtype: DLDataType,
+    pub shape: *mut i64,
+    pub strides: *mut i64,
+    pub byte_offset: u64,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DLManagedTensor {
+    pub dl_tensor: DLTensor,
+    pub manager_ctx: *mut c_void,
+    pub deleter: Option<unsafe extern "C" fn(self_: *mut DLManagedTensor)>,
+}
+
+unsafe extern "C" fn dlpack_deleter_simple(tensor: *mut DLManagedTensor) {
+    if !tensor.is_null() {
+        let boxed = Box::from_raw(tensor);
+        if !boxed.dl_tensor.shape.is_null() {
+            let _ = Vec::from_raw_parts(boxed.dl_tensor.shape, boxed.dl_tensor.ndim as usize, boxed.dl_tensor.ndim as usize);
+        }
+        if !boxed.dl_tensor.strides.is_null() {
+            let _ = Vec::from_raw_parts(boxed.dl_tensor.strides, boxed.dl_tensor.ndim as usize, boxed.dl_tensor.ndim as usize);
+        }
+    }
+}
+
+/// Zero-Copy DLPack tensor exporter for zero-overhead Python/PyTorch/JAX interop
+#[no_mangle]
+pub extern "C" fn cron_dlpack_tensor_export(
+    data_ptr: *mut c_float,
+    rows: i64,
+    cols: i64,
+) -> *mut DLManagedTensor {
+    if data_ptr.is_null() || rows <= 0 || cols <= 0 {
+        return std::ptr::null_mut();
+    }
+
+    let mut shape = vec![rows, cols];
+    let mut strides = vec![cols, 1];
+
+    let shape_ptr = shape.as_mut_ptr();
+    let strides_ptr = strides.as_mut_ptr();
+    std::mem::forget(shape);
+    std::mem::forget(strides);
+
+    let dl_tensor = DLTensor {
+        data: data_ptr as *mut c_void,
+        device: DLDevice {
+            device_type: DLDeviceType::KDLCpu,
+            device_id: 0,
+        },
+        ndim: 2,
+        dtype: DLDataType {
+            code: 2, // kDLFloat
+            bits: 32,
+            lanes: 1,
+        },
+        shape: shape_ptr,
+        strides: strides_ptr,
+        byte_offset: 0,
+    };
+
+    let managed = Box::new(DLManagedTensor {
+        dl_tensor,
+        manager_ctx: std::ptr::null_mut(),
+        deleter: Some(dlpack_deleter_simple),
+    });
+
+    Box::into_raw(managed)
+}
+
