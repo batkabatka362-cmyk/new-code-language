@@ -5,7 +5,7 @@ use cronc::cl_jit::{execute_cl_on_core, ClJitCore};
 #[test]
 fn test_cl_kernel_list_catalog() {
     let catalog = list_available_kernels();
-    assert_eq!(catalog.len(), 12, "Must provide all 12 foundational AI operators");
+    assert_eq!(catalog.len(), 29, "Must provide all 29 foundational AI operators");
 
     let names: Vec<&str> = catalog.iter().map(|k| k.name).collect();
     assert!(names.contains(&"flash-attn"));

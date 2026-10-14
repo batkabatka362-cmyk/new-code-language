@@ -2263,6 +2263,49 @@ fn test_cli_cl_bridge_exports() {
     let _ = std::fs::remove_file(py_path);
 }
 
+#[test]
+fn test_cli_import_fx_graph() {
+    let temp_dir = std::env::temp_dir();
+    let json_path = temp_dir.join("test_fx_input.json");
+    let out_cl_path = temp_dir.join("test_fx_output.cl");
+
+    let fx_json = r#"{
+        "graph_name": "CliMlpModel",
+        "nodes": [
+            {"op": "placeholder", "name": "x", "target": "x"},
+            {"op": "call_module", "name": "layer1", "target": "layer1", "args": ["x"], "shape": [16, 32]},
+            {"op": "call_function", "name": "relu", "target": "torch.relu", "args": ["layer1"]},
+            {"op": "output", "name": "out", "target": "out", "args": ["relu"]}
+        ]
+    }"#;
+    std::fs::write(&json_path, fx_json).expect("Write test fx json");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "import-fx",
+            json_path.to_str().unwrap(),
+            "-o",
+            out_cl_path.to_str().unwrap(),
+            "--name",
+            "CliMlpModel",
+        ])
+        .output()
+        .expect("Failed to run cron import-fx");
+
+    assert!(out.status.success(), "cron import-fx must succeed");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("CRON PYTORCH FX GRAPH IMPORTER"));
+    assert!(stdout.contains("[SUCCESS] Synthesized"));
+
+    let cl_content = std::fs::read_to_string(&out_cl_path).expect("Read synthesized .cl");
+    assert!(cl_content.contains("@kernel CliMlpModel"));
+    assert!(cl_content.contains("BitNet 1.58b"));
+
+    let _ = std::fs::remove_file(json_path);
+    let _ = std::fs::remove_file(out_cl_path);
+}
+
+
 
 
 

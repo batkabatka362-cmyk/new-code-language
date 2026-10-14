@@ -916,6 +916,9 @@ fn main() {
         "cl-import" | "import-nn" => {
             handle_cl_import_command(&args[2..]);
         }
+        "import-fx" | "cl-import-fx" => {
+            handle_import_fx_command(&args[2..]);
+        }
         "cl-lsp" | "cl-check" => {
             handle_cl_lsp_command(&args[2..]);
         }
@@ -8244,6 +8247,56 @@ fn handle_cl_import_command(args: &[String]) {
     let _ = std::fs::write(&out_path, &cl_code);
     println!("Generated 256-core partitioned .cl machine code -> {}", out_path);
     println!("Quantization: 100% BitNet {{-1, 0, +1}} Packed Trits with 4D-Torus Routing");
+}
+
+fn handle_import_fx_command(args: &[String]) {
+    if args.is_empty() {
+        println!("USAGE: cron import-fx <model_fx.json> [-o <out.cl>] [--name <model_name>]");
+        return;
+    }
+
+    let input_path = &args[0];
+    let mut out_path = "model_lowered.cl".to_string();
+    let mut model_name = "PyTorchModel".to_string();
+
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "-o" && i + 1 < args.len() {
+            out_path = args[i + 1].clone();
+            i += 2;
+        } else if args[i] == "--name" && i + 1 < args.len() {
+            model_name = args[i + 1].clone();
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    println!("================================================================================");
+    println!(" CRON PYTORCH FX GRAPH IMPORTER & 128-BIT VLIW SYNTHESIZER");
+    println!(" Input Graph: {}", input_path);
+    println!(" Target Model: {}", model_name);
+    println!("================================================================================");
+
+    match std::fs::read_to_string(input_path) {
+        Ok(json_content) => {
+            match cronc::lower_pytorch_fx_graph(&json_content, &model_name) {
+                Ok(lowered) => {
+                    match std::fs::write(&out_path, &lowered.cl_source) {
+                        Ok(_) => {
+                            println!("[SUCCESS] Synthesized {} bundles across {} layers -> {}", lowered.total_bundles, lowered.total_layers, out_path);
+                            println!("          Parameters Quantized : {} trits (BitNet b1.58)", lowered.total_parameters);
+                            println!("          Quantization Ratio   : {:.1}x compression", lowered.quantization_ratio);
+                            println!("          Estimated Hardware Speedup: {:.1}x over FP32 baseline", lowered.estimated_speedup);
+                        }
+                        Err(e) => eprintln!("[ERROR] Failed to write output file '{}': {}", out_path, e),
+                    }
+                }
+                Err(e) => eprintln!("[ERROR] Lowering failed: {}", e),
+            }
+        }
+        Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
+    }
 }
 
 fn handle_cl_lsp_command(args: &[String]) {

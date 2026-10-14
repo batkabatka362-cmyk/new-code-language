@@ -248,3 +248,27 @@ fn test_generate_example_imported_model() {
     assert!(!vliw.is_empty());
 }
 
+#[test]
+fn test_pytorch_fx_graph_lowering() {
+    let fx_json = r#"{
+        "graph_name": "SimpleResNetBlock",
+        "nodes": [
+            {"op": "placeholder", "name": "input_x", "target": "input_x"},
+            {"op": "call_module", "name": "conv_linear", "target": "conv_linear", "args": ["input_x"], "shape": [32, 64]},
+            {"op": "call_function", "name": "relu_act", "target": "torch.relu", "args": ["conv_linear"]},
+            {"op": "call_module", "name": "fc_head", "target": "fc_head", "args": ["relu_act"], "shape": [10, 32]},
+            {"op": "output", "name": "out", "target": "out", "args": ["fc_head"]}
+        ]
+    }"#;
+
+    let lowered = cronc::lower_pytorch_fx_graph(fx_json, "SimpleResNetBlock")
+        .expect("PyTorch FX lowering must succeed");
+
+    assert_eq!(lowered.total_layers, 5);
+    assert_eq!(lowered.total_parameters, (32 * 64) + (10 * 32));
+    assert!(lowered.cl_source.contains("@kernel SimpleResNetBlock"));
+    assert!(lowered.cl_source.contains("_MD03M102")); // BitNet Ternary Dot
+    assert!(lowered.cl_source.contains("!HL00#0000")); // Halt / Ret
+}
+
+

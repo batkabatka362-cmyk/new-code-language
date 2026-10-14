@@ -10,6 +10,9 @@ pub mod onnx;
 pub mod quantize;
 pub mod safetensors;
 pub mod ternary;
+pub mod pytorch_fx;
+
+pub use pytorch_fx::{lower_pytorch_fx_graph, FxGraph, FxNode, FxOpType};
 
 pub use gguf::{
     create_synthetic_gguf, parse_gguf_header, parse_gguf_header_from_reader, GgufModel,

@@ -627,3 +627,71 @@ if HAS_JAX:
         w_scale = jnp.mean(jnp.abs(weight)) + 1e-6
         w_ternary = jnp.clip(jnp.round(weight / w_scale), -1.0, 1.0)
         return jnp.dot(x, w_ternary.T) * w_scale
+
+
+# ==============================================================================
+# UNIVERSAL PYTORCH FX TRACE & DLPACK PROTOCOL EXPORT
+# ==============================================================================
+
+if HAS_TORCH:
+    CronLinear = CronSphereLinear
+    CronAutogradFunction = CronSphereLinearFunction
+
+    def export_model_to_fx_json(model: nn.Module) -> str:
+        """
+        Trace any PyTorch nn.Module using torch.fx and export to a clean JSON graph
+        ready for direct compilation to CRON .cl microcode bundles.
+        """
+        import json
+        import torch.fx
+
+        traced = torch.fx.symbolic_trace(model)
+        nodes_data = []
+
+        for node in traced.graph.nodes:
+            in_f = 64
+            out_f = 64
+            if node.op == "call_module":
+                submod = getattr(model, node.target, None)
+                if submod is not None:
+                    if hasattr(submod, "in_features") and hasattr(submod, "out_features"):
+                        in_f = submod.in_features
+                        out_f = submod.out_features
+                    elif hasattr(submod, "weight") and hasattr(submod.weight, "shape"):
+                        out_f = submod.weight.shape[0]
+                        in_f = submod.weight.shape[1] if len(submod.weight.shape) > 1 else out_f
+
+            nodes_data.append({
+                "op": node.op,
+                "name": node.name,
+                "target": str(node.target),
+                "args": [str(a) for a in node.args],
+                "shape": [out_f, in_f],
+            })
+
+        graph_dict = {
+            "graph_name": model.__class__.__name__,
+            "nodes": nodes_data,
+        }
+        return json.dumps(graph_dict, indent=2)
+
+
+def dlpack_from_cron_tensor(managed_ptr: int):
+    """
+    Zero-Copy bridge converting a native CRON DLManagedTensor C pointer into
+    a native PyTorch tensor without copying any memory bytes.
+    """
+    if HAS_TORCH:
+        try:
+            import torch.utils.dlpack
+            # When ctypes pointer is provided
+            capsule = ctypes.pythonapi.PyCapsule_New(
+                ctypes.c_void_p(managed_ptr),
+                b"dltensor",
+                None,
+            )
+            return torch.utils.dlpack.from_dlpack(capsule)
+        except Exception as e:
+            return None
+    return None
+

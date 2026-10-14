@@ -68,7 +68,7 @@ fn test_workload_evaluation_metrics() {
 #[test]
 fn test_comparison_suite_report() {
     let suite = run_comparison_suite();
-    assert_eq!(suite.results.len(), 5);
+    assert_eq!(suite.results.len(), 9);
     assert!(suite.summary_speedup_mean > 1.5, "Average speedup must exceed 1.5x");
     assert!(suite.summary_memory_reduction_mean > 3.0, "Average memory compression must exceed 3.0x");
     assert!(suite.summary_energy_savings_mean > 90.0, "Average energy savings must exceed 90%");

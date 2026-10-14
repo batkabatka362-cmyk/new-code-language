@@ -238,6 +238,7 @@ pub use cl_transpile::{
     generate_cron_cuda_cuh, generate_csharp_bindings, generate_python_runtime,
     TranspileReport, TranspileTarget,
 };
+pub use model_importer::pytorch_fx::{lower_pytorch_fx_graph, FxGraph, FxLoweredCode, FxNode, FxOpType};
 
 pub use cl_macro::{MacroCompiler, MacroStmt, parse_clm, compute_slot_crc, build_valid_slot};
 pub use cl_importer::{NeuralLayer, TernaryVal};
