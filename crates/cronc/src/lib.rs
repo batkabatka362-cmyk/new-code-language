@@ -163,6 +163,9 @@ pub mod cl_sovereign_corpus;
 pub mod cl_multi_wafer;
 pub mod cl_clifford_isa;
 pub mod cl_sovereign_mind;
+pub mod cl_topological_attention;
+pub mod cl_homeostatic_plasticity;
+pub mod cl_snake_discrete;
 
 pub use cl_matrix94::{FourTactPipeline94, PipelineOutput, NUM_STATES};
 pub use cl_htgm::{HierarchicalTBTMemory, AttractorResonanceOutput, D_BITS};
@@ -180,6 +183,9 @@ pub use cl_multi_wafer::{
 };
 pub use cl_clifford_isa::{CliffordBundle, CliffordRotorEmulator, MicroOp as CliffordMicroOp, MicroOpCode as CliffordMicroOpCode};
 pub use cl_sovereign_mind::{CorticalColumn, LifNeuron, SovereignMind};
+pub use cl_topological_attention::{PhaseResonanceAttention, PhaseResonanceConfig, TokenPhase4D};
+pub use cl_homeostatic_plasticity::HomeostaticDPSTACore;
+pub use cl_snake_discrete::{PhaseOnlyKVCache, PhaseKVCacheEntry, Sphere4DSnake, Sphere4DSnakeEngine};
 
 pub use cl_sphere_infer::{
     compile_weights_to_sphere_cl, HyperspherePoint4D, SphereCompileOptions, SphereCoreNode, SphereGenerationResult,
