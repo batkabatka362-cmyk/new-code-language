@@ -104,3 +104,25 @@ fn test_cross_engine_pipeline_and_attractor_coherence() {
     let resonance = htgm.probe_resonance();
     println!("Resonance Probe: Score={}, Resonant={}", resonance.resonance_score, resonance.is_resonant);
 }
+
+#[test]
+fn test_sovereign_models_generation_and_vault_integrity() {
+    let target_dir = if Path::new("models").exists() {
+        std::path::PathBuf::from("models")
+    } else {
+        std::path::PathBuf::from("../../models")
+    };
+    let dpdata_path = target_dir.join("quantum_rotor_kernel.dpdata");
+    let cldb_path = target_dir.join("cortex_knowledge.cldb");
+
+    let dp_size = cronc::SovereignCorpusEngine::export_sovereign_dpdata(&dpdata_path)
+        .expect("Export sovereign dpdata");
+    assert!(dp_size > 0);
+    println!("Exported sovereign dpdata: {} bytes", dp_size);
+
+    let cldb_size = cronc::SovereignCorpusEngine::export_sovereign_cldb(&cldb_path)
+        .expect("Export sovereign cldb");
+    assert_eq!(cldb_size, TOTAL_CLDB_SIZE);
+    println!("Exported sovereign cldb vault: {} bytes", cldb_size);
+}
+

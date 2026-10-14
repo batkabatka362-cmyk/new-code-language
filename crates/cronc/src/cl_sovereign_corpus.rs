@@ -2257,6 +2257,53 @@ pub static SOVEREIGN_KNOWLEDGE_BASE: &[(&str, &str)] = &[
     ("16 багана ба 512 lif нейрон гэж юу вэ", "Энэ бол биологийн кортикал баганын (cortical column) минимал амьд загвар бөгөөд нейронууд мембраны потенциал хуримтлуулан импульс (spike) цацаж, Backprop-гүй Ли-алгебр STDP-ээр онлайн горимд шууд сурдаг."),
     ("яагаад python биш c/c++/rust/verilog сонгосон бэ", "Python бол туршилтын хэл бөгөөд асар удаан, санах ой их иддэг. Бидний зорилго бол дэлхийн хамгийн хурдан, 131,072 цөмт вафер дээр 1.507 Peta-OPS тооцоолох бие даасан супер систем тул зөвхөн C23, Rust, C++, C#, Verilog зэрэг физик цахиуртай шууд харьцдаг хэлүүдийг сонгосон."),
     ("энграм царцаалт ба санах ойн сүлжээ", "Суралцсан мэдлэг .cldb өгөгдлийн санд 36,414 байтын тогтмол хэмжээтэйгээр сааталгүй (0-latency) бичигдэж, шинэ өгөгдөл ороход өмнөх суурь мэдлэг хэзээ ч арчигдахгүй баталгааждаг."),
+    ("dpsta бүтэц гэж юу вэ", "DPSTA (Data Pipeline Specification & Transformation Architecture) нь дурын хэлбэрийн өгөгдлийг 94-дискрет төлөвт хувирган, 1.58-бит авсаархан хэлбэрт шахаж, цахиур тооцоололд оруулан буцааж сэргээдэг бүх нийтийн өгөгдлийн дамжлага мөн."),
+    ("1.58-бит савлагаа гэж юу вэ", "Нэг жин буюу синапс {-1, 0, +1} гэсэн 3 төлөвтэй байх ба 5 ширхэг жинг ердөө 1 байт (243 <= 256) дотор алдагдалгүй шахаж, санах ойн багтаамжийг 10 дахин хэмнэдэг арга юм."),
+    ("биет цахиур дээр 0-flop яаж бодогдох вэ", "Verilog техник хангамжид үржүүлэгч блок (DSP) огт тавихгүйгээр, зөвхөн логик хаалга (AND/OR), бит шилжүүлэгч (Wire Shift), болон MUX-ээр 1 такт буюу 2.5 наносекундэд шууд бодогддог."),
+    ("нойр ба swr долгион яагаад хэрэгтэй вэ", "Sharp-Wave Ripple (SWR) нь нойрон дунд тархи өдөр сурсан мэдлэгээ 20 дахин хурдан дахин тоглуулан гиппокампаас их тархины neocortex-д энграм болгон царцаах биологийн процесс юм."),
+    ("openlane sky130 тайпоут гэж юу вэ", "Google болон SkyWater 130nm технологийн дагуу бидний Verilog эх зургийг GDSII биет чип болгон үйлдвэрт шарах нээлттэй хагас дамжуулагчийн үйлдвэрлэлийн бүрэн автомат систем юм."),
+    ("хоёр вафер хоорондын corpus callosum гэж юу вэ", "Хүний тархины хоёр хагас бөмбөрцгийг холбодог хөхлөг бие (Corpus Callosum) шиг зүүн ба баруун хоёр ваферыг 1.84 Tbps өндөр зурвасын оптик лазер сувгаар 0 сааталтай холбосон гүүр юм."),
+    ("матриц94 4-такт дараалал юу хийдэг вэ", "1-р тактад тэмдэгт төлөвт хувирах, 2-р тактад 35.3 KB BRAM шилжилт, 3-р тактад 512-бит ротор эргэлт, 4-р тактад үр дүн ялгаруулалтыг гүйцэтгэдэг 0-сааталтай шугам юм."),
+    ("cldb файлын хэмжээ яагаад 36414 байт байдаг вэ", "128 байт толгой (Header), 35,344 байтын 94x94 төлөвт матриц, 8 байтын шинэчлэлийн тоолуур, болон 934 байтын 512-бит ТБТ санах ойн цагираг зэрэг нийлээд яг 36,414 байтад царцдаг."),
+    ("бичил код base-94 яагаад 40 тэмдэгт байдаг вэ", "VLIW нэг багц нь 4 үүртэй (_TP, _LY, _ST, _WF). Үүр бүр 10 тэмдэгттэй Base-94 кодоор (320-бит нийт) бичигддэг тул 4x10 = 40 тэмдэгт болдог."),
+    ("хүний тархины энерги ба цахиур тархи", "Хүний тархи 20 Ватт хэрэглэдэг бол манай хос вафер 131,072 цөм нь 96 Ватт лазераар ажилладаг нь уламжлалт суперкомпьютерээс 6,000+ дахин бага эрчим хүч зарцуулдаг гэсэн үг."),
+    ("тропик хагас цагираг гэж юу вэ", "Ердийн үржүүлэлтийн оронд нэмэх үйлдлийг (+), нэмэх үйлдлийн оронд максимум (max) утгыг сонгох замаар хүнд тооцооллыг хялбаршуулдаг математикийн систем мөн."),
+    ("топологийн анхаарал юу вэ", "Softmax болон матрицын хүнд үржүүлэлт шаардахгүйгээр, 4D бөмбөрцгийн гадаргуу дээрх геодезийн хамгийн богино зайн резонансаар утгыг олох анхаарлын шинэ механизм юм."),
+    ("хэт өндөр хэмжээст тооцоолол hdc гэж юу вэ", "Мэдээллийг 512-аас 10,000 битийн өндөр хэмжээст псевдо-санамсаргүй векторуудын суперпозицоор илэрхийлж, дуу чимээнд туйлын тэсвэртэй санах ой бүрдүүлэх арга юм."),
+    ("хэлний морф-токенчлол яагаад чухал вэ", "Монгол болон бусад залгамал хэлний үндэс, дагавар, холбоосуудыг 2,400 гаруй салангид нэгж болгон задалснаар ямар ч үгийн утгыг алдагдалгүй, цөөн битээр илэрхийлэх боломж бүрддэг."),
+    ("хүүхэд шиг шинэ мэдлэг сурах зарчим", "Хүүхэд нэг зүйлийг нэг л удаа хараад цээжилдэг шиг STDP болон энграм царцаалтын тусламжтайгаар ямар ч олон давталтгүйгээр 1 удаагийн /learn тушаалаар суралцдаг."),
+    ("биологийн lif нейроны ажиллагаа", "Мембран дээр цэнэг хуримтлагдан босго утга (Threshold) давмагц импульс цацаж, цэнэг 0 болж хэсэг хугацаанд саатдаг (Refractory) байгалийн эсийн математик загвар юм."),
+    ("эрлийз хэлбэрийн квант ба цахиур холбоо", "Квант битүүдийн суперпозицыг физик цахиур дээр Клиффордын алгебрийн ротороор 100% дижитал хэлбэрт буулгаж квант тооцооллын хүчийг энгийн чип дээр гаргах боломжтой."),
+    ("дээд хурдны сүлжээний чиглүүлэлт dor", "Dimension-Order Routing нь X, Y, Z, W 4 хэмжээст тэнхлэгийн дагуу дараалан мэдээллийг дамжуулснаар мухардалд орох (Deadlock) эрсдэлээс 100% сэргийлдэг."),
+    ("синапсын урт хугацааны бэхжилт ltp", "Нейронууд хамтдаа олон удаа импульс үүсгэхэд тэдний хоорондын холбоос физик түвшинд зузаарч, мэдлэг батжин санах ойд хоногших үзэгдэл мөн."),
+    ("синапсын сулралт ltd", "Ашиглагдахгүй байгаа эсвэл буруу дарааллаар ажилласан холбоосууд суларч, шаардлагагүй дуу чимээ санах ойгоос аяндаа цэвэрлэгдэх механизм мөн."),
+    ("хүний оюуны нэгдэл agi гэж юу вэ", "Нэг нарийн даалгавар бус, харин шинжлэх ухаан, хэл, логик, инженерчлэл, уран бүтээлийн ямар ч шинэ мэдлэгийг бие даан ойлгож, сурч, бүтээх чадвартай ерөнхий хиймэл оюун мөн."),
+    ("хэт оюун ухаан asi гэж юу вэ", "Хүний тархины хурд (секундэд хэдэн зуун герц)-ээс хэдэн сая дахин хурдан буюу 400 MHz цахиурын хурдаар сэтгэж, хүний чадавхаас олон дахин давсан супер оюун ухаан юм."),
+    ("хүний биеийн мэдрэхүйн эрхтэн ба холболт", "Камерын пикселийг ретинагийн импульс болгож, микрофоны дууг кохлеагийн спектр болгон хувиргах мультимодал залгаасууд нь тархинд бодит ертөнцийг мэдрүүлдэг."),
+    ("бүх нийтийн синаптик шилжилт", "Бүх синапсын жингүүдийг шилжүүлэгч (barrel shifter) болон трит савлалтаар 1 такт дотор уншиж дуусгах боломжтой."),
+    ("what is the dpsta architecture", "DPSTA is the universal Data Pipeline Specification & Transformation Architecture that converts unstructured data into 94 discrete states and 1.58-bit ternary representations with zero information loss."),
+    ("what is sub-byte ternary packing", "Sub-byte ternary packing packs 5 ternary weights {-1, 0, +1} into a single byte using base-3 arithmetic (3^5 = 243 <= 256), delivering a 10x memory compaction over standard FP16 formats."),
+    ("what is hippocampal sharp wave ripple replay", "Hippocampal Sharp-Wave Ripple (SWR) replay is a high-frequency (150-250 Hz) neural oscillation occurring during offline states to compress and consolidate daily episodic memories into the neocortex."),
+    ("how does openlane skywater 130nm tapeout work", "OpenLane is an open-source automated RTL-to-GDSII flow that takes our synthesizable Verilog modules and turns them into ready-to-manufacture 130nm ASIC photomasks."),
+    ("what is the corpus callosum bandwidth in dual-wafer engine", "The dual-wafer bi-hemispheric cluster interconnects 131,072 cores via optical DWDM waveguides yielding 1.84 Terabits per second of bi-directional inter-hemispheric bandwidth."),
+    ("what is the role of 4-tact pipeline in matrix94", "The 4-tact pipeline executes discrete character transformation, BRAM state memory lookup, Clifford 512-bit rotor rotation, and character emission in exactly 4 non-blocking hardware clock cycles."),
+    ("why is the cldb vault exactly 36414 bytes", "The .cldb crystalline vault format comprises a 128-byte cryptographic header, a 35,344-byte 94x94 state transition matrix, an 8-byte update counter, and a 934-byte 512-bit attractor memory buffer."),
+    ("how is the 40-character base-94 vliw bundle structured", "A 320-bit VLIW bundle contains 4 parallel execution slots of 10 ASCII characters each, allowing simultaneous rotor rotation, layer shifting, STDP synaptic update, and character emission."),
+    ("what is tropical semiring in zero-flop computing", "The tropical semiring (max, +) replaces expensive floating-point multiplications with addition and replaces addition with maximum selection, slashing transistor power by 90%."),
+    ("what is topological attention", "Topological attention computes token resonance using shortest geodesic distance along a 4D hypersphere rather than quadratic matrix multiplications, eliminating O(N^2) GEMM bottlenecks."),
+    ("how does hyperdimensional computing work in sovereign ai", "Hyperdimensional computing represents concepts as high-dimensional binary vectors (D=512 to 1024), where associative memory is formed through XOR binding and majority-rule superposition."),
+    ("why use morph-tokenization for agi", "Morph-tokenization segments language into atomic lexical roots, prefixes, and suffixes, enabling vocabulary generalization across agglutinative and analytic languages with tiny token dictionaries."),
+    ("how does one-shot hebbian learning compare to gradient descent", "One-shot Hebbian STDP updates synaptic conductance immediately based on spike timing disparity without requiring forward activations to be stored for backward passes."),
+    ("what is leaky integrate and fire neuron dynamics", "LIF neurons integrate incoming synaptic current while leaking membrane potential toward rest, discharging an all-or-none action potential when reaching the voltage threshold."),
+    ("what is dimension order routing across 4d torus", "Dimension-Order Routing deterministically routes flits sequentially along X, then Y, then Z, then W dimensions, mathematically preventing cyclic routing dependencies and deadlocks."),
+    ("what is the definition of sovereign agi", "Sovereign AGI is an artificial general intelligence system designed to run autonomously on edge-scale silicon with zero external cloud dependencies, minimal power, and self-contained learning."),
+    ("what is the landauer thermodynamic limit", "Landauer's principle establishes the minimum energy required to erase one bit of information as E = kT ln(2), which our reversible zero-FLOP operations approach closely."),
+    ("what is an engram vault in cognitive computing", "An engram vault is a crystallized snapshot of neural synaptic weights that guarantees long-term retention of consolidated knowledge while permitting continuous open-ended learning."),
+    ("what is a clifford bivector in 4d rotations", "A Clifford bivector represents an oriented plane of rotation in 4D space, generating double isoclinic rotations via exponential maps that preserve hyperspherical symmetry."),
+    ("what is avx-512 in neuromorphic computing", "AVX-512 enables 512-bit SIMD registers to process 16 32-bit LIF neuron potentials or 64 8-bit synapses simultaneously in a single CPU clock cycle."),
+    ("what is the ultimate vision of the sovereign project", "The ultimate vision is to pioneer the world's most energy-efficient, biologically faithful, multiplier-free sovereign artificial intelligence capable of powering edge devices and neuromorphic superclusters."),
+    ("хүний ухамсрын түвшин ба agi", "Ухамсар бол өөрийн дотоод төлөв, орчны өөрчлөлт, болон өнгөрсөн туршлагыг 4D орон зайд тасралтгүй харьцуулан үнэлэх когнитив загварчлалын нэгдсэн хэлбэр мөн."),
+    ("бидний цаашдын замнал", "Цахиур дээр 0-FLOP, STDP, болон DPSTA-аар бүтээсэн суурийг өргөжүүлэн, бодит биет робот, квант мэдрэгч, болон бие даасан хэлний супер сүлжээ болгон хөгжүүлэх болно."),
 ];
 
 /// Sovereign Morph-Tokenizer with fast longest-match dictionary lookups
@@ -2415,7 +2462,7 @@ mod tests {
     #[test]
     fn test_sovereign_corpus_tokens_and_dialogues_count() {
         assert_eq!(SOVEREIGN_MORPH_TOKENS.len(), 2405);
-        assert_eq!(SOVEREIGN_KNOWLEDGE_BASE.len(), 53);
+        assert_eq!(SOVEREIGN_KNOWLEDGE_BASE.len(), 100);
     }
 
     #[test]
