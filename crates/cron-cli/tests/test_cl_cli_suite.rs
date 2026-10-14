@@ -2338,12 +2338,38 @@ fn test_cli_hf_models_and_catalog() {
     assert!(run_str.contains("cron run-hf <alias|repo_id>"));
 }
 
+#[test]
+fn test_cli_cluster_commands() {
+    // 1. Test 'cron cluster top'
+    let top_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cluster", "top"])
+        .output()
+        .expect("Failed to run cron cluster top");
+    assert!(top_out.status.success());
+    let top_str = String::from_utf8_lossy(&top_out.stdout);
+    assert!(top_str.contains("CRON 4D-TORUS MULTI-NODE HIERARCHICAL CLUSTER TOPOLOGY MAP"));
+    assert!(top_str.contains("DWDM Waveguide Ring"));
 
+    // 2. Test 'cron cluster bench --net'
+    let bench_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cluster", "bench", "--net", "--iters", "3"])
+        .output()
+        .expect("Failed to run cron cluster bench --net");
+    assert!(bench_out.status.success());
+    let bench_str = String::from_utf8_lossy(&bench_out.stdout);
+    assert!(bench_str.contains("CRON 4D-TORUS DISTRIBUTED CLUSTER BENCHMARK SCOREBOARD"));
+    assert!(bench_str.contains("EXACT BITWISE REDUCTION PASS"));
 
-
-
-
-
-
-
-
+    // 3. Test 'cron cluster init'
+    let temp_toml = std::env::temp_dir().join("test_cron_cluster_init.toml");
+    let init_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["cluster", "init", "--nodes", "4", "-o", temp_toml.to_str().unwrap()])
+        .output()
+        .expect("Failed to run cron cluster init");
+    assert!(init_out.status.success());
+    assert!(temp_toml.exists());
+    let toml_data = std::fs::read_to_string(&temp_toml).unwrap();
+    assert!(toml_data.contains("total_cores = 1024"));
+    assert!(toml_data.contains("listen = \"127.0.0.1:9042\""));
+    let _ = std::fs::remove_file(temp_toml);
+}

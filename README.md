@@ -391,5 +391,36 @@ cron run-hf bitnet "CRON .cl хэл дээр Фибоначчийн микрок
 cron run-hf smollm "Нейроморф чипийн давуу тал юу вэ?" --tokens 64
 ```
 
+---
 
+## 9. Тархмал 4D-Torus Олон Компьютер / Олон Чип Кластер Сүлжээ (Distributed 4D-Torus Multi-Node Cluster & Ring AllReduce)
+
+CRON экосистем нь нэг чип дээрх 256 цөмөөс хальж, олон физик машин, олон серверийг TCP/IP болон RDMA өндөр хурдны сүлжээгээр холбон нэгдмэл **Distributed 4D-Torus** суперкомпьютер болгон өргөтгөх боломжтой боллоо.
+
+### Архитектурын Гол Үзүүлэлтүүд:
+- **32-Байтын Бинар Wire Протокол**: Техник хангамжийн түвшний `CRC-8 ATM` (полиномиал `0x07`) шалгалттай, санах ойн хуваарилалтгүй (zero-alloc) пакет толгой.
+- **Хэмжээсийн Дарааллын Чиглүүлэлт (DOR - Dimension-Order Routing)**: Физик серверүүд болон чипүүдийн хооронд $X \to Y \to Z \to W$ координатаар пакет чиглүүлж түгжрэлгүй (deadlock-free) дамжуулна.
+- **Hardware-Accelerated Ring AllReduce**: 100% цэвэр Rust сүлжээний хөдөлгүүр (`std::net`), санах ойн нэмэлт хуулбаргүй шууд сокет дамжуулалт, BitNet ternary редукц.
+- **Кластер Удирдлагын Хэрэгслүүд**: Тохиргооны файл үүсгэгч (`cron_cluster.toml`), бодит хугацааны ASCII топологи зураглал (`top`), сүлжээний зурвасын өргөн ба хоцролтын хэмжүүр (`bench-net`).
+
+### Хэрэглэх Командууд:
+```bash
+# 1. Физик сервер дээр кластерийн ажилчин (worker) дэмоныг асаах
+cron cluster worker --listen 0.0.0.0:9042 --node-id 0 --cores 256
+cron cluster worker --listen 0.0.0.0:9043 --node-id 1 --cores 256
+
+# 2. Кластерийн сүлжээний топологийг ASCII HUD хэлбэрээр хянах
+cron cluster top --nodes 192.168.1.10:9042,192.168.1.11:9043,192.168.1.12:9044
+
+# 3. Тархмал Ring AllReduce сүлжээний хурд, хоцролтыг тестлэх (Benchmark)
+cron cluster bench --net --iters 100 --size-kb 1024
+cron cluster bench-net --nodes 127.0.0.1:9042,127.0.0.1:9043 --iters 50 --json
+
+# 4. Кластерийн стандарт тохиргооны файл (cron_cluster.toml) үүсгэх
+cron cluster init --nodes 8 --start-port 9042 -o cron_cluster.toml
+
+# 5. Олон чипийн симуляци болон техник хангамжийн хэмжигдэхүүн харах
+cron cluster info --chips 16
+cron cluster run model.cl --chips 16
+```
 

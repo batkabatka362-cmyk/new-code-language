@@ -147,8 +147,7 @@ fn print_help() {
     println!("    build-native-lib [-o lib.dll]  Compile high-performance C23 native accelerator shared library");
     println!("    verilog-sim <file.cl>          Simulate & verify synthesized Verilog RTL testbench");
     println!("    bench-host [--json]            Run empirical local hardware benchmarks against PyTorch CPU");
-    println!("    cluster run <file.cl> [--chips N] Execute on distributed 4,096-core multi-chip cluster");
-    println!("    cluster info [--chips N]       Display multi-chip cluster topology, 6D map & PPA metrics");
+    println!("    cluster <worker|bench|top|init|run|info> Multi-Node & Multi-Chip 4D-Torus Distributed Cluster Engine");
     println!("    cr-to-cl <file.cr> [-o <out.cl>] High-Level CRON Blueprint (.cr) to 128-bit 4-Slot VLIW (.cl) Autogen");
     println!("    info                           Display 4D-Torus architecture specifications");
     println!();
@@ -6028,12 +6027,16 @@ fn main() {
 
 fn handle_cluster_command(args: &[String]) {
     if args.is_empty() {
-        println!("CRON Multi-Chip Cluster Management Tool");
+        println!("CRON Multi-Chip & Multi-Node Distributed Cluster Engine");
         println!("Usage: cron cluster <action> [options]");
         println!("\nActions:");
-        println!("    run <file> [--chips <N>]   Execute .cl or .clb on distributed cluster (default 16 chips = 4,096 cores)");
-        println!("    info [--chips <N>]         Display cluster topology, 6D coordinates, and PPA metrics");
-        println!("    bench [--chips <N>]        Run distributed 4,096-core GEMM & NoC benchmark");
+        println!("    worker [--listen <ip:port>] [--node-id <N>]   Launch distributed 4D-Torus TCP worker daemon");
+        println!("    bench [--chips <N>] [--net] [--nodes <addrs>] Benchmark multi-chip NoC or distributed network ring");
+        println!("    bench-net [--nodes <addrs>] [--size-kb <N>]   Benchmark distributed Ring AllReduce over TCP sockets");
+        println!("    top / status [--nodes <addrs>]                Display live ASCII 4D-Torus cluster topology HUD");
+        println!("    init [--nodes <N>] [--start-port <P>] [-o <f>] Generate default cron_cluster.toml configuration");
+        println!("    run <file> [--chips <N>]                      Execute .cl or .clb on distributed cluster (default 16 chips = 4,096 cores)");
+        println!("    info [--chips <N>]                            Display cluster topology, 6D coordinates, and PPA metrics");
         return;
     }
 
@@ -6050,6 +6053,144 @@ fn handle_cluster_command(args: &[String]) {
     }
 
     match action.as_str() {
+        "worker" => {
+            let mut listen = "127.0.0.1:9042".to_string();
+            let mut node_id = 0u16;
+            let mut cores = 256usize;
+            let mut dies = 1usize;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--listen" | "-l" if i + 1 < args.len() => {
+                        listen = args[i + 1].clone();
+                        i += 2;
+                    }
+                    "--node-id" | "--id" if i + 1 < args.len() => {
+                        node_id = args[i + 1].parse().unwrap_or(0);
+                        i += 2;
+                    }
+                    "--cores" if i + 1 < args.len() => {
+                        cores = args[i + 1].parse().unwrap_or(256);
+                        i += 2;
+                    }
+                    "--dies" if i + 1 < args.len() => {
+                        dies = args[i + 1].parse().unwrap_or(1);
+                        i += 2;
+                    }
+                    _ => i += 1,
+                }
+            }
+            let config = cronc::ClusterNodeConfig {
+                node_id,
+                listen_addr: listen,
+                neighbor_addr: None,
+                cores,
+                dies,
+            };
+            if let Err(e) = cronc::run_cluster_worker(config, None) {
+                eprintln!("[CLUSTER WORKER ERROR] {}", e);
+                std::process::exit(1);
+            }
+        }
+        "top" | "status" => {
+            let mut nodes: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--nodes" if i + 1 < args.len() => {
+                        nodes = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+                        i += 2;
+                    }
+                    _ => i += 1,
+                }
+            }
+            if nodes.is_empty() {
+                nodes = vec![
+                    "127.0.0.1:9042".to_string(),
+                    "127.0.0.1:9043".to_string(),
+                    "127.0.0.1:9044".to_string(),
+                    "127.0.0.1:9045".to_string(),
+                ];
+            }
+            print!("{}", cronc::render_cluster_network_ascii(&nodes));
+        }
+        "init" => {
+            let mut num_nodes = 4usize;
+            let mut start_port = 9042u16;
+            let mut out_file = "cron_cluster.toml".to_string();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--nodes" | "-n" if i + 1 < args.len() => {
+                        num_nodes = args[i + 1].parse().unwrap_or(4);
+                        i += 2;
+                    }
+                    "--start-port" | "-p" if i + 1 < args.len() => {
+                        start_port = args[i + 1].parse().unwrap_or(9042);
+                        i += 2;
+                    }
+                    "-o" | "--out" if i + 1 < args.len() => {
+                        out_file = args[i + 1].clone();
+                        i += 2;
+                    }
+                    _ => i += 1,
+                }
+            }
+            let cfg = cronc::generate_default_cluster_config(num_nodes, start_port);
+            if let Err(e) = fs::write(&out_file, cfg) {
+                eprintln!("Failed to write cluster config to '{}': {}", out_file, e);
+                std::process::exit(1);
+            }
+            println!("[SUCCESS] Generated CRON Cluster config '{}' for {} nodes ({} cores)", out_file, num_nodes, num_nodes * 256);
+        }
+        "bench-net" | "net-bench" => {
+            let mut nodes: Vec<String> = Vec::new();
+            let mut size_kb = 1024usize;
+            let mut iters = 100usize;
+            let mut emit_json = false;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--nodes" if i + 1 < args.len() => {
+                        nodes = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+                        i += 2;
+                    }
+                    "--size-kb" if i + 1 < args.len() => {
+                        size_kb = args[i + 1].parse().unwrap_or(1024);
+                        i += 2;
+                    }
+                    "--iters" if i + 1 < args.len() => {
+                        iters = args[i + 1].parse().unwrap_or(100);
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
+                    _ => i += 1,
+                }
+            }
+            if nodes.is_empty() {
+                nodes = vec![
+                    "127.0.0.1:9042".to_string(),
+                    "127.0.0.1:9043".to_string(),
+                    "127.0.0.1:9044".to_string(),
+                    "127.0.0.1:9045".to_string(),
+                ];
+            }
+            let report = match cronc::run_cluster_benchmark(&nodes, size_kb * 1024, iters) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("[BENCHMARK ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            };
+            if emit_json {
+                println!("{}", report.to_json());
+            } else {
+                println!("{}", report.render_ascii_hud());
+            }
+        }
         "info" => {
             print_banner();
             println!("============================================================");
@@ -6136,6 +6277,56 @@ fn handle_cluster_command(args: &[String]) {
             println!("  STATUS: {}-CORE DISTRIBUTED FABRIC EXECUTED 100% NATIVELY\n", stats.total_cores);
         }
         "bench" => {
+            if args.iter().any(|a| a == "--net") {
+                let mut nodes: Vec<String> = Vec::new();
+                let mut size_kb = 1024usize;
+                let mut iters = 100usize;
+                let mut emit_json = false;
+                let mut i = 1;
+                while i < args.len() {
+                    match args[i].as_str() {
+                        "--nodes" if i + 1 < args.len() => {
+                            nodes = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+                            i += 2;
+                        }
+                        "--size-kb" if i + 1 < args.len() => {
+                            size_kb = args[i + 1].parse().unwrap_or(1024);
+                            i += 2;
+                        }
+                        "--iters" if i + 1 < args.len() => {
+                            iters = args[i + 1].parse().unwrap_or(100);
+                            i += 2;
+                        }
+                        "--json" => {
+                            emit_json = true;
+                            i += 1;
+                        }
+                        _ => i += 1,
+                    }
+                }
+                if nodes.is_empty() {
+                    nodes = vec![
+                        "127.0.0.1:9042".to_string(),
+                        "127.0.0.1:9043".to_string(),
+                        "127.0.0.1:9044".to_string(),
+                        "127.0.0.1:9045".to_string(),
+                    ];
+                }
+                let report = match cronc::run_cluster_benchmark(&nodes, size_kb * 1024, iters) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("[BENCHMARK ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                if emit_json {
+                    println!("{}", report.to_json());
+                } else {
+                    println!("{}", report.render_ascii_hud());
+                }
+                return;
+            }
+
             print_banner();
             println!("============================================================");
             println!("      CRON 4,096-CORE DISTRIBUTED CLUSTER BENCHMARK         ");
@@ -6181,7 +6372,7 @@ fn handle_cluster_command(args: &[String]) {
             println!("  BENCHMARK STATUS: SSS+ SUPREME DISTRIBUTED EFFICIENCY\n");
         }
         _ => {
-            eprintln!("Unknown cluster action '{}'. Available: run, info, bench", action);
+            eprintln!("Unknown cluster action '{}'. Available: worker, bench, bench-net, top, status, init, run, info", action);
             std::process::exit(1);
         }
     }
