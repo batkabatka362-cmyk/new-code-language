@@ -23,6 +23,7 @@ fn test_live_ai_streaming_server_and_benchmark() {
         host: "127.0.0.1".to_string(),
         port,
         workers: 2,
+        default_model: "cron-r1-7b-ternary".to_string(),
     };
     let server = LiveHttpServer::new(config);
     let is_running = server.is_running.clone();

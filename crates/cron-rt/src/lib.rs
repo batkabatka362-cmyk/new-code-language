@@ -10,7 +10,7 @@ pub mod http_server;
 pub mod mmap_streamer;
 
 pub use fiber::{FiberChannel, FiberConfig, FiberHandle, FiberScheduler, FiberState};
-pub use http_server::{HttpRequest, HttpServerConfig, LiveHttpServer, RegionScratchpad};
+pub use http_server::{HttpRequest, HttpServerConfig, LiveHttpServer, RegionScratchpad, generate_cron_chat_response};
 pub use mmap_streamer::{LayerMetadata, PagedWeightStreamer, StreamerTelemetry};
 
 use std::ffi::{CStr, CString};
@@ -1689,6 +1689,106 @@ pub unsafe extern "C" fn cron_liquid_compile_cl(
         }
         return false;
     }
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+// ----------------------------------------------------------------------------
+// 10h. OpenAI-Compatible Chat Completions & Local Server C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_chat_generate(
+    prompt: *const c_char,
+    model: *const c_char,
+    think: bool,
+    out_thoughts: *mut *mut c_char,
+    out_answer: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if prompt.is_null() || out_answer.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let prompt_str = match CStr::from_ptr(prompt).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let model_str = if model.is_null() {
+        "cron-r1-7b-ternary"
+    } else {
+        match CStr::from_ptr(model).to_str() {
+            Ok(s) => s,
+            Err(_) => "cron-r1-7b-ternary",
+        }
+    };
+
+    let (thoughts, answer) = generate_cron_chat_response(prompt_str, model_str, think);
+
+    if !out_thoughts.is_null() {
+        *out_thoughts = CString::new(thoughts).unwrap().into_raw();
+    }
+    *out_answer = CString::new(answer).unwrap().into_raw();
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_http_server_start_daemon(
+    host: *const c_char,
+    port: u16,
+    model: *const c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    let host_str = if host.is_null() {
+        "127.0.0.1".to_string()
+    } else {
+        match CStr::from_ptr(host).to_str() {
+            Ok(s) => s.to_string(),
+            Err(e) => {
+                if !out_error.is_null() {
+                    *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+                }
+                return false;
+            }
+        }
+    };
+
+    let model_str = if model.is_null() {
+        "cron-r1-7b-ternary".to_string()
+    } else {
+        match CStr::from_ptr(model).to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => "cron-r1-7b-ternary".to_string(),
+        }
+    };
+
+    let cfg = HttpServerConfig {
+        host: host_str,
+        port: if port > 0 { port } else { 8080 },
+        workers: 4,
+        default_model: model_str,
+    };
+
+    let srv = LiveHttpServer::new(cfg);
+    std::thread::spawn(move || {
+        let _ = srv.start(None);
+    });
 
     if !out_error.is_null() {
         *out_error = std::ptr::null_mut();

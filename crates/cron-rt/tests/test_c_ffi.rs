@@ -961,6 +961,43 @@ fn test_ffi_liquid_nn() {
     let _ = std::fs::remove_dir(&temp_dir);
 }
 
+#[test]
+fn test_ffi_chat_and_server() {
+    let mut thoughts_ptr: *mut c_char = std::ptr::null_mut();
+    let mut answer_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let prompt = CString::new("Монгол бичгээр бичих үү?").unwrap();
+    let model = CString::new("cron-mongol-v3").unwrap();
+
+    let ok = unsafe {
+        cron_chat_generate(
+            prompt.as_ptr(),
+            model.as_ptr(),
+            true,
+            &mut thoughts_ptr,
+            &mut answer_ptr,
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_chat_generate must succeed");
+    assert!(!thoughts_ptr.is_null());
+    assert!(!answer_ptr.is_null());
+
+    let thoughts_str = unsafe { CStr::from_ptr(thoughts_ptr).to_str().unwrap() };
+    let answer_str = unsafe { CStr::from_ptr(answer_ptr).to_str().unwrap() };
+
+    assert!(thoughts_str.contains("<think>"));
+    assert!(answer_str.contains("Монгол") || answer_str.contains("CRON"));
+
+    unsafe {
+        cron_string_free(thoughts_ptr);
+        cron_string_free(answer_ptr);
+    }
+}
+
+
 
 
 

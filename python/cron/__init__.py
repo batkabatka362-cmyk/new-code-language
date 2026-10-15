@@ -197,6 +197,26 @@ def _setup_ffi(lib):
             ctypes.c_char_p,
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_chat_generate
+    if hasattr(lib, "cron_chat_generate"):
+        lib.cron_chat_generate.restype = ctypes.c_bool
+        lib.cron_chat_generate.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_bool,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
+    # cron_http_server_start_daemon
+    if hasattr(lib, "cron_http_server_start_daemon"):
+        lib.cron_http_server_start_daemon.restype = ctypes.c_bool
+        lib.cron_http_server_start_daemon.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_uint16,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -940,6 +960,8 @@ __all__ = [
     "benchmark_titans",
     "simulate_liquid_nn",
     "compile_liquid_nn_to_cl",
+    "chat",
+    "serve",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1514,6 +1536,76 @@ def compile_liquid_nn_to_cl(
         raise RuntimeError(f"Failed to compile Liquid NN to .cl: {err}")
 
     return os.path.abspath(output_cl)
+
+def chat(
+    prompt: str,
+    model: str = "cron-r1-7b-ternary",
+    think: bool = True,
+) -> Dict[str, str]:
+    """
+    Executes a chat completion turn against the CRON local AI inference engine.
+    Returns dict with 'thoughts' (Chain-of-Thought monologue) and 'answer'.
+    """
+    if not _lib or not hasattr(_lib, "cron_chat_generate"):
+        raise RuntimeError("Native CRON library not available for chat")
+
+    out_thoughts = ctypes.c_char_p()
+    out_answer = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+
+    ok = _lib.cron_chat_generate(
+        prompt.encode("utf-8"),
+        model.encode("utf-8"),
+        ctypes.c_bool(think),
+        ctypes.byref(out_thoughts),
+        ctypes.byref(out_answer),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to generate chat response: {err}")
+
+    thoughts = out_thoughts.value.decode("utf-8") if out_thoughts.value else ""
+    answer = out_answer.value.decode("utf-8") if out_answer.value else ""
+
+    if hasattr(_lib, "cron_string_free"):
+        if out_thoughts:
+            _lib.cron_string_free(out_thoughts)
+        if out_answer:
+            _lib.cron_string_free(out_answer)
+
+    return {"thoughts": thoughts, "answer": answer}
+
+def serve(
+    port: int = 8080,
+    host: str = "127.0.0.1",
+    model: str = "cron-r1-7b-ternary",
+    daemon: bool = True,
+) -> bool:
+    """
+    Launches OpenAI-compatible CRON Edge AI inference server listening on host:port.
+    Endpoints:
+      - POST /v1/chat/completions (supports streaming SSE and non-streaming JSON)
+      - GET /v1/models
+      - GET /health
+      - GET /metrics
+    """
+    if not _lib or not hasattr(_lib, "cron_http_server_start_daemon"):
+        raise RuntimeError("Native CRON library not available for serve")
+
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_http_server_start_daemon(
+        host.encode("utf-8"),
+        ctypes.c_uint16(port),
+        model.encode("utf-8"),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to start CRON server: {err}")
+
+    return True
+
 
 
 

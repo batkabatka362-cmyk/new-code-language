@@ -74,6 +74,8 @@ fn print_help() {
     println!("    reason [prompt] [opts]         DeepSeek-R1 style Test-Time Reasoning & GRPO VLIW synthesis");
     println!("    titans [opts]                  Google Titans Neural Long-Term Memory & RWKV-7 Flat O(1) RAM");
     println!("    cl-liquid [opts]               Liquid Continuous-Time Neural Network (LNN/LTC) dynamic engine");
+    println!("    chat [opts]                    Interactive terminal chat client with R1 reasoning & Mongolian NLP");
+    println!("    serve [opts]                   Start OpenAI-compatible REST server (/v1/chat/completions, SSE)");
     println!("    cl-clifford [--angle a]        Clifford Geometric Algebra 4D/5D Spacetime & Quantum Rotor Compiler");
     println!("    cl-agi [options]               Living AGI Cognitive Mind: Holographic Memory, Neuromodulators & Sleep");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
@@ -223,6 +225,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    Liquid Continuous-Time Neural Network (LNN / LTC) dynamic differential engine.\n    Evaluates adaptive time-constant dilation, sub-microsecond shock reflexes, and unconditionally stable integration in <1KB RAM.\n");
             println!("OPTIONS:\n    --neurons <N>      Number of liquid neurons (default: 8)\n    --inputs <M>       Number of sensory inputs (default: 4)\n    --steps <S>        Number of simulation time steps (default: 500)\n    --dt <T>           Integration step size dt (default: 0.01)\n    --compile          Compile liquid network directly to 128-bit VLIW microcode (.cl)\n    --core <ID>        Core ID (0..255) for 4D-Torus deployment (default: 0)\n    --json             Output structured telemetry in JSON\n    -o, --out <path>   Save microcode or telemetry to file\n    -h, --help         Display this help message\n");
             println!("EXAMPLES:\n    cron cl-liquid --neurons 16 --steps 1000\n    cron cl-liquid --compile -o liquid_core.cl\n    cron cl-liquid --json");
+        }
+        "serve" => {
+            println!("USAGE:\n    cron serve [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Launches an OpenAI-compatible local HTTP REST inference server.\n    Endpoints: POST /v1/chat/completions, GET /v1/models, GET /health, GET /metrics.\n");
+            println!("OPTIONS:\n    --port <P>         TCP port to bind (default: 8080)\n    --host <H>         Host address to bind (default: 127.0.0.1)\n    --model <name>     Default model name (default: cron-r1-7b-ternary)\n    -h, --help         Display this help message\n");
+            println!("EXAMPLES:\n    cron serve --port 8080\n    curl http://127.0.0.1:8080/v1/models\n    curl http://127.0.0.1:8080/v1/chat/completions -d '{{\"messages\":[{{\"role\":\"user\",\"content\":\"Hi\"}}]}}'");
         }
         "agent" => {
             println!("USAGE:\n    cron agent [OPTIONS]\n");
@@ -454,33 +462,7 @@ fn main() {
 
     match command.as_str() {
         "serve" => {
-            let mut port: u16 = 8080;
-            let mut host = "127.0.0.1".to_string();
-            let mut workers: usize = 4;
-
-            let mut i = 2;
-            while i < args.len() {
-                if args[i] == "--port" && i + 1 < args.len() {
-                    if let Ok(p) = args[i + 1].parse::<u16>() { port = p; }
-                    i += 2;
-                } else if args[i] == "--host" && i + 1 < args.len() {
-                    host = args[i + 1].clone();
-                    i += 2;
-                } else if args[i] == "--workers" && i + 1 < args.len() {
-                    if let Ok(w) = args[i + 1].parse::<usize>() { workers = w; }
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-
-            println!("[CRON HARD BACKEND] Launching 0-Alloc Regional HTTP Server...");
-            let config = cron_rt::HttpServerConfig { host, port, workers };
-            let server = cron_rt::LiveHttpServer::new(config);
-            if let Err(e) = server.start(None) {
-                eprintln!("[CRON SERVER ERROR] {}", e);
-                std::process::exit(1);
-            }
+            handle_serve_command(&args[2..]);
         }
         "bench-server" => {
             let mut url = "http://127.0.0.1:8080/health".to_string();
@@ -712,7 +694,7 @@ fn main() {
                 } else if (args[i] == "--max-tokens" || args[i] == "-n") && i + 1 < args.len() {
                     if let Ok(m) = args[i + 1].parse::<usize>() { config.max_tokens_per_turn = m; }
                     i += 2;
-                } else if args[i] == "--eval" && i + 1 < args.len() {
+                } else if (args[i] == "--eval" || args[i] == "--prompt" || args[i] == "-p") && i + 1 < args.len() {
                     eval_prompt = Some(args[i + 1].clone());
                     i += 2;
                 } else if args[i] == "--mode" && i + 1 < args.len() {
@@ -10348,6 +10330,69 @@ fn handle_liquid_command(args: &[String]) {
     if let Some(ref path) = out_file {
         let _ = std::fs::write(path, format!("Final State: {:?}", final_state));
         println!("  [SAVED] Liquid simulation report saved -> {}", path);
+    }
+}
+
+
+
+fn handle_serve_command(args: &[String]) {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_subcommand_help("serve");
+        return;
+    }
+
+    let mut port = 8080u16;
+    let mut host = "127.0.0.1".to_string();
+    let mut model = "cron-r1-7b-ternary".to_string();
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--port" | "-p" => {
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse::<u16>() { port = v; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--host" => {
+                if i + 1 < args.len() {
+                    host = args[i + 1].clone();
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--model" => {
+                if i + 1 < args.len() {
+                    model = args[i + 1].clone();
+                    i += 2;
+                } else { i += 1; }
+            }
+            _ => { i += 1; }
+        }
+    }
+
+    let cfg = cron_rt::HttpServerConfig {
+        host: host.clone(),
+        port,
+        workers: 4,
+        default_model: model.clone(),
+    };
+
+    println!("================================================================================");
+    println!(" CRON OPENAI-COMPATIBLE LOCAL EDGE INFERENCE SERVER");
+    println!("================================================================================");
+    println!("  [+] HTTP Listening Address : http://{}:{}", host, port);
+    println!("  [+] Default LLM Model      : {}", model);
+    println!("  [+] Active Cores           : 256 Coherent 4D-Torus Nodes (Zero-GC, 0 Alloc)");
+    println!("  [+] Chat Endpoint          : POST http://{}:{}/v1/chat/completions", host, port);
+    println!("  [+] Models Endpoint        : GET  http://{}:{}/v1/models", host, port);
+    println!("  [+] Health / Telemetry     : GET  http://{}:{}/health", host, port);
+    println!("  [+] Streaming Mode         : Server-Sent Events (SSE: text/event-stream)");
+    println!("================================================================================");
+    println!("Press Ctrl+C to stop server...\n");
+
+    let srv = cron_rt::LiveHttpServer::new(cfg);
+    if let Err(e) = srv.start(None) {
+        eprintln!("[ERROR] Failed to run server: {}", e);
     }
 }
 
