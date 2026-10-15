@@ -170,9 +170,10 @@ pub mod cl_snake_discrete;
 pub mod cl_cluster_net;
 
 pub use cl_cluster_net::{
-    ClusterBenchmarkReport, ClusterNodeConfig, ClusterOpcode, ClusterPacket, ClusterPacketHeader,
-    generate_default_cluster_config, render_cluster_network_ascii, run_cluster_benchmark,
-    run_cluster_worker, CLUSTER_MAGIC, HEADER_SIZE, PROTOCOL_VERSION,
+    execute_multi_node_ring_allreduce, generate_default_cluster_config, render_cluster_network_ascii,
+    ring_allreduce_bitwise_add, run_cluster_benchmark, run_cluster_worker, ClusterBenchmarkReport,
+    ClusterNodeConfig, ClusterOpcode, ClusterPacket, ClusterPacketHeader, ClusterWorkerHandle,
+    CLUSTER_MAGIC, HEADER_SIZE, PROTOCOL_VERSION,
 };
 
 pub use cl_matrix94::{FourTactPipeline94, PipelineOutput, NUM_STATES};
