@@ -526,7 +526,7 @@ pub fn export_unified_3d_topology_visualizer(config: &VisualizerConfig) -> Strin
             <div>
                 <h1>CRON MULTI-TOPOLOGY 3D VISUALIZER</h1>
                 <div style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono);">
-                    4D Torus NoC • Hexagonal Cellular ATP • CL-LoRA Discrete Manifold
+                    SAGI AGI Neocortical Foundation Engine • 256-Core 4D-Torus (256 CORES) • Hexagonal Cellular ATP • CL-LoRA Discrete Manifold
                 </div>
             </div>
         </div>
