@@ -6183,7 +6183,16 @@ fn main() {
             println!("============================================================\n");
             println!("[1/4] Synthesizing IEEE 1364-2001 Verilog RTL Core...");
             let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let verilog_rtl = if input_path.ends_with(".cl") {
+            let verilog_rtl = if input_path.ends_with(".v") || input_path.ends_with(".sv") {
+                content.clone()
+            } else if input_path.ends_with(".py") {
+                let mut transpiler = cronc::cl_py_transpile::PyToCronTranspiler::new(64, true);
+                if let Err(e) = transpiler.parse_and_lower(&content) {
+                    eprintln!("[SYNTHESIS FAILURE] Python transpilation error: {}", e);
+                    std::process::exit(1);
+                }
+                transpiler.emit_verilog_rtl()
+            } else if input_path.ends_with(".cl") {
                 match cronc::verilog_backend::generate_verilog_hdl(&content, "cron_top") {
                     Ok(v) => v,
                     Err(e) => {

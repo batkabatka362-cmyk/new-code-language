@@ -20,6 +20,8 @@ build_native/
 
 # Generated telemetry data
 /telemetry/
+build_fpga_*/
+silicon_deployment/
 *.csv
 agi_agent_telemetry.json
 training_telemetry.csv
