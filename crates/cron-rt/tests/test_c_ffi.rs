@@ -1033,6 +1033,31 @@ fn test_ffi_finetune_lora() {
     }
 }
 
+#[test]
+fn test_ffi_hardware_bench() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_bench_hardware_suite_json(
+            &mut json_ptr,
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_bench_hardware_suite_json must succeed");
+    assert!(!json_ptr.is_null());
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"total_cores\": 256"));
+    assert!(json_str.contains("\"peak_chip_tflops\": 20.48"));
+
+    unsafe {
+        cron_string_free(json_ptr);
+    }
+}
+
+
 
 
 

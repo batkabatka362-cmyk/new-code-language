@@ -1870,6 +1870,87 @@ pub unsafe extern "C" fn cron_finetune_lora_json(
     true
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cron_bench_hardware_suite_json(
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let report = cronc::cl_hardware_profile::run_hardware_suite_benchmark();
+    let json_str = report.to_json();
+
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_bench_kernel_roofline_json(
+    cl_source_or_path: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if cl_source_or_path.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let src_str = match CStr::from_ptr(cl_source_or_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    match cronc::cl_hardware_profile::profile_file_or_code(src_str) {
+        Ok((bench, prof)) => {
+            let json_str = format!(
+                r#"{{"kernel":"{}","total_cycles":{},"achieved_ipc":{:.2},"operational_intensity":{:.4},"regime":"{}","single_core_gflops":{:.2},"chip_256_tflops":{:.2},"sram_bandwidth_gbps":{:.2},"chip_sram_bandwidth_tbps":{:.2},"bank_conflict_free_pct":{:.2},"landauer_energy_pj_per_op":{:.4},"silicon_efficiency_pct":{:.2},"ai_optimization_guidance":"{}"}}"#,
+                prof.kernel_name,
+                bench.total_cycles,
+                prof.achieved_ipc,
+                bench.operational_intensity,
+                match bench.regime {
+                    cronc::RooflineRegime::ComputeBound => "COMPUTE_BOUND",
+                    cronc::RooflineRegime::MemoryBound => "MEMORY_BOUND",
+                },
+                prof.single_core_gflops,
+                prof.chip_256_tflops,
+                prof.sram_bandwidth_gbps,
+                prof.chip_sram_bandwidth_tbps,
+                prof.bank_conflict_free_pct,
+                prof.landauer_energy_pj_per_op,
+                prof.silicon_efficiency_pct,
+                bench.ai_optimization_guidance.replace('"', "\\\"")
+            );
+            *out_json = CString::new(json_str).unwrap().into_raw();
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------

@@ -77,6 +77,7 @@ fn print_help() {
     println!("    chat [opts]                    Interactive terminal chat client with R1 reasoning & Mongolian NLP");
     println!("    serve [opts]                   Start OpenAI-compatible REST server (/v1/chat/completions, SSE)");
     println!("    finetune <dataset> [opts]      On-device sub-byte CL-LoRA fine-tuning (<4.1KB L1, 0-FLOP backprop)");
+    println!("    bench [file.cl] [opts]         Multi-core 4D-Torus hardware roofline & silicon profiler");
     println!("    cl-clifford [--angle a]        Clifford Geometric Algebra 4D/5D Spacetime & Quantum Rotor Compiler");
     println!("    cl-agi [options]               Living AGI Cognitive Mind: Holographic Memory, Neuromodulators & Sleep");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
@@ -238,6 +239,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    On-device Sub-Byte CL-LoRA Fine-Tuning Engine with 0-FLOP integer gradient backprop.\n    Trains discrete rank-r adapters on plain text or JSONL in <4.1 KB L1 cache.\n");
             println!("OPTIONS:\n    -r, --rank <N>     LoRA rank r in [1..8] (default: 2)\n    --lr <rate>        Learning rate (default: 0.05)\n    --steps <N>        Training optimization steps (default: 100)\n    --alpha <val>      LoRA scaling alpha (default: 2.0)\n    --layers <L>       Number of target layers (default: 4)\n    --no-mongol        Disable Mongolian morphological tokenization\n    -o, --out <path>   Output binary .cll adapter path (default: adapter.cll)\n    --compile          Also export synthesized 128-bit VLIW microcode (.cl)\n    --json             Output structured telemetry in JSON\n    -h, --help         Display this help message\n");
             println!("EXAMPLES:\n    cron finetune dataset.txt -r 4 --steps 200 -o mongol_lora.cll\n    cron finetune train.jsonl --compile");
+        }
+        "bench" | "cl-bench" => {
+            println!("USAGE:\n    cron bench [file.cl] [OPTIONS]\n");
+            println!("DESCRIPTION:\n    CRON 256-Core 4D-Torus Hardware Silicon Roofline & Performance Profiler.\n    Evaluates Operational Intensity (FLOP/Byte), SRAM bandwidth, 16-bank GF(2^4) conflict freedom,\n    VLIW slot IPC (up to 4.0), and 0.17 pJ/bit Landauer thermodynamic reversible limit.\n");
+            println!("OPTIONS:\n    [file.cl]          Specific .cl kernel to profile (defaults to full Frontier AI suite)\n    --bare-metal       Run sub-microsecond bare-metal timer jitter profiler\n    --json             Output structured hardware telemetry in JSON\n    -o, --out <path>   Write report to file (Markdown or JSON)\n    -h, --help         Display this help message\n");
+            println!("EXAMPLES:\n    cron bench\n    cron bench kernel.cl\n    cron bench kernel.cl --json\n    cron bench --bare-metal");
         }
         "agent" => {
             println!("USAGE:\n    cron agent [OPTIONS]\n");
@@ -3852,74 +3859,8 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        "cl-bench" => {
-            let mut bare_metal = false;
-            let mut samples = 10_000;
-            let mut json_mode = false;
-            for (idx, arg) in args.iter().enumerate().skip(2) {
-                if arg == "--bare-metal" {
-                    bare_metal = true;
-                } else if arg == "--samples" && idx + 1 < args.len() {
-                    if let Ok(s) = args[idx + 1].parse::<usize>() {
-                        samples = s;
-                    }
-                } else if arg == "--json" {
-                    json_mode = true;
-                }
-            }
-
-            if bare_metal {
-                let rep = cronc::run_bare_metal_jitter_profiler(samples);
-                if json_mode {
-                    println!("{}", rep.to_json());
-                } else {
-                    println!("{}", rep.format_ascii_hud());
-                }
-                return;
-            }
-
-            if args.len() < 3 || args[2] == "--libcl" || args[2] == "libcl" {
-                let iters = if args.len() >= 4 { args[3].parse::<usize>().unwrap_or(1000) } else { 1000 };
-                let ws = env::current_dir().unwrap_or_default();
-                match cronc::cl_benchmark::run_libcl_benchmarks(&ws, iters) {
-                    Ok(rep) => println!("{}", cronc::cl_benchmark::render_benchmark_report(&rep)),
-                    Err(e) => eprintln!("[BENCH ERROR] {}", e),
-                }
-                return;
-            }
-            let input_path = &args[2];
-            let content = match fs::read_to_string(input_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Error reading '{}': {}", input_path, e);
-                    std::process::exit(1);
-                }
-            };
-
-            let mut json_mode = false;
-            let mut i = 3;
-            while i < args.len() {
-                if args[i] == "--json" {
-                    json_mode = true;
-                    i += 1;
-                } else {
-                    i += 1;
-                }
-            }
-
-            let report = match cronc::analyze_cl_roofline(&content) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("[BENCHMARK ERROR] {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-            if json_mode {
-                println!("{}", report.to_json());
-            } else {
-                println!("{}", report.format_ascii_report(input_path));
-            }
+        "cl-bench" | "bench" => {
+            handle_bench_command(&args[2..]);
         }
         "cl-bench-lib" => {
             let mut runs = 1000;
@@ -5153,27 +5094,7 @@ fn main() {
         "cl-patch" => {
             handle_cl_patch_command(&args[2..]);
         }
-        "cl-compare" | "bench" => {
-            if args.iter().any(|a| a == "--bare-metal") {
-                let mut samples = 10_000;
-                let mut json_mode = false;
-                for (idx, arg) in args.iter().enumerate().skip(2) {
-                    if arg == "--samples" && idx + 1 < args.len() {
-                        if let Ok(s) = args[idx + 1].parse::<usize>() {
-                            samples = s;
-                        }
-                    } else if arg == "--json" {
-                        json_mode = true;
-                    }
-                }
-                let rep = cronc::run_bare_metal_jitter_profiler(samples);
-                if json_mode {
-                    println!("{}", rep.to_json());
-                } else {
-                    println!("{}", rep.format_ascii_hud());
-                }
-                return;
-            }
+        "cl-compare" => {
             handle_cl_compare_command(&args[2..]);
         }
         "build-native-lib" | "build-native" => {
@@ -10540,6 +10461,126 @@ fn handle_finetune_command(args: &[String]) {
     println!("  - Hardware Multipliers      : 0 DSPs (100% Add/Sub Integer Sign Updates)");
     println!("  - Output Adapter File       : {}", report.output_path);
     println!("================================================================================");
+}
+
+fn handle_bench_command(args: &[String]) {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_subcommand_help("bench");
+        return;
+    }
+
+    if args.iter().any(|a| a == "--bare-metal") {
+        let mut samples = 10_000;
+        let mut json_mode = false;
+        let mut i = 0;
+        while i < args.len() {
+            if args[i] == "--samples" && i + 1 < args.len() {
+                if let Ok(s) = args[i + 1].parse::<usize>() { samples = s; }
+                i += 2;
+            } else if args[i] == "--json" {
+                json_mode = true;
+                i += 1;
+            } else { i += 1; }
+        }
+        let rep = cronc::run_bare_metal_jitter_profiler(samples);
+        if json_mode {
+            println!("{}", rep.to_json());
+        } else {
+            println!("{}", rep.format_ascii_hud());
+        }
+        return;
+    }
+
+    let mut target_file: Option<String> = None;
+    let mut json_mode = false;
+    let mut out_file: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => {
+                json_mode = true;
+                i += 1;
+            }
+            "-o" | "--out" => {
+                if i + 1 < args.len() {
+                    out_file = Some(args[i + 1].clone());
+                    i += 2;
+                } else { i += 1; }
+            }
+            other if !other.starts_with("--") => {
+                target_file = Some(other.to_string());
+                i += 1;
+            }
+            _ => { i += 1; }
+        }
+    }
+
+    if let Some(ref file_path) = target_file {
+        match cronc::profile_file_or_code(file_path) {
+            Ok((bench_rep, prof_rec)) => {
+                if json_mode {
+                    let json_str = format!(
+                        r#"{{"kernel":"{}","total_cycles":{},"achieved_ipc":{:.2},"operational_intensity":{:.4},"regime":"{}","single_core_gflops":{:.2},"chip_256_tflops":{:.2},"sram_bandwidth_gbps":{:.2},"chip_sram_bandwidth_tbps":{:.2},"bank_conflict_free_pct":{:.2},"landauer_energy_pj_per_op":{:.4},"silicon_efficiency_pct":{:.2},"ai_optimization_guidance":"{}"}}"#,
+                        prof_rec.kernel_name,
+                        bench_rep.total_cycles,
+                        prof_rec.achieved_ipc,
+                        bench_rep.operational_intensity,
+                        match bench_rep.regime {
+                            cronc::RooflineRegime::ComputeBound => "COMPUTE_BOUND",
+                            cronc::RooflineRegime::MemoryBound => "MEMORY_BOUND",
+                        },
+                        prof_rec.single_core_gflops,
+                        prof_rec.chip_256_tflops,
+                        prof_rec.sram_bandwidth_gbps,
+                        prof_rec.chip_sram_bandwidth_tbps,
+                        prof_rec.bank_conflict_free_pct,
+                        prof_rec.landauer_energy_pj_per_op,
+                        prof_rec.silicon_efficiency_pct,
+                        bench_rep.ai_optimization_guidance.replace('"', "\\\"")
+                    );
+                    if let Some(ref out) = out_file {
+                        let _ = std::fs::write(out, &json_str);
+                        println!("[SUCCESS] Benchmark JSON report written -> {}", out);
+                    } else {
+                        println!("{}", json_str);
+                    }
+                } else {
+                    let ascii_report = bench_rep.format_ascii_report(&prof_rec.kernel_name);
+                    if let Some(ref out) = out_file {
+                        let _ = std::fs::write(out, &ascii_report);
+                        println!("[SUCCESS] Benchmark report written -> {}", out);
+                    } else {
+                        print!("{}", ascii_report);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[CRON BENCH ERROR] {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // Run full 256-Core hardware silicon suite benchmark
+        let report = cronc::run_hardware_suite_benchmark();
+        if json_mode {
+            let json_str = report.to_json();
+            if let Some(ref out) = out_file {
+                let _ = std::fs::write(out, &json_str);
+                println!("[SUCCESS] Multi-core benchmark suite JSON written -> {}", out);
+            } else {
+                println!("{}", json_str);
+            }
+        } else {
+            let table = report.format_ascii_table();
+            if let Some(ref out) = out_file {
+                let _ = std::fs::write(out, &table);
+                println!("[SUCCESS] Multi-core benchmark suite written -> {}", out);
+            } else {
+                print!("{}", table);
+            }
+        }
+    }
 }
 
 fn handle_cl_clifford_command(args: &[String]) {

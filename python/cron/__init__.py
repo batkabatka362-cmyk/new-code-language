@@ -230,6 +230,21 @@ def _setup_ffi(lib):
             ctypes.POINTER(ctypes.c_char_p),
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_bench_hardware_suite_json
+    if hasattr(lib, "cron_bench_hardware_suite_json"):
+        lib.cron_bench_hardware_suite_json.restype = ctypes.c_bool
+        lib.cron_bench_hardware_suite_json.argtypes = [
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
+    # cron_bench_kernel_roofline_json
+    if hasattr(lib, "cron_bench_kernel_roofline_json"):
+        lib.cron_bench_kernel_roofline_json.restype = ctypes.c_bool
+        lib.cron_bench_kernel_roofline_json.argtypes = [
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -976,6 +991,7 @@ __all__ = [
     "chat",
     "serve",
     "finetune",
+    "bench",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1662,6 +1678,47 @@ def finetune(
         _lib.cron_string_free(out_json)
 
     return json.loads(raw_json)
+
+def bench(target: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Executes hardware roofline benchmark and multi-core silicon profiling.
+    - If target is None: benchmarks the complete 256-Core 4D-Torus Frontier AI silicon suite.
+    - If target is a .cl file or code: profiles exact operational intensity, VLIW IPC,
+      SRAM bandwidth, GF(2^4) conflict freedom, and Landauer reversible thermodynamic dissipation.
+    """
+    import json
+    if not _lib:
+        raise RuntimeError("Native CRON library not available for benchmark")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+
+    if target is None:
+        if not hasattr(_lib, "cron_bench_hardware_suite_json"):
+            raise RuntimeError("cron_bench_hardware_suite_json symbol not found")
+        ok = _lib.cron_bench_hardware_suite_json(
+            ctypes.byref(out_json),
+            ctypes.byref(out_err),
+        )
+    else:
+        if not hasattr(_lib, "cron_bench_kernel_roofline_json"):
+            raise RuntimeError("cron_bench_kernel_roofline_json symbol not found")
+        ok = _lib.cron_bench_kernel_roofline_json(
+            target.encode("utf-8"),
+            ctypes.byref(out_json),
+            ctypes.byref(out_err),
+        )
+
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Hardware benchmark failed: {err}")
+
+    raw_json = out_json.value.decode("utf-8") if out_json.value else "{}"
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+
+    return json.loads(raw_json)
+
 
 
 

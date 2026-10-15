@@ -146,6 +146,7 @@ pub mod cl_living_homeostasis;
 pub mod cl_hdc;
 pub mod cl_liquid_nn;
 pub mod cl_finetune;
+pub mod cl_hardware_profile;
 pub mod cl_causal;
 pub mod cl_htm;
 pub mod cl_self_evolve;
@@ -322,6 +323,7 @@ pub use cl_hdc::{
 pub use cl_lyapunov::{LyapunovWatchdog, LyapunovWatchdogConfig, LyapunovStatus};
 pub use cl_liquid_nn::LiquidNeuralNetwork;
 pub use cl_finetune::{run_lora_finetune, prepare_dataset_pairs, FineTuneConfig, FineTuneReport};
+pub use cl_hardware_profile::{run_hardware_suite_benchmark, profile_single_kernel, profile_file_or_code, HardwareSuiteReport, KernelProfileRecord};
 
 pub use cl_metaplasticity::{BcmConfig, MetaplasticEngine, MetaplasticSynapse};
 pub use cl_thermodynamics::{ThermodynamicOptimizer, TileThermodynamicState};
