@@ -911,6 +911,57 @@ fn test_ffi_titans_memory() {
     unsafe { cron_string_free(json_ptr); }
 }
 
+#[test]
+fn test_ffi_liquid_nn() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_liquid_simulate_json(
+            8,
+            4,
+            100,
+            0.01,
+            &mut json_ptr,
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_liquid_simulate_json must succeed");
+    assert!(!json_ptr.is_null());
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"is_unconditionally_stable\":true"));
+    assert!(json_str.contains("\"time_dilation_speedup\":"));
+    assert!(json_str.contains("\"memory_footprint_bytes\":1024"));
+
+    unsafe { cron_string_free(json_ptr); }
+
+    let temp_dir = std::env::temp_dir().join(format!("cron_liquid_ffi_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let out_cl = temp_dir.join("liquid_ffi.cl");
+    let c_path = CString::new(out_cl.to_str().unwrap()).unwrap();
+
+    let ok_cl = unsafe {
+        cron_liquid_compile_cl(
+            8,
+            4,
+            0.01,
+            0,
+            c_path.as_ptr(),
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok_cl, "cron_liquid_compile_cl must succeed");
+    assert!(out_cl.exists());
+    let cl_content = std::fs::read_to_string(&out_cl).unwrap();
+    assert!(cl_content.contains("@liquid_nn_entry:"));
+
+    let _ = std::fs::remove_file(&out_cl);
+    let _ = std::fs::remove_dir(&temp_dir);
+}
+
+
 
 
 

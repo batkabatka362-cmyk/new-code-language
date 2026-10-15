@@ -319,6 +319,7 @@ pub use cl_hdc::{
     run_hdc_capacity_scaling_suite, HyperVector as HdcHyperVector, HdcItemMemory,
 };
 pub use cl_lyapunov::{LyapunovWatchdog, LyapunovWatchdogConfig, LyapunovStatus};
+pub use cl_liquid_nn::LiquidNeuralNetwork;
 
 pub use cl_metaplasticity::{BcmConfig, MetaplasticEngine, MetaplasticSynapse};
 pub use cl_thermodynamics::{ThermodynamicOptimizer, TileThermodynamicState};

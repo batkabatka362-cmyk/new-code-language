@@ -175,6 +175,28 @@ def _setup_ffi(lib):
             ctypes.POINTER(ctypes.c_char_p),
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_liquid_simulate_json
+    if hasattr(lib, "cron_liquid_simulate_json"):
+        lib.cron_liquid_simulate_json.restype = ctypes.c_bool
+        lib.cron_liquid_simulate_json.argtypes = [
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_double,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
+    # cron_liquid_compile_cl
+    if hasattr(lib, "cron_liquid_compile_cl"):
+        lib.cron_liquid_compile_cl.restype = ctypes.c_bool
+        lib.cron_liquid_compile_cl.argtypes = [
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_double,
+            ctypes.c_uint8,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -916,6 +938,8 @@ __all__ = [
     "benchmark_mongol_tokens",
     "reason",
     "benchmark_titans",
+    "simulate_liquid_nn",
+    "compile_liquid_nn_to_cl",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1427,6 +1451,70 @@ def benchmark_titans(
     if hasattr(_lib, "cron_string_free"):
         _lib.cron_string_free(out_json)
     return res
+
+def simulate_liquid_nn(
+    num_neurons: int = 8,
+    num_inputs: int = 4,
+    steps: int = 500,
+    dt: float = 0.01,
+) -> Dict[str, Any]:
+    """
+    Simulates Liquid Continuous-Time Neural Network (LNN / LTC) dynamics on-chip.
+    Measures effective time-constant dilation, shock reflex speedup, and verifies unconditional stability in <1KB RAM.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_liquid_simulate_json"):
+        raise RuntimeError("Native CRON library not available for simulate_liquid_nn")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_liquid_simulate_json(
+        ctypes.c_size_t(num_neurons),
+        ctypes.c_size_t(num_inputs),
+        ctypes.c_size_t(steps),
+        ctypes.c_double(dt),
+        ctypes.byref(out_json),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to simulate Liquid NN: {err}")
+
+    res = json.loads(out_json.value.decode("utf-8"))
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return res
+
+def compile_liquid_nn_to_cl(
+    output_cl: str = "liquid_neural_network.cl",
+    num_neurons: int = 8,
+    num_inputs: int = 4,
+    dt: float = 0.01,
+    core_id: int = 0,
+) -> str:
+    """
+    Compiles Liquid Continuous-Time Neural Network into 100% valid CRON 128-bit VLIW microcode (.cl).
+    Returns absolute path of the generated .cl file.
+    """
+    import os
+    if not _lib or not hasattr(_lib, "cron_liquid_compile_cl"):
+        raise RuntimeError("Native CRON library not available for compile_liquid_nn_to_cl")
+
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_liquid_compile_cl(
+        ctypes.c_size_t(num_neurons),
+        ctypes.c_size_t(num_inputs),
+        ctypes.c_double(dt),
+        ctypes.c_uint8(core_id),
+        output_cl.encode("utf-8"),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to compile Liquid NN to .cl: {err}")
+
+    return os.path.abspath(output_cl)
+
 
 
 

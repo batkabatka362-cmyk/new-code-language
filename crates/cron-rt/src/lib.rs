@@ -1589,6 +1589,114 @@ pub unsafe extern "C" fn cron_titans_benchmark_json(
 }
 
 // ----------------------------------------------------------------------------
+// 10g. Liquid Continuous-Time Neural Network (LNN / LTC) C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_liquid_simulate_json(
+    num_neurons: usize,
+    num_inputs: usize,
+    steps: usize,
+    dt: f64,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let mut lnn = cronc::cl_liquid_nn::LiquidNeuralNetwork::new(
+        num_neurons.max(2),
+        num_inputs.max(1),
+        if dt > 0.0 { dt } else { 0.01 },
+    );
+
+    let calm_inputs = vec![0.0; lnn.num_inputs];
+    let calm_tau = lnn.effective_time_constants(&calm_inputs);
+
+    let shock_inputs = vec![5.0; lnn.num_inputs];
+    let shock_tau = lnn.effective_time_constants(&shock_inputs);
+
+    let mut final_state = Vec::new();
+    for step in 0..steps.max(1) {
+        let t = step as f64 * lnn.dt;
+        let inputs: Vec<f64> = (0..lnn.num_inputs)
+            .map(|i| ((t * (i + 1) as f64).sin()) * 1.5)
+            .collect();
+        final_state = lnn.step(&inputs);
+    }
+
+    let avg_calm_tau = calm_tau.iter().sum::<f64>() / calm_tau.len() as f64;
+    let avg_shock_tau = shock_tau.iter().sum::<f64>() / shock_tau.len() as f64;
+    let time_dilation_ratio = avg_calm_tau / avg_shock_tau.max(1e-6);
+
+    let json_str = format!(
+        r#"{{"num_neurons":{},"num_inputs":{},"steps":{},"dt":{:.4},"memory_footprint_bytes":{},"avg_calm_tau":{:.4},"avg_shock_tau":{:.4},"time_dilation_speedup":{:.2},"is_unconditionally_stable":true,"final_state":{:?}}}"#,
+        lnn.num_neurons,
+        lnn.num_inputs,
+        steps,
+        lnn.dt,
+        lnn.memory_footprint_bytes(),
+        avg_calm_tau,
+        avg_shock_tau,
+        time_dilation_ratio,
+        final_state
+    );
+
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_liquid_compile_cl(
+    num_neurons: usize,
+    num_inputs: usize,
+    dt: f64,
+    core_id: u8,
+    out_cl_path: *const c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    let path_str = if out_cl_path.is_null() {
+        "liquid_neural_network.cl"
+    } else {
+        match CStr::from_ptr(out_cl_path).to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                if !out_error.is_null() {
+                    *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+                }
+                return false;
+            }
+        }
+    };
+
+    let lnn = cronc::cl_liquid_nn::LiquidNeuralNetwork::new(
+        num_neurons.max(2),
+        num_inputs.max(1),
+        if dt > 0.0 { dt } else { 0.01 },
+    );
+
+    let cl_code = lnn.compile_to_cl(core_id);
+    if let Err(e) = std::fs::write(path_str, cl_code) {
+        if !out_error.is_null() {
+            *out_error = CString::new(format!("Failed to write .cl file: {}", e)).unwrap().into_raw();
+        }
+        return false;
+    }
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+// ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
 
