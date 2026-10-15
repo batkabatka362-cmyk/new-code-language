@@ -739,6 +739,40 @@ fn test_ffi_safetensors_ingest() {
     let _ = std::fs::remove_dir(temp_dir);
 }
 
+#[test]
+fn test_ffi_export_visualizer_html() {
+    let temp_dir = std::env::temp_dir().join(format!("cron_ffi_viz_test_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let out_html = temp_dir.join("test_dashboard.html");
+    let c_out = CString::new(out_html.to_str().unwrap()).unwrap();
+    let c_mode = CString::new("all").unwrap();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_export_visualizer_html(
+            c_out.as_ptr(),
+            c_mode.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_export_visualizer_html must succeed");
+    assert!(out_html.exists(), "Output HTML file must be created");
+
+    let html_content = std::fs::read_to_string(&out_html).unwrap();
+    assert!(html_content.contains("three.min.js"), "Must include Three.js");
+    assert!(html_content.contains("4D Torus NoC"), "Must include 4D Torus topology");
+    assert!(html_content.contains("Hexagonal ATP"), "Must include Hexagonal ATP life");
+    assert!(html_content.contains("CL-LoRA"), "Must include CL-LoRA manifold");
+    assert!(html_content.contains("432 Hz Resonance"), "Must include Audio resonance synthesizer");
+
+    let _ = std::fs::remove_file(&out_html);
+    let _ = std::fs::remove_dir(&temp_dir);
+}
+
+
 
 
 

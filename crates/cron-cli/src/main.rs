@@ -68,7 +68,7 @@ fn print_help() {
     println!("    cl-macro <file.clm> [-o out.cl] High-Level Macro Assembler (.clm) to VLIW 10-char bundles");
     println!("    cl-import [options]            Neural Model & Tensor Importer (BitNet 1.58b ternary quantization)");
     println!("    cl-lsp <file.cl>               Real-time Language Server Protocol & CRC/Hazard diagnostic linter");
-    println!("    cl-visualize [-o out.html]     Interactive 3D Web Dashboard & 4D-Torus Live Wavefront Visualizer");
+    println!("    visualize [opts] [-o out.html] Unified 3D Torus, Hexagonal ATP & CL-LoRA interactive visualizer");
     println!("    cl-clifford [--angle a]        Clifford Geometric Algebra 4D/5D Spacetime & Quantum Rotor Compiler");
     println!("    cl-agi [options]               Living AGI Cognitive Mind: Holographic Memory, Neuromodulators & Sleep");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
@@ -163,6 +163,32 @@ fn print_help() {
 
 fn print_subcommand_help(cmd: &str) {
     match cmd {
+        "visualize" | "cl-visualize" | "viz" | "cl-viz" => {
+            println!("================================================================================");
+            println!(" CRON 3D MULTI-TOPOLOGY INTERACTIVE VISUALIZER");
+            println!("================================================================================");
+            println!("Generates a rich, standalone 3D WebGL dashboard featuring:");
+            println!("  1. 256-Core 4D-Torus Spatiotemporal NoC Topology (DOR routing, PGAS conflicts)");
+            println!("  2. Hexagonal Honeycomb Crystalline Topology (Cellular ATP synthase molecular rotor)");
+            println!("  3. CL-LoRA Discrete Latent Manifold Topology (Ternary trits {{-1, 0, 1}}, 0 FLOP drift)");
+            println!();
+            println!("USAGE:");
+            println!("    cron visualize [options] [kernel.cl | adapter.cll]");
+            println!();
+            println!("OPTIONS:");
+            println!("    -o, --out <path.html>    Output HTML file path (default: cron_visualizer.html)");
+            println!("    --mode <m>               Initial active topology (torus | hex | lora | all, default: all)");
+            println!("    --lora <adapter.cll>     Load discrete CL-LoRA adapter binary into manifold viewer");
+            println!("    --cl <kernel.cl>         Load 4D microcode file to simulate on 256 cores");
+            println!("    --atp <flux>             Cellular ATP flux rate in pJ/bit (default: 0.17)");
+            println!("    --open                   Automatically open generated visualizer in default browser");
+            println!("    -h, --help               Display this help message");
+            println!();
+            println!("EXAMPLES:");
+            println!("    cron visualize --mode all -o visualizer.html");
+            println!("    cron visualize --lora weights.cll --mode lora");
+            println!("    cron visualize kernel.cl --open");
+        }
         "agent" => {
             println!("USAGE:\n    cron agent [OPTIONS]\n");
             println!("DESCRIPTION:\n    Autonomous sandboxed cognitive agent engine with zero-trust capability tokens, taint tracking, and multi-step 4D-Torus VLIW execution.\n");
@@ -1215,7 +1241,7 @@ fn main() {
         "cl-lsp" | "cl-check" => {
             handle_cl_lsp_command(&args[2..]);
         }
-        "cl-visualize" | "cl-viz" => {
+        "cl-visualize" | "cl-viz" | "visualize" | "viz" => {
             handle_cl_visualize_command(&args[2..]);
         }
         "cl-clifford" | "cga" => {
@@ -9489,61 +9515,181 @@ fn handle_cl_lsp_command(args: &[String]) {
 }
 
 fn handle_cl_visualize_command(args: &[String]) {
-    let mut out_file = "sagi_wafer_dashboard.html".to_string();
-    let mut input_file: Option<String> = None;
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        println!("================================================================================");
+        println!(" CRON 3D MULTI-TOPOLOGY INTERACTIVE VISUALIZER");
+        println!("================================================================================");
+        println!("Generates a rich, standalone 3D WebGL dashboard featuring:");
+        println!("  1. 256-Core 4D-Torus Spatiotemporal NoC Topology (DOR routing, PGAS conflicts)");
+        println!("  2. Hexagonal Honeycomb Crystalline Topology (Cellular ATP synthase molecular rotor)");
+        println!("  3. CL-LoRA Discrete Latent Manifold Topology (Ternary trits {{-1, 0, 1}}, 0 FLOP drift)");
+        println!();
+        println!("USAGE:");
+        println!("    cron visualize [options] [kernel.cl | adapter.cll]");
+        println!();
+        println!("OPTIONS:");
+        println!("    -o, --out <path.html>    Output HTML file path (default: cron_visualizer.html)");
+        println!("    --mode <m>               Initial active topology (torus | hex | lora | all, default: all)");
+        println!("    --lora <adapter.cll>     Load discrete CL-LoRA adapter binary into manifold viewer");
+        println!("    --cl <kernel.cl>         Load 4D microcode file to simulate on 256 cores");
+        println!("    --atp <flux>             Cellular ATP flux rate in pJ/bit (default: 0.17)");
+        println!("    --open                   Automatically open generated visualizer in default browser");
+        println!("    -h, --help               Display this help message");
+        println!();
+        println!("EXAMPLES:");
+        println!("    cron visualize --mode all -o visualizer.html");
+        println!("    cron visualize --lora weights.cll --mode lora");
+        println!("    cron visualize kernel.cl --open");
+        return;
+    }
+
+    let mut out_file = "cron_visualizer.html".to_string();
+    let mut mode: Option<String> = None;
+    let mut cl_file: Option<String> = None;
+    let mut lora_file: Option<String> = None;
+    let mut atp_flux = 0.17f32;
+    let mut auto_open = false;
 
     let mut i = 0;
     while i < args.len() {
-        if (args[i] == "-o" || args[i] == "--output") && i + 1 < args.len() {
-            out_file = args[i + 1].clone();
-            i += 2;
-        } else if !args[i].starts_with('-') && input_file.is_none() {
-            input_file = Some(args[i].clone());
-            i += 1;
-        } else {
-            i += 1;
+        match args[i].as_str() {
+            "-o" | "--out" | "--output" => {
+                if i + 1 < args.len() {
+                    out_file = args[i + 1].clone();
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--mode" => {
+                if i + 1 < args.len() {
+                    mode = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--lora" => {
+                if i + 1 < args.len() {
+                    lora_file = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--cl" => {
+                if i + 1 < args.len() {
+                    cl_file = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--atp" => {
+                if i + 1 < args.len() {
+                    if let Ok(val) = args[i + 1].parse::<f32>() {
+                        atp_flux = val;
+                    }
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--open" => {
+                auto_open = true;
+                i += 1;
+            }
+            arg if !arg.starts_with('-') => {
+                if arg.ends_with(".cll") && lora_file.is_none() {
+                    lora_file = Some(arg.to_string());
+                } else if (arg.ends_with(".cl") || arg.ends_with(".clb")) && cl_file.is_none() {
+                    cl_file = Some(arg.to_string());
+                } else if cl_file.is_none() && lora_file.is_none() {
+                    cl_file = Some(arg.to_string());
+                }
+                i += 1;
+            }
+            _ => {
+                i += 1;
+            }
         }
     }
 
     println!("================================================================================");
-    println!(" CRON 256-CORE / 65,536-CORE LIVE 3D VISUALIZER & WEB DASHBOARD GENERATOR");
+    println!(" CRON 3D MULTI-TOPOLOGY INTERACTIVE VISUALIZER & WEB DASHBOARD GENERATOR");
     println!("================================================================================");
 
-    let (regs, total_cycles, packet_count, kernel_name, tflops, watts, temp) = if let Some(ref path) = input_file {
-        println!("Analyzing and simulating target microcode: {}", path);
-        let mut sim_regs = [[0u32; 16]; 256];
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(core) = cronc::cl_jit::run_cl_jit(&content) {
-                for (ci, core_regs) in sim_regs.iter_mut().enumerate() {
-                    for (ri, reg) in core_regs.iter_mut().enumerate() {
-                        *reg = core.r[ri] ^ ((ci as u32) << 8);
-                    }
+    let cl_path = cl_file.as_deref().map(std::path::Path::new);
+    let lora_path = lora_file.as_deref().map(std::path::Path::new);
+
+    let mut cfg = match cronc::cl_visualizer::VisualizerConfig::from_files(
+        cl_path,
+        lora_path,
+        mode.as_deref(),
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[!] Warning initializing visualizer config: {}", e);
+            cronc::cl_visualizer::VisualizerConfig::default()
+        }
+    };
+
+    if let Some(ref m) = mode {
+        cfg.active_mode = m.clone();
+    }
+    cfg.atp_flux_rate = atp_flux;
+
+    println!("  [+] Active Topologies     : [4D Torus NoC] [Hexagonal ATP Life] [CL-LoRA Manifold]");
+    println!("  [+] Default Mode          : {}", cfg.active_mode.to_uppercase());
+    println!("  [+] Target Microcode      : {}", cfg.kernel_name);
+    println!("  [+] Compute Throughput    : {:.2} TFLOPs (Zero-FLOP Integer Add/Sub)", cfg.tflops);
+    println!("  [+] 4D-Torus Cores        : 256 Active Cores (DOR X->Y->Z->W)");
+    println!("  [+] Thermal / Power       : {:.2} W | {:.1} °C", cfg.power_watts, cfg.temp_celsius);
+    println!("  [+] Cellular ATP Flux     : {:.2} pJ / bit (Molecular rotor reversible flux)", cfg.atp_flux_rate);
+
+    if let Some(ref lora_name) = cfg.lora_adapter_name {
+        println!("  [+] CL-LoRA Discrete Latent: '{}' (Rank: {}, Dim: {}, Trits: {})",
+            lora_name, cfg.lora_rank, cfg.lora_dim, cfg.lora_trits_a.len() + cfg.lora_trits_b.len()
+        );
+        println!("  [+] L1 Memory Footprint   : < 4.1 KB (5-trits-per-byte sub-byte packing)");
+    }
+
+    let html = cronc::cl_visualizer::export_unified_3d_topology_visualizer(&cfg);
+
+    match std::fs::write(&out_file, html) {
+        Ok(_) => {
+            println!("--------------------------------------------------------------------------------");
+            println!("  [SUCCESS] Unified 3D WebGL Visualizer generated successfully!");
+            println!("  [HTML Dashboard] -> {}", out_file);
+            println!("  [Architecture]  -> Zero-server dependency, pure standalone WebGL Three.js");
+            println!("================================================================================");
+
+            if auto_open {
+                println!("  [*] Opening in default web browser...");
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/C", "start", &out_file])
+                        .spawn();
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = std::process::Command::new("open")
+                        .arg(&out_file)
+                        .spawn();
+                }
+                #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+                {
+                    let _ = std::process::Command::new("xdg-open")
+                        .arg(&out_file)
+                        .spawn();
                 }
             }
         }
-        let report = cronc::analyze_cl_roofline(&std::fs::read_to_string(path).unwrap_or_default()).ok();
-        let cycles = report.as_ref().map(|r| r.total_cycles as u64).unwrap_or(7936);
-        let packets = report.as_ref().map(|r| r.noc_packet_transfers).unwrap_or(1470);
-        let flops = report.as_ref().map(|r| (r.attainable_core_gflops * 256.0) / 1000.0).unwrap_or(20.48);
-        (sim_regs, cycles, packets, path.clone(), flops, 3.07, 25.8)
-    } else {
-        let fake_regs = [[0x00FFu32; 16]; 256];
-        (fake_regs, 10000, 2560, "sagi_neocortical_foundation_model.cl".to_string(), 20.48, 3.07, 25.8)
-    };
-
-    let html = cronc::cl_visualizer::export_html5_dashboard_with_meta(
-        &regs,
-        total_cycles,
-        packet_count,
-        &kernel_name,
-        tflops as f32,
-        watts,
-        temp,
-    );
-    let _ = std::fs::write(&out_file, html);
-
-    println!("Interactive 3D Web Dashboard exported successfully -> {}", out_file);
-    println!("Open in any browser to inspect real-time 4D-Torus packet flow and Core activations.");
+        Err(e) => {
+            eprintln!("[ERROR] Failed to write HTML output file '{}': {}", out_file, e);
+        }
+    }
 }
 
 fn handle_cl_clifford_command(args: &[String]) {

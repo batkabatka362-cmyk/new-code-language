@@ -108,6 +108,16 @@ def _setup_ffi(lib):
     if hasattr(lib, "cron_safetensors_to_cl_file"):
         lib.cron_safetensors_to_cl_file.restype = ctypes.c_bool
         lib.cron_safetensors_to_cl_file.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p)]
+    # cron_export_visualizer_html
+    if hasattr(lib, "cron_export_visualizer_html"):
+        lib.cron_export_visualizer_html.restype = ctypes.c_bool
+        lib.cron_export_visualizer_html.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -838,6 +848,10 @@ __all__ = [
     "transpile_py_to_verilog",
     "compile_py_native",
     "verify_py_parity",
+    "inspect_safetensors",
+    "safetensors_to_cl_lora",
+    "safetensors_to_cl",
+    "visualize",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1107,6 +1121,56 @@ def safetensors_to_cl(file_path: str, out_cl_path: str, module_name: str = "cron
         err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
         raise RuntimeError(f"Failed to synthesize CL microcode: {err}")
     return True
+
+def visualize(
+    output_html: str = "cron_visualizer.html",
+    mode: str = "all",
+    cl_path: Optional[str] = None,
+    lora_path: Optional[str] = None,
+    auto_open: bool = False,
+) -> str:
+    """
+    Renders an interactive, standalone 3D WebGL Multi-Topology Dashboard featuring:
+      1. 256-Core 4D-Torus Spatiotemporal NoC Topology (DOR packet flow & conflict heatmaps)
+      2. Hexagonal Honeycomb Crystalline Topology (Cellular ATP Synthase rotor & 0.17 pJ/bit Landauer limit)
+      3. CL-LoRA Discrete Latent Manifold Topology (Ternary trits {-1, 0, 1}, 0 FLOP drift, Attractor resonance)
+
+    Args:
+        output_html: Destination HTML filepath (default: "cron_visualizer.html")
+        mode: Initial active topology ("torus", "hex", "lora", "all")
+        cl_path: Optional path to compiled 4D-Torus microcode (.cl)
+        lora_path: Optional path to discrete CL-LoRA adapter binary (.cll)
+        auto_open: If True, automatically launches the default web browser
+
+    Returns:
+        Absolute filepath to the generated standalone HTML visualizer.
+    """
+    import os
+    import webbrowser
+
+    if not _lib or not hasattr(_lib, "cron_export_visualizer_html"):
+        raise RuntimeError("Native CRON library not available for visualize")
+
+    out_err = ctypes.c_char_p()
+    cl_arg = cl_path.encode("utf-8") if cl_path else None
+    lora_arg = lora_path.encode("utf-8") if lora_path else None
+
+    ok = _lib.cron_export_visualizer_html(
+        output_html.encode("utf-8"),
+        mode.encode("utf-8"),
+        cl_arg,
+        lora_arg,
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to generate 3D visualizer: {err}")
+
+    abs_path = os.path.abspath(output_html)
+    if auto_open:
+        webbrowser.open(f"file://{abs_path}")
+
+    return abs_path
 
 
 

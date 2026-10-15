@@ -281,7 +281,7 @@ pub use model_importer::pytorch_fx::{lower_pytorch_fx_graph, FxGraph, FxLoweredC
 pub use cl_macro::{MacroCompiler, MacroStmt, parse_clm, compute_slot_crc, build_valid_slot};
 pub use cl_importer::{NeuralLayer, TernaryVal};
 pub use cl_lsp::{analyze_cl_source, format_diagnostics_report, ClDiagnostic, DiagnosticSeverity};
-pub use cl_visualizer::export_html5_dashboard;
+pub use cl_visualizer::{export_html5_dashboard, export_unified_3d_topology_visualizer, VisualizerConfig};
 pub use cl_clifford::Multivector4D as Multivector4DClifford;
 pub use cl_hyperdimensional::{HyperVector, HolographicMemoryBank, HDC_DIM};
 pub use cl_neuromodulation::{NeuromodulationEngine, NeuromodulatorState as LivingNeuromodulatorState, DynamicCoreTuning};

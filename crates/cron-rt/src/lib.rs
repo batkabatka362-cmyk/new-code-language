@@ -1179,6 +1179,80 @@ pub unsafe extern "C" fn cron_safetensors_to_cl_file(
     true
 }
 
+// ----------------------------------------------------------------------------
+// 10b. Unified 3D Multi-Topology Visualizer C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_export_visualizer_html(
+    out_html_path: *const c_char,
+    mode: *const c_char,
+    cl_path: *const c_char,
+    lora_cll_path: *const c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if out_html_path.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("out_html_path cannot be null").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let out_str = match CStr::from_ptr(out_html_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error in out_html_path: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let mode_str = if !mode.is_null() {
+        CStr::from_ptr(mode).to_str().unwrap_or("all")
+    } else {
+        "all"
+    };
+
+    let cl_file = if !cl_path.is_null() {
+        CStr::from_ptr(cl_path).to_str().ok()
+    } else {
+        None
+    };
+
+    let lora_file = if !lora_cll_path.is_null() {
+        CStr::from_ptr(lora_cll_path).to_str().ok()
+    } else {
+        None
+    };
+
+    let cl_p = cl_file.map(std::path::Path::new);
+    let lora_p = lora_file.map(std::path::Path::new);
+
+    let cfg = match cronc::cl_visualizer::VisualizerConfig::from_files(cl_p, lora_p, Some(mode_str)) {
+        Ok(c) => c,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Visualizer config error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let html = cronc::cl_visualizer::export_unified_3d_topology_visualizer(&cfg);
+
+    if let Err(e) = std::fs::write(out_str, html) {
+        if !out_error.is_null() {
+            *out_error = CString::new(format!("Failed to write HTML file: {}", e)).unwrap().into_raw();
+        }
+        return false;
+    }
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
 
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
