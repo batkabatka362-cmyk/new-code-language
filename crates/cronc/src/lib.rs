@@ -172,10 +172,16 @@ pub mod cl_daemon;
 pub mod cl_agent;
 pub mod cl_accelerator;
 pub mod cl_lora;
+pub mod cl_py_transpile;
 
 pub use cl_lora::{
     pack_trits_5, parse_jsonl_training_pairs, train_cl_lora_from_pairs, unpack_trits_5,
     ClLoraAdapter, ClLoraConfig, DiscreteLoraLayer, CLLORA_MAGIC, CLLORA_VERSION,
+};
+
+pub use cl_py_transpile::{
+    tokenize_python, verify_python_to_cl_parity, HirOp, ParityReport, PyDomainKind,
+    PyMathFunction, PyToCronTranspiler, PyToken, PyTranspileTarget,
 };
 
 pub use cl_accelerator::{

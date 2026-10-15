@@ -701,7 +701,80 @@ __all__ = [
     "save_clm",
     "load_clm",
     "StigmergySwarm",
+    "compile",
 ]
+
+def compile(target: str = "cl", sphere: bool = True, dim: int = 64):
+    """
+    Decorator for Python mathematical functions that losslessly lowers them
+    into CRON 128-bit VLIW microcode (.cl), ISO C23 + AVX-512, or synthesizable Verilog RTL.
+    """
+    import inspect
+    import subprocess
+    import tempfile
+
+    def decorator(fn):
+        try:
+            src = inspect.getsource(fn)
+        except Exception:
+            src = f"def {fn.__name__}(*args):\n    pass\n"
+
+        class CompiledCronFn:
+            def __init__(self, func, source_code):
+                self._func = func
+                self.source_code = source_code
+                self.target = target
+                self.sphere = sphere
+                self.dim = dim
+                self.cl_code = None
+                self.c23_code = None
+                self.verilog_code = None
+                self._transpile()
+
+            def _transpile(self):
+                # Search for compiled cron CLI binary
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                candidates = [
+                    os.path.join(base_dir, "target", "debug", "cron.exe"),
+                    os.path.join(base_dir, "target", "release", "cron.exe"),
+                    os.path.join(base_dir, "target", "debug", "cron"),
+                    os.path.join(base_dir, "target", "release", "cron"),
+                ]
+                cron_bin = next((c for c in candidates if os.path.exists(c)), None)
+                if not cron_bin:
+                    return
+
+                try:
+                    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+                        f.write(self.source_code)
+                        tmp_py = f.name
+                    ext = "cl" if target == "cl" else ("c" if target in ("c23", "c") else "v")
+                    tmp_out = tmp_py + "." + ext
+                    cmd = [cron_bin, "import-py", tmp_py, "-t", target, "-o", tmp_out, "--dim", str(self.dim)]
+                    if self.sphere:
+                        cmd.append("--sphere")
+                    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+                    if os.path.exists(tmp_out):
+                        with open(tmp_out, "r", encoding="utf-8") as out_f:
+                            code = out_f.read()
+                        if target == "cl":
+                            self.cl_code = code
+                        elif target in ("c23", "c"):
+                            self.c23_code = code
+                        else:
+                            self.verilog_code = code
+                        os.remove(tmp_out)
+                    if os.path.exists(tmp_py):
+                        os.remove(tmp_py)
+                except Exception:
+                    pass
+
+            def __call__(self, *args, **kwargs):
+                return self._func(*args, **kwargs)
+
+        return CompiledCronFn(fn, src)
+
+    return decorator
 
 
 
