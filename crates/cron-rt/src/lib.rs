@@ -1538,6 +1538,57 @@ pub unsafe extern "C" fn cron_r1_reason_json(
 }
 
 // ----------------------------------------------------------------------------
+// 10f. Google Titans & RWKV-7 Neural Long-Term Memory C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_titans_benchmark_json(
+    d_model: usize,
+    num_heads: usize,
+    memory_dim: usize,
+    seq_len: usize,
+    is_ternary: bool,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let config = cronc::cl_titans::TitansConfig::new(
+        d_model.max(16),
+        num_heads.max(1),
+        memory_dim.max(8),
+    ).with_ternary(is_ternary);
+
+    let mut engine = cronc::cl_titans::TitansMemoryEngine::new(config);
+    let report = engine.benchmark_stream(seq_len.max(16));
+
+    let json_str = format!(
+        r#"{{"d_model":{},"num_heads":{},"memory_dim":{},"seq_len":{},"surprise_events_count":{},"average_surprise":{:.4},"transformer_kv_cache_bytes":{},"titans_flat_memory_bytes":{},"memory_savings_pct":{:.2},"is_flat_o1_verified":{}}}"#,
+        report.d_model,
+        report.num_heads,
+        report.memory_dim,
+        report.seq_len,
+        report.surprise_events_count,
+        report.average_surprise,
+        report.transformer_kv_cache_bytes,
+        report.titans_flat_memory_bytes,
+        report.memory_savings_pct,
+        report.is_flat_o1_verified
+    );
+
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+// ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
 

@@ -106,6 +106,7 @@ pub mod cl_visualizer;
 pub mod cl_mla;
 pub mod cl_mongol;
 pub mod cl_r1_reasoning;
+pub mod cl_titans;
 pub mod cl_clifford;
 pub mod cl_topological;
 pub mod cl_topological_lm;
@@ -288,6 +289,7 @@ pub use cl_visualizer::{export_html5_dashboard, export_unified_3d_topology_visua
 pub use cl_mla::{MlaConfig, MlaKvCache, MlaWeights, MlaEngine, MlaBenchmarkReport, generate_mla_verilog_rtl};
 pub use cl_mongol::{MongolMorphTokenizer, MongolMorphToken, MongolGrammarRules, MongolScriptBridge, MongolTokenEfficiencyReport, VowelHarmony, SuffixType};
 pub use cl_r1_reasoning::{R1ReasoningEngine, R1ReasoningConfig, R1ReasoningResult, GrpoCandidate};
+pub use cl_titans::{TitansConfig, TitansMemoryEngine, TitansStepResult, TitansBenchmarkReport};
 pub use cl_clifford::Multivector4D as Multivector4DClifford;
 pub use cl_hyperdimensional::{HyperVector, HolographicMemoryBank, HDC_DIM};
 pub use cl_neuromodulation::{NeuromodulationEngine, NeuromodulatorState as LivingNeuromodulatorState, DynamicCoreTuning};

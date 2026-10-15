@@ -72,6 +72,7 @@ fn print_help() {
     println!("    mla [opts]                     Multi-Head Latent Attention (MLA / DeepSeek-V3) & 0-DSP RTL");
     println!("    morph [opts]                   Agglutinative Mongolian morphological tokenizer & script bridge");
     println!("    reason [prompt] [opts]         DeepSeek-R1 style Test-Time Reasoning & GRPO VLIW synthesis");
+    println!("    titans [opts]                  Google Titans Neural Long-Term Memory & RWKV-7 Flat O(1) RAM");
     println!("    cl-clifford [--angle a]        Clifford Geometric Algebra 4D/5D Spacetime & Quantum Rotor Compiler");
     println!("    cl-agi [options]               Living AGI Cognitive Mind: Holographic Memory, Neuromodulators & Sleep");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
@@ -209,6 +210,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    DeepSeek-R1 style test-time reasoning engine with explicit <think> chain-of-thought,\n    Group Relative Policy Optimization (GRPO), and autonomous VLIW self-healing.\n");
             println!("OPTIONS:\n    -g, --group <N>     Number of GRPO parallel rollout candidates (default: 4)\n    --no-cot            Hide internal <think> monologue and output only final microcode\n    --json              Output structured reasoning trace in JSON\n    -o, --out <path>    Save synthesized verified microcode to file\n    -h, --help          Display this help message\n");
             println!("EXAMPLES:\n    cron reason \"Synthesize zero-hazard Clifford rotor attention\"\n    cron reason \"FlashAttention 4.0 IPC Polyhedral Tiling\" -g 8\n    cron reason \"BitNet SwiGLU 1.58b 4-slot bundle\" --json");
+        }
+        "titans" | "memory" | "cl-titans" => {
+            println!("USAGE:\n    cron titans [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Google Titans Neural Long-Term Memory (NLTM) with surprise-driven associative updates\n    and RWKV-7 style constant O(1) memory scaling during autoregressive generation.\n");
+            println!("OPTIONS:\n    --dim <d>          Model dimension d_model (default: 64)\n    --heads <n>        Number of memory heads (default: 4)\n    --mem-dim <m>      Associative memory dimension (default: 16)\n    --seq <len>        Sequence length to stream (default: 512)\n    --ternary          Enable MatMul-Free ternary weights {{-1, 0, 1}}\n    --json             Output structured benchmark report in JSON\n    -o, --out <path>   Save telemetry to file\n    -h, --help         Display this help message\n");
+            println!("EXAMPLES:\n    cron titans --seq 10000 --ternary\n    cron titans --json");
         }
         "agent" => {
             println!("USAGE:\n    cron agent [OPTIONS]\n");
@@ -1273,6 +1280,9 @@ fn main() {
         }
         "reason" | "r1" | "cl-reason" => {
             handle_r1_reason_command(&args[2..]);
+        }
+        "titans" | "memory" | "cl-titans" => {
+            handle_titans_command(&args[2..]);
         }
         "cl-clifford" | "cga" => {
             handle_cl_clifford_command(&args[2..]);
@@ -10078,6 +10088,111 @@ fn handle_r1_reason_command(args: &[String]) {
         } else {
             println!("  [SUCCESS] Verified .cl microcode saved -> {}", path);
         }
+    }
+}
+
+fn handle_titans_command(args: &[String]) {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_subcommand_help("titans");
+        return;
+    }
+
+    let mut d_model = 64usize;
+    let mut num_heads = 4usize;
+    let mut memory_dim = 16usize;
+    let mut seq_len = 512usize;
+    let mut is_ternary = false;
+    let mut emit_json = false;
+    let mut out_file: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dim" | "-d" => {
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse::<usize>() { d_model = v; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--heads" | "-n" => {
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse::<usize>() { num_heads = v; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--mem-dim" | "-m" => {
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse::<usize>() { memory_dim = v; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--seq" | "-s" => {
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse::<usize>() { seq_len = v; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--ternary" | "-t" => {
+                is_ternary = true;
+                i += 1;
+            }
+            "--json" => {
+                emit_json = true;
+                i += 1;
+            }
+            "-o" | "--out" => {
+                if i + 1 < args.len() {
+                    out_file = Some(args[i + 1].clone());
+                    i += 2;
+                } else { i += 1; }
+            }
+            _ => { i += 1; }
+        }
+    }
+
+    let config = cronc::cl_titans::TitansConfig::new(d_model, num_heads, memory_dim).with_ternary(is_ternary);
+    let mut engine = cronc::cl_titans::TitansMemoryEngine::new(config);
+    let report = engine.benchmark_stream(seq_len);
+
+    if emit_json {
+        let json = format!(
+            r#"{{"d_model":{},"num_heads":{},"memory_dim":{},"seq_len":{},"surprise_events_count":{},"average_surprise":{:.4},"transformer_kv_cache_bytes":{},"titans_flat_memory_bytes":{},"memory_savings_pct":{:.2},"is_flat_o1_verified":{}}}"#,
+            report.d_model, report.num_heads, report.memory_dim, report.seq_len,
+            report.surprise_events_count, report.average_surprise,
+            report.transformer_kv_cache_bytes, report.titans_flat_memory_bytes,
+            report.memory_savings_pct, report.is_flat_o1_verified
+        );
+        if let Some(ref path) = out_file {
+            let _ = std::fs::write(path, &json);
+        }
+        println!("{}", json);
+        return;
+    }
+
+    println!("================================================================================");
+    println!(" CRON GOOGLE TITANS & RWKV-7 NEURAL LONG-TERM MEMORY ENGINE");
+    println!("================================================================================");
+    println!("  [+] Architecture           : Neural Long-Term Memory (NLTM) + Test-Time Adaptation");
+    println!("  [+] Scaling Complexity     : STRICT CONSTANT O(1) FLAT MEMORY (RWKV-7 style)");
+    println!("  [+] Precision Mode         : {}", if is_ternary { "MatMul-Free Ternary {{-1, 0, 1}} (0 DSP Multipliers)" } else { "Full Precision Floating Point" });
+    println!("  [+] Parameters             : d_model={}, heads={}, memory_dim={}", report.d_model, report.num_heads, report.memory_dim);
+    println!("  [+] Stream Processed       : {} tokens in continuous stream", report.seq_len);
+    println!("--------------------------------------------------------------------------------");
+    println!(" MEMORY FOOTPRINT COMPARISON (STREAM = {} TOKENS):", report.seq_len);
+    println!("  - Standard Transformer KV-Cache  : {:>10} bytes (O(N) unbounded linear growth)", report.transformer_kv_cache_bytes);
+    println!("  - Google Titans / RWKV-7 Memory  : {:>10} bytes (O(1) flat persistent state)", report.titans_flat_memory_bytes);
+    println!("  - VRAM Savings Efficiency        : {:.2}% ({:.1}x memory compression)", report.memory_savings_pct, report.transformer_kv_cache_bytes as f64 / report.titans_flat_memory_bytes as f64);
+    println!("  - Flat O(1) Memory Verified      : {}", if report.is_flat_o1_verified { "YES (0 bytes allocated during generation)" } else { "NO" });
+    println!("--------------------------------------------------------------------------------");
+    println!(" SURPRISE & ASSOCIATIVE DYNAMICS:");
+    println!("  - Surprise Memory Updates        : {} events triggered (adaptive memorization)", report.surprise_events_count);
+    println!("  - Average Surprise Metric (S_t)  : {:.4} (prediction error ||M*k - v||^2)", report.average_surprise);
+    println!("  - Learning Rate / Weight Decay   : eta=0.10, lambda=0.01");
+    println!("================================================================================");
+
+    if let Some(ref path) = out_file {
+        let _ = std::fs::write(path, format!("{:#?}", report));
+        println!("  [SAVED] Titans benchmark report saved -> {}", path);
     }
 }
 

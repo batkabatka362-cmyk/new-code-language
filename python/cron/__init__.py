@@ -163,6 +163,18 @@ def _setup_ffi(lib):
             ctypes.POINTER(ctypes.c_char_p),
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_titans_benchmark_json
+    if hasattr(lib, "cron_titans_benchmark_json"):
+        lib.cron_titans_benchmark_json.restype = ctypes.c_bool
+        lib.cron_titans_benchmark_json.argtypes = [
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_bool,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -903,6 +915,7 @@ __all__ = [
     "cyrillic_to_traditional",
     "benchmark_mongol_tokens",
     "reason",
+    "benchmark_titans",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1379,6 +1392,42 @@ def reason(
     if hasattr(_lib, "cron_string_free"):
         _lib.cron_string_free(out_json)
     return res
+
+def benchmark_titans(
+    d_model: int = 64,
+    num_heads: int = 4,
+    memory_dim: int = 16,
+    seq_len: int = 512,
+    is_ternary: bool = False,
+) -> Dict[str, Any]:
+    """
+    Benchmarks Google Titans & RWKV-7 Neural Long-Term Memory (NLTM) vs standard Transformer KV-cache.
+    Proves strict O(1) constant memory scaling and measures surprise-driven associative updates.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_titans_benchmark_json"):
+        raise RuntimeError("Native CRON library not available for benchmark_titans")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_titans_benchmark_json(
+        ctypes.c_size_t(d_model),
+        ctypes.c_size_t(num_heads),
+        ctypes.c_size_t(memory_dim),
+        ctypes.c_size_t(seq_len),
+        ctypes.c_bool(is_ternary),
+        ctypes.byref(out_json),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to benchmark Titans memory: {err}")
+
+    res = json.loads(out_json.value.decode("utf-8"))
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return res
+
 
 
 

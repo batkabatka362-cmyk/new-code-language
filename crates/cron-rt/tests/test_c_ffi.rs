@@ -884,6 +884,34 @@ fn test_ffi_r1_reasoning() {
     unsafe { cron_string_free(json_ptr); }
 }
 
+#[test]
+fn test_ffi_titans_memory() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_titans_benchmark_json(
+            64,
+            4,
+            16,
+            128,
+            true, // ternary
+            &mut json_ptr,
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_titans_benchmark_json must succeed");
+    assert!(!json_ptr.is_null());
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"is_flat_o1_verified\":true"));
+    assert!(json_str.contains("\"memory_savings_pct\":"));
+    assert!(json_str.contains("\"titans_flat_memory_bytes\":8192"));
+
+    unsafe { cron_string_free(json_ptr); }
+}
+
+
 
 
 
