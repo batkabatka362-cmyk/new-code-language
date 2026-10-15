@@ -103,6 +103,7 @@ pub mod cl_macro;
 pub mod cl_importer;
 pub mod cl_lsp;
 pub mod cl_visualizer;
+pub mod cl_mla;
 pub mod cl_clifford;
 pub mod cl_topological;
 pub mod cl_topological_lm;
@@ -282,6 +283,7 @@ pub use cl_macro::{MacroCompiler, MacroStmt, parse_clm, compute_slot_crc, build_
 pub use cl_importer::{NeuralLayer, TernaryVal};
 pub use cl_lsp::{analyze_cl_source, format_diagnostics_report, ClDiagnostic, DiagnosticSeverity};
 pub use cl_visualizer::{export_html5_dashboard, export_unified_3d_topology_visualizer, VisualizerConfig};
+pub use cl_mla::{MlaConfig, MlaKvCache, MlaWeights, MlaEngine, MlaBenchmarkReport, generate_mla_verilog_rtl};
 pub use cl_clifford::Multivector4D as Multivector4DClifford;
 pub use cl_hyperdimensional::{HyperVector, HolographicMemoryBank, HDC_DIM};
 pub use cl_neuromodulation::{NeuromodulationEngine, NeuromodulatorState as LivingNeuromodulatorState, DynamicCoreTuning};

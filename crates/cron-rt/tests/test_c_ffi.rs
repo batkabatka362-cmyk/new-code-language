@@ -772,6 +772,57 @@ fn test_ffi_export_visualizer_html() {
     let _ = std::fs::remove_dir(&temp_dir);
 }
 
+#[test]
+fn test_ffi_mla_benchmark_and_verilog() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    // 1. Test MLA Benchmark JSON
+    let ok_bench = unsafe {
+        cron_mla_benchmark_json(
+            64,
+            4,
+            16,
+            128,
+            true, // ternary
+            &mut json_ptr,
+            &mut err_ptr,
+        )
+    };
+    assert!(ok_bench, "cron_mla_benchmark_json must succeed");
+    assert!(!json_ptr.is_null());
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"vram_reduction_pct\":"));
+    assert!(json_str.contains("\"dsp_multipliers_ternary\":0"));
+    unsafe { cron_string_free(json_ptr); }
+
+    // 2. Test MLA Synthesize Verilog
+    let temp_dir = std::env::temp_dir().join(format!("cron_ffi_mla_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let v_path = temp_dir.join("cksl_mla_absorb_core.v");
+    let c_path = CString::new(v_path.to_str().unwrap()).unwrap();
+
+    let ok_v = unsafe {
+        cron_mla_synthesize_verilog(
+            64,
+            4,
+            16,
+            true,
+            c_path.as_ptr(),
+            &mut err_ptr,
+        )
+    };
+    assert!(ok_v, "cron_mla_synthesize_verilog must succeed");
+    assert!(v_path.exists());
+    let rtl = std::fs::read_to_string(&v_path).unwrap();
+    assert!(rtl.contains("module cksl_mla_absorb_core"));
+    assert!(rtl.contains("gf_swizzle"));
+
+    let _ = std::fs::remove_file(&v_path);
+    let _ = std::fs::remove_dir(&temp_dir);
+}
+
+
 
 
 

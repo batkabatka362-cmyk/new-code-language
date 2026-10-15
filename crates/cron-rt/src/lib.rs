@@ -1255,6 +1255,113 @@ pub unsafe extern "C" fn cron_export_visualizer_html(
 }
 
 // ----------------------------------------------------------------------------
+// 10c. Multi-Head Latent Attention (MLA / DeepSeek-V3) C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_mla_benchmark_json(
+    d_model: usize,
+    num_heads: usize,
+    kv_latent_dim: usize,
+    seq_len: usize,
+    is_ternary: bool,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("out_json pointer is null").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let config = cronc::cl_mla::MlaConfig::new(
+        d_model.max(16),
+        num_heads.max(1),
+        kv_latent_dim.max(8),
+    ).with_ternary(is_ternary);
+
+    let weights = cronc::cl_mla::MlaWeights::new_synthetic(config);
+    let engine = cronc::cl_mla::MlaEngine::new(weights);
+    let report = engine.benchmark(seq_len.max(16));
+
+    let json_str = format!(
+        r#"{{"d_model":{},"num_heads":{},"head_dim":{},"kv_latent_dim":{},"rope_dim":{},"seq_len":{},"kv_cache_bytes_mha":{},"kv_cache_bytes_gqa":{},"kv_cache_bytes_mla":{},"kv_cache_bytes_mla_ternary":{},"vram_reduction_pct":{:.2},"bandwidth_reduction_pct":{:.2},"dsp_multipliers_standard":{},"dsp_multipliers_ternary":{},"parity_max_abs_error":{:.6},"latency_absorbed_us":{:.2},"latency_uncompressed_us":{:.2},"speedup_ratio":{:.2}}}"#,
+        report.d_model,
+        report.num_heads,
+        report.head_dim,
+        report.kv_latent_dim,
+        report.rope_dim,
+        report.seq_len,
+        report.kv_cache_bytes_mha,
+        report.kv_cache_bytes_gqa,
+        report.kv_cache_bytes_mla,
+        report.kv_cache_bytes_mla_ternary,
+        report.vram_reduction_pct,
+        report.bandwidth_reduction_pct,
+        report.dsp_multipliers_standard,
+        report.dsp_multipliers_ternary,
+        report.parity_max_abs_error,
+        report.latency_absorbed_us,
+        report.latency_uncompressed_us,
+        report.speedup_ratio,
+    );
+
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_mla_synthesize_verilog(
+    d_model: usize,
+    num_heads: usize,
+    kv_latent_dim: usize,
+    is_ternary: bool,
+    out_v_path: *const c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if out_v_path.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("out_v_path cannot be null").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let path_str = match CStr::from_ptr(out_v_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let config = cronc::cl_mla::MlaConfig::new(
+        d_model.max(16),
+        num_heads.max(1),
+        kv_latent_dim.max(8),
+    ).with_ternary(is_ternary);
+
+    let rtl = cronc::cl_mla::generate_mla_verilog_rtl(&config);
+
+    if let Err(e) = std::fs::write(path_str, rtl) {
+        if !out_error.is_null() {
+            *out_error = CString::new(format!("Failed to write Verilog RTL: {}", e)).unwrap().into_raw();
+        }
+        return false;
+    }
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+// ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
 

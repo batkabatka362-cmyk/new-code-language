@@ -118,6 +118,29 @@ def _setup_ffi(lib):
             ctypes.c_char_p,
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_mla_benchmark_json
+    if hasattr(lib, "cron_mla_benchmark_json"):
+        lib.cron_mla_benchmark_json.restype = ctypes.c_bool
+        lib.cron_mla_benchmark_json.argtypes = [
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_bool,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
+    # cron_mla_synthesize_verilog
+    if hasattr(lib, "cron_mla_synthesize_verilog"):
+        lib.cron_mla_synthesize_verilog.restype = ctypes.c_bool
+        lib.cron_mla_synthesize_verilog.argtypes = [
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_size_t,
+            ctypes.c_bool,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -852,6 +875,8 @@ __all__ = [
     "safetensors_to_cl_lora",
     "safetensors_to_cl",
     "visualize",
+    "benchmark_mla",
+    "synthesize_mla_verilog",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1171,6 +1196,72 @@ def visualize(
         webbrowser.open(f"file://{abs_path}")
 
     return abs_path
+
+def benchmark_mla(
+    d_model: int = 64,
+    num_heads: int = 4,
+    kv_latent_dim: int = 16,
+    seq_len: int = 128,
+    is_ternary: bool = False,
+) -> Dict[str, Any]:
+    """
+    Benchmarks Multi-Head Latent Attention (MLA / DeepSeek-V3) vs standard MHA/GQA.
+    Evaluates VRAM reduction, memory bandwidth, latency, and absorbed parity error.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_mla_benchmark_json"):
+        raise RuntimeError("Native CRON library not available for benchmark_mla")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_mla_benchmark_json(
+        ctypes.c_size_t(d_model),
+        ctypes.c_size_t(num_heads),
+        ctypes.c_size_t(kv_latent_dim),
+        ctypes.c_size_t(seq_len),
+        ctypes.c_bool(is_ternary),
+        ctypes.byref(out_json),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to benchmark MLA: {err}")
+
+    res = json.loads(out_json.value.decode("utf-8"))
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return res
+
+def synthesize_mla_verilog(
+    output_v: str = "cksl_mla_absorb_core.v",
+    d_model: int = 64,
+    num_heads: int = 4,
+    kv_latent_dim: int = 16,
+    is_ternary: bool = False,
+) -> str:
+    """
+    Synthesizes IEEE 1364-2001 Verilog RTL hardware core for DeepSeek-style MLA Matrix Absorption.
+    Returns absolute filepath of the generated Verilog file.
+    """
+    import os
+    if not _lib or not hasattr(_lib, "cron_mla_synthesize_verilog"):
+        raise RuntimeError("Native CRON library not available for synthesize_mla_verilog")
+
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_mla_synthesize_verilog(
+        ctypes.c_size_t(d_model),
+        ctypes.c_size_t(num_heads),
+        ctypes.c_size_t(kv_latent_dim),
+        ctypes.c_bool(is_ternary),
+        output_v.encode("utf-8"),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to synthesize MLA Verilog RTL: {err}")
+
+    return os.path.abspath(output_v)
+
 
 
 
