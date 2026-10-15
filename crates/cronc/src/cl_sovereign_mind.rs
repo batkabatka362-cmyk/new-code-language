@@ -200,7 +200,8 @@ impl SovereignMind {
             ("solve logic task", "CRON Logic Resolution: Analyzing multi-premise proposition via 4D Clifford rotor constraint satisfaction. By projecting Boolean clauses into S^3 hyperspherical phase space, satisfiability resolves to a minimum-energy geodesic convergence with zero truth-table explosion."),
             ("what is bitnet", "BitNet b1.58 is a 1.58-bit ternary foundation architecture replacing floating-point matrix multiplications with ternary weights {-1, 0, +1} and additions. It slashes energy consumption to ~1.7 pJ/token and eliminates memory bandwidth bottlenecks."),
             ("explain transformer in .cl", "The CRON transformer in .cl microcode executes FlashAttention-3 tiled attention and ternary FFN projections using four 10-char VLIW micro-ops per bundle, maintaining O(1) KV-cache footprint via MLA compression."),
-            ("ai", "CRON Silicon AI is a 4D-Torus neuromorphic foundation model combining multiplier-free BitNet b1.58 ternary inference with 16-column cortical engram memory."),
+            ("cron ai", "CRON Silicon AI is a 4D-Torus neuromorphic foundation model combining multiplier-free BitNet b1.58 ternary inference with 16-column cortical engram memory."),
+            ("artificial intelligence", "CRON Silicon AI is a 4D-Torus neuromorphic foundation model combining multiplier-free BitNet b1.58 ternary inference with 16-column cortical engram memory."),
         ];
 
         for &(prompt, answer) in EXTRA_ENGRAMS {
@@ -567,21 +568,7 @@ impl SovereignMind {
             return (cached.clone(), elapsed, "ENGRAM_CRYSTALLINE_MATCH (0.0 ms)");
         }
 
-        // 2. Associative Episodic Long-Term Memory Recall (Attractor overlap)
-        if let Some((recalled_text, _score, mode)) = self.associative_recall(user_input) {
-            let elapsed = start.elapsed();
-            return (recalled_text, elapsed, mode);
-        }
-
-        // 3. Fuzzy phrase check
-        for (k, v) in &self.engram_cache {
-            if query_norm.contains(k) || k.contains(&query_norm) {
-                let elapsed = start.elapsed();
-                return (v.clone(), elapsed, "ENGRAM_RESONANCE_MATCH (< 1.0 ms)");
-            }
-        }
-
-        // 3.5. Keyword semantic overlap check (multi-term resonance)
+        // 2. Keyword semantic overlap check (multi-term resonance, ranking by shared terms)
         let q_words: Vec<&str> = query_norm
             .split(|c: char| !c.is_alphanumeric())
             .filter(|w| w.len() >= 3)
@@ -604,6 +591,36 @@ impl SovereignMind {
                 let elapsed = start.elapsed();
                 return (matched_answer, elapsed, "SEMANTIC_KEYWORD_RESONANCE (< 0.5 ms)");
             }
+        }
+
+        // 3. Longest exact phrase / bounded keyword check
+        let mut best_phrase_match = None;
+        let mut max_key_len = 0;
+        for (k, v) in &self.engram_cache {
+            if k.len() < 3 {
+                continue;
+            }
+            let is_match = if k.contains(' ') || k.contains('_') {
+                let k_norm = k.replace('_', " ");
+                let q_norm = query_norm.replace('_', " ");
+                q_norm.contains(&k_norm) || k_norm.contains(&q_norm)
+            } else {
+                q_words.contains(&k.as_str())
+            };
+            if is_match && k.len() > max_key_len {
+                max_key_len = k.len();
+                best_phrase_match = Some(v.clone());
+            }
+        }
+        if let Some(matched_phrase) = best_phrase_match {
+            let elapsed = start.elapsed();
+            return (matched_phrase, elapsed, "ENGRAM_RESONANCE_MATCH (< 1.0 ms)");
+        }
+
+        // 4. Associative Episodic Long-Term Memory Recall (Attractor overlap)
+        if let Some((recalled_text, _score, mode)) = self.associative_recall(user_input) {
+            let elapsed = start.elapsed();
+            return (recalled_text, elapsed, mode);
         }
 
         // 4. Hierarchical Attractor Trajectory (Tier 2/3 Reasoning)

@@ -619,6 +619,9 @@ fn main() {
                 } else if args[i] == "--weights" && i + 1 < args.len() {
                     config.weights_path = Some(args[i + 1].clone());
                     i += 2;
+                } else if (args[i] == "--max-tokens" || args[i] == "-n") && i + 1 < args.len() {
+                    if let Ok(m) = args[i + 1].parse::<usize>() { config.max_tokens_per_turn = m; }
+                    i += 2;
                 } else if args[i] == "--eval" && i + 1 < args.len() {
                     eval_prompt = Some(args[i + 1].clone());
                     i += 2;
@@ -4732,6 +4735,7 @@ fn main() {
                         num_layers,
                         page_size_mb: 16,
                         k_speculative: 4,
+                        max_tokens_per_turn: max_tokens,
                         grammar_mode: "unconstrained".to_string(),
                         weights_path: model_path,
                         precision_mode: compute_mode,

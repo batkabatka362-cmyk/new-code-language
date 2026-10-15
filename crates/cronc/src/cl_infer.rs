@@ -1998,7 +1998,12 @@ where
     let mut sovereign_grounded_tokens: Vec<usize> = Vec::new();
     if is_golden_synthetic {
         let mut mind = crate::cl_sovereign_mind::SovereignMind::new();
-        let (recalled_text, _elapsed, _mode) = mind.query(prompt);
+        let query_str = if let Some(last_line) = prompt.lines().rev().find(|l| !l.trim().is_empty()) {
+            last_line.trim().trim_start_matches("User:").trim()
+        } else {
+            prompt.trim()
+        };
+        let (recalled_text, _elapsed, _mode) = mind.query(query_str);
         if !recalled_text.is_empty() {
             let encoded = tokenizer.encode(&recalled_text);
             sovereign_grounded_tokens = encoded.into_iter().map(|id| (id as usize) % config.vocab_size).collect();
@@ -2052,6 +2057,10 @@ where
         };
         token_ids.push(next_token);
 
+        if (next_token as u32) == tokenizer.eos_token_id() {
+            break;
+        }
+
         // Streaming UTF-8 buffer decoding
         let token_bytes = tokenizer.get_token_bytes(next_token as u32);
         stream_bytes.extend_from_slice(&token_bytes);
@@ -2073,10 +2082,6 @@ where
                     stream_bytes.drain(..valid_up_to);
                 }
             }
-        }
-
-        if (next_token as u32) == tokenizer.eos_token_id() {
-            break;
         }
     }
 
