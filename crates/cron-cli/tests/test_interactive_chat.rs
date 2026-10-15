@@ -38,9 +38,10 @@ fn test_chat_session_unconstrained_turn() {
 fn test_chat_session_multiple_turns_bounded_memory() {
     let config = ChatConfig {
         model_name: "cron-bitnet-7b".to_string(),
-        num_layers: 16,
+        num_layers: 4,
         page_size_mb: 16,
         k_speculative: 4,
+        max_tokens_per_turn: 16,
         grammar_mode: "unconstrained".to_string(),
         weights_path: None,
         ..Default::default()

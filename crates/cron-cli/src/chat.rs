@@ -39,6 +39,8 @@ pub struct ChatConfig {
     pub use_clifford: bool,
     pub use_reversible: bool,
     pub use_snn: bool,
+    pub use_sphere: bool,
+    pub adapter_path: Option<String>,
 }
 
 impl Default for ChatConfig {
@@ -62,6 +64,8 @@ impl Default for ChatConfig {
             use_clifford: false,
             use_reversible: false,
             use_snn: false,
+            use_sphere: false,
+            adapter_path: None,
         }
     }
 }
@@ -94,6 +98,8 @@ pub struct ChatSession {
     pub turns_count: usize,
     pub total_tokens_emitted: usize,
     pub history: Vec<(String, String)>,
+    pub sphere_model: Option<cronc::SphereTransformerModel>,
+    pub adapter: Option<cronc::ClLoraAdapter>,
 }
 
 impl ChatSession {
@@ -123,6 +129,33 @@ impl ChatSession {
                 cronc::SafeTensorsWeightProvider::from_file(path).ok().map(|p| Box::new(p) as Box<dyn cronc::LayerWeightProvider + Send + Sync>)
             } else {
                 None
+            }
+        } else {
+            None
+        };
+
+        let sphere_model = if config.use_sphere {
+            let sphere_cfg = cronc::SphereTransformerConfig {
+                vocab_size: 256,
+                hidden_dim: 64,
+                num_layers: config.num_layers.min(8),
+                num_heads: 4,
+                head_dim: 16,
+                intermediate_dim: 128,
+                max_seq_len: 256,
+            };
+            Some(cronc::SphereTransformerModel::new_synthetic(sphere_cfg))
+        } else {
+            None
+        };
+
+        let adapter = if let Some(ref path) = config.adapter_path {
+            match cronc::ClLoraAdapter::load_from_file(std::path::Path::new(path)) {
+                Ok(ad) => Some(ad),
+                Err(e) => {
+                    eprintln!("[WARN] Failed to load adapter from '{}': {}", path, e);
+                    None
+                }
             }
         } else {
             None
@@ -167,6 +200,8 @@ impl ChatSession {
             turns_count: 0,
             total_tokens_emitted: 0,
             history: Vec::new(),
+            sphere_model,
+            adapter,
         }
     }
 
@@ -287,7 +322,7 @@ pub fn run_interactive_chat_loop(config: ChatConfig) -> io::Result<()> {
         if session.tf_config.use_moe { "ON (Top-K Sparse)" } else { "OFF" },
         if session.tf_config.reasoning_mode { "ON (<think>)" } else { "OFF" }
     )?;
-    writeln!(handle, " Commands:      :help, :quit, :clear, :stats, :arch, :think, :mode, :save")?;
+    writeln!(handle, " Commands:      :help, :quit, :clear, :stats, :arch, :think, :sphere, :adapter, :mode, :save")?;
     writeln!(handle, "================================================================================")?;
     writeln!(handle)?;
 
@@ -320,6 +355,7 @@ pub fn run_interactive_chat_loop(config: ChatConfig) -> io::Result<()> {
             writeln!(handle, "| :arch          Display active 4D-Torus neuromorphic setup      |")?;
             writeln!(handle, "| :clear         Clear conversation context history              |")?;
             writeln!(handle, "| :think         Toggle test-time <think> reasoning trajectory   |")?;
+            writeln!(handle, "| :sphere        Toggle 4D Sphere Riemannian Geodesic engine     |")?;
             writeln!(handle, "| :mode <m>      Set precision: ternary, float, hybrid           |")?;
             writeln!(handle, "| :save [file]   Export chat session to .cldb memory vault       |")?;
             writeln!(handle, "| :quit, :exit   Save state and exit the interactive chat        |")?;
@@ -369,6 +405,8 @@ pub fn run_interactive_chat_loop(config: ChatConfig) -> io::Result<()> {
             writeln!(handle, "| Clifford 4D Rotor:    {:<40} |", if session.tf_config.use_clifford { "ACTIVE (Spacetime Rotor)" } else { "RoPE Standard" })?;
             writeln!(handle, "| Landauer Reversible:  {:<40} |", if session.tf_config.use_reversible { "ACTIVE (0.17 pJ / tok)" } else { "DISABLED" })?;
             writeln!(handle, "| Neuromorphic SNN:     {:<40} |", if session.tf_config.use_snn { "ACTIVE (LIF Event-Spiking)" } else { "DISABLED" })?;
+            writeln!(handle, "| Sphere 4D Geodesic:   {:<40} |", if session.config.use_sphere { "ACTIVE (S^3 Riemannian Manifold)" } else { "DISABLED (Standard Torus)" })?;
+            writeln!(handle, "| CL-LoRA Adapter:      {:<40} |", if let Some(ref ad) = session.adapter { format!("ACTIVE: {} ({}B)", ad.name, ad.size_in_bytes()) } else { "NONE (Base Model)".to_string() })?;
             writeln!(handle, "+----------------------------------------------------------------+")?;
             continue;
         }
@@ -433,6 +471,50 @@ pub fn run_interactive_chat_loop(config: ChatConfig) -> io::Result<()> {
         if input == ":snn" {
             session.tf_config.use_snn = !session.tf_config.use_snn;
             writeln!(handle, "[Neuromorphic LIF Spiking: {}]", if session.tf_config.use_snn { "ENABLED" } else { "DISABLED" })?;
+            continue;
+        }
+        if input == ":sphere" {
+            session.config.use_sphere = !session.config.use_sphere;
+            if session.config.use_sphere && session.sphere_model.is_none() {
+                let sphere_cfg = cronc::SphereTransformerConfig {
+                    vocab_size: 256,
+                    hidden_dim: 64,
+                    num_layers: session.config.num_layers.min(8),
+                    num_heads: 4,
+                    head_dim: 16,
+                    intermediate_dim: 128,
+                    max_seq_len: 256,
+                };
+                session.sphere_model = Some(cronc::SphereTransformerModel::new_synthetic(sphere_cfg));
+            }
+            writeln!(
+                handle,
+                "[4D Hyperspherical Riemannian Sphere Matrix Engine: {} (0 FLOPs, 0 DSP Multipliers)]",
+                if session.config.use_sphere { "ENABLED" } else { "DISABLED" }
+            )?;
+            continue;
+        }
+        if input.starts_with(":adapter") {
+            let parts: Vec<&str> = input.split_whitespace().collect();
+            if parts.len() > 1 {
+                let path = parts[1];
+                match cronc::ClLoraAdapter::load_from_file(std::path::Path::new(path)) {
+                    Ok(ad) => {
+                        let name = ad.name.clone();
+                        let rank = ad.config.rank;
+                        let bytes = ad.size_in_bytes();
+                        session.adapter = Some(ad);
+                        writeln!(handle, "[CRON-LORA] Loaded fine-tuned adapter: '{}' (Rank: {}, Footprint: {} bytes / L1 cache)", name, rank, bytes)?;
+                    }
+                    Err(e) => {
+                        writeln!(handle, "[ERROR] Failed to load adapter from '{}': {}", path, e)?;
+                    }
+                }
+            } else if let Some(ref ad) = session.adapter {
+                writeln!(handle, "[CRON-LORA Active Adapter] Name: '{}', Rank: {}, Layers: {}, Size: {} bytes (<=35.3 KB L1)", ad.name, ad.config.rank, ad.layers.len(), ad.size_in_bytes())?;
+            } else {
+                writeln!(handle, "[CRON-LORA] No adapter currently loaded. Use ':adapter <file.cldb>' to attach a fine-tuned adapter.")?;
+            }
             continue;
         }
 

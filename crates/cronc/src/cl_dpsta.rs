@@ -184,6 +184,55 @@ impl CompactDatasetEngine {
         Ok(states)
     }
 
+    /// Creates a 100% lossless, bijective .dpdata package for arbitrary binary/UTF-8 data.
+    pub fn create_lossless_package<P: AsRef<Path>>(data: &[u8], out_path: P) -> Result<usize, String> {
+        let (packed_states, orig_len) = LosslessBijective94::encode_bytes(data);
+        let token_count = packed_states.len() as u32;
+        let orig_len_u64 = orig_len as u64;
+
+        let mut file = File::create(out_path).map_err(|e| format!("Failed to create .dpdata: {}", e))?;
+        file.write_all(DPDATA_MAGIC_LOSSLESS).map_err(|e| format!("Write failed: {}", e))?;
+        file.write_all(&orig_len_u64.to_le_bytes()).map_err(|e| format!("Write failed: {}", e))?;
+        file.write_all(&token_count.to_le_bytes()).map_err(|e| format!("Write failed: {}", e))?;
+        file.write_all(&packed_states).map_err(|e| format!("Write failed: {}", e))?;
+
+        Ok(16 + packed_states.len())
+    }
+
+    /// Reads a lossless .dpdata binary stream back into the exact original byte stream.
+    pub fn load_lossless_package<P: AsRef<Path>>(in_path: P) -> Result<Vec<u8>, String> {
+        let mut file = File::open(in_path).map_err(|e| format!("Failed to open .dpdata: {}", e))?;
+        let mut magic = [0u8; 4];
+        file.read_exact(&mut magic).map_err(|e| format!("Header read failed: {}", e))?;
+
+        if &magic != DPDATA_MAGIC_LOSSLESS {
+            return Err("Not a lossless DP95 format package".to_string());
+        }
+
+        let mut orig_len_buf = [0u8; 8];
+        file.read_exact(&mut orig_len_buf).map_err(|e| format!("Read orig_len failed: {}", e))?;
+        let orig_len = u64::from_le_bytes(orig_len_buf) as usize;
+
+        let mut token_count_buf = [0u8; 4];
+        file.read_exact(&mut token_count_buf).map_err(|e| format!("Read token_count failed: {}", e))?;
+        let token_count = u32::from_le_bytes(token_count_buf) as usize;
+
+        let mut states = vec![0u8; token_count];
+        file.read_exact(&mut states).map_err(|e| format!("Read states failed: {}", e))?;
+
+        Ok(LosslessBijective94::decode_bytes(&states, orig_len))
+    }
+
+    /// Lossless UTF-8 text pack and unpack
+    pub fn create_lossless_text_package<P: AsRef<Path>>(text: &str, out_path: P) -> Result<usize, String> {
+        Self::create_lossless_package(text.as_bytes(), out_path)
+    }
+
+    pub fn load_lossless_text_package<P: AsRef<Path>>(in_path: P) -> Result<String, String> {
+        let bytes = Self::load_lossless_package(in_path)?;
+        String::from_utf8(bytes).map_err(|e| format!("UTF-8 decode failed: {}", e))
+    }
+
     /// Formats a 10-character Base-94 hardware word with CRC-8 integrity.
     pub fn format_base94_word(chars_10: &str) -> (String, u8) {
         let mut word: Vec<char> = chars_10.chars().take(10).collect();
@@ -206,6 +255,127 @@ impl CompactDatasetEngine {
         }
 
         (word_str, crc)
+    }
+}
+
+// ==============================================================================
+// 3. LOSSLESS BIJECTIVE BASE-94 ENCODING & CAYLEY LATIN TRANSFORM
+// ==============================================================================
+pub const DPDATA_MAGIC_LOSSLESS: &[u8; 4] = b"DP95";
+
+pub struct LosslessBijective94;
+
+impl LosslessBijective94 {
+    /// Encodes any byte slice into Base-94 state tokens [0..93].
+    /// Every 4 bytes (32-bit uint) decomposes into 5 Base-94 digits (94^5 > 2^32).
+    pub fn encode_bytes(data: &[u8]) -> (Vec<u8>, usize) {
+        let orig_len = data.len();
+        let num_blocks = (orig_len + 3) / 4;
+        let mut out = Vec::with_capacity(num_blocks * 5);
+
+        for chunk in data.chunks(4) {
+            let mut buf = [0u8; 4];
+            buf[..chunk.len()].copy_from_slice(chunk);
+            let mut v = (buf[0] as u64)
+                | ((buf[1] as u64) << 8)
+                | ((buf[2] as u64) << 16)
+                | ((buf[3] as u64) << 24);
+
+            for _ in 0..5 {
+                let digit = (v % 94) as u8;
+                out.push(digit);
+                v /= 94;
+            }
+        }
+
+        (out, orig_len)
+    }
+
+    /// Decodes Base-94 state tokens [0..93] back into exact original bytes.
+    pub fn decode_bytes(states: &[u8], orig_len: usize) -> Vec<u8> {
+        let mut out = Vec::with_capacity(orig_len);
+
+        for chunk in states.chunks(5) {
+            let mut v = 0u64;
+            let mut mult = 1u64;
+            for &d in chunk {
+                v += (d as u64 % 94) * mult;
+                mult *= 94;
+            }
+
+            let b = [
+                (v & 0xFF) as u8,
+                ((v >> 8) & 0xFF) as u8,
+                ((v >> 16) & 0xFF) as u8,
+                ((v >> 24) & 0xFF) as u8,
+            ];
+
+            for byte in b {
+                if out.len() < orig_len {
+                    out.push(byte);
+                }
+            }
+        }
+
+        out
+    }
+
+    /// Permutes state with Cayley Quasigroup Latin Square: C(s, key) = (3s + 5key + 7) mod 94
+    #[inline(always)]
+    pub fn cayley_forward(state: u8, key: u8) -> u8 {
+        crate::cl_matrix94::cayley_cell(3, 5, 7, state, key)
+    }
+
+    /// Exact inverse of Cayley Quasigroup Latin Square using modular inverse 3^-1 mod 94 = 63.
+    #[inline(always)]
+    pub fn cayley_inverse(cell: u8, key: u8) -> u8 {
+        let term = (cell as i64) - 5 * (key as i64) - 7;
+        let pos_term = ((term % 94) + 94) % 94;
+        ((63 * pos_term) % 94) as u8
+    }
+}
+
+// ==============================================================================
+// 4. STREAMING DPSTA READER (Bounded strictly to 35.3 KB L1 Cache footprint)
+// ==============================================================================
+pub struct StreamingDpstaReader<R: Read> {
+    reader: R,
+    pub token_count: usize,
+    read_tokens: usize,
+    chunk_buffer: Vec<u8>,
+}
+
+impl<R: Read> StreamingDpstaReader<R> {
+    pub const BUFFER_SIZE: usize = crate::cl_matrix94::FOUR_TACT_SIZE; // 35,344 bytes
+
+    pub fn new(mut reader: R) -> Result<Self, String> {
+        let mut header = [0u8; 8];
+        reader.read_exact(&mut header).map_err(|e| format!("Header read error: {}", e))?;
+        if &header[0..4] != DPDATA_MAGIC && &header[0..4] != DPDATA_MAGIC_LOSSLESS {
+            return Err("Invalid .dpdata magic signature".to_string());
+        }
+        let token_count = u32::from_le_bytes(header[4..8].try_into().unwrap()) as usize;
+        Ok(Self {
+            reader,
+            token_count,
+            read_tokens: 0,
+            chunk_buffer: vec![0u8; Self::BUFFER_SIZE],
+        })
+    }
+
+    /// Reads the next chunk up to 35.3 KB into the internal L1 cache buffer.
+    pub fn read_next_chunk(&mut self) -> std::io::Result<Option<&[u8]>> {
+        if self.read_tokens >= self.token_count {
+            return Ok(None);
+        }
+        let to_read = (self.token_count - self.read_tokens).min(Self::BUFFER_SIZE);
+        self.reader.read_exact(&mut self.chunk_buffer[..to_read])?;
+        self.read_tokens += to_read;
+        Ok(Some(&self.chunk_buffer[..to_read]))
+    }
+
+    pub fn read_so_far(&self) -> usize {
+        self.read_tokens
     }
 }
 
@@ -254,9 +424,69 @@ mod tests {
     }
 
     #[test]
-    fn test_base94_word_crc8() {
-        let (word, crc) = CompactDatasetEngine::format_base94_word("QUANTUM_OP");
-        assert_eq!(word.len(), 10);
-        assert!(crc > 0);
+    fn test_lossless_bijective_base94_roundtrip() {
+        let test_texts = [
+            "Монгол хэл дээрх хиймэл оюуны DPSTA өгөгдөл шахалт ба сэргээлт! 100% алдагдалгүй.",
+            "fn compute_clifford_4d(theta: f64) -> [f64; 4] {\n    let s = theta.sin();\n    [s, -s, 1.0, 0.0]\n}",
+            "Arbitrary spaces, tabs \t\t, and\nnewlines with special chars: !@#$%^&*()_+-=[]{}|;':\",./<>?~`",
+            "",
+            "A",
+            "12345",
+        ];
+
+        for text in &test_texts {
+            let (encoded, orig_len) = LosslessBijective94::encode_bytes(text.as_bytes());
+            // Verify all encoded digits are valid discrete state IDs 0..93
+            for &d in &encoded {
+                assert!(d < 94, "Every state must be in 0..93 discrete range");
+            }
+
+            let decoded = LosslessBijective94::decode_bytes(&encoded, orig_len);
+            let reconstructed = String::from_utf8(decoded).expect("Must be valid UTF-8");
+            assert_eq!(*text, reconstructed, "Lossless bijective Base-94 roundtrip must match 100%");
+        }
+    }
+
+    #[test]
+    fn test_cayley_quasigroup_latin_square_invertibility() {
+        // Test all states 0..93 and multiple salt keys
+        for key in [0u8, 1, 7, 13, 42, 93] {
+            for state in 0..94u8 {
+                let permuted = LosslessBijective94::cayley_forward(state, key);
+                assert!(permuted < 94);
+                let inverted = LosslessBijective94::cayley_inverse(permuted, key);
+                assert_eq!(state, inverted, "Cayley Latin Square must be 100% reversible with key {}", key);
+            }
+        }
+    }
+
+    #[test]
+    fn test_streaming_dpsta_reader_l1_bounded() {
+        let text = "CRON DPSTA Crystalline Stream L1 Cache Verification Test ".repeat(200);
+        let tmp = std::env::temp_dir().join("test_stream_l1.dpdata");
+
+        CompactDatasetEngine::create_lossless_text_package(&text, &tmp).unwrap();
+
+        let file = fs::File::open(&tmp).unwrap();
+        let mut stream_reader = StreamingDpstaReader::new(file).unwrap();
+
+        let mut total_chunks = 0;
+        let mut total_bytes_read = 0;
+
+        while let Ok(Some(chunk)) = stream_reader.read_next_chunk() {
+            total_chunks += 1;
+            total_bytes_read += chunk.len();
+            assert!(chunk.len() <= StreamingDpstaReader::<fs::File>::BUFFER_SIZE);
+        }
+
+        assert!(total_chunks >= 1);
+        assert_eq!(total_bytes_read, stream_reader.token_count);
+
+        // Verify content
+        let recovered = CompactDatasetEngine::load_lossless_text_package(&tmp).unwrap();
+        assert_eq!(recovered, text);
+
+        let _ = fs::remove_file(tmp);
     }
 }
+

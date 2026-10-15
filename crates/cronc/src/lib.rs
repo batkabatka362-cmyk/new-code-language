@@ -171,6 +171,12 @@ pub mod cl_cluster_net;
 pub mod cl_daemon;
 pub mod cl_agent;
 pub mod cl_accelerator;
+pub mod cl_lora;
+
+pub use cl_lora::{
+    pack_trits_5, parse_jsonl_training_pairs, train_cl_lora_from_pairs, unpack_trits_5,
+    ClLoraAdapter, ClLoraConfig, DiscreteLoraLayer, CLLORA_MAGIC, CLLORA_VERSION,
+};
 
 pub use cl_accelerator::{
     AccelerationTelemetry, DoubleBufferedLayerStaging, ModelAccelerationPipeline,
@@ -193,7 +199,10 @@ pub use cl_cluster_net::{
 pub use cl_matrix94::{FourTactPipeline94, PipelineOutput, NUM_STATES};
 pub use cl_htgm::{HierarchicalTBTMemory, AttractorResonanceOutput, D_BITS};
 pub use cl_cldb::{CldbVault, CldbHeader, TOTAL_CLDB_SIZE};
-pub use cl_dpsta::{CompactDatasetEngine, SubByteTernaryDataset, TernaryWeight, pack_ternary_slice, unpack_ternary_slice};
+pub use cl_dpsta::{
+    CompactDatasetEngine, LosslessBijective94, StreamingDpstaReader, SubByteTernaryDataset,
+    TernaryWeight, pack_ternary_slice, unpack_ternary_slice, DPDATA_MAGIC, DPDATA_MAGIC_LOSSLESS,
+};
 pub use cl_rtl_dpsta::{export_dpsta_rtl_package, export_dpsta_asic_tapeout};
 pub use cl_dpsta_sleep::{DpstaSleepEngine, DpstaSleepReport, SleepParameters, FrozenEngram};
 pub use cl_multimodal_dpsta::{RetinalVisionTransducer, CochlearAuditoryTransducer, ThalamicSensoryHub, SensoryFrame, SensoryModality};
