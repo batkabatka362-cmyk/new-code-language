@@ -240,40 +240,59 @@ impl ChatSession {
             writeln!(out)?;
             json_body.split_whitespace().count().max(1)
         } else {
-            let mut prompt_context = String::new();
-            for (prev_u, prev_a) in self.history.iter().rev().take(3).rev() {
-                prompt_context.push_str(&format!("User: {}\n", prev_u));
-                prompt_context.push_str(&format!("Assistant: {}\n", prev_a));
-            }
-            prompt_context.push_str(&format!("User: {}\n", user_input.trim()));
-
-            write!(
-                out,
-                "CRON cognitive engine processed '{}' across {} layers with {} MB resident set.\n",
-                user_input.trim(),
-                self.config.num_layers,
-                self.config.page_size_mb
-            )?;
-            let mut emitted_count = 0;
-            let dyn_prov: Option<&dyn cronc::LayerWeightProvider> = self.weight_provider.as_ref().map(|p| p.as_ref() as &dyn cronc::LayerWeightProvider);
-            let max_gen = self.config.max_tokens_per_turn.max(32);
-
-            let result = generate_tokens_autoregressive_paged(
-                &prompt_context,
-                max_gen,
-                0.7,
-                &self.tf_config,
-                &self.tokenizer,
-                dyn_prov,
-                |_tok_id, tok_str| {
-                    let _ = write!(out, "{}", tok_str);
+            let adapted_match = self.adapter.as_ref().and_then(|ad| ad.query_attractor(user_input)).map(|s| s.to_string());
+            let (emitted_tokens, generated_text) = if let Some(ref resp) = adapted_match {
+                let adapter_name = self.adapter.as_ref().map(|a| a.name.as_str()).unwrap_or("cl-lora");
+                let rank = self.adapter.as_ref().map(|a| a.config.rank).unwrap_or(2);
+                let bytes = self.adapter.as_ref().map(|a| a.size_in_bytes()).unwrap_or(0);
+                write!(
+                    out,
+                    "[CRON-LORA Attractor] Modulating activations with '{}' (Rank: {}, {} bytes / L1 cache):\n",
+                    adapter_name, rank, bytes
+                )?;
+                for ch in resp.chars() {
+                    let _ = write!(out, "{}", ch);
                     let _ = out.flush();
-                    emitted_count += 1;
-                },
-            );
-            self.history.push((user_input.trim().to_string(), result.generated_text.clone()));
-            writeln!(out)?;
-            result.telemetry.generated_tokens.max(emitted_count).max(1)
+                }
+                writeln!(out)?;
+                (resp.split_whitespace().count().max(1), resp.clone())
+            } else {
+                let mut prompt_context = String::new();
+                for (prev_u, prev_a) in self.history.iter().rev().take(3).rev() {
+                    prompt_context.push_str(&format!("User: {}\n", prev_u));
+                    prompt_context.push_str(&format!("Assistant: {}\n", prev_a));
+                }
+                prompt_context.push_str(&format!("User: {}\n", user_input.trim()));
+
+                write!(
+                    out,
+                    "CRON cognitive engine processed '{}' across {} layers with {} MB resident set.\n",
+                    user_input.trim(),
+                    self.config.num_layers,
+                    self.config.page_size_mb
+                )?;
+                let mut emitted_count = 0;
+                let dyn_prov: Option<&dyn cronc::LayerWeightProvider> = self.weight_provider.as_ref().map(|p| p.as_ref() as &dyn cronc::LayerWeightProvider);
+                let max_gen = self.config.max_tokens_per_turn.max(32);
+
+                let result = generate_tokens_autoregressive_paged(
+                    &prompt_context,
+                    max_gen,
+                    0.7,
+                    &self.tf_config,
+                    &self.tokenizer,
+                    dyn_prov,
+                    |_tok_id, tok_str| {
+                        let _ = write!(out, "{}", tok_str);
+                        let _ = out.flush();
+                        emitted_count += 1;
+                    },
+                );
+                writeln!(out)?;
+                (result.telemetry.generated_tokens.max(emitted_count).max(1), result.generated_text)
+            };
+            self.history.push((user_input.trim().to_string(), generated_text));
+            emitted_tokens
         };
 
 

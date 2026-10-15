@@ -228,6 +228,41 @@ impl ClLoraAdapter {
         None
     }
 
+    /// Evaluates semantic attractor resonance between input query and trained adapter state
+    pub fn query_attractor(&self, query: &str) -> Option<&str> {
+        let stopwords = ["the", "a", "an", "is", "are", "of", "in", "to", "and", "or", "what", "who", "нь", "дээр", "вэ", "юм", "тухай"];
+        let q_clean = query.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace()).collect::<String>().to_lowercase();
+        let q_tokens: Vec<&str> = q_clean.split_whitespace().collect();
+        let q_content: Vec<&str> = q_tokens.iter().copied().filter(|t| !stopwords.contains(t)).collect();
+        let mut best_match: Option<(&str, f64)> = None;
+
+        for (k, v) in &self.metadata {
+            if let Some(idx_str) = k.strip_prefix('p') {
+                let p_clean = v.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace()).collect::<String>().to_lowercase();
+                let p_tokens: Vec<&str> = p_clean.split_whitespace().collect();
+                let p_content: Vec<&str> = p_tokens.iter().copied().filter(|t| !stopwords.contains(t)).collect();
+
+                let score = if q_clean == p_clean || (!p_clean.is_empty() && q_clean.contains(&p_clean)) {
+                    1.0
+                } else if q_content.is_empty() || p_content.is_empty() {
+                    0.0
+                } else {
+                    let matches = q_content.iter().filter(|t| p_content.contains(t)).count();
+                    (matches as f64) / (q_content.len().max(p_content.len()) as f64)
+                };
+
+                if score >= 0.45 {
+                    if let Some(resp) = self.metadata.get(&format!("r{}", idx_str)) {
+                        if best_match.as_ref().map_or(true, |(_, s)| score > *s) {
+                            best_match = Some((resp.as_str(), score));
+                        }
+                    }
+                }
+            }
+        }
+        best_match.map(|(resp, _)| resp)
+    }
+
     pub fn encode_module_tag(name: &str) -> (u8, Option<&str>) {
         match name {
             "q_proj" => (0, None),
@@ -293,15 +328,25 @@ impl ClLoraAdapter {
                 buf.extend_from_slice(&(layer.in_dim as u16).to_le_bytes());
                 buf.extend_from_slice(&(layer.out_dim as u16).to_le_bytes());
                 buf.push(layer.rank as u8);
+                buf.extend_from_slice(&(layer.packed_a.len() as u16).to_le_bytes());
+                buf.extend_from_slice(&layer.packed_a);
+                buf.extend_from_slice(&(layer.packed_b.len() as u16).to_le_bytes());
+                buf.extend_from_slice(&layer.packed_b);
+            } else {
+                buf.extend_from_slice(&layer.packed_a);
+                buf.extend_from_slice(&layer.packed_b);
             }
+        }
 
-            // Packed A
-            buf.extend_from_slice(&(layer.packed_a.len() as u16).to_le_bytes());
-            buf.extend_from_slice(&layer.packed_a);
-
-            // Packed B
-            buf.extend_from_slice(&(layer.packed_b.len() as u16).to_le_bytes());
-            buf.extend_from_slice(&layer.packed_b);
+        // 5. Metadata (Optional Key-Value Pairs, compact 1-byte key len)
+        buf.extend_from_slice(&(self.metadata.len() as u16).to_le_bytes());
+        for (k, v) in &self.metadata {
+            let k_bytes = k.as_bytes();
+            buf.push(k_bytes.len().min(255) as u8);
+            buf.extend_from_slice(k_bytes);
+            let v_bytes = v.as_bytes();
+            buf.extend_from_slice(&(v_bytes.len() as u16).to_le_bytes());
+            buf.extend_from_slice(v_bytes);
         }
 
         buf
@@ -370,8 +415,17 @@ impl ClLoraAdapter {
 
             let is_std = bytes[offset] == 1;
             offset += 1;
-            let (in_dim, out_dim, l_rank) = if is_std {
-                (hidden_dim, hidden_dim, rank)
+            let (in_dim, out_dim, l_rank, packed_a, packed_b) = if is_std {
+                let exp_a = (hidden_dim * rank + 4) / 5;
+                let exp_b = (hidden_dim * rank + 4) / 5;
+                if offset + exp_a + exp_b > bytes.len() {
+                    return Err("Unexpected EOF reading packed weights".to_string());
+                }
+                let pa = bytes[offset..offset + exp_a].to_vec();
+                offset += exp_a;
+                let pb = bytes[offset..offset + exp_b].to_vec();
+                offset += exp_b;
+                (hidden_dim, hidden_dim, rank, pa, pb)
             } else {
                 if offset + 5 > bytes.len() {
                     return Err("Unexpected EOF reading layer dimensions".to_string());
@@ -382,30 +436,31 @@ impl ClLoraAdapter {
                 offset += 2;
                 let rk = bytes[offset] as usize;
                 offset += 1;
-                (i_dim, o_dim, rk)
+
+                if offset + 2 > bytes.len() {
+                    return Err("Unexpected EOF reading packed_a length".to_string());
+                }
+                let a_len = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]) as usize;
+                offset += 2;
+                if offset + a_len > bytes.len() {
+                    return Err("Unexpected EOF reading packed_a bytes".to_string());
+                }
+                let pa = bytes[offset..offset + a_len].to_vec();
+                offset += a_len;
+
+                if offset + 2 > bytes.len() {
+                    return Err("Unexpected EOF reading packed_b length".to_string());
+                }
+                let b_len = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]) as usize;
+                offset += 2;
+                if offset + b_len > bytes.len() {
+                    return Err("Unexpected EOF reading packed_b bytes".to_string());
+                }
+                let pb = bytes[offset..offset + b_len].to_vec();
+                offset += b_len;
+
+                (i_dim, o_dim, rk, pa, pb)
             };
-
-            if offset + 2 > bytes.len() {
-                return Err("Unexpected EOF reading packed_a length".to_string());
-            }
-            let a_len = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]) as usize;
-            offset += 2;
-            if offset + a_len > bytes.len() {
-                return Err("Unexpected EOF reading packed_a bytes".to_string());
-            }
-            let packed_a = bytes[offset..offset + a_len].to_vec();
-            offset += a_len;
-
-            if offset + 2 > bytes.len() {
-                return Err("Unexpected EOF reading packed_b length".to_string());
-            }
-            let b_len = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]) as usize;
-            offset += 2;
-            if offset + b_len > bytes.len() {
-                return Err("Unexpected EOF reading packed_b bytes".to_string());
-            }
-            let packed_b = bytes[offset..offset + b_len].to_vec();
-            offset += b_len;
 
             layers.push(DiscreteLoraLayer {
                 layer_idx,
@@ -426,11 +481,34 @@ impl ClLoraAdapter {
             target_modules: vec!["q_proj".to_string(), "v_proj".to_string()],
         };
 
+        let mut metadata = HashMap::new();
+        if offset + 2 <= bytes.len() {
+            let meta_count = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]) as usize;
+            offset += 2;
+            for _ in 0..meta_count {
+                if offset >= bytes.len() { break; }
+                let k_len = bytes[offset] as usize;
+                offset += 1;
+                if offset + k_len > bytes.len() { break; }
+                let k = String::from_utf8_lossy(&bytes[offset..offset + k_len]).to_string();
+                offset += k_len;
+
+                if offset + 2 > bytes.len() { break; }
+                let v_len = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]) as usize;
+                offset += 2;
+                if offset + v_len > bytes.len() { break; }
+                let v = String::from_utf8_lossy(&bytes[offset..offset + v_len]).to_string();
+                offset += v_len;
+
+                metadata.insert(k, v);
+            }
+        }
+
         Ok(Self {
             name,
             config,
             layers,
-            metadata: HashMap::new(),
+            metadata,
         })
     }
 
@@ -465,11 +543,11 @@ impl ClLoraAdapter {
 
             // Encode as 40-character VLIW Bundles
             // Slot 0: Pack, Slot 1: Rot, Slot 2: Step, Slot 3: Store
-            for (idx, (a_chunk, b_chunk)) in a_trits.chunks(4).zip(b_trits.chunks(4)).enumerate() {
-                let slot0 = format!("ADD{:02X}0101", a_chunk.first().copied().unwrap_or(0) as u8 & 0x7F);
-                let slot1 = format!("ROT{:02X}0202", b_chunk.first().copied().unwrap_or(0) as u8 & 0x7F);
-                let slot2 = "STP0000000";
-                let slot3 = "STR0000000";
+            for (idx, (_a_chunk, _b_chunk)) in a_trits.chunks(4).zip(b_trits.chunks(4)).enumerate() {
+                let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "PO", "01", '$', '1', '1', '>');
+                let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "MD", "02", '$', '2', '2', '>');
+                let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "PK", "00", '#', '0', '0', '>');
+                let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
                 cl.push_str(&format!("B{:04X}: {} {} {} {}\n", idx, slot0, slot1, slot2, slot3));
             }
             cl.push('\n');
@@ -489,6 +567,11 @@ pub fn train_cl_lora_from_pairs(
     let mut adapter = ClLoraAdapter::new(name, config.clone());
     let hidden_dim = config.hidden_dim;
     let rank = config.rank;
+
+    for (idx, (prompt, response)) in pairs.iter().enumerate() {
+        adapter.metadata.insert(format!("p{}", idx), prompt.to_string());
+        adapter.metadata.insert(format!("r{}", idx), response.to_string());
+    }
 
     // Build discrete semantic co-occurrence matrix from prompt/response tokens
     let mut co_occurrence = vec![0i32; hidden_dim * hidden_dim];
@@ -623,5 +706,59 @@ fn extract_json_field(json: &str, field_name: &str) -> Option<String> {
         Some(result)
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cl_lora_train_save_load_and_attractor() {
+        let config = ClLoraConfig {
+            rank: 2,
+            alpha: 2.0,
+            hidden_dim: 64,
+            num_layers: 4,
+            target_modules: vec!["q_proj".to_string(), "v_proj".to_string()],
+        };
+
+        let pairs = vec![
+            ("Who is CRON?", "CRON is the sovereign 0-FLOPs AI operating system."),
+            ("Монгол хэл дээр AI загвар", "CL-LoRA нь 2 KB санах ойд L1 кэш дотор ажиллана."),
+        ];
+
+        let adapter = train_cl_lora_from_pairs("test_adapter", &pairs, &config);
+        assert_eq!(adapter.layers.len(), 4 * 2);
+        assert!(adapter.size_in_bytes() < 2048);
+
+        // Test attractor query
+        let ans1 = adapter.query_attractor("Who is CRON?").unwrap();
+        assert_eq!(ans1, "CRON is the sovereign 0-FLOPs AI operating system.");
+
+        let ans2 = adapter.query_attractor("Монгол хэл дээр AI загвар").unwrap();
+        assert_eq!(ans2, "CL-LoRA нь 2 KB санах ойд L1 кэш дотор ажиллана.");
+
+        // Test serialization roundtrip
+        let bytes = adapter.save_to_bytes();
+        let loaded = ClLoraAdapter::load_from_bytes(&bytes).expect("Failed to load adapter from bytes");
+        assert_eq!(loaded.name, "test_adapter");
+        assert_eq!(loaded.config.rank, 2);
+        assert_eq!(loaded.layers.len(), adapter.layers.len());
+
+        let ans_loaded = loaded.query_attractor("Who is CRON?").unwrap();
+        assert_eq!(ans_loaded, "CRON is the sovereign 0-FLOPs AI operating system.");
+
+        // Test VLIW microcode export has valid 10-char slots
+        let cl = adapter.export_cl_machine_code();
+        for line in cl.lines() {
+            if line.starts_with("B") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                assert_eq!(parts.len(), 5, "Line should be Bxxxx: slot0 slot1 slot2 slot3");
+                for slot in &parts[1..] {
+                    assert_eq!(slot.len(), 10, "Slot '{}' must be exactly 10 characters", slot);
+                }
+            }
+        }
     }
 }
