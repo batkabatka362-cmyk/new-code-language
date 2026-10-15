@@ -423,4 +423,227 @@ impl MultiModalFusion {
 
         out
     }
+
+    /// Renders an RGB image into a terminal ASCII spatial preview.
+    pub fn render_ascii_image(rgb: &[u8], width: usize, height: usize, display_w: usize, display_h: usize) -> String {
+        let symbols = [' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'];
+        let mut out = String::new();
+
+        if rgb.is_empty() || width == 0 || height == 0 {
+            return "[Empty image stream]\n".to_string();
+        }
+
+        let dw = display_w.max(4);
+        let dh = display_h.max(2);
+
+        out.push_str("┌─── Optical Spatial Sensory Retinal Map ─────────────────────┐\n");
+
+        for dy in 0..dh {
+            out.push_str("│ ");
+            let src_y = (dy * height) / dh;
+            for dx in 0..dw {
+                let src_x = (dx * width) / dw;
+                let idx = (src_y * width + src_x) * 3;
+                let (r, g, b) = if idx + 2 < rgb.len() {
+                    (rgb[idx] as f32, rgb[idx + 1] as f32, rgb[idx + 2] as f32)
+                } else {
+                    (0.0, 0.0, 0.0)
+                };
+                // Luminance: ITU-R BT.601
+                let lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                let sym_idx = ((lum / 255.0 * 9.0).round() as usize).clamp(0, 9);
+                out.push(symbols[sym_idx]);
+            }
+            out.push_str(" │\n");
+        }
+
+        out.push_str("└───");
+        for _ in 0..dw {
+            out.push('─');
+        }
+        out.push_str(&format!("── Resolution {}x{} ─┘\n", width, height));
+
+        out
+    }
+
+    /// Parses standard uncompressed PCM WAV bytes (16-bit little-endian or 8-bit).
+    /// Returns (sample_rate_hz, normalized_samples [-1.0, 1.0]).
+    pub fn parse_wav(bytes: &[u8]) -> Result<(usize, Vec<f32>), String> {
+        if bytes.len() < 44 {
+            return Err("WAV byte stream is too short (< 44 bytes)".to_string());
+        }
+        if &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+            return Err("Invalid WAV signature (expected RIFF/WAVE)".to_string());
+        }
+        let num_channels = u16::from_le_bytes([bytes[22], bytes[23]]) as usize;
+        let sample_rate = u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]) as usize;
+        let bits_per_sample = u16::from_le_bytes([bytes[34], bytes[35]]) as usize;
+
+        // Find "data" chunk
+        let mut offset = 12;
+        let mut data_start = 0;
+        let mut data_size = 0;
+        while offset + 8 <= bytes.len() {
+            let chunk_id = &bytes[offset..offset + 4];
+            let chunk_len = u32::from_le_bytes([bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]]) as usize;
+            if chunk_id == b"data" {
+                data_start = offset + 8;
+                data_size = chunk_len.min(bytes.len().saturating_sub(data_start));
+                break;
+            }
+            offset += 8 + chunk_len;
+        }
+
+        if data_start == 0 {
+            data_start = 44.min(bytes.len());
+            data_size = bytes.len() - data_start;
+        }
+
+        let mut samples = Vec::new();
+        if bits_per_sample == 16 {
+            let num_samples = data_size / 2;
+            samples.reserve(num_samples / num_channels.max(1));
+            let raw_data = &bytes[data_start..data_start + data_size];
+            for i in (0..num_samples * 2).step_by(2 * num_channels.max(1)) {
+                if i + 1 < raw_data.len() {
+                    let s = i16::from_le_bytes([raw_data[i], raw_data[i + 1]]);
+                    samples.push(s as f32 / 32768.0);
+                }
+            }
+        } else {
+            let raw_data = &bytes[data_start..data_start + data_size];
+            for i in (0..raw_data.len()).step_by(num_channels.max(1)) {
+                let s = raw_data[i] as f32;
+                samples.push((s - 128.0) / 128.0);
+            }
+        }
+
+        Ok((sample_rate.max(8000), samples))
+    }
+
+    /// Parses PPM (P6 binary) or uncompressed 24-bit/32-bit BMP bytes into RGB.
+    /// Returns (width, height, rgb_bytes).
+    pub fn parse_ppm_or_bmp(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>), String> {
+        if bytes.len() < 10 {
+            return Err("Image byte stream is too short".to_string());
+        }
+
+        // 1. BMP format: starts with 'BM'
+        if &bytes[0..2] == b"BM" && bytes.len() >= 54 {
+            let data_offset = u32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]) as usize;
+            let width = i32::from_le_bytes([bytes[18], bytes[19], bytes[20], bytes[21]]).unsigned_abs() as usize;
+            let height = i32::from_le_bytes([bytes[22], bytes[23], bytes[24], bytes[25]]).unsigned_abs() as usize;
+            let bpp = u16::from_le_bytes([bytes[28], bytes[29]]) as usize;
+
+            if (bpp == 24 || bpp == 32) && data_offset < bytes.len() && width > 0 && height > 0 {
+                let bytes_per_pixel = bpp / 8;
+                let row_padded = (width * bytes_per_pixel + 3) & !3;
+                let mut rgb = vec![0u8; width * height * 3];
+
+                for y in 0..height {
+                    let src_row = height - 1 - y;
+                    let row_start = data_offset + src_row * row_padded;
+                    for x in 0..width {
+                        let px_start = row_start + x * bytes_per_pixel;
+                        if px_start + 2 < bytes.len() {
+                            let b = bytes[px_start];
+                            let g = bytes[px_start + 1];
+                            let r = bytes[px_start + 2];
+                            let dst_idx = (y * width + x) * 3;
+                            rgb[dst_idx] = r;
+                            rgb[dst_idx + 1] = g;
+                            rgb[dst_idx + 2] = b;
+                        }
+                    }
+                }
+                return Ok((width, height, rgb));
+            }
+        }
+
+        // 2. PPM P6 format
+        if &bytes[0..2] == b"P6" {
+            let mut cursor = 2;
+            let mut tokens = Vec::new();
+            while cursor < bytes.len() && tokens.len() < 3 {
+                while cursor < bytes.len() && (bytes[cursor].is_ascii_whitespace() || bytes[cursor] == b'#') {
+                    if bytes[cursor] == b'#' {
+                        while cursor < bytes.len() && bytes[cursor] != b'\n' {
+                            cursor += 1;
+                        }
+                    } else {
+                        cursor += 1;
+                    }
+                }
+                let token_start = cursor;
+                while cursor < bytes.len() && !bytes[cursor].is_ascii_whitespace() {
+                    cursor += 1;
+                }
+                if token_start < cursor {
+                    if let Ok(s) = std::str::from_utf8(&bytes[token_start..cursor]) {
+                        tokens.push(s.to_string());
+                    }
+                }
+            }
+            if tokens.len() >= 3 && cursor < bytes.len() {
+                if bytes[cursor] == b'\n' || bytes[cursor] == b' ' || bytes[cursor] == b'\r' {
+                    cursor += 1;
+                }
+                let width: usize = tokens[0].parse().map_err(|_| "Invalid PPM width")?;
+                let height: usize = tokens[1].parse().map_err(|_| "Invalid PPM height")?;
+                let raw_rgb = bytes[cursor..].to_vec();
+                if raw_rgb.len() >= width * height * 3 {
+                    return Ok((width, height, raw_rgb[..width * height * 3].to_vec()));
+                }
+            }
+        }
+
+        Err("Unsupported image format (expected 24/32-bit BMP or PPM P6 binary)".to_string())
+    }
+
+    /// Generates high-definition synthetic visual test scenes (checkerboard, concentric, geometric).
+    pub fn generate_synthetic_test_pattern(pattern_type: &str, width: usize, height: usize) -> Vec<u8> {
+        let mut rgb = vec![0u8; width * height * 3];
+        for y in 0..height {
+            for x in 0..width {
+                let idx = (y * width + x) * 3;
+                let (r, g, b) = match pattern_type {
+                    "checkerboard" => {
+                        let block = (x / 16) + (y / 16);
+                        if block % 2 == 0 { (240, 240, 240) } else { (20, 20, 40) }
+                    }
+                    "concentric" | "circle" => {
+                        let cx = (x as f32) - (width as f32 / 2.0);
+                        let cy = (y as f32) - (height as f32 / 2.0);
+                        let dist = (cx * cx + cy * cy).sqrt();
+                        let ring = ((dist * 0.1).sin() * 127.0 + 128.0) as u8;
+                        (ring, (ring / 2) + 30, 255 - ring)
+                    }
+                    _ => {
+                        let gx = (x as f32 / width as f32 * 255.0) as u8;
+                        let gy = (y as f32 / height as f32 * 255.0) as u8;
+                        let gz = ((gx as u16 + gy as u16) / 2) as u8;
+                        (gx, gy, gz)
+                    }
+                };
+                rgb[idx] = r;
+                rgb[idx + 1] = g;
+                rgb[idx + 2] = b;
+            }
+        }
+        rgb
+    }
+
+    /// Generates synthetic multitone acoustic audio waveform.
+    pub fn generate_synthetic_audio(freq_hz: f32, duration_s: f32, sample_rate: usize) -> Vec<f32> {
+        let total_samples = (duration_s * sample_rate as f32) as usize;
+        let mut pcm = Vec::with_capacity(total_samples);
+        for i in 0..total_samples {
+            let t = i as f32 / sample_rate as f32;
+            let val = (2.0 * PI * freq_hz * t).sin() * 0.6
+                + (2.0 * PI * (freq_hz * 1.5) * t).sin() * 0.25
+                + (2.0 * PI * (freq_hz * 2.0) * t).sin() * 0.15;
+            pcm.push(val);
+        }
+        pcm
+    }
 }

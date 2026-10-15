@@ -2180,6 +2180,26 @@ where
         }
     };
 
+    let is_golden_synthetic = match effective_provider {
+        Some(p) => p.get_tensor(0, "__provider_type__").map(|(tag, _)| tag == b"golden").unwrap_or(false),
+        None => true,
+    };
+
+    let mut sovereign_grounded_tokens: Vec<usize> = Vec::new();
+    if is_golden_synthetic {
+        let mut mind = crate::cl_sovereign_mind::SovereignMind::new();
+        let query_text = if !prompt.trim().is_empty() {
+            prompt
+        } else {
+            "Describe sensory visual and audio input"
+        };
+        let (recalled_text, _elapsed, _mode) = mind.query(query_text);
+        if !recalled_text.is_empty() {
+            let encoded = tokenizer.encode(&recalled_text);
+            sovereign_grounded_tokens = encoded.into_iter().map(|id| (id as usize) % config.vocab_size).collect();
+        }
+    }
+
     let start_instant = std::time::Instant::now();
     let mut current_pos = 0;
 
@@ -2226,7 +2246,15 @@ where
             break;
         }
 
-        let next_token = sample_token_advanced(&last_logits, &token_ids, sampling);
+        let next_token = if is_golden_synthetic && !sovereign_grounded_tokens.is_empty() {
+            if _step < sovereign_grounded_tokens.len() {
+                sovereign_grounded_tokens[_step]
+            } else {
+                tokenizer.eos_token_id() as usize
+            }
+        } else {
+            sample_token_advanced(&last_logits, &token_ids, sampling)
+        };
         token_ids.push(next_token);
 
         let token_bytes = tokenizer.get_token_bytes(next_token as u32);
