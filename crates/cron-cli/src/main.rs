@@ -36,6 +36,7 @@ fn print_help() {
     println!("    swarm-tui [--mode <m>] [--snapshot] [--ticks <n>] Interactive real-time TUI Swarm & Torus Traffic Visualizer");
     println!("    monitor [--mode <m>] [--snapshot] Live terminal monitoring HUD for 4D/6D Torus & Multi-Agent Swarm");
     println!("    daemon [--watch <dir>] [--cldb <vault.cldb>] Autonomous continuous learning & Hippocampal SWR sleep daemon");
+    println!("    agent [--task <t>] [--cap <c>] Autonomous sandboxed agent with hardware capability tokens & 4D-Torus execution");
     println!("    add <package> [--path <dir>]   Add dependency to cron.toml and update cron.lock");
     println!("    remove <package>               Remove dependency from cron.toml and lockfile");
     println!("    install                        Resolve dependencies and verify cryptographic lockfile");
@@ -158,6 +159,12 @@ fn print_help() {
 
 fn print_subcommand_help(cmd: &str) {
     match cmd {
+        "agent" => {
+            println!("USAGE:\n    cron agent [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Autonomous sandboxed cognitive agent engine with zero-trust capability tokens, taint tracking, and multi-step 4D-Torus VLIW execution.\n");
+            println!("OPTIONS:\n    -t, --task <desc>   High-level goal or task description\n    --cap <scopes>      Granted capabilities (all, fs-read, fs-write, compute, torus, patch, io)\n    --sandbox <dir>     Sandboxed filesystem root path (default: current directory)\n    -n, --max-steps <N> Maximum autonomous execution steps (default: 8)\n    --taint <origin>    Inject untrusted input to test taint tracking quarantine\n    --json              Output structured execution telemetry in JSON\n    -h, --help          Display this help message\n");
+            println!("EXAMPLE:\n    cron agent --task \"Synthesize zero-hazard Clifford rotor microcode\" --cap all");
+        }
         "cl-memcheck" => {
             println!("USAGE:\n    cron cl-memcheck <file.cl> [OPTIONS]\n");
             println!("DESCRIPTION:\n    Formal verification of 16-bank conflict-free memory access across 256 cores using Galois Field GF(2^4) XOR address swizzling.\n");
@@ -6349,6 +6356,104 @@ fn main() {
                 }
 
                 std::thread::sleep(std::time::Duration::from_millis(scan_interval_ms));
+            }
+        }
+        "agent" => {
+            let mut task = "Synthesize zero-hazard Clifford rotor microcode for associative memory".to_string();
+            let mut caps_arg = "all".to_string();
+            let mut sandbox_dir = std::path::PathBuf::from(".");
+            let mut max_steps = 8usize;
+            let mut taint_origin: Option<String> = None;
+            let mut emit_json = false;
+
+            let mut i = 2;
+            while i < args.len() {
+                if (args[i] == "--task" || args[i] == "-t") && i + 1 < args.len() {
+                    task = args[i + 1].clone();
+                    i += 2;
+                } else if args[i] == "--cap" && i + 1 < args.len() {
+                    caps_arg = args[i + 1].clone();
+                    i += 2;
+                } else if args[i] == "--sandbox" && i + 1 < args.len() {
+                    sandbox_dir = std::path::PathBuf::from(&args[i + 1]);
+                    i += 2;
+                } else if (args[i] == "--max-steps" || args[i] == "-n" || args[i] == "--steps") && i + 1 < args.len() {
+                    max_steps = args[i + 1].parse().unwrap_or(8);
+                    i += 2;
+                } else if args[i] == "--taint" && i + 1 < args.len() {
+                    taint_origin = Some(args[i + 1].clone());
+                    i += 2;
+                } else if args[i] == "--json" {
+                    emit_json = true;
+                    i += 1;
+                } else if args[i] == "-h" || args[i] == "--help" {
+                    print_subcommand_help("agent");
+                    return;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let mut ring = cronc::CapabilityRing::new();
+            let caps_lower = caps_arg.to_lowercase();
+            let all = caps_lower.contains("all");
+
+            if all || caps_lower.contains("fs-read") || caps_lower.contains("read") {
+                ring.grant(cronc::CapabilityScope::FsRead { base_dir: sandbox_dir.clone() }, 32);
+            }
+            if all || caps_lower.contains("fs-write") || caps_lower.contains("write") {
+                ring.grant(cronc::CapabilityScope::FsWrite { base_dir: sandbox_dir.clone() }, 16);
+            }
+            if all || caps_lower.contains("compute") || caps_lower.contains("vliw") {
+                ring.grant(cronc::CapabilityScope::ComputeSlot { max_cycles: 10_000 }, 64);
+            }
+            if all || caps_lower.contains("torus") || caps_lower.contains("noc") {
+                ring.grant(cronc::CapabilityScope::TorusNoC { max_hops: 16 }, 32);
+            }
+            if all || caps_lower.contains("patch") || caps_lower.contains("memory") {
+                ring.grant(cronc::CapabilityScope::MemoryPatch { allowed_banks: 0xFFFF }, 16);
+            }
+            if all || caps_lower.contains("io") || caps_lower.contains("hardware") {
+                ring.grant(cronc::CapabilityScope::HardwareIo, 16);
+            }
+
+            let mut engine = cronc::SandboxedAgentEngine::new(task, ring, sandbox_dir);
+            if let Some(ref origin) = taint_origin {
+                engine.inject_untrusted_input(origin);
+            }
+
+            if !emit_json {
+                print_banner();
+                println!("{}", engine.render_ascii_agent_hud());
+            }
+
+            let report = engine.run_until_goal(max_steps);
+            let trunc = |s: &str, n: usize| {
+                if s.len() <= n {
+                    s.to_string()
+                } else {
+                    format!("{}...", &s[..n.saturating_sub(3)])
+                }
+            };
+
+            if emit_json {
+                println!(
+                    r#"{{"goal":"{}","steps":{},"solved":{},"conclusion":"{}","energy_pj":{:.2},"capabilities_invoked":{},"violations_blocked":{}}}"#,
+                    report.goal, report.total_steps, report.solved, report.final_conclusion,
+                    report.total_energy_pj, report.capabilities_invoked, report.security_violations_blocked
+                );
+            } else {
+                println!("{}", engine.render_ascii_agent_hud());
+                println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+                println!("║                     AUTONOMOUS AGENT SESSION COMPLETE                        ║");
+                println!("╠══════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Goal Status        : {:<55} ║", if report.solved { "SOLVED (Verified Zero-Hazard VLIW)" } else { "PARTIAL / BUDGET LIMIT" });
+                println!("║ Execution Steps    : {:<55} ║", format!("{}/{}", report.total_steps, max_steps));
+                println!("║ Capabilities Used  : {:<55} ║", format!("{} privileged operations verified", report.capabilities_invoked));
+                println!("║ Taint Guard Blocks : {:<55} ║", format!("{} zero-trust violations neutralized", report.security_violations_blocked));
+                println!("║ Total Energy Cost  : {:<55} ║", format!("{:.2} pJ (Multiplier-Free BitNet b1.58)", report.total_energy_pj));
+                println!("║ Conclusion         : {:<55} ║", trunc(&report.final_conclusion, 55));
+                println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
             }
         }
         "verify" => {

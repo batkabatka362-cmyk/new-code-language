@@ -169,7 +169,13 @@ pub mod cl_homeostatic_plasticity;
 pub mod cl_snake_discrete;
 pub mod cl_cluster_net;
 pub mod cl_daemon;
+pub mod cl_agent;
 
+pub use cl_agent::{
+    AgentAction, AgentRunReport, AgentSandbox, AgentSecurityError, AgentStepRecord,
+    CapabilityRing, CapabilityScope, CapabilityToken, CognitivePhase, SandboxedAgentEngine,
+    TaintStatus,
+};
 pub use cl_daemon::{ContinuousLearningDaemon, DaemonConfig, DaemonCycleReport, CognitiveState};
 
 pub use cl_cluster_net::{
