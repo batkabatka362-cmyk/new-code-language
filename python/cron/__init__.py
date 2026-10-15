@@ -153,6 +153,16 @@ def _setup_ffi(lib):
     if hasattr(lib, "cron_mongol_benchmark_json"):
         lib.cron_mongol_benchmark_json.restype = ctypes.c_bool
         lib.cron_mongol_benchmark_json.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p)]
+    # cron_r1_reason_json
+    if hasattr(lib, "cron_r1_reason_json"):
+        lib.cron_r1_reason_json.restype = ctypes.c_bool
+        lib.cron_r1_reason_json.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_size_t,
+            ctypes.c_bool,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -892,6 +902,7 @@ __all__ = [
     "mongol_segment",
     "cyrillic_to_traditional",
     "benchmark_mongol_tokens",
+    "reason",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1336,6 +1347,39 @@ def benchmark_mongol_tokens(text: str) -> Dict[str, Any]:
     if hasattr(_lib, "cron_string_free"):
         _lib.cron_string_free(out_json)
     return res
+
+def reason(
+    prompt: str,
+    group_size: int = 4,
+    show_cot: bool = True,
+) -> Dict[str, Any]:
+    """
+    Executes DeepSeek-R1 style test-time reasoning with explicit <think> chain-of-thought
+    and Group Relative Policy Optimization (GRPO) advantage normalization.
+    Returns dictionary with full CoT monologue, verified VLIW microcode, reward scores, and proof hash.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_r1_reason_json"):
+        raise RuntimeError("Native CRON library not available for reason")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_r1_reason_json(
+        prompt.encode("utf-8"),
+        ctypes.c_size_t(group_size),
+        ctypes.c_bool(show_cot),
+        ctypes.byref(out_json),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to execute R1 reasoning: {err}")
+
+    res = json.loads(out_json.value.decode("utf-8"))
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return res
+
 
 
 

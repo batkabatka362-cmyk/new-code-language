@@ -856,6 +856,35 @@ fn test_ffi_mongol_morphology() {
     unsafe { cron_string_free(bench_ptr); }
 }
 
+#[test]
+fn test_ffi_r1_reasoning() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let c_prompt = CString::new("Synthesize zero-hazard Clifford rotor attention").unwrap();
+
+    let ok = unsafe {
+        cron_r1_reason_json(
+            c_prompt.as_ptr(),
+            4,
+            true,
+            &mut json_ptr,
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_r1_reason_json must succeed");
+    assert!(!json_ptr.is_null());
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("<think>"));
+    assert!(json_str.contains("</think>"));
+    assert!(json_str.contains("\"verified_code\":"));
+    assert!(json_str.contains("\"proof_hash\":"));
+
+    unsafe { cron_string_free(json_ptr); }
+}
+
+
 
 
 

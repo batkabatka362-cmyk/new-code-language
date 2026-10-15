@@ -1479,6 +1479,65 @@ pub unsafe extern "C" fn cron_mongol_benchmark_json(
 }
 
 // ----------------------------------------------------------------------------
+// 10e. DeepSeek-R1 Style Test-Time Reasoning & GRPO C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_r1_reason_json(
+    prompt: *const c_char,
+    group_size: usize,
+    show_cot: bool,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if prompt.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let prompt_str = match CStr::from_ptr(prompt).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let mut cfg = cronc::cl_r1_reasoning::R1ReasoningConfig::default();
+    cfg.group_size = group_size.max(2);
+    cfg.enable_cot_trace = show_cot;
+
+    let engine = cronc::cl_r1_reasoning::R1ReasoningEngine::new(cfg);
+    let res = engine.reason_and_synthesize(prompt_str);
+
+    let json_str = format!(
+        r#"{{"prompt":"{}","full_cot_monologue":"{}","verified_code":"{}","group_size":{},"best_candidate_id":{},"best_reward":{:.4},"group_mean_reward":{:.4},"group_std_reward":{:.4},"ipc":{:.2},"total_cycles":{},"elapsed_ms":{:.2},"proof_hash":"{}"}}"#,
+        res.prompt.replace('\"', "\\\"").replace('\n', "\\n"),
+        res.full_cot_monologue.replace('\"', "\\\"").replace('\n', "\\n"),
+        res.verified_code.replace('\"', "\\\"").replace('\n', "\\n"),
+        res.group_size,
+        res.best_candidate_id,
+        res.best_reward,
+        res.group_mean_reward,
+        res.group_std_reward,
+        res.ipc,
+        res.total_cycles,
+        res.elapsed_ms,
+        res.proof_hash
+    );
+
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+// ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
 

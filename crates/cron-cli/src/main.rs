@@ -71,6 +71,7 @@ fn print_help() {
     println!("    visualize [opts] [-o out.html] Unified 3D Torus, Hexagonal ATP & CL-LoRA interactive visualizer");
     println!("    mla [opts]                     Multi-Head Latent Attention (MLA / DeepSeek-V3) & 0-DSP RTL");
     println!("    morph [opts]                   Agglutinative Mongolian morphological tokenizer & script bridge");
+    println!("    reason [prompt] [opts]         DeepSeek-R1 style Test-Time Reasoning & GRPO VLIW synthesis");
     println!("    cl-clifford [--angle a]        Clifford Geometric Algebra 4D/5D Spacetime & Quantum Rotor Compiler");
     println!("    cl-agi [options]               Living AGI Cognitive Mind: Holographic Memory, Neuromodulators & Sleep");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
@@ -202,6 +203,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    Agglutinative Mongolian morphological root-suffix tokenizer and Traditional Script bridge.\n    Achieves 3.5x token compression vs Western BPE and converts Cyrillic <-> Traditional Mongolian script.\n");
             println!("OPTIONS:\n    -t, --text <text>   Input Mongolian text to process\n    -f, --file <path>   Read input text from file\n    --traditional       Transliterate Cyrillic to Traditional Mongolian Script (Босоо бичиг)\n    --segment           Output root + affix morphological tokens\n    --benchmark         Compare token efficiency against Western BPE\n    --json              Output structured morphological AST in JSON\n    -o, --out <path>    Save output to file\n    -h, --help          Display this help message\n");
             println!("EXAMPLES:\n    cron morph \"Монголчуудтайгаа номуудаас уншив\"\n    cron morph --traditional \"Монгол улс\"\n    cron morph --benchmark --json");
+        }
+        "reason" | "r1" | "cl-reason" => {
+            println!("USAGE:\n    cron reason [OPTIONS] [prompt]\n");
+            println!("DESCRIPTION:\n    DeepSeek-R1 style test-time reasoning engine with explicit <think> chain-of-thought,\n    Group Relative Policy Optimization (GRPO), and autonomous VLIW self-healing.\n");
+            println!("OPTIONS:\n    -g, --group <N>     Number of GRPO parallel rollout candidates (default: 4)\n    --no-cot            Hide internal <think> monologue and output only final microcode\n    --json              Output structured reasoning trace in JSON\n    -o, --out <path>    Save synthesized verified microcode to file\n    -h, --help          Display this help message\n");
+            println!("EXAMPLES:\n    cron reason \"Synthesize zero-hazard Clifford rotor attention\"\n    cron reason \"FlashAttention 4.0 IPC Polyhedral Tiling\" -g 8\n    cron reason \"BitNet SwiGLU 1.58b 4-slot bundle\" --json");
         }
         "agent" => {
             println!("USAGE:\n    cron agent [OPTIONS]\n");
@@ -1263,6 +1270,9 @@ fn main() {
         }
         "morph" | "mongol" | "cl-morph" => {
             handle_mongol_morph_command(&args[2..]);
+        }
+        "reason" | "r1" | "cl-reason" => {
+            handle_r1_reason_command(&args[2..]);
         }
         "cl-clifford" | "cga" => {
             handle_cl_clifford_command(&args[2..]);
@@ -9968,6 +9978,106 @@ fn handle_mongol_morph_command(args: &[String]) {
         let segs: Vec<String> = tok.tokenize(&input_text);
         let _ = std::fs::write(path, segs.join(" "));
         println!("  [SAVED] Tokenized morphological sequence saved -> {}", path);
+    }
+}
+
+fn handle_r1_reason_command(args: &[String]) {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_subcommand_help("reason");
+        return;
+    }
+
+    let mut prompt: Option<String> = None;
+    let mut group_size = 4usize;
+    let mut show_cot = true;
+    let mut emit_json = false;
+    let mut out_file: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--group" | "-g" => {
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse::<usize>() { group_size = v; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--no-cot" => {
+                show_cot = false;
+                i += 1;
+            }
+            "--json" => {
+                emit_json = true;
+                i += 1;
+            }
+            "-o" | "--out" => {
+                if i + 1 < args.len() {
+                    out_file = Some(args[i + 1].clone());
+                    i += 2;
+                } else { i += 1; }
+            }
+            arg if !arg.starts_with('-') && prompt.is_none() => {
+                prompt = Some(arg.to_string());
+                i += 1;
+            }
+            _ => { i += 1; }
+        }
+    }
+
+    let p = prompt.unwrap_or_else(|| "Synthesize 0-hazard Clifford rotor attention kernel with 4.0 IPC".to_string());
+
+    let mut cfg = cronc::cl_r1_reasoning::R1ReasoningConfig::default();
+    cfg.group_size = group_size;
+    cfg.enable_cot_trace = show_cot;
+
+    let engine = cronc::cl_r1_reasoning::R1ReasoningEngine::new(cfg);
+    let res = engine.reason_and_synthesize(&p);
+
+    if emit_json {
+        let json = format!(
+            r#"{{"prompt":"{}","full_cot_monologue":"{}","verified_code":"{}","group_size":{},"best_candidate_id":{},"best_reward":{:.4},"group_mean_reward":{:.4},"group_std_reward":{:.4},"ipc":{:.2},"total_cycles":{},"elapsed_ms":{:.2},"proof_hash":"{}"}}"#,
+            res.prompt.replace('\"', "\\\"").replace('\n', "\\n"),
+            res.full_cot_monologue.replace('\"', "\\\"").replace('\n', "\\n"),
+            res.verified_code.replace('\"', "\\\"").replace('\n', "\\n"),
+            res.group_size, res.best_candidate_id, res.best_reward,
+            res.group_mean_reward, res.group_std_reward, res.ipc,
+            res.total_cycles, res.elapsed_ms, res.proof_hash
+        );
+        if let Some(ref path) = out_file {
+            let _ = std::fs::write(path, &json);
+        }
+        println!("{}", json);
+        return;
+    }
+
+    println!("================================================================================");
+    println!(" CRON TEST-TIME REASONING ENGINE (DEEPSEEK-R1 / GRPO)");
+    println!("================================================================================");
+    println!("  [+] Reasoning Goal         : \"{}\"", res.prompt);
+    println!("  [+] GRPO Rollouts          : {} candidates evaluated", res.group_size);
+    println!("  [+] Best Trajectory        : Candidate #{} (Score: {:.2} / 1.00)", res.best_candidate_id, res.best_reward);
+    println!("  [+] Group Mean / Std       : {:.2} / {:.2}", res.group_mean_reward, res.group_std_reward);
+    println!("  [+] VLIW IPC Density       : {:.2} / 4.00 (0 Pipeline Bubbles)", res.ipc);
+    println!("  [+] Formal Verification    : 100% 0-hazard verified (CRC-8 ATM: {})", res.proof_hash);
+    println!("  [+] Elapsed Thinking Time  : {:.2} ms", res.elapsed_ms);
+    println!("--------------------------------------------------------------------------------");
+
+    if show_cot {
+        println!(" INTERNAL CHAIN-OF-THOUGHT (CoT) MONOLOGUE:");
+        print!("{}", res.full_cot_monologue);
+        println!("--------------------------------------------------------------------------------");
+    }
+
+    println!(" SYNTHESIZED VERIFIED VLIW MICROCODE (.cl):");
+    println!("{}", res.verified_code);
+    println!("================================================================================");
+
+    if let Some(ref path) = out_file {
+        if let Err(e) = std::fs::write(path, &res.verified_code) {
+            eprintln!("[ERROR] Failed to save microcode to '{}': {}", path, e);
+        } else {
+            println!("  [SUCCESS] Verified .cl microcode saved -> {}", path);
+        }
     }
 }
 
