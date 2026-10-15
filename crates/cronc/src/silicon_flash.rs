@@ -632,5 +632,48 @@ pub fn emit_hardware_package(pkg: &HardwarePackage, out_dir: &Path) -> Result<()
     fs::write(out_dir.join("flash_manifest.json"), &pkg.manifest_json)
         .map_err(|e| format!("Failed to write flash_manifest.json: {}", e))?;
 
+    let bat_script = r#"@echo off
+echo ============================================================
+echo   CRON FPGA / ASIC AUTOMATED BITSTREAM SYNTHESIS RUNNER
+echo ============================================================
+where vivado >nul 2>nul
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] Detected AMD Vivado in PATH. Running synthesis...
+    vivado -mode batch -source synth.tcl
+    goto :done
+)
+where yosys >nul 2>nul
+if %ERRORLEVEL% equ 0 (
+    echo [INFO] Detected Yosys in PATH. Running open-source synthesis...
+    yosys -s synth_yosys.ys
+    goto :done
+)
+echo [NOTICE] Neither Vivado nor Yosys was detected in PATH.
+echo [NOTICE] Hardware Verilog RTL (cron_top.v) and timing constraints (timing.xdc)
+echo [NOTICE] are ready for synthesis.
+:done
+echo [SUCCESS] Bitstream runner completed.
+"#;
+    let _ = fs::write(out_dir.join("build_bitstream.bat"), bat_script);
+
+    let sh_script = r#"#!/usr/bin/env bash
+set -e
+echo "============================================================"
+echo "  CRON FPGA / ASIC AUTOMATED BITSTREAM SYNTHESIS RUNNER"
+echo "============================================================"
+if command -v vivado >/dev/null 2>&1; then
+    echo "[INFO] Detected AMD Vivado in PATH. Running synthesis..."
+    vivado -mode batch -source synth.tcl
+elif command -v yosys >/dev/null 2>&1; then
+    echo "[INFO] Detected Yosys in PATH. Running open-source synthesis..."
+    yosys -s synth_yosys.ys
+else
+    echo "[NOTICE] Neither Vivado nor Yosys was detected in PATH."
+    echo "[NOTICE] Verilog RTL (cron_top.v) and constraints (timing.xdc) are ready."
+fi
+echo "[SUCCESS] Bitstream runner completed."
+"#;
+    let _ = fs::write(out_dir.join("build_bitstream.sh"), sh_script);
+
     Ok(())
 }

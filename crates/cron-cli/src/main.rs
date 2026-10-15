@@ -304,6 +304,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("OPTIONS:\n    --tokens <N>        Maximum new tokens to generate (default: 32)\n    --temp <F>          Sampling temperature (default: 0.7)\n    --think             Enable DeepSeek-R1 test-time reasoning stream (<think>...)\n    --mode <t|f|h>      Compute precision mode (ternary, float, hybrid)\n    -h, --help          Display this help message\n");
             println!("EXAMPLE:\n    cron run-hf deepseek-r1 \"Explain quantum mechanics\"\n    cron run-hf bitnet \"Write Fibonacci in .cl\"");
         }
+        "flash" => {
+            println!("USAGE:\n    cron flash <file.cl> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    Synthesizes complete FPGA/ASIC hardware deployment package with Verilog RTL, Vivado/Quartus/OpenLane synthesis scripts, PCIe Gen5 DMA drivers, and automated bitstream runners.\n");
+            println!("OPTIONS:\n    --target <target>     Target silicon: xilinx_u280, xilinx_vck190, intel_stratix10, openlane_sky130, yosys_nextpnr\n    --interface <bus>     Host bus: pcie_gen5_x16, cxl_3_0, dwdm_optical, axi4_stream\n    -o, --out-dir <dir>   Output directory for hardware package (default: silicon_deployment)\n    --dry-run             Perform package generation without touching physical hardware\n    --build, --run-synth  Trigger automated Vivado or Yosys bitstream synthesis runner\n    -h, --help            Display this help message\n");
+            println!("EXAMPLE:\n    cron flash model.cl --target xilinx_u280 -o build_hw --build");
+        }
         other => {
             println!("CRON Command: {}\n", other);
             println!("USAGE:\n    cron {} [OPTIONS] [ARGUMENTS]\n", other);
@@ -5807,7 +5813,7 @@ fn main() {
         }
         "flash" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--target <t>] [--interface <i>] [--out-dir <dir>|-o <dir>] [--dry-run]");
+                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--target <t>] [--interface <i>] [--out-dir <dir>|-o <dir>] [--dry-run] [--build|--run-synth]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -5821,6 +5827,7 @@ fn main() {
 
             let mut config = cronc::FlashConfig::default();
             let mut out_dir = std::path::PathBuf::from("silicon_deployment");
+            let mut run_synth = false;
 
             let mut i = 3;
             while i < args.len() {
@@ -5841,6 +5848,9 @@ fn main() {
                     i += 2;
                 } else if args[i] == "--dry-run" {
                     config.dry_run = true;
+                    i += 1;
+                } else if args[i] == "--build" || args[i] == "--run-synth" {
+                    run_synth = true;
                     i += 1;
                 } else {
                     i += 1;
@@ -5899,6 +5909,7 @@ fn main() {
             println!("      ✓ Host PCIe DMA Header:   {}/cron_pcie_dma.h", out_dir.display());
             println!("      ✓ Host PCIe DMA Driver:   {}/cron_pcie_dma.c", out_dir.display());
             println!("      ✓ Deployment Manifest:    {}/flash_manifest.json", out_dir.display());
+            println!("      ✓ Bitstream Runner:       {}/build_bitstream.{}", out_dir.display(), if cfg!(windows) { "bat" } else { "sh" });
             println!();
             println!("============================================================");
             println!("                 DEPLOYMENT SPECIFICATIONS                  ");
@@ -5919,6 +5930,36 @@ fn main() {
                 _ => "STATUS: HARDWARE PACKAGE READY FOR AMD VIVADO / JTAG FLASH",
             };
             println!("  {}\n", status_msg);
+
+            if run_synth {
+                println!("[SYNTHESIS] Triggering automated bitstream synthesis runner...");
+                let script_path = if cfg!(windows) {
+                    out_dir.join("build_bitstream.bat")
+                } else {
+                    out_dir.join("build_bitstream.sh")
+                };
+                if script_path.exists() {
+                    let mut cmd = if cfg!(windows) {
+                        let mut c = std::process::Command::new("cmd");
+                        c.args(["/C", script_path.to_str().unwrap()]);
+                        c
+                    } else {
+                        let mut c = std::process::Command::new("bash");
+                        c.arg(script_path.to_str().unwrap());
+                        c
+                    };
+                    cmd.current_dir(&out_dir);
+                    match cmd.status() {
+                        Ok(status) => {
+                            println!("[SYNTHESIS] Runner exited with status: {}", status);
+                        }
+                        Err(e) => {
+                            println!("[SYNTHESIS NOTICE] Could not spawn bitstream runner directly: {}", e);
+                            println!("[SYNTHESIS NOTICE] You can invoke '{}' manually on the synthesis host.", script_path.display());
+                        }
+                    }
+                }
+            }
         }
         "verify" => {
             if args.len() < 3 {

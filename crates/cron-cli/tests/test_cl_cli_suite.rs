@@ -138,8 +138,33 @@ fn test_cli_cl_direct_verify_and_flash() {
     assert!(flash_out.status.success());
     assert!(deploy_dir.join("cron_top.v").exists());
     assert!(deploy_dir.join("cron_pcie_dma.h").exists());
+    assert!(deploy_dir.join("build_bitstream.bat").exists());
+    assert!(deploy_dir.join("build_bitstream.sh").exists());
 
     let _ = fs::remove_dir_all(&deploy_dir);
+
+    // Flash with --build automated synthesis runner
+    let deploy_build_dir = temp_dir.join("test_cl_deploy_build_output");
+    let flash_build_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args([
+            "flash",
+            &cl_path,
+            "--target",
+            "xilinx_u280",
+            "--out-dir",
+            deploy_build_dir.to_str().unwrap(),
+            "--dry-run",
+            "--build",
+        ])
+        .output()
+        .expect("Failed to run flash with --build on .cl");
+    assert!(flash_build_out.status.success());
+    let build_stdout = String::from_utf8_lossy(&flash_build_out.stdout);
+    assert!(build_stdout.contains("Triggering automated bitstream synthesis runner"));
+    assert!(deploy_build_dir.join("build_bitstream.bat").exists());
+    assert!(deploy_build_dir.join("build_bitstream.sh").exists());
+
+    let _ = fs::remove_dir_all(&deploy_build_dir);
 }
 
 #[test]

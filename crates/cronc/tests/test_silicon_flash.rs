@@ -46,6 +46,8 @@ fn test_generate_hardware_package_alveo_u280() {
     assert!(test_dir.join("cron_pcie_dma.h").exists());
     assert!(test_dir.join("cron_pcie_dma.c").exists());
     assert!(test_dir.join("flash_manifest.json").exists());
+    assert!(test_dir.join("build_bitstream.bat").exists());
+    assert!(test_dir.join("build_bitstream.sh").exists());
 
     let c_path = test_dir.join("cron_pcie_dma.c");
     let o_path = test_dir.join(if cfg!(windows) { "cron_pcie_dma.obj" } else { "cron_pcie_dma.o" });
