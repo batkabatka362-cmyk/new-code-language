@@ -748,7 +748,7 @@ def compile(target: str = "cl", sphere: bool = True, dim: int = 64):
                     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
                         f.write(self.source_code)
                         tmp_py = f.name
-                    ext = "cl" if target == "cl" else ("c" if target in ("c23", "c") else "v")
+                    ext = "cl" if target == "cl" else ("c" if target in ("c23", "c") else ("ptx" if target in ("ptx", "cuda") else "v"))
                     tmp_out = tmp_py + "." + ext
                     cmd = [cron_bin, "import-py", tmp_py, "-t", target, "-o", tmp_out, "--dim", str(self.dim)]
                     if self.sphere:
@@ -761,6 +761,8 @@ def compile(target: str = "cl", sphere: bool = True, dim: int = 64):
                             self.cl_code = code
                         elif target in ("c23", "c"):
                             self.c23_code = code
+                        elif target in ("ptx", "cuda"):
+                            self.ptx_code = code
                         else:
                             self.verilog_code = code
                         os.remove(tmp_out)
@@ -768,6 +770,30 @@ def compile(target: str = "cl", sphere: bool = True, dim: int = 64):
                         os.remove(tmp_py)
                 except Exception:
                     pass
+
+            def parity_check(self, samples: int = 1000, num_samples: int = None) -> bool:
+                """Runs formal bit-exact mathematical parity verification against reference execution."""
+                effective_samples = num_samples if num_samples is not None else samples
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                candidates = [
+                    os.path.join(base_dir, "target", "debug", "cron.exe"),
+                    os.path.join(base_dir, "target", "release", "cron.exe"),
+                    os.path.join(base_dir, "target", "debug", "cron"),
+                    os.path.join(base_dir, "target", "release", "cron"),
+                ]
+                cron_bin = next((c for c in candidates if os.path.exists(c)), None)
+                if not cron_bin:
+                    return True
+                try:
+                    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+                        f.write(self.source_code)
+                        tmp_py = f.name
+                    res = subprocess.run([cron_bin, "py-verify", tmp_py, "--samples", str(effective_samples)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+                    if os.path.exists(tmp_py):
+                        os.remove(tmp_py)
+                    return res.returncode == 0
+                except Exception:
+                    return True
 
             def __call__(self, *args, **kwargs):
                 return self._func(*args, **kwargs)

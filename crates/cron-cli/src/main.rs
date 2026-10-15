@@ -11020,8 +11020,9 @@ fn handle_import_py_command(args: &[String]) {
         "cl" | "cron" => (transpiler.emit_cl_machine_code(), "cl"),
         "c23" | "c" | "simd" => (transpiler.emit_c23_source(), "c"),
         "verilog" | "v" | "rtl" => (transpiler.emit_verilog_rtl(), "v"),
+        "ptx" | "cuda" | "gpu" => (transpiler.emit_ptx_cuda_kernel(), "ptx"),
         other => {
-            eprintln!("[ERROR] Unsupported target '{}'. Supported: cl, c23, verilog", other);
+            eprintln!("[ERROR] Unsupported target '{}'. Supported: cl, c23, verilog, ptx", other);
             std::process::exit(1);
         }
     };
@@ -11046,6 +11047,7 @@ fn handle_import_py_command(args: &[String]) {
         "cl" => "CRON CL 128-bit VLIW Microcode (40-char Bundles, 4-Slot)",
         "c23" => "ISO C23 + AVX-512 SIMD Zero-Dependency Native Source",
         "verilog" => "Synthesizable IEEE 1364 Verilog RTL Core (0 DSP Multipliers)",
+        "ptx" | "cuda" => "NVIDIA CUDA PTX v7.5+ GPU Kernel (SM_80+ Architecture)",
         _ => "Custom Target",
     });
     println!("║ Functions Lowered:   {:<65} ║", transpiler.functions.len());
