@@ -181,7 +181,7 @@ pub use cl_lora::{
 
 pub use cl_py_transpile::{
     tokenize_python, verify_python_to_cl_parity, HirOp, ParityReport, PyDomainKind,
-    PyMathFunction, PyToCronTranspiler, PyToken, PyTranspileTarget,
+    PyMathFunction, PyToCronTranspiler, PyToken, PyTranspileTarget, compile_py_to_native_binary,
 };
 
 pub use cl_accelerator::{
@@ -528,7 +528,7 @@ pub use cl_binary::{assemble_cl_to_clb, disassemble_clb_to_cl};
 pub use optimizer::Optimizer;
 pub use fdo::{parse_fdo_profile, analyze_profile, compact_nop_bundles, fdo_recompile};
 pub use autotune::{SiliconAutotuner, AutotuneDecision};
-pub use cl_c23::{compile_cl_to_c23, compile_cl_to_native_binary};
+pub use cl_c23::{compile_cl_to_c23, compile_cl_to_native_binary, compile_c23_to_native_binary, compile_c23_source_to_native_binary_with_target};
 pub use model_importer::{
     import_model_file, lower_onnx_graph, lower_safetensors_model,
     ImportOptions, ImportedModel, LoweredCode, LoweringOptions,

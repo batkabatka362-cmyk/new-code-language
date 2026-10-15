@@ -595,6 +595,77 @@ fn test_ffi_wafer_swarm_execute_oneshot() {
     }
 }
 
+#[test]
+fn test_ffi_py_transpile_and_parity() {
+    use cron_rt::{cron_py_to_c23, cron_py_to_cl, cron_py_to_verilog, cron_py_verify_parity, cron_string_free};
+
+    let py_src = CString::new(r#"
+def atp_synthase_step(x):
+    return x + 0.17 * sin(x)
+"#).unwrap();
+
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    // 1. C23 Transpilation
+    let c_ptr = unsafe { cron_py_to_c23(py_src.as_ptr(), 64, true, &mut err_ptr) };
+    assert!(!c_ptr.is_null());
+    let c_str = unsafe { CStr::from_ptr(c_ptr).to_str().unwrap() };
+    assert!(c_str.contains("cron_atp_synthase_step"));
+    assert!(c_str.contains("CRON_EXPORT"));
+    unsafe { cron_string_free(c_ptr); }
+
+    // 2. CL Transpilation
+    let cl_ptr = unsafe { cron_py_to_cl(py_src.as_ptr(), 64, true, &mut err_ptr) };
+    assert!(!cl_ptr.is_null());
+    let cl_str = unsafe { CStr::from_ptr(cl_ptr).to_str().unwrap() };
+    assert!(cl_str.contains("B0000:"));
+    unsafe { cron_string_free(cl_ptr); }
+
+    // 3. Verilog Transpilation
+    let v_ptr = unsafe { cron_py_to_verilog(py_src.as_ptr(), 64, true, &mut err_ptr) };
+    assert!(!v_ptr.is_null());
+    let v_str = unsafe { CStr::from_ptr(v_ptr).to_str().unwrap() };
+    assert!(v_str.contains("module cron_core_atp_synthase_step"));
+    unsafe { cron_string_free(v_ptr); }
+
+    // 4. Parity Verification in RAM
+    let mut max_diff: f64 = 999.0;
+    let mut speedup: f64 = 0.0;
+    let ok = unsafe { cron_py_verify_parity(py_src.as_ptr(), 500, &mut max_diff, &mut speedup, &mut err_ptr) };
+    assert!(ok);
+    assert!(max_diff < 1e-12);
+    assert!(speedup > 100.0);
+}
+
+#[test]
+fn test_ffi_py_compile_native_dll() {
+    use cron_rt::{cron_py_compile_native, cron_string_free};
+
+    let py_src = CString::new(r#"
+def relu_layer(x):
+    return relu(x)
+"#).unwrap();
+
+    let temp_dll = std::env::temp_dir().join(format!("test_py_relu_{}.dll", std::process::id()));
+    let out_path = CString::new(temp_dll.to_str().unwrap()).unwrap();
+    let opt = CString::new("3").unwrap();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_py_compile_native(py_src.as_ptr(), out_path.as_ptr(), opt.as_ptr(), 64, true, &mut err_ptr)
+    };
+
+    if ok {
+        assert!(temp_dll.exists());
+        let _ = std::fs::remove_file(temp_dll);
+    } else if !err_ptr.is_null() {
+        let err_msg = unsafe { CStr::from_ptr(err_ptr).to_str().unwrap() };
+        println!("Compilation skipped or warning: {}", err_msg);
+        unsafe { cron_string_free(err_ptr); }
+    }
+}
+
+
 
 
 

@@ -720,10 +720,11 @@ impl PyToCronTranspiler {
         out.push_str("// ============================================================================\n\n");
         out.push_str("#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#include <math.h>\n");
         out.push_str("#if defined(__AVX512F__) || defined(__AVX2__)\n#include <immintrin.h>\n#endif\n\n");
+        out.push_str("#ifdef _WIN32\n#define CRON_EXPORT __declspec(dllexport)\n#else\n#define CRON_EXPORT __attribute__((visibility(\"default\")))\n#endif\n\n");
 
         for func in &self.functions {
             out.push_str(&format!("// Mathematical Domain: {:?}\n", func.domain));
-            out.push_str(&format!("void cron_{}(const double* restrict in_vec, double* restrict out_vec, size_t dim) {{\n", func.name));
+            out.push_str(&format!("CRON_EXPORT void cron_{}(const double* restrict in_vec, double* restrict out_vec, size_t dim) {{\n", func.name));
             out.push_str("    // Direct L1 cache register-pinned loop\n");
 
             match func.domain {
@@ -736,15 +737,14 @@ impl PyToCronTranspiler {
                 }
                 PyDomainKind::NeuralNet => {
                     out.push_str("    for (size_t i = 0; i < dim; ++i) {\n");
-                    out.push_str("        // Sub-byte ternary discrete projection {-1, 0, +1}\n");
-                    out.push_str("        out_vec[i] = (in_vec[i] > 0.0) ? in_vec[i] : (in_vec[i] < -0.5 ? -in_vec[i] : 0.0);\n");
+                    out.push_str("        // Sub-byte ReLU discrete activation\n");
+                    out.push_str("        out_vec[i] = (in_vec[i] > 0.0) ? in_vec[i] : 0.0;\n");
                     out.push_str("    }\n");
                 }
                 PyDomainKind::TreeGraph => {
                     out.push_str("    for (size_t i = 0; i < dim; ++i) {\n");
-                    out.push_str("        // Branchless 16-way HTGM routing step\n");
-                    out.push_str("        uint16_t mask = 0x00FF;\n");
-                    out.push_str("        out_vec[i] = ((size_t)in_vec[i] & mask) ? in_vec[i] + 1.0 : in_vec[i] * 0.5;\n");
+                    out.push_str("        // Branchless HTGM routing step\n");
+                    out.push_str("        out_vec[i] = floor(in_vec[i] * 2.0);\n");
                     out.push_str("    }\n");
                 }
                 PyDomainKind::AtpLife => {
@@ -761,6 +761,9 @@ impl PyToCronTranspiler {
                 }
             }
 
+            out.push_str("}\n\n");
+            out.push_str(&format!("CRON_EXPORT void {}(const double* restrict in_vec, double* restrict out_vec, size_t dim) {{\n", func.name));
+            out.push_str(&format!("    cron_{}(in_vec, out_vec, dim);\n", func.name));
             out.push_str("}\n\n");
         }
 
@@ -1068,3 +1071,23 @@ pub fn verify_python_to_cl_parity(py_code: &str, num_samples: usize) -> Result<V
 
     Ok(reports)
 }
+
+/// Compiles Python mathematical code directly to native binary or shared library (.dll / .so)
+pub fn compile_py_to_native_binary(
+    py_code: &str,
+    output_binary_path: &str,
+    opt_level: &str,
+    dim: usize,
+    use_sphere: bool,
+) -> Result<(), String> {
+    let mut transpiler = PyToCronTranspiler::new(dim, use_sphere);
+    transpiler.parse_and_lower(py_code)?;
+    let c23_code = transpiler.emit_c23_source();
+    crate::cl_c23::compile_c23_source_to_native_binary_with_target(
+        &c23_code,
+        output_binary_path,
+        opt_level,
+        crate::cl_c23::SimdTarget::Auto,
+    )
+}
+

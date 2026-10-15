@@ -1246,15 +1246,14 @@ CRON_API void cron_sphere_quantize_ternary(int8_t* out_ternary, float* out_scale
 "#
 }
 
-/// Compiles .cl source code directly into a native host binary executable or shared library (.dll / .so)
+/// Compiles ISO C23 source code directly into a native host binary executable or shared library (.dll / .so)
 /// via host C compiler with specific SIMD target optimization flags.
-pub fn compile_cl_to_native_binary_with_target(
-    cl_source: &str,
+pub fn compile_c23_source_to_native_binary_with_target(
+    c23_code: &str,
     output_binary_path: &str,
     opt_level: &str,
     simd_target: SimdTarget,
 ) -> Result<(), String> {
-    let c23_code = compile_cl_to_c23(cl_source, "cron_kernel")?;
     let temp_dir = std::env::temp_dir();
     static CALL_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let count = CALL_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1366,6 +1365,28 @@ pub fn compile_cl_to_native_binary_with_target(
         }
         Err(format!("Host C native compilation failed: {}", last_err))
     }
+}
+
+/// Compiles .cl source code directly into a native host binary executable or shared library (.dll / .so)
+/// via host C compiler with specific SIMD target optimization flags.
+pub fn compile_cl_to_native_binary_with_target(
+    cl_source: &str,
+    output_binary_path: &str,
+    opt_level: &str,
+    simd_target: SimdTarget,
+) -> Result<(), String> {
+    let c23_code = compile_cl_to_c23(cl_source, "cron_kernel")?;
+    compile_c23_source_to_native_binary_with_target(&c23_code, output_binary_path, opt_level, simd_target)
+}
+
+/// Compiles ISO C23 source code directly into a native host binary executable or shared library via host C compiler
+/// (Defaults to auto-detecting host architecture)
+pub fn compile_c23_to_native_binary(
+    c23_code: &str,
+    output_binary_path: &str,
+    opt_level: &str,
+) -> Result<(), String> {
+    compile_c23_source_to_native_binary_with_target(c23_code, output_binary_path, opt_level, SimdTarget::Auto)
 }
 
 /// Compiles .cl source code directly into a native host binary executable via host C compiler

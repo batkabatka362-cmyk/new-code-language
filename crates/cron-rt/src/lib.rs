@@ -755,6 +755,207 @@ pub unsafe extern "C" fn cron_cl_jit_execute(
 }
 
 // ----------------------------------------------------------------------------
+// 10.6. Universal Python C-ABI & In-Memory Native JIT Execution Engine
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_py_to_c23(
+    py_source: *const c_char,
+    dim: usize,
+    sphere: bool,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    if py_source.is_null() {
+        return std::ptr::null_mut();
+    }
+    let src = match CStr::from_ptr(py_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    let mut transpiler = cronc::PyToCronTranspiler::new(dim, sphere);
+    if let Err(e) = transpiler.parse_and_lower(src) {
+        if !out_error.is_null() {
+            *out_error = CString::new(e).unwrap().into_raw();
+        }
+        return std::ptr::null_mut();
+    }
+    let c_code = transpiler.emit_c23_source();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    CString::new(c_code).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_py_to_cl(
+    py_source: *const c_char,
+    dim: usize,
+    sphere: bool,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    if py_source.is_null() {
+        return std::ptr::null_mut();
+    }
+    let src = match CStr::from_ptr(py_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    let mut transpiler = cronc::PyToCronTranspiler::new(dim, sphere);
+    if let Err(e) = transpiler.parse_and_lower(src) {
+        if !out_error.is_null() {
+            *out_error = CString::new(e).unwrap().into_raw();
+        }
+        return std::ptr::null_mut();
+    }
+    let cl_code = transpiler.emit_cl_machine_code();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    CString::new(cl_code).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_py_to_verilog(
+    py_source: *const c_char,
+    dim: usize,
+    sphere: bool,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    if py_source.is_null() {
+        return std::ptr::null_mut();
+    }
+    let src = match CStr::from_ptr(py_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    let mut transpiler = cronc::PyToCronTranspiler::new(dim, sphere);
+    if let Err(e) = transpiler.parse_and_lower(src) {
+        if !out_error.is_null() {
+            *out_error = CString::new(e).unwrap().into_raw();
+        }
+        return std::ptr::null_mut();
+    }
+    let v_code = transpiler.emit_verilog_rtl();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    CString::new(v_code).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_py_compile_native(
+    py_source: *const c_char,
+    output_binary_path: *const c_char,
+    opt_level: *const c_char,
+    dim: usize,
+    sphere: bool,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if py_source.is_null() || output_binary_path.is_null() {
+        return false;
+    }
+    let src = match CStr::from_ptr(py_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+    let out_bin = match CStr::from_ptr(output_binary_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Path UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+    let opt = if !opt_level.is_null() {
+        CStr::from_ptr(opt_level).to_str().unwrap_or("3")
+    } else {
+        "3"
+    };
+
+    match cronc::compile_py_to_native_binary(src, out_bin, opt, dim, sphere) {
+        Ok(()) => {
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_py_verify_parity(
+    py_source: *const c_char,
+    samples: usize,
+    out_max_diff: *mut f64,
+    out_speedup: *mut f64,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if py_source.is_null() {
+        return false;
+    }
+    let src = match CStr::from_ptr(py_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    match cronc::verify_python_to_cl_parity(src, samples) {
+        Ok(reports) => {
+            if let Some(first) = reports.first() {
+                if !out_max_diff.is_null() {
+                    *out_max_diff = first.max_absolute_diff;
+                }
+                if !out_speedup.is_null() {
+                    *out_speedup = first.speedup_factor;
+                }
+            }
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
+
+// ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
 
