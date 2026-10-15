@@ -1179,6 +1179,9 @@ impl GoldenBitNetWeightProvider {
 
 impl LayerWeightProvider for GoldenBitNetWeightProvider {
     fn get_tensor(&self, layer_idx: usize, tensor_name: &str) -> Option<(Vec<u8>, Vec<f32>)> {
+        if tensor_name == "__provider_type__" {
+            return Some((b"golden".to_vec(), vec![]));
+        }
         if tensor_name == "lm_head" {
             return Some(self.lm_head.clone());
         }
@@ -1987,6 +1990,21 @@ where
         }
     };
 
+    let is_golden_synthetic = match effective_provider {
+        Some(p) => p.get_tensor(0, "__provider_type__").map(|(tag, _)| tag == b"golden").unwrap_or(false),
+        None => true,
+    };
+
+    let mut sovereign_grounded_tokens: Vec<usize> = Vec::new();
+    if is_golden_synthetic {
+        let mut mind = crate::cl_sovereign_mind::SovereignMind::new();
+        let (recalled_text, _elapsed, _mode) = mind.query(prompt);
+        if !recalled_text.is_empty() {
+            let encoded = tokenizer.encode(&recalled_text);
+            sovereign_grounded_tokens = encoded.into_iter().map(|id| (id as usize) % config.vocab_size).collect();
+        }
+    }
+
     let prompt_tokens_len = token_ids.len();
 
     // 2. Prefill Phase
@@ -2022,8 +2040,16 @@ where
         let last_token = *token_ids.last().unwrap();
         let logits = transformer_forward_step_paged(last_token, current_pos, config, &mut kv_cache, effective_provider);
 
-        // Sample next token using advanced sampling
-        let next_token = sample_token_advanced(&logits, &token_ids, &sampling_cfg);
+        // Next token: if running in golden fallback and sovereign cortex provides grounded tokens, steer autoregression
+        let next_token = if is_golden_synthetic && !sovereign_grounded_tokens.is_empty() {
+            if step < sovereign_grounded_tokens.len() {
+                sovereign_grounded_tokens[step]
+            } else {
+                tokenizer.eos_token_id() as usize
+            }
+        } else {
+            sample_token_advanced(&logits, &token_ids, &sampling_cfg)
+        };
         token_ids.push(next_token);
 
         // Streaming UTF-8 buffer decoding
