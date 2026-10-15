@@ -424,3 +424,59 @@ cron cluster info --chips 16
 cron cluster run model.cl --chips 16
 ```
 
+---
+
+## 10. Физик Силикон ба FPGA Битстрим Синтезийн Хэрэгсэл (Silicon Flash & FPGA Toolchain)
+
+CRON нь `.cl` машин кодыг шууд физик FPGA (AMD Xilinx Alveo U280, Versal VCK190, Intel Stratix 10) болон OpenLane SkyWater 130nm ASIC микрочип болгон синтезлэх, PCIe Gen5 DMA хост драйвер үүсгэх, автоматаар битстрим синтезийг асаах бүрэн багцтай.
+
+### Онцлогууд:
+- **Олон чипийн синтез**: AMD Vivado (`synth.tcl`, `timing.xdc`), Intel Quartus Prime (`synth_quartus.tcl`), Yosys/NextPNR (`synth_yosys.ys`), OpenLane ASIC (`config.json`, `run_openlane.sh`).
+- **Zero-Copy PCIe Gen5 x16 DMA Хост Драйвер**: Тоног төхөөрөмжийн регистр болон 16-Bank PGAS санах ойтой 64 GB/s хурдаар шууд харьцах C толгой ба эх код (`cron_pcie_dma.h`, `cron_pcie_dma.c`).
+- **Автомат Битстрим Ажиллуулагч**: `build_bitstream.bat` (Windows) болон `build_bitstream.sh` (Linux) нь PATH доторх Vivado эсвэл Yosys-ийг автоматаар илрүүлж синтезийг ажиллуулна.
+
+```bash
+# 1. Alveo U280 зориулж синтез хийж багц үүсгэх
+cron flash model.cl --target xilinx_u280 -o build_hw
+
+# 2. Багц үүсгэж, Vivado / Yosys битстрим синтезийг шууд ажиллуулах
+cron flash model.cl --target xilinx_u280 -o build_hw --build
+
+# 3. OpenLane Sky130 ASIC tapeout багц гаргах
+cron flash model.cl --target openlane_sky130 -o sky130_tapeout
+```
+
+---
+
+## 11. Өөрөө Өөрийгөө Хөрвүүлэгч Компилятор ба Бүрэн Давтагдах Баталгаажуулалт (Self-Hosting & Bootstrap Reproducibility)
+
+CRON төсөл нь эхнээсээ дуустал 7 үе шаттай бүрэн бие даасан хөрвүүлэгч ба баталгаажуулалтын хөдөлгүүртэй боллоо:
+
+```bash
+# 7 үе шаттай self-hosting бүтэн дамжлагыг шалгах
+cron bootstrap
+
+# Машин уншихад зориулсан бүтэцлэгдсэн JSON тайлан авах
+cron bootstrap --json
+```
+
+### 7 Үе Шатны Баталгаажуулалт:
+1. **Stage 1 (Blueprint Compiler)**: Дээд түвшний CRON `.cr` эх кодыг 128-бит 4-slot VLIW `.cl` болгон хөрвүүлнэ.
+2. **Stage 2 (DAG Optimizer & Linter)**: Бүтэц, CRC-8 ATM токен, болон 4.0 IPC нягтруулалтыг шалгана.
+3. **Stage 3 (Binary Bytecode Roundtrip)**: `.cl` кодыг 128-бит хоёртын `.clb` болгон угсарч, буцааж задлан бит-яг тохирлыг баталгаажуулна.
+4. **Stage 4 (16-Bank PGAS SRAM Verifier)**: Galois Field GF(2^4) XOR хаягжуулалтаар санах ойн 0 мөргөлдөөнийг батална.
+5. **Stage 5 (4D-Torus Bare-Metal Sim)**: 256-цөмт симулятор дээр тактаар гүйлгэж 0 алдаа, 0 түгжрэл гэдгийг нотолно.
+6. **Stage 6 (C23 Source Transpiler)**: Бие даасан ISO C23 эх код руу шууд буулгана.
+7. **Stage 7 (Verilog RTL Synthesizer)**: IEEE 1364-2001 симуляцийн бэлэн RTL цөм болгон хувиргана.
+
+---
+
+## 12. VS Code & IDE Өргөтгөл v1.5.0 (VS Code Extension Suite)
+
+`vscode-cron` өргөтгөл нь хувилбар 1.5.0 болж дараах боломжуудыг нэмсэн:
+- **LSP 3.17 & DAP Хэрэгслүүд**: Токен шалгалт, синтакс тодруулалт, тактын түвшний алхам алхмаар алхах дебаггер.
+- **4D-Torus Кластер Топологи**: Командын палетт болон QuickMenu-ээс кластерын сүлжээг шууд харах (`cron.clusterTop`).
+- **Силикон & FPGA Flash**: Нэг товшилтоор RTL синтез хийж битстрим угсрах (`cron.flashHw`).
+- **16-Bank PGAS Санах Ойн Инспектор**: Санах ойн банкнуудын ачаалал, дулааны хяналт (`cron.openMemoryInspector`).
+
+

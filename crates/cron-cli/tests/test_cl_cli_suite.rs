@@ -2398,3 +2398,35 @@ fn test_cli_cluster_commands() {
     assert!(toml_data.contains("listen = \"127.0.0.1:9042\""));
     let _ = std::fs::remove_file(temp_toml);
 }
+
+#[test]
+fn test_cli_bootstrap_reproducibility() {
+    // 1. Test 'cron bootstrap' human-readable certification
+    let out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .arg("bootstrap")
+        .output()
+        .expect("Failed to run cron bootstrap");
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("CRON AUTONOMOUS SELF-HOSTING COMPILER & SILICON REPRODUCIBILITY CERTIFIER"));
+    assert!(stdout.contains("Stage 1: High-Level Blueprint (.cr -> .cl)"));
+    assert!(stdout.contains("Stage 2: DAG Slot Optimizer & Linter"));
+    assert!(stdout.contains("Stage 3: Binary Bytecode (.cl <-> .clb)"));
+    assert!(stdout.contains("Stage 4: 16-Bank PGAS GF(2^4) XOR Verifier"));
+    assert!(stdout.contains("Stage 5: 256-Core 4D-Torus Bare-Metal Sim"));
+    assert!(stdout.contains("Stage 6: C23 Standalone Source Transpiler"));
+    assert!(stdout.contains("Stage 7: IEEE 1364-2001 Verilog RTL Core"));
+    assert!(stdout.contains("100% SELF-HOSTED, DETERMINISTIC, REPRODUCIBLE COMPILER PIPELINE"));
+
+    // 2. Test 'cron bootstrap --json'
+    let json_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["bootstrap", "--json"])
+        .output()
+        .expect("Failed to run cron bootstrap --json");
+    assert!(json_out.status.success());
+    let json_str = String::from_utf8_lossy(&json_out.stdout);
+    assert!(json_str.contains("\"status\":\"ok\""));
+    assert!(json_str.contains("\"certified\":true"));
+    assert!(json_str.contains("\"is_provably_conflict_free\":true"));
+}
+
