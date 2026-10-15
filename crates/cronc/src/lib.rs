@@ -491,7 +491,7 @@ pub use cl_jit::{run_cl_jit, execute_cl_on_core, ClJitCore};
 pub use cl_heal::{heal_cl_program, heal_slot_crc, ClHealReport, CANONICAL_NOP};
 pub use cl_opt::{optimize_cl_program, optimize_cl_program_advanced, ClOptConfig, ClOptLevel, ClOptReport};
 pub use comptime::{evaluate_and_fold_program, ComptimeEvaluator, ComptimeValue, ComptimeEnv};
-pub use silicon_flash::{generate_hardware_package, emit_hardware_package, FlashConfig, HardwarePackage, HostInterface, SiliconTarget};
+pub use silicon_flash::{generate_hardware_package, emit_hardware_package, FlashConfig, HardwarePackage, HostInterface, SiliconTarget, FpgaBoard};
 pub use formal_verify::{FormalVerifier, FormalVerificationReport};
 pub use scheduler::{AOTHazardScheduler, IRInstruction, SoftwarePipelineReport};
 pub use jit_backend::run_source_jit;

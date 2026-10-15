@@ -44,6 +44,7 @@ fn print_help() {
     println!("    ptx <file.cl> [-o <out.ptx>]   Compile .cl into NVIDIA CUDA PTX v7.5+ GPU kernel");
     println!("    metal <file.cl> [-o <out.metal>] Compile .cl into Apple Metal Shading Language (MSL)");
     println!("    verilog <file.cl> [-o <out.v>] Synthesize IEEE 1364-2001 Verilog RTL core");
+    println!("    flash <file.cl> [--board <b>] [--target <t>] [--flash] Physical FPGA synthesis, constraints & 1-click flashing");
     println!("    run <file.cl>                  Compile and execute on 256-Core 4D-Torus Simulator");
     println!("    sim <file.cl|.clb>             Directly run .cl machine code or .clb binary in 4D-Torus VM");
     println!("    cl-run <file.cl>               Execute .cl machine code in RAM via sub-microsecond JIT engine");
@@ -6019,7 +6020,7 @@ fn main() {
         }
         "flash" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--target <t>] [--interface <i>] [--out-dir <dir>|-o <dir>] [--dry-run] [--build|--run-synth]");
+                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--board <b>] [--target <t>] [--interface <i>] [--out-dir <dir>|-o <dir>] [--dry-run] [--build|--run-synth] [--flash]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -6034,10 +6035,20 @@ fn main() {
             let mut config = cronc::FlashConfig::default();
             let mut out_dir = std::path::PathBuf::from("silicon_deployment");
             let mut run_synth = false;
+            let mut run_flash = false;
 
             let mut i = 3;
             while i < args.len() {
-                if args[i] == "--target" && i + 1 < args.len() {
+                if (args[i] == "--board" || args[i] == "-b") && i + 1 < args.len() {
+                    let b = cronc::FpgaBoard::parse_board(&args[i + 1]).unwrap_or_else(|e| {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    });
+                    config.target = b.silicon_target();
+                    config.core_clock_mhz = b.clock_mhz();
+                    config.board = Some(b);
+                    i += 2;
+                } else if args[i] == "--target" && i + 1 < args.len() {
                     config.target = cronc::SiliconTarget::parse_target(&args[i + 1]).unwrap_or_else(|e| {
                         eprintln!("Error: {}", e);
                         std::process::exit(1);
@@ -6057,6 +6068,9 @@ fn main() {
                     i += 1;
                 } else if args[i] == "--build" || args[i] == "--run-synth" {
                     run_synth = true;
+                    i += 1;
+                } else if args[i] == "--flash" {
+                    run_flash = true;
                     i += 1;
                 } else {
                     i += 1;
@@ -6087,16 +6101,24 @@ fn main() {
                 }
             };
 
-            let toolchain_desc = match config.target {
-                cronc::SiliconTarget::OpenLaneSky130 => "OpenLane SkyWater 130nm ASIC Config & SDC Timing Constraints",
-                cronc::SiliconTarget::YosysNextPnr => "Open-Source Yosys + NextPNR Synthesis & PnR Scripts",
-                cronc::SiliconTarget::IntelStratix10 => "Intel Quartus Prime Pro Tcl & SDC Timing Constraints",
-                _ => "AMD Vivado Physical Synthesis Tcl & Timing Constraints",
+            let toolchain_desc = if let Some(b) = config.board {
+                match b {
+                    cronc::FpgaBoard::IceBreaker | cronc::FpgaBoard::GenericIce40 => "Open-Source Yosys + NextPNR-iCE40 Flow & PCF Constraints",
+                    cronc::FpgaBoard::ColorlightI5 | cronc::FpgaBoard::GenericEcp5 => "Open-Source Yosys + NextPNR-ECP5 Flow & LPF Constraints",
+                    cronc::FpgaBoard::DigilentArtyA7 => "AMD Vivado Physical Synthesis & XDC Pin Constraints",
+                }
+            } else {
+                match config.target {
+                    cronc::SiliconTarget::OpenLaneSky130 => "OpenLane SkyWater 130nm ASIC Config & SDC Timing Constraints",
+                    cronc::SiliconTarget::YosysNextPnr => "Open-Source Yosys + NextPNR Synthesis & PnR Scripts",
+                    cronc::SiliconTarget::IntelStratix10 => "Intel Quartus Prime Pro Tcl & SDC Timing Constraints",
+                    _ => "AMD Vivado Physical Synthesis Tcl & Timing Constraints",
+                }
             };
             println!("[2/4] Generating {}...", toolchain_desc);
             let pkg = cronc::generate_hardware_package(&verilog_rtl, module_name, &config);
 
-            println!("[3/4] Generating Zero-Copy PCIe Gen5 x16 AXI4 DMA Host Drivers...");
+            println!("[3/4] Generating Zero-Copy PCIe Gen5 x16 AXI4 DMA & Hardware UART Drivers...");
             if let Err(e) = cronc::emit_hardware_package(&pkg, &out_dir) {
                 eprintln!("Error emitting package: {}", e);
                 std::process::exit(1);
@@ -6104,6 +6126,10 @@ fn main() {
 
             println!("[4/4] Hardware Deployment Package Assembled in '{:?}':", out_dir);
             println!("      ✓ Verilog RTL Core:       {}/cron_top.v", out_dir.display());
+            println!("      ✓ Hardware UART Bridge:   {}/cron_uart.v", out_dir.display());
+            if !pkg.pin_constraints_name.is_empty() {
+                println!("      ✓ Pin Constraints:        {}/{}", out_dir.display(), pkg.pin_constraints_name);
+            }
             println!("      ✓ Vivado Synthesis Tcl:   {}/synth.tcl", out_dir.display());
             println!("      ✓ Quartus Synthesis Tcl:  {}/synth_quartus.tcl", out_dir.display());
             println!("      ✓ OpenLane 130nm Config:  {}/config.json", out_dir.display());
@@ -6116,12 +6142,21 @@ fn main() {
             println!("      ✓ Host PCIe DMA Driver:   {}/cron_pcie_dma.c", out_dir.display());
             println!("      ✓ Deployment Manifest:    {}/flash_manifest.json", out_dir.display());
             println!("      ✓ Bitstream Runner:       {}/build_bitstream.{}", out_dir.display(), if cfg!(windows) { "bat" } else { "sh" });
+            println!("      ✓ 1-Click Flash Script:   {}/flash_device.{}", out_dir.display(), if cfg!(windows) { "bat" } else { "sh" });
             println!();
             println!("============================================================");
             println!("                 DEPLOYMENT SPECIFICATIONS                  ");
             println!("============================================================");
-            println!("  Target Silicon:               {}", config.target.display_name());
-            println!("  Part Number:                  {}", config.target.part_number());
+            if let Some(b) = config.board {
+                println!("  Target FPGA Board:            {}", b.display_name());
+                println!("  Target Silicon Chip:          {}", b.target_chip());
+                println!("  Board Oscillator Clock:       {} MHz", b.clock_mhz());
+                println!("  Physical Pin Constraints:     {}", b.constraint_filename());
+                println!("  1-Click Flash Command:        {}", b.programmer_command());
+            } else {
+                println!("  Target Silicon:               {}", config.target.display_name());
+                println!("  Part Number:                  {}", config.target.part_number());
+            }
             println!("  Host Interconnect:            {:?} ({:.2} GB/s BW)", config.interface, config.interface.bandwidth_gbps());
             println!("  Core Clock Target:            {} MHz ({:.3} ns)", config.core_clock_mhz, 1000.0 / config.core_clock_mhz as f64);
             println!("  4D-Torus NoC Clock:           {} MHz ({:.3} ns)", config.noc_clock_mhz, 1000.0 / config.noc_clock_mhz as f64);
@@ -6129,11 +6164,19 @@ fn main() {
             println!("  Estimated DSP Multipliers:    {} DSPs (100% Multiplier-Free)", pkg.estimated_dsp);
             println!("  Estimated BRAM Blocks:        {} Blocks", pkg.estimated_bram);
             println!("============================================================");
-            let status_msg = match config.target {
-                cronc::SiliconTarget::OpenLaneSky130 => "STATUS: HARDWARE PACKAGE READY FOR SKYWATER 130NM ASIC TAPEOUT",
-                cronc::SiliconTarget::YosysNextPnr => "STATUS: HARDWARE PACKAGE READY FOR YOSYS / NEXTPNR FPGA SYNTHESIS",
-                cronc::SiliconTarget::IntelStratix10 => "STATUS: HARDWARE PACKAGE READY FOR INTEL QUARTUS PRIME PRO",
-                _ => "STATUS: HARDWARE PACKAGE READY FOR AMD VIVADO / JTAG FLASH",
+            let status_msg = if let Some(b) = config.board {
+                match b {
+                    cronc::FpgaBoard::IceBreaker | cronc::FpgaBoard::GenericIce40 => "STATUS: HARDWARE PACKAGE READY FOR iCE40UP5K PHYSICAL FLASH (iceprog / openFPGALoader)",
+                    cronc::FpgaBoard::ColorlightI5 | cronc::FpgaBoard::GenericEcp5 => "STATUS: HARDWARE PACKAGE READY FOR ECP5 PHYSICAL FLASH (ecpprog / openFPGALoader)",
+                    cronc::FpgaBoard::DigilentArtyA7 => "STATUS: HARDWARE PACKAGE READY FOR ARTY A7 PHYSICAL FLASH (openFPGALoader / Vivado)",
+                }
+            } else {
+                match config.target {
+                    cronc::SiliconTarget::OpenLaneSky130 => "STATUS: HARDWARE PACKAGE READY FOR SKYWATER 130NM ASIC TAPEOUT",
+                    cronc::SiliconTarget::YosysNextPnr => "STATUS: HARDWARE PACKAGE READY FOR YOSYS / NEXTPNR FPGA SYNTHESIS",
+                    cronc::SiliconTarget::IntelStratix10 => "STATUS: HARDWARE PACKAGE READY FOR INTEL QUARTUS PRIME PRO",
+                    _ => "STATUS: HARDWARE PACKAGE READY FOR AMD VIVADO / JTAG FLASH",
+                }
             };
             println!("  {}\n", status_msg);
 
@@ -6162,6 +6205,36 @@ fn main() {
                         Err(e) => {
                             println!("[SYNTHESIS NOTICE] Could not spawn bitstream runner directly: {}", e);
                             println!("[SYNTHESIS NOTICE] You can invoke '{}' manually on the synthesis host.", script_path.display());
+                        }
+                    }
+                }
+            }
+
+            if run_flash {
+                println!("[FLASH] Triggering 1-click physical FPGA hardware flashing runner...");
+                let script_path = if cfg!(windows) {
+                    out_dir.join("flash_device.bat")
+                } else {
+                    out_dir.join("flash_device.sh")
+                };
+                if script_path.exists() {
+                    let mut cmd = if cfg!(windows) {
+                        let mut c = std::process::Command::new("cmd");
+                        c.args(["/C", script_path.to_str().unwrap()]);
+                        c
+                    } else {
+                        let mut c = std::process::Command::new("bash");
+                        c.arg(script_path.to_str().unwrap());
+                        c
+                    };
+                    cmd.current_dir(&out_dir);
+                    match cmd.status() {
+                        Ok(status) => {
+                            println!("[FLASH] Programmer script finished with status: {}", status);
+                        }
+                        Err(e) => {
+                            println!("[FLASH NOTICE] Could not spawn flash programmer directly: {}", e);
+                            println!("[FLASH NOTICE] You can invoke '{}' manually once your board is plugged into USB.", script_path.display());
                         }
                     }
                 }

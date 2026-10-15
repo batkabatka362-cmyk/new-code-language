@@ -174,3 +174,92 @@ fn test_generate_hardware_package_intel_quartus() {
     assert!(pkg.constraints_sdc.contains("create_clock"), "Expected SDC clock constraint");
 }
 
+#[test]
+fn test_generate_hardware_package_colorlight_i5() {
+    let cl_code = r#"
+    ; Colorlight ECP5 Microcode
+    B0000: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
+    "#;
+
+    let verilog_rtl = cronc::verilog_backend::generate_verilog_hdl(cl_code, "cron_top")
+        .expect("Failed to synthesize Verilog RTL");
+    let config = FlashConfig {
+        board: Some(FpgaBoard::ColorlightI5),
+        target: FpgaBoard::ColorlightI5.silicon_target(),
+        core_clock_mhz: FpgaBoard::ColorlightI5.clock_mhz(),
+        ..Default::default()
+    };
+
+    let pkg = generate_hardware_package(&verilog_rtl, "SphereColorlight", &config);
+
+    assert_eq!(pkg.estimated_dsp, 0, "ECP5 must be 100% multiplier-free (0 DSP)");
+    assert_eq!(pkg.pin_constraints_name, "pins.lpf");
+    assert!(pkg.pin_constraints.contains("LOCATE COMP \"clk\" SITE \"P6\";"));
+    assert!(pkg.uart_bridge_v.contains("cron_uart"));
+    assert!(pkg.yosys_script.contains("synth_ecp5"));
+    assert!(pkg.nextpnr_script.contains("nextpnr-ecp5 --25k"));
+    assert!(pkg.flash_device_bat.contains("openFPGALoader -b colorlight-i5"));
+
+    let test_dir = std::env::temp_dir().join("cron_test_colorlight_pkg");
+    emit_hardware_package(&pkg, &test_dir).expect("Failed to emit Colorlight package");
+
+    assert!(test_dir.join("cron_top.v").exists());
+    assert!(test_dir.join("cron_uart.v").exists());
+    assert!(test_dir.join("pins.lpf").exists());
+    assert!(test_dir.join("flash_device.bat").exists());
+    assert!(test_dir.join("flash_device.sh").exists());
+
+    let _ = fs::remove_dir_all(test_dir);
+}
+
+#[test]
+fn test_generate_hardware_package_icebreaker() {
+    let cl_code = r#"
+    ; iCEBreaker iCE40UP5K Microcode
+    B0000: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
+    "#;
+
+    let verilog_rtl = cronc::verilog_backend::generate_verilog_hdl(cl_code, "cron_top")
+        .expect("Failed to synthesize Verilog RTL");
+    let config = FlashConfig {
+        board: Some(FpgaBoard::IceBreaker),
+        target: FpgaBoard::IceBreaker.silicon_target(),
+        core_clock_mhz: FpgaBoard::IceBreaker.clock_mhz(),
+        ..Default::default()
+    };
+
+    let pkg = generate_hardware_package(&verilog_rtl, "SphereIceBreaker", &config);
+
+    assert_eq!(pkg.estimated_dsp, 0, "iCE40 must be 100% multiplier-free (0 DSP)");
+    assert_eq!(pkg.pin_constraints_name, "pins.pcf");
+    assert!(pkg.pin_constraints.contains("set_io clk 35"));
+    assert!(pkg.yosys_script.contains("synth_ice40"));
+    assert!(pkg.nextpnr_script.contains("nextpnr-ice40 --up5k"));
+    assert!(pkg.flash_device_sh.contains("iceprog cron_top.bin"));
+}
+
+#[test]
+fn test_generate_hardware_package_arty_a7() {
+    let cl_code = r#"
+    ; Arty A7 Microcode
+    B0000: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
+    "#;
+
+    let verilog_rtl = cronc::verilog_backend::generate_verilog_hdl(cl_code, "cron_top")
+        .expect("Failed to synthesize Verilog RTL");
+    let config = FlashConfig {
+        board: Some(FpgaBoard::DigilentArtyA7),
+        target: FpgaBoard::DigilentArtyA7.silicon_target(),
+        core_clock_mhz: FpgaBoard::DigilentArtyA7.clock_mhz(),
+        ..Default::default()
+    };
+
+    let pkg = generate_hardware_package(&verilog_rtl, "SphereArtyA7", &config);
+
+    assert_eq!(pkg.estimated_dsp, 0, "Artix-7 must be 100% multiplier-free (0 DSP)");
+    assert_eq!(pkg.pin_constraints_name, "pins.xdc");
+    assert!(pkg.pin_constraints.contains("PACKAGE_PIN E3"));
+    assert!(pkg.flash_device_bat.contains("arty_a7_35t"));
+}
+
+
