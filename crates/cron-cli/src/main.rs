@@ -4872,6 +4872,8 @@ fn main() {
                 "bench" | "benchmark" => {
                     let mut num_tokens = 64usize;
                     let mut context_len = 128usize;
+                    let mut enable_accel = false;
+                    let mut spec_k = 4usize;
                     let mut i = 2;
                     while i < args.len() {
                         match args[i].as_str() {
@@ -4883,6 +4885,15 @@ fn main() {
                                 context_len = args[i + 1].parse().unwrap_or(128);
                                 i += 2;
                             }
+                            "--accel" | "--accelerate" => {
+                                enable_accel = true;
+                                i += 1;
+                            }
+                            "--speculative" | "-k" if i + 1 < args.len() => {
+                                spec_k = args[i + 1].parse().unwrap_or(4);
+                                enable_accel = true;
+                                i += 2;
+                            }
                             "--json" => {
                                 emit_json = true;
                                 i += 1;
@@ -4892,6 +4903,31 @@ fn main() {
                     }
 
                     let prompt = "Cron silicon neuromorphic intelligence:".to_string();
+
+                    if enable_accel {
+                        let mut pipeline = cronc::ModelAccelerationPipeline::new(spec_k, 16, 2, hidden_dim, 2048);
+                        let prompt_toks = tokenizer.encode(&prompt);
+                        let _seq = pipeline.run_accelerated_generation(&prompt_toks, num_tokens, |_ctx, drafts| {
+                            drafts.to_vec()
+                        });
+
+                        if emit_json {
+                            println!(
+                                r#"{{"status":"ok","accelerated":true,"tokens_generated":{},"tokens_per_sec":{:.2},"baseline_tok_per_sec":{:.2},"speedup":{:.2},"speculative_k":{},"moe_bandwidth_saved_pct":{:.1},"energy_pj":{:.2}}}"#,
+                                pipeline.telemetry.total_tokens_generated,
+                                pipeline.telemetry.accelerated_tok_per_sec,
+                                pipeline.telemetry.baseline_tok_per_sec,
+                                pipeline.telemetry.net_speedup_factor,
+                                spec_k,
+                                pipeline.telemetry.moe_bandwidth_reduction_pct,
+                                pipeline.telemetry.total_energy_pj
+                            );
+                        } else {
+                            println!("{}", pipeline.render_ascii_acceleration_hud());
+                        }
+                        return;
+                    }
+
                     let sampling_cfg = cronc::SamplingConfig {
                         temperature: 0.0,
                         top_p: 1.0,

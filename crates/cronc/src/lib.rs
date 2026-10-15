@@ -170,7 +170,12 @@ pub mod cl_snake_discrete;
 pub mod cl_cluster_net;
 pub mod cl_daemon;
 pub mod cl_agent;
+pub mod cl_accelerator;
 
+pub use cl_accelerator::{
+    AccelerationTelemetry, DoubleBufferedLayerStaging, ModelAccelerationPipeline,
+    NeuralDraftPredictor, SparseMoeRouter,
+};
 pub use cl_agent::{
     AgentAction, AgentRunReport, AgentSandbox, AgentSecurityError, AgentStepRecord,
     CapabilityRing, CapabilityScope, CapabilityToken, CognitivePhase, SandboxedAgentEngine,
