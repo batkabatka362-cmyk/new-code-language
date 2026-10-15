@@ -168,6 +168,9 @@ pub mod cl_topological_attention;
 pub mod cl_homeostatic_plasticity;
 pub mod cl_snake_discrete;
 pub mod cl_cluster_net;
+pub mod cl_daemon;
+
+pub use cl_daemon::{ContinuousLearningDaemon, DaemonConfig, DaemonCycleReport, CognitiveState};
 
 pub use cl_cluster_net::{
     execute_multi_node_ring_allreduce, generate_default_cluster_config, render_cluster_network_ascii,

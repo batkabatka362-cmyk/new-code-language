@@ -35,6 +35,7 @@ fn print_help() {
     println!("    swarm-synthesize [--prompt <p>] Closed-loop autonomous multi-agent synthesis & continuous vibe-healing");
     println!("    swarm-tui [--mode <m>] [--snapshot] [--ticks <n>] Interactive real-time TUI Swarm & Torus Traffic Visualizer");
     println!("    monitor [--mode <m>] [--snapshot] Live terminal monitoring HUD for 4D/6D Torus & Multi-Agent Swarm");
+    println!("    daemon [--watch <dir>] [--cldb <vault.cldb>] Autonomous continuous learning & Hippocampal SWR sleep daemon");
     println!("    add <package> [--path <dir>]   Add dependency to cron.toml and update cron.lock");
     println!("    remove <package>               Remove dependency from cron.toml and lockfile");
     println!("    install                        Resolve dependencies and verify cryptographic lockfile");
@@ -6238,6 +6239,116 @@ fn main() {
                         }
                     }
                 }
+            }
+        }
+        "daemon" => {
+            let mut watch_paths = Vec::new();
+            let mut cldb_path = std::path::PathBuf::from("cortex_knowledge.cldb");
+            let mut dpdata_path: Option<std::path::PathBuf> = None;
+            let mut sleep_idle_secs = 5u64;
+            let mut scan_interval_ms = 1000u64;
+            let mut run_once = false;
+            let mut emit_json = false;
+            let mut max_cycles: Option<usize> = None;
+
+            let mut i = 2;
+            while i < args.len() {
+                if (args[i] == "--watch" || args[i] == "-w" || args[i] == "--dir") && i + 1 < args.len() {
+                    watch_paths.push(std::path::PathBuf::from(&args[i + 1]));
+                    i += 2;
+                } else if args[i] == "--cldb" && i + 1 < args.len() {
+                    cldb_path = std::path::PathBuf::from(&args[i + 1]);
+                    i += 2;
+                } else if args[i] == "--dpdata" && i + 1 < args.len() {
+                    dpdata_path = Some(std::path::PathBuf::from(&args[i + 1]));
+                    i += 2;
+                } else if (args[i] == "--idle" || args[i] == "--sleep-idle") && i + 1 < args.len() {
+                    sleep_idle_secs = args[i + 1].parse().unwrap_or(5);
+                    i += 2;
+                } else if (args[i] == "--interval" || args[i] == "-i") && i + 1 < args.len() {
+                    scan_interval_ms = args[i + 1].parse().unwrap_or(1000);
+                    i += 2;
+                } else if (args[i] == "--cycles" || args[i] == "-n") && i + 1 < args.len() {
+                    max_cycles = Some(args[i + 1].parse().unwrap_or(1));
+                    i += 2;
+                } else if args[i] == "--once" {
+                    run_once = true;
+                    i += 1;
+                } else if args[i] == "--json" {
+                    emit_json = true;
+                    i += 1;
+                } else {
+                    i += 1;
+                }
+            }
+
+            if watch_paths.is_empty() {
+                watch_paths.push(std::path::PathBuf::from("."));
+            }
+
+            let config = cronc::DaemonConfig {
+                watch_paths,
+                cldb_path,
+                dpdata_path,
+                sleep_idle_secs,
+                novelty_threshold: 0.1,
+                prune_threshold: 4,
+                max_files_per_cycle: 50,
+            };
+
+            let mut daemon = cronc::ContinuousLearningDaemon::new(config);
+            let restored = daemon.load_or_init_cldb().unwrap_or(false);
+
+            if !emit_json {
+                print_banner();
+                println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+                println!("║   CRON AUTONOMOUS CONTINUOUS LEARNING & COGNITIVE DAEMON INITIALIZED         ║");
+                println!("╠══════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Crystalline Vault : {:<56} ║", daemon.config.cldb_path.display());
+                println!("║ Prior Memory State: {:<56} ║", if restored { "36,414B Prior Engram Vault Restored (Zero Amnesia)" } else { "Tabula Rasa (Fresh Substrate Initialized)" });
+                println!("║ Watch Directories : {:<56} ║", format!("{:?}", daemon.config.watch_paths));
+                println!("║ Sleep Idle Timeout: {:<56} ║", format!("{} seconds -> Hippocampal SWR (150-250Hz)", daemon.config.sleep_idle_secs));
+                println!("║ Mode              : {:<56} ║", if run_once { "Single-Cycle Step & Consolidate" } else { "Continuous Autonomous Background Daemon" });
+                println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+            }
+
+            if run_once {
+                let report = daemon.step_cycle();
+                if emit_json {
+                    println!(
+                        r#"{{"status":"ok","state":"{}","files_discovered":{},"files_ingested":{},"tokens":{},"swr_ripples":{},"synapses_pruned":{},"sparsity_pct":{:.2},"cldb_persisted":{},"time_ms":{:.2}}}"#,
+                        report.state.name(), report.files_discovered, report.files_ingested, report.tokens_processed,
+                        report.swr_ripples_executed, report.synapses_pruned, report.current_sparsity_pct,
+                        report.cldb_persisted, report.cycle_duration_ms
+                    );
+                } else {
+                    println!("{}", daemon.render_ascii_brainwave_hud());
+                }
+                return;
+            }
+
+            let mut cycle = 0;
+            loop {
+                cycle += 1;
+                let report = daemon.step_cycle();
+
+                if emit_json {
+                    println!(
+                        r#"{{"cycle":{},"state":"{}","files_discovered":{},"files_ingested":{},"tokens":{},"swr_ripples":{},"synapses_pruned":{},"sparsity_pct":{:.2},"cldb_persisted":{}}}"#,
+                        cycle, report.state.name(), report.files_discovered, report.files_ingested, report.tokens_processed,
+                        report.swr_ripples_executed, report.synapses_pruned, report.current_sparsity_pct, report.cldb_persisted
+                    );
+                } else if report.files_ingested > 0 || report.swr_ripples_executed > 0 || report.cldb_persisted || cycle % 10 == 1 {
+                    println!("{}", daemon.render_ascii_brainwave_hud());
+                }
+
+                if let Some(max_c) = max_cycles {
+                    if cycle >= max_c {
+                        break;
+                    }
+                }
+
+                std::thread::sleep(std::time::Duration::from_millis(scan_interval_ms));
             }
         }
         "verify" => {
