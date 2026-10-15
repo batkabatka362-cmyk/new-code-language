@@ -1362,6 +1362,123 @@ pub unsafe extern "C" fn cron_mla_synthesize_verilog(
 }
 
 // ----------------------------------------------------------------------------
+// 10d. Agglutinative Morphological Tokenizer & Mongolian Engine C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_mongol_segment_json(
+    text: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if text.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let text_str = match CStr::from_ptr(text).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let tok = cronc::cl_mongol::MongolMorphTokenizer::new();
+    let mut parsed_words = Vec::new();
+    for word in text_str.split_whitespace() {
+        let seg = tok.segment_word(word);
+        let sfxs: Vec<String> = seg.suffixes.iter().map(|(s, t)| format!("{{\"suffix\":\"{}\",\"type\":\"{:?}\"}}", s, t)).collect();
+        parsed_words.push(format!(
+            r#"{{"surface":"{}","root":"{}","suffixes":[{}],"harmony":"{:?}"}}"#,
+            seg.surface, seg.root, sfxs.join(","), seg.harmony
+        ));
+    }
+
+    let json_str = format!("[{}]", parsed_words.join(","));
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_mongol_to_traditional(
+    text: *const c_char,
+    out_str: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if text.is_null() || out_str.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let text_str = match CStr::from_ptr(text).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let converted = cronc::cl_mongol::MongolScriptBridge::cyrillic_to_traditional(text_str);
+    *out_str = CString::new(converted).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_mongol_benchmark_json(
+    text: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if text.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let text_str = match CStr::from_ptr(text).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let tok = cronc::cl_mongol::MongolMorphTokenizer::new();
+    let rep = tok.benchmark_compression(text_str);
+
+    let json_str = format!(
+        r#"{{"char_count":{},"word_count":{},"utf8_byte_count":{},"western_bpe_token_count":{},"cron_morph_token_count":{},"token_reduction_pct":{:.2},"compression_ratio_vs_western":{:.2},"compression_ratio_vs_bytes":{:.2}}}"#,
+        rep.char_count, rep.word_count, rep.utf8_byte_count,
+        rep.western_bpe_token_count, rep.cron_morph_token_count,
+        rep.token_reduction_pct, rep.compression_ratio_vs_western, rep.compression_ratio_vs_bytes
+    );
+
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+// ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
 

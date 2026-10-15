@@ -141,6 +141,18 @@ def _setup_ffi(lib):
             ctypes.c_char_p,
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_mongol_segment_json
+    if hasattr(lib, "cron_mongol_segment_json"):
+        lib.cron_mongol_segment_json.restype = ctypes.c_bool
+        lib.cron_mongol_segment_json.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p)]
+    # cron_mongol_to_traditional
+    if hasattr(lib, "cron_mongol_to_traditional"):
+        lib.cron_mongol_to_traditional.restype = ctypes.c_bool
+        lib.cron_mongol_to_traditional.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p)]
+    # cron_mongol_benchmark_json
+    if hasattr(lib, "cron_mongol_benchmark_json"):
+        lib.cron_mongol_benchmark_json.restype = ctypes.c_bool
+        lib.cron_mongol_benchmark_json.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p)]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -877,6 +889,9 @@ __all__ = [
     "visualize",
     "benchmark_mla",
     "synthesize_mla_verilog",
+    "mongol_segment",
+    "cyrillic_to_traditional",
+    "benchmark_mongol_tokens",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1261,6 +1276,67 @@ def synthesize_mla_verilog(
         raise RuntimeError(f"Failed to synthesize MLA Verilog RTL: {err}")
 
     return os.path.abspath(output_v)
+
+def mongol_segment(text: str) -> List[Dict[str, Any]]:
+    """
+    Segments Mongolian text into roots and grammatical suffixes (cases, plurals, tenses, converbs).
+    Returns structured list of parsed morphological tokens.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_mongol_segment_json"):
+        raise RuntimeError("Native CRON library not available for mongol_segment")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_mongol_segment_json(text.encode("utf-8"), ctypes.byref(out_json), ctypes.byref(out_err))
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to segment Mongolian text: {err}")
+
+    res = json.loads(out_json.value.decode("utf-8"))
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return res
+
+def cyrillic_to_traditional(text: str) -> str:
+    """
+    Converts Cyrillic Mongolian text into Traditional Mongolian Script (Босоо бичиг).
+    """
+    if not _lib or not hasattr(_lib, "cron_mongol_to_traditional"):
+        raise RuntimeError("Native CRON library not available for cyrillic_to_traditional")
+
+    out_str = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_mongol_to_traditional(text.encode("utf-8"), ctypes.byref(out_str), ctypes.byref(out_err))
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to convert to Traditional script: {err}")
+
+    res = out_str.value.decode("utf-8")
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_str)
+    return res
+
+def benchmark_mongol_tokens(text: str) -> Dict[str, Any]:
+    """
+    Benchmarks token efficiency of Mongolian morphological segmentation vs raw UTF-8 bytes and Western BPE.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_mongol_benchmark_json"):
+        raise RuntimeError("Native CRON library not available for benchmark_mongol_tokens")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_mongol_benchmark_json(text.encode("utf-8"), ctypes.byref(out_json), ctypes.byref(out_err))
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to benchmark Mongolian tokens: {err}")
+
+    res = json.loads(out_json.value.decode("utf-8"))
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return res
+
 
 
 

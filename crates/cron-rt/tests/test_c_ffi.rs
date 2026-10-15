@@ -822,6 +822,41 @@ fn test_ffi_mla_benchmark_and_verilog() {
     let _ = std::fs::remove_dir(&temp_dir);
 }
 
+#[test]
+fn test_ffi_mongol_morphology() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut str_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let c_text = CString::new("Монгол улсын их сургууль").unwrap();
+
+    // 1. Segmentation
+    let ok_seg = unsafe { cron_mongol_segment_json(c_text.as_ptr(), &mut json_ptr, &mut err_ptr) };
+    assert!(ok_seg);
+    assert!(!json_ptr.is_null());
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"root\":\"монгол\""));
+    unsafe { cron_string_free(json_ptr); }
+
+    // 2. Traditional script
+    let ok_trad = unsafe { cron_mongol_to_traditional(c_text.as_ptr(), &mut str_ptr, &mut err_ptr) };
+    assert!(ok_trad);
+    assert!(!str_ptr.is_null());
+    let trad_str = unsafe { CStr::from_ptr(str_ptr).to_str().unwrap() };
+    assert!(trad_str.contains("ᠮᠣᠩᠭᠣᠯ"));
+    unsafe { cron_string_free(str_ptr); }
+
+    // 3. Benchmark
+    let mut bench_ptr: *mut c_char = std::ptr::null_mut();
+    let ok_bench = unsafe { cron_mongol_benchmark_json(c_text.as_ptr(), &mut bench_ptr, &mut err_ptr) };
+    assert!(ok_bench);
+    assert!(!bench_ptr.is_null());
+    let b_str = unsafe { CStr::from_ptr(bench_ptr).to_str().unwrap() };
+    assert!(b_str.contains("\"token_reduction_pct\":"));
+    unsafe { cron_string_free(bench_ptr); }
+}
+
+
 
 
 
