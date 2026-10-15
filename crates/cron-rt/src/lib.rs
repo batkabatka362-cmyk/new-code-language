@@ -1796,6 +1796,80 @@ pub unsafe extern "C" fn cron_http_server_start_daemon(
     true
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cron_finetune_lora_json(
+    dataset_content: *const c_char,
+    rank: usize,
+    learning_rate: f64,
+    steps: usize,
+    use_mongol: bool,
+    out_cll_path: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if dataset_content.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let dataset_str = match CStr::from_ptr(dataset_content).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let cll_path_str = if out_cll_path.is_null() {
+        "adapter.cll".to_string()
+    } else {
+        match CStr::from_ptr(out_cll_path).to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => "adapter.cll".to_string(),
+        }
+    };
+
+    let cfg = cronc::cl_finetune::FineTuneConfig {
+        adapter_name: "cron-cl-lora-adapter".to_string(),
+        rank: if rank > 0 { rank } else { 2 },
+        alpha: 2.0,
+        learning_rate: if learning_rate > 0.0 { learning_rate } else { 0.05 },
+        steps: if steps > 0 { steps } else { 100 },
+        hidden_dim: 64,
+        num_layers: 4,
+        use_mongol_morphology: use_mongol,
+        output_cll_path: Some(cll_path_str),
+    };
+
+    let (_adapter, report) = cronc::cl_finetune::run_lora_finetune(dataset_str, &cfg);
+
+    let json_str = format!(
+        r#"{{"adapter_name":"{}","total_samples":{},"total_tokens_processed":{},"initial_loss":{:.4},"final_loss":{:.4},"loss_reduction_pct":{:.2},"perplexity":{:.4},"training_time_ms":{:.2},"tokens_per_second":{:.2},"adapter_size_bytes":{},"is_l1_bounded":{},"output_path":"{}"}}"#,
+        report.adapter_name,
+        report.total_samples,
+        report.total_tokens_processed,
+        report.initial_loss,
+        report.final_loss,
+        report.loss_reduction_pct,
+        report.perplexity,
+        report.training_time_ms,
+        report.tokens_per_second,
+        report.adapter_size_bytes,
+        report.is_l1_bounded,
+        report.output_path.replace('\\', "/")
+    );
+
+    *out_json = CString::new(json_str).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------

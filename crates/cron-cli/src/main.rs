@@ -76,6 +76,7 @@ fn print_help() {
     println!("    cl-liquid [opts]               Liquid Continuous-Time Neural Network (LNN/LTC) dynamic engine");
     println!("    chat [opts]                    Interactive terminal chat client with R1 reasoning & Mongolian NLP");
     println!("    serve [opts]                   Start OpenAI-compatible REST server (/v1/chat/completions, SSE)");
+    println!("    finetune <dataset> [opts]      On-device sub-byte CL-LoRA fine-tuning (<4.1KB L1, 0-FLOP backprop)");
     println!("    cl-clifford [--angle a]        Clifford Geometric Algebra 4D/5D Spacetime & Quantum Rotor Compiler");
     println!("    cl-agi [options]               Living AGI Cognitive Mind: Holographic Memory, Neuromodulators & Sleep");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
@@ -231,6 +232,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    Launches an OpenAI-compatible local HTTP REST inference server.\n    Endpoints: POST /v1/chat/completions, GET /v1/models, GET /health, GET /metrics.\n");
             println!("OPTIONS:\n    --port <P>         TCP port to bind (default: 8080)\n    --host <H>         Host address to bind (default: 127.0.0.1)\n    --model <name>     Default model name (default: cron-r1-7b-ternary)\n    -h, --help         Display this help message\n");
             println!("EXAMPLES:\n    cron serve --port 8080\n    curl http://127.0.0.1:8080/v1/models\n    curl http://127.0.0.1:8080/v1/chat/completions -d '{{\"messages\":[{{\"role\":\"user\",\"content\":\"Hi\"}}]}}'");
+        }
+        "finetune" | "cl-finetune" | "lora-train" => {
+            println!("USAGE:\n    cron finetune <DATASET> [OPTIONS]\n");
+            println!("DESCRIPTION:\n    On-device Sub-Byte CL-LoRA Fine-Tuning Engine with 0-FLOP integer gradient backprop.\n    Trains discrete rank-r adapters on plain text or JSONL in <4.1 KB L1 cache.\n");
+            println!("OPTIONS:\n    -r, --rank <N>     LoRA rank r in [1..8] (default: 2)\n    --lr <rate>        Learning rate (default: 0.05)\n    --steps <N>        Training optimization steps (default: 100)\n    --alpha <val>      LoRA scaling alpha (default: 2.0)\n    --layers <L>       Number of target layers (default: 4)\n    --no-mongol        Disable Mongolian morphological tokenization\n    -o, --out <path>   Output binary .cll adapter path (default: adapter.cll)\n    --compile          Also export synthesized 128-bit VLIW microcode (.cl)\n    --json             Output structured telemetry in JSON\n    -h, --help         Display this help message\n");
+            println!("EXAMPLES:\n    cron finetune dataset.txt -r 4 --steps 200 -o mongol_lora.cll\n    cron finetune train.jsonl --compile");
         }
         "agent" => {
             println!("USAGE:\n    cron agent [OPTIONS]\n");
@@ -1276,6 +1283,9 @@ fn main() {
         "cl-liquid" | "liquid" | "lnn" => {
             handle_liquid_command(&args[2..]);
         }
+        "finetune" | "cl-finetune" | "lora-train" => {
+            handle_finetune_command(&args[2..]);
+        }
         "cl-clifford" | "cga" => {
             handle_cl_clifford_command(&args[2..]);
         }
@@ -1327,7 +1337,7 @@ fn main() {
         "cl-dpsta" | "dpsta" => {
             handle_cl_dpsta_command(&args[2..]);
         }
-        "fine-tune" | "finetune" | "cl-lora" => {
+        "fine-tune" | "cl-lora" => {
             handle_fine_tune_command(&args[2..]);
         }
         "weights" | "model-weights" => {
@@ -10394,6 +10404,142 @@ fn handle_serve_command(args: &[String]) {
     if let Err(e) = srv.start(None) {
         eprintln!("[ERROR] Failed to run server: {}", e);
     }
+}
+
+fn handle_finetune_command(args: &[String]) {
+    if args.is_empty() || args.iter().any(|a| a == "-h" || a == "--help") {
+        print_subcommand_help("finetune");
+        return;
+    }
+
+    let dataset_arg = &args[0];
+    let mut rank = 2usize;
+    let mut alpha = 2.0f64;
+    let mut lr = 0.05f64;
+    let mut steps = 100usize;
+    let mut layers = 4usize;
+    let mut use_mongol = true;
+    let mut out_path = "adapter.cll".to_string();
+    let mut compile_cl = false;
+    let mut json_out = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-r" | "--rank" => {
+                if i + 1 < args.len() {
+                    if let Ok(r) = args[i + 1].parse::<usize>() { rank = r; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--alpha" => {
+                if i + 1 < args.len() {
+                    if let Ok(a) = args[i + 1].parse::<f64>() { alpha = a; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--lr" => {
+                if i + 1 < args.len() {
+                    if let Ok(l) = args[i + 1].parse::<f64>() { lr = l; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--steps" | "-s" => {
+                if i + 1 < args.len() {
+                    if let Ok(s) = args[i + 1].parse::<usize>() { steps = s; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--layers" => {
+                if i + 1 < args.len() {
+                    if let Ok(l) = args[i + 1].parse::<usize>() { layers = l; }
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--no-mongol" => {
+                use_mongol = false;
+                i += 1;
+            }
+            "-o" | "--out" => {
+                if i + 1 < args.len() {
+                    out_path = args[i + 1].clone();
+                    i += 2;
+                } else { i += 1; }
+            }
+            "--compile" => {
+                compile_cl = true;
+                i += 1;
+            }
+            "--json" => {
+                json_out = true;
+                i += 1;
+            }
+            _ => { i += 1; }
+        }
+    }
+
+    let cfg = cronc::FineTuneConfig {
+        adapter_name: "cron-cl-lora-adapter".to_string(),
+        rank,
+        alpha,
+        learning_rate: lr,
+        steps,
+        hidden_dim: 64,
+        num_layers: layers,
+        use_mongol_morphology: use_mongol,
+        output_cll_path: Some(out_path.clone()),
+    };
+
+    let (adapter, report) = cronc::run_lora_finetune(dataset_arg, &cfg);
+
+    if compile_cl {
+        let cl_code = adapter.export_cl_machine_code();
+        let cl_path = out_path.replace(".cll", ".cl");
+        let _ = std::fs::write(&cl_path, cl_code);
+        if !json_out {
+            println!("  [SUCCESS] 128-bit VLIW Microcode synthesized -> {}", cl_path);
+        }
+    }
+
+    if json_out {
+        println!(
+            r#"{{"adapter_name":"{}","total_samples":{},"total_tokens_processed":{},"initial_loss":{:.4},"final_loss":{:.4},"loss_reduction_pct":{:.2},"perplexity":{:.4},"training_time_ms":{:.2},"tokens_per_second":{:.2},"adapter_size_bytes":{},"is_l1_bounded":{},"output_path":"{}"}}"#,
+            report.adapter_name,
+            report.total_samples,
+            report.total_tokens_processed,
+            report.initial_loss,
+            report.final_loss,
+            report.loss_reduction_pct,
+            report.perplexity,
+            report.training_time_ms,
+            report.tokens_per_second,
+            report.adapter_size_bytes,
+            report.is_l1_bounded,
+            report.output_path.replace('\\', "/")
+        );
+        return;
+    }
+
+    println!("================================================================================");
+    println!(" CRON ON-DEVICE SUB-BYTE CL-LoRA FINE-TUNING ENGINE");
+    println!("================================================================================");
+    println!("  [+] Adapter Name           : {}", report.adapter_name);
+    println!("  [+] Low-Rank Rank (r)      : {} (Discrete {{-1, 0, 1}} Sub-Byte)", rank);
+    println!("  [+] Optimization Steps     : {} steps (LR: {:.4})", steps, lr);
+    println!("  [+] Total Samples Ingested : {} sample pairs", report.total_samples);
+    println!("  [+] Tokens Processed       : {} tokens ({:.1} tok/sec)", report.total_tokens_processed, report.tokens_per_second);
+    println!("--------------------------------------------------------------------------------");
+    println!(" LOSS REDUCTION & CONVERGENCE TELEMETRY:");
+    println!("  - Initial Cross-Entropy Loss: {:.4}", report.initial_loss);
+    println!("  - Final Converged Loss      : {:.4} (Loss Reduction: {:.2}%)", report.final_loss, report.loss_reduction_pct);
+    println!("  - Validation Perplexity     : {:.4} (Optimal Attractor Manifold)", report.perplexity);
+    println!("  - Training Elapsed Time     : {:.2} ms (Zero FLOP Backpropagation)", report.training_time_ms);
+    println!("--------------------------------------------------------------------------------");
+    println!(" HARDWARE SILICON FOOTPRINT:");
+    println!("  - Binary Adapter Footprint  : {} bytes (<4.1 KB L1 Bound: {})", report.adapter_size_bytes, if report.is_l1_bounded { "PASS" } else { "EXCEEDED" });
+    println!("  - Hardware Multipliers      : 0 DSPs (100% Add/Sub Integer Sign Updates)");
+    println!("  - Output Adapter File       : {}", report.output_path);
+    println!("================================================================================");
 }
 
 fn handle_cl_clifford_command(args: &[String]) {

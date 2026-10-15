@@ -997,6 +997,43 @@ fn test_ffi_chat_and_server() {
     }
 }
 
+#[test]
+fn test_ffi_finetune_lora() {
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let dataset = CString::new("CRON Language 0 FLOP AI silicon architecture. Zero memory hazard.").unwrap();
+    let out_cll = CString::new("test_ffi_adapter.cll").unwrap();
+
+    let ok = unsafe {
+        cron_finetune_lora_json(
+            dataset.as_ptr(),
+            2,
+            0.05,
+            30,
+            false,
+            out_cll.as_ptr(),
+            &mut json_ptr,
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_finetune_lora_json must succeed");
+    assert!(!json_ptr.is_null());
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"is_l1_bounded\":true"));
+    assert!(json_str.contains("\"adapter_size_bytes\":"));
+
+    assert!(std::path::Path::new("test_ffi_adapter.cll").exists());
+    let _ = std::fs::remove_file("test_ffi_adapter.cll");
+
+    unsafe {
+        cron_string_free(json_ptr);
+    }
+}
+
+
 
 
 
