@@ -27,8 +27,9 @@ pub use safetensors::{
     f16_to_f32, parse_safetensors, parse_safetensors_json, SafeTensorDType, SafeTensorData, SafeTensorMeta, SafeTensorsModel,
 };
 pub use ternary::{
-    pack_ternary_2bit, quantize_to_ternary, ternary_dot_product, ternary_gemv, unpack_ternary_2bit,
-    TernaryQuantParams,
+    calibrated_ternary_dot_product, pack_ternary_2bit, quantize_to_ternary,
+    quantize_with_outlier_calibration, ternary_dot_product, ternary_gemv, unpack_ternary_2bit,
+    CalibratedTernaryTensor, OutlierResidual, TernaryQuantParams,
 };
 
 use std::fs;

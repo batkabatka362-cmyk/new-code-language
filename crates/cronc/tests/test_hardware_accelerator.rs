@@ -48,13 +48,36 @@ fn test_double_buffered_layer_staging() {
 
 #[test]
 fn test_neural_draft_predictor_generation() {
-    let predictor = NeuralDraftPredictor::new(4);
+    let mut predictor = NeuralDraftPredictor::new(4);
     let context = vec![1, 2, 3, 42];
-    let drafts = predictor.propose_draft_candidates(&context);
+    let drafts = predictor.propose_draft_candidates(&context, 0.0);
 
-    assert_eq!(drafts.len(), 4, "Must generate exactly K=4 draft candidates");
+    assert_eq!(drafts.len(), 4, "Must generate exactly K=4 draft candidates when min_confidence=0");
     assert!(drafts.iter().all(|&t| t < 32000), "Candidates must be valid vocab IDs");
 }
+
+#[test]
+fn test_tiered_thermal_cache_reduces_disk_reads() {
+    use cronc::TieredThermalCache;
+    let mut cache = TieredThermalCache::new(80, 16, 32);
+
+    let layer_size = 1024 * 1024; // 1 MB per layer
+    // Access hot attention layer (layer 2)
+    let hit_hot = cache.access_layer(2, layer_size);
+    assert!(hit_hot, "Pinned hot layer must always hit in RAM");
+
+    // Access FFN layer 20 (first time: miss)
+    let hit_ffn_1 = cache.access_layer(20, layer_size);
+    assert!(!hit_ffn_1, "Cold layer must miss first time");
+
+    // Access FFN layer 20 again (second time: LRU hit)
+    let hit_ffn_2 = cache.access_layer(20, layer_size);
+    assert!(hit_ffn_2, "Cached FFN layer must hit on subsequent access");
+
+    assert!(cache.disk_reduction_pct() > 50.0, "Disk reduction should be high");
+    assert!(cache.estimated_ssd_temp_celsius() < 55.0, "SSD temp must stay cool");
+}
+
 
 #[test]
 fn test_end_to_end_accelerated_generation_speedup() {

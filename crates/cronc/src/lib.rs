@@ -174,7 +174,7 @@ pub mod cl_accelerator;
 
 pub use cl_accelerator::{
     AccelerationTelemetry, DoubleBufferedLayerStaging, ModelAccelerationPipeline,
-    NeuralDraftPredictor, SparseMoeRouter,
+    NeuralDraftPredictor, SparseMoeRouter, TieredThermalCache,
 };
 pub use cl_agent::{
     AgentAction, AgentRunReport, AgentSandbox, AgentSecurityError, AgentStepRecord,
