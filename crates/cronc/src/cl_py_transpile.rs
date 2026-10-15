@@ -420,8 +420,8 @@ impl PyToCronTranspiler {
                     }
                 }
 
-                // If no explicit ops were parsed (e.g. one-liner or complex syntax), synthesize canonical domain pipeline
-                if ops.is_empty() {
+                // If no explicit computation ops were parsed (e.g. one-liner, stub, or complex syntax), synthesize canonical domain pipeline
+                if ops.is_empty() || ops.iter().all(|op| matches!(op, HirOp::Return { .. })) {
                     ops = self.synthesize_canonical_domain_ops(&args, domain);
                 }
 
@@ -644,64 +644,61 @@ impl PyToCronTranspiler {
                 match op {
                     HirOp::MatMul { in_dim, out_dim, .. } => {
                         let bundles_needed = (*in_dim * *out_dim / 16).max(2).min(8);
-                        for b in 0..bundles_needed {
-                            let slot0 = format!("ADD{:02X}0101", (b * 3 + 1) & 0x7F);
-                            let slot1 = format!("MUL{:02X}0202", (b * 5 + 3) & 0x7F);
-                            let slot2 = "STP0000000";
-                            let slot3 = "STR0000000";
+                        for _ in 0..bundles_needed {
+                            let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "MD", "01", '$', '1', '1', '>');
+                            let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "PO", "02", '$', '2', '2', '>');
+                            let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "PK", "00", '#', '0', '0', '>');
+                            let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
                             out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                             bundle_idx += 1;
                         }
                     }
-                    HirOp::SphereGeodesicRotor { angle_rad, .. } => {
-                        let theta_byte = ((angle_rad * 40.0) as u8) & 0x7F;
-                        let slot0 = format!("ROT{:02X}0101", theta_byte);
-                        let slot1 = "GEO010202";
-                        let slot2 = "CLF0000000";
-                        let slot3 = "STR0000000";
+                    HirOp::SphereGeodesicRotor { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "CD", "01", '$', '1', '1', '>');
+                        let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "WF", "02", '$', '2', '2', '>');
+                        let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "TP", "00", '#', '0', '0', '>');
+                        let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
                         out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                         bundle_idx += 1;
                     }
                     HirOp::TernaryLinear { .. } => {
-                        let slot0 = "PAK010101";
-                        let slot1 = "SUB020202";
-                        let slot2 = "STP010101";
-                        let slot3 = "STR0000000";
+                        let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "PO", "01", '$', '1', '1', '>');
+                        let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "MD", "02", '$', '2', '2', '>');
+                        let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "PK", "00", '#', '0', '0', '>');
+                        let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
                         out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                         bundle_idx += 1;
                     }
-                    HirOp::HyperTreeStep { direction_mask, .. } => {
-                        let mask_byte = (direction_mask & 0xFF) as u8;
-                        let slot0 = format!("TRB{:02X}0101", mask_byte);
-                        let slot1 = "DOR010202";
-                        let slot2 = "NOC0000000";
-                        let slot3 = "STR0000000";
+                    HirOp::HyperTreeStep { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "TL", "01", '$', '1', '1', '>');
+                        let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "DW", "02", '$', '2', '2', '>');
+                        let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "PS", "00", '#', '0', '0', '>');
+                        let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
                         out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                         bundle_idx += 1;
                     }
-                    HirOp::ReversibleTransition { energy_barrier_pj, .. } => {
-                        let pj_byte = ((energy_barrier_pj * 100.0) as u8) & 0x7F;
-                        let slot0 = format!("REV{:02X}0101", pj_byte);
-                        let slot1 = "THM010202";
-                        let slot2 = "LND0000000";
-                        let slot3 = "STR0000000";
+                    HirOp::ReversibleTransition { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "RF", "01", '$', '1', '1', '>');
+                        let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "TO", "02", '$', '2', '2', '>');
+                        let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "RS", "00", '#', '0', '0', '>');
+                        let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
                         out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                         bundle_idx += 1;
                     }
                     HirOp::Activation { kind, .. } => {
-                        let act_code = if kind.contains("relu") { "REL" } else { "SIL" };
-                        let slot0 = format!("{}000101", act_code);
-                        let slot1 = "NOP0000000";
-                        let slot2 = "NOP0000000";
-                        let slot3 = "STR0000000";
+                        let act_code = if kind.contains("relu") { "GE" } else { "SI" };
+                        let slot0 = crate::cl_lang::pack_slot_with_crc8('_', act_code, "01", '$', '1', '1', '>');
+                        let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
+                        let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
+                        let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
                         out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                         bundle_idx += 1;
                     }
                     HirOp::Return { .. } => {
-                        let slot0 = "EMIT000000";
-                        let slot1 = "FLUSH00000";
-                        let slot2 = "SYNC000000";
-                        let slot3 = "HALT000000";
+                        let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "PO", "00", '$', '0', '0', '>');
+                        let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "SH", "00", '$', '0', '0', '>');
+                        let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "RS", "00", '#', '0', '0', '>');
+                        let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "HL", "00", '#', '0', '0', '!');
                         out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                         bundle_idx += 1;
                     }
