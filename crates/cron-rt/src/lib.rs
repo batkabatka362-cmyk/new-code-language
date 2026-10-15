@@ -954,6 +954,231 @@ pub unsafe extern "C" fn cron_py_verify_parity(
     }
 }
 
+// ----------------------------------------------------------------------------
+// 10.7. HuggingFace SafeTensors / Model Weights Ingestion C-ABI
+// ----------------------------------------------------------------------------
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_safetensors_inspect_json(
+    file_path: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if file_path.is_null() || out_json.is_null() {
+        return false;
+    }
+    let path_str = match CStr::from_ptr(file_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let bytes = match std::fs::read(path_str) {
+        Ok(b) => b,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Failed to read file: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let model = match cronc::model_importer::safetensors::parse_safetensors(&bytes) {
+        Ok(m) => m,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Parse error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let mut total_params = 0usize;
+    let mut tensors_json = Vec::new();
+    for (name, tensor) in &model.tensors {
+        total_params += tensor.values.len();
+        let shape_str: Vec<String> = tensor.shape.iter().map(|s| s.to_string()).collect();
+        tensors_json.push(format!(
+            "{{\"name\":\"{}\",\"dtype\":\"{:?}\",\"shape\":[{}],\"numel\":{}}}",
+            name, tensor.dtype, shape_str.join(","), tensor.values.len()
+        ));
+    }
+
+    let json = format!(
+        "{{\"file_path\":\"{}\",\"total_tensors\":{},\"total_parameters\":{},\"raw_bytes\":{},\"tensors\":[{}]}}",
+        path_str.replace('\\', "/"),
+        model.tensors.len(),
+        total_params,
+        total_params * 4,
+        tensors_json.join(",")
+    );
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    *out_json = CString::new(json).unwrap().into_raw();
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_safetensors_to_cl_lora_file(
+    file_path: *const c_char,
+    out_cll_path: *const c_char,
+    rank: usize,
+    alpha: f64,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if file_path.is_null() || out_cll_path.is_null() {
+        return false;
+    }
+    let in_str = match CStr::from_ptr(file_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+    let out_str = match CStr::from_ptr(out_cll_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let bytes = match std::fs::read(in_str) {
+        Ok(b) => b,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Failed to read file: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let model = match cronc::model_importer::safetensors::parse_safetensors(&bytes) {
+        Ok(m) => m,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Parse error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let stem = std::path::Path::new(in_str)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("adapter");
+
+    let adapter = match cronc::model_importer::safetensors::safetensors_to_cl_lora(&model, stem, rank, alpha) {
+        Ok(a) => a,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    if let Err(e) = adapter.save_to_file(std::path::Path::new(out_str)) {
+        if !out_error.is_null() {
+            *out_error = CString::new(format!("Failed to save .cll: {}", e)).unwrap().into_raw();
+        }
+        return false;
+    }
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_safetensors_to_cl_file(
+    file_path: *const c_char,
+    out_cl_path: *const c_char,
+    module_name: *const c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if file_path.is_null() || out_cl_path.is_null() {
+        return false;
+    }
+    let in_str = match CStr::from_ptr(file_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+    let out_str = match CStr::from_ptr(out_cl_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+    let mod_name = if !module_name.is_null() {
+        CStr::from_ptr(module_name).to_str().unwrap_or("cron_weights")
+    } else {
+        "cron_weights"
+    };
+
+    let bytes = match std::fs::read(in_str) {
+        Ok(b) => b,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Failed to read file: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let model = match cronc::model_importer::safetensors::parse_safetensors(&bytes) {
+        Ok(m) => m,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("Parse error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let cl_code = match cronc::model_importer::safetensors::safetensors_to_cl_machine_code(&model, mod_name) {
+        Ok(c) => c,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    if let Err(e) = std::fs::write(out_str, cl_code) {
+        if !out_error.is_null() {
+            *out_error = CString::new(format!("Failed to write .cl: {}", e)).unwrap().into_raw();
+        }
+        return false;
+    }
+
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
 
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI

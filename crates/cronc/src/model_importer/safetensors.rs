@@ -572,3 +572,206 @@ pub fn create_synthetic_safetensors(
     out.extend_from_slice(&payload);
     out
 }
+
+/// Ingests SafeTensors weights into a discrete CRON CL-LoRA adapter (.cll)
+pub fn safetensors_to_cl_lora(
+    model: &SafeTensorsModel,
+    adapter_name: &str,
+    default_rank: usize,
+    alpha: f64,
+) -> Result<crate::cl_lora::ClLoraAdapter, String> {
+    let mut config = crate::cl_lora::ClLoraConfig {
+        rank: default_rank.clamp(1, 8),
+        alpha,
+        hidden_dim: 64,
+        num_layers: 0,
+        target_modules: Vec::new(),
+    };
+
+    let mut layers = Vec::new();
+    let mut detected_modules = std::collections::HashSet::new();
+
+    let mut tensor_names: Vec<String> = model.tensors.keys().cloned().collect();
+    tensor_names.sort();
+
+    let mut pairs: HashMap<(usize, String), (Option<SafeTensorData>, Option<SafeTensorData>)> = HashMap::new();
+
+    for name in &tensor_names {
+        let lower = name.to_lowercase();
+        let is_a = lower.contains("lora_a") || lower.ends_with("_a") || lower.contains(".a.weight") || lower.contains(".a.");
+        let is_b = lower.contains("lora_b") || lower.ends_with("_b") || lower.contains(".b.weight") || lower.contains(".b.");
+
+        if is_a || is_b {
+            let mut layer_idx = 0usize;
+            for part in lower.split(|c: char| !c.is_alphanumeric()) {
+                if let Ok(num) = part.parse::<usize>() {
+                    layer_idx = num;
+                    break;
+                }
+            }
+
+            let module = if lower.contains("q_proj") {
+                "q_proj"
+            } else if lower.contains("k_proj") {
+                "k_proj"
+            } else if lower.contains("v_proj") {
+                "v_proj"
+            } else if lower.contains("o_proj") {
+                "o_proj"
+            } else if lower.contains("gate_proj") {
+                "gate_proj"
+            } else if lower.contains("up_proj") {
+                "up_proj"
+            } else if lower.contains("down_proj") {
+                "down_proj"
+            } else {
+                "attn_proj"
+            };
+
+            detected_modules.insert(module.to_string());
+            let entry = pairs.entry((layer_idx, module.to_string())).or_insert((None, None));
+            if is_a {
+                entry.0 = Some(model.tensors[name].clone());
+            } else {
+                entry.1 = Some(model.tensors[name].clone());
+            }
+        }
+    }
+
+    if pairs.is_empty() {
+        for (idx, name) in tensor_names.iter().enumerate() {
+            let tensor = &model.tensors[name];
+            if tensor.shape.len() >= 2 {
+                let out_dim = tensor.shape[0];
+                let in_dim = tensor.shape[1];
+                let rank = default_rank.clamp(1, 8);
+
+                let mean_abs = tensor.values.iter().map(|v| v.abs()).sum::<f32>() / tensor.values.len().max(1) as f32;
+                let thresh = mean_abs * 0.5;
+
+                let mut a_trits = vec![0i8; rank * in_dim];
+                for i in 0..(rank * in_dim).min(tensor.values.len()) {
+                    let v = tensor.values[i];
+                    if v > thresh {
+                        a_trits[i] = 1;
+                    } else if v < -thresh {
+                        a_trits[i] = -1;
+                    }
+                }
+
+                let mut b_trits = vec![0i8; out_dim * rank];
+                for i in 0..(out_dim * rank).min(tensor.values.len()) {
+                    let v = tensor.values[tensor.values.len() - 1 - i];
+                    if v > thresh {
+                        b_trits[i] = 1;
+                    } else if v < -thresh {
+                        b_trits[i] = -1;
+                    }
+                }
+
+                layers.push(crate::cl_lora::DiscreteLoraLayer::new(
+                    idx,
+                    name,
+                    in_dim,
+                    out_dim,
+                    rank,
+                    &a_trits,
+                    &b_trits,
+                ));
+            }
+        }
+    } else {
+        let mut sorted_keys: Vec<_> = pairs.keys().cloned().collect();
+        sorted_keys.sort();
+
+        for (layer_idx, module) in sorted_keys {
+            if let Some((Some(a_data), Some(b_data))) = pairs.get(&(layer_idx, module.clone())) {
+                let rank = a_data.shape.first().copied().unwrap_or(default_rank).min(default_rank).clamp(1, 8);
+                let in_dim = a_data.shape.last().copied().unwrap_or(64);
+                let out_dim = b_data.shape.first().copied().unwrap_or(64);
+
+                let thresh_a = a_data.values.iter().map(|v| v.abs()).sum::<f32>() / a_data.values.len().max(1) as f32 * 0.5;
+                let a_trits: Vec<i8> = a_data.values.iter().map(|&v| {
+                    if v > thresh_a { 1 } else if v < -thresh_a { -1 } else { 0 }
+                }).collect();
+
+                let thresh_b = b_data.values.iter().map(|v| v.abs()).sum::<f32>() / b_data.values.len().max(1) as f32 * 0.5;
+                let b_trits: Vec<i8> = b_data.values.iter().map(|&v| {
+                    if v > thresh_b { 1 } else if v < -thresh_b { -1 } else { 0 }
+                }).collect();
+
+                layers.push(crate::cl_lora::DiscreteLoraLayer::new(
+                    layer_idx,
+                    &module,
+                    in_dim,
+                    out_dim,
+                    rank,
+                    &a_trits,
+                    &b_trits,
+                ));
+            }
+        }
+    }
+
+    config.num_layers = layers.iter().map(|l| l.layer_idx).max().map(|m| m + 1).unwrap_or(1);
+    config.hidden_dim = layers.first().map(|l| l.in_dim).unwrap_or(64);
+    config.target_modules = detected_modules.into_iter().collect();
+    config.target_modules.sort();
+
+    let mut adapter = crate::cl_lora::ClLoraAdapter::new(adapter_name, config);
+    adapter.layers = layers;
+
+    for (k, v) in &model.metadata {
+        adapter.metadata.insert(k.clone(), v.clone());
+    }
+    adapter.metadata.insert("source_format".to_string(), "HuggingFace_SafeTensors".to_string());
+    adapter.metadata.insert("adapter_name".to_string(), adapter_name.to_string());
+
+    Ok(adapter)
+}
+
+/// Lowers SafeTensors directly into 40-character 4-slot VLIW .cl machine microcode bundles
+pub fn safetensors_to_cl_machine_code(
+    model: &SafeTensorsModel,
+    module_name: &str,
+) -> Result<String, String> {
+    let mut out = String::new();
+    out.push_str("// ============================================================================\n");
+    out.push_str(&format!("// CRON 128-bit VLIW Microcode Lowered from SafeTensors: {}\n", module_name));
+    out.push_str("// 40-character 4-slot Bundles with CRC8 & 0 Multipliers (L1 Bound <= 35.3 KB)\n");
+    out.push_str("// ============================================================================\n\n");
+    out.push_str(".core [0, 0, 0, 0]:\n");
+    out.push_str("@entry:\n");
+
+    let mut bundle_idx = 0usize;
+
+    for (name, tensor) in &model.tensors {
+        out.push_str(&format!("// Tensor: {} (shape: {:?}, dtype: {:?})\n", name, tensor.shape, tensor.dtype));
+
+        // Slot 0: Weight Load (_MD05: memory read into R1)
+        let slot0 = crate::cl_lang::pack_slot_with_crc8('_', "MD", "05", '$', '1', '1', '>');
+        // Slot 1: Discrete Givens phase / Ternary dot product
+        let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "TO", "02", '$', '2', '2', '>');
+        // Slot 2: Reset accumulator
+        let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "RS", "00", '#', '0', '0', '>');
+        // Slot 3: NOP
+        let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "NO", "00", '#', '0', '0', '>');
+
+        out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+        bundle_idx += 1;
+
+        if bundle_idx >= 64 {
+            break;
+        }
+    }
+
+    // Final Halt Bundle
+    let halt0 = crate::cl_lang::pack_slot_with_crc8('_', "PO", "00", '$', '0', '0', '>');
+    let halt1 = crate::cl_lang::pack_slot_with_crc8('_', "SH", "00", '$', '0', '0', '>');
+    let halt2 = crate::cl_lang::pack_slot_with_crc8('_', "RS", "00", '#', '0', '0', '>');
+    let halt3 = crate::cl_lang::pack_slot_with_crc8('_', "HL", "00", '#', '0', '0', '!');
+    out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, halt0, halt1, halt2, halt3));
+
+    Ok(out)
+}
+

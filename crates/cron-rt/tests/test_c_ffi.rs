@@ -665,6 +665,81 @@ def relu_layer(x):
     }
 }
 
+#[test]
+fn test_ffi_safetensors_ingest() {
+    use cron_rt::{
+        cron_safetensors_inspect_json, cron_safetensors_to_cl_file,
+        cron_safetensors_to_cl_lora_file, cron_string_free,
+    };
+    use cronc::model_importer::safetensors::{create_synthetic_safetensors, SafeTensorDType};
+
+    let temp_dir = std::env::temp_dir().join(format!("test_ffi_st_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let st_file = temp_dir.join("mini.safetensors");
+    let cll_file = temp_dir.join("mini.cll");
+    let cl_file = temp_dir.join("mini.cl");
+
+    let weights: Vec<f32> = (0..64).map(|i| (i as f32) * 0.05).collect();
+    let bytes = create_synthetic_safetensors(&[
+        (
+            "model.layers.0.self_attn.q_proj.lora_A.weight",
+            SafeTensorDType::F32,
+            &[2, 32],
+            &weights,
+        ),
+        (
+            "model.layers.0.self_attn.q_proj.lora_B.weight",
+            SafeTensorDType::F32,
+            &[32, 2],
+            &weights,
+        ),
+    ]);
+    std::fs::write(&st_file, &bytes).unwrap();
+
+    let c_st = CString::new(st_file.to_str().unwrap()).unwrap();
+    let c_cll = CString::new(cll_file.to_str().unwrap()).unwrap();
+    let c_cl = CString::new(cl_file.to_str().unwrap()).unwrap();
+    let c_mod = CString::new("MiniTest").unwrap();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    // 1. Inspect JSON
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let ok_inspect = unsafe {
+        cron_safetensors_inspect_json(c_st.as_ptr(), &mut json_ptr, &mut err_ptr)
+    };
+    assert!(ok_inspect);
+    assert!(!json_ptr.is_null());
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"total_tensors\":2"));
+    assert!(json_str.contains("\"total_parameters\":128"));
+    unsafe { cron_string_free(json_ptr); }
+
+    // 2. SafeTensors -> CL-LoRA .cll
+    let ok_lora = unsafe {
+        cron_safetensors_to_cl_lora_file(c_st.as_ptr(), c_cll.as_ptr(), 2, 2.0, &mut err_ptr)
+    };
+    assert!(ok_lora);
+    assert!(cll_file.exists());
+    let cll_bytes = std::fs::read(&cll_file).unwrap();
+    assert!(cll_bytes.len() < 4096);
+
+    // 3. SafeTensors -> .cl VLIW Microcode
+    let ok_cl = unsafe {
+        cron_safetensors_to_cl_file(c_st.as_ptr(), c_cl.as_ptr(), c_mod.as_ptr(), &mut err_ptr)
+    };
+    assert!(ok_cl);
+    assert!(cl_file.exists());
+    let cl_text = std::fs::read_to_string(&cl_file).unwrap();
+    assert!(cl_text.contains(".core [0, 0, 0, 0]:"));
+    assert!(cl_text.contains("@entry:"));
+
+    let _ = std::fs::remove_file(st_file);
+    let _ = std::fs::remove_file(cll_file);
+    let _ = std::fs::remove_file(cl_file);
+    let _ = std::fs::remove_dir(temp_dir);
+}
+
+
 
 
 

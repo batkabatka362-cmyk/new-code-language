@@ -531,6 +531,7 @@ pub use autotune::{SiliconAutotuner, AutotuneDecision};
 pub use cl_c23::{compile_cl_to_c23, compile_cl_to_native_binary, compile_c23_to_native_binary, compile_c23_source_to_native_binary_with_target};
 pub use model_importer::{
     import_model_file, lower_onnx_graph, lower_safetensors_model,
+    safetensors_to_cl_lora, safetensors_to_cl_machine_code, parse_safetensors,
     ImportOptions, ImportedModel, LoweredCode, LoweringOptions,
     QuantizationMode, QuantizationReport, QuantizedTensor,
     SafeTensorDType, SafeTensorData, SafeTensorsModel,

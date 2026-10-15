@@ -24,7 +24,8 @@ pub use quantize::{
     quantize_int4, quantize_ternary_158b, QuantizationMode, QuantizationReport, QuantizedTensor,
 };
 pub use safetensors::{
-    f16_to_f32, parse_safetensors, parse_safetensors_json, SafeTensorDType, SafeTensorData, SafeTensorMeta, SafeTensorsModel,
+    f16_to_f32, parse_safetensors, parse_safetensors_json, safetensors_to_cl_lora, safetensors_to_cl_machine_code,
+    SafeTensorDType, SafeTensorData, SafeTensorMeta, SafeTensorsModel,
 };
 pub use ternary::{
     calibrated_ternary_dot_product, pack_ternary_2bit, quantize_to_ternary,

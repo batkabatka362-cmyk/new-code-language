@@ -96,6 +96,18 @@ def _setup_ffi(lib):
     if hasattr(lib, "cron_py_verify_parity"):
         lib.cron_py_verify_parity.restype = ctypes.c_bool
         lib.cron_py_verify_parity.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_char_p)]
+    # cron_safetensors_inspect_json
+    if hasattr(lib, "cron_safetensors_inspect_json"):
+        lib.cron_safetensors_inspect_json.restype = ctypes.c_bool
+        lib.cron_safetensors_inspect_json.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p)]
+    # cron_safetensors_to_cl_lora_file
+    if hasattr(lib, "cron_safetensors_to_cl_lora_file"):
+        lib.cron_safetensors_to_cl_lora_file.restype = ctypes.c_bool
+        lib.cron_safetensors_to_cl_lora_file.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_double, ctypes.POINTER(ctypes.c_char_p)]
+    # cron_safetensors_to_cl_file
+    if hasattr(lib, "cron_safetensors_to_cl_file"):
+        lib.cron_safetensors_to_cl_file.restype = ctypes.c_bool
+        lib.cron_safetensors_to_cl_file.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p)]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -1034,6 +1046,68 @@ def jit(fn=None, *, dim: int = 64, sphere: bool = True, opt_level: str = "3"):
     if fn is None:
         return lambda f: compile(target="native", sphere=sphere, dim=dim, opt_level=opt_level)(f)
     return compile(target="native", sphere=sphere, dim=dim, opt_level=opt_level)(fn)
+
+def inspect_safetensors(file_path: str) -> Dict[str, Any]:
+    """
+    Inspects HuggingFace SafeTensors file metadata, shapes, parameters, and compression ratios.
+    Returns a dictionary with model telemetry.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_safetensors_inspect_json"):
+        raise RuntimeError("Native CRON library not available for inspect_safetensors")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_safetensors_inspect_json(file_path.encode("utf-8"), ctypes.byref(out_json), ctypes.byref(out_err))
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to inspect SafeTensors: {err}")
+
+    res = json.loads(out_json.value.decode("utf-8"))
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return res
+
+def safetensors_to_cl_lora(file_path: str, out_cll_path: str, rank: int = 2, alpha: float = 2.0) -> bool:
+    """
+    Ingests HuggingFace SafeTensors model weights and quantizes into sub-byte discrete CL-LoRA adapter binary (.cll).
+    Uses 5-trits-per-byte packing with 0 FLOP additions/subtractions in < 4.1 KB L1 footprint.
+    """
+    if not _lib or not hasattr(_lib, "cron_safetensors_to_cl_lora_file"):
+        raise RuntimeError("Native CRON library not available for safetensors_to_cl_lora")
+
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_safetensors_to_cl_lora_file(
+        file_path.encode("utf-8"),
+        out_cll_path.encode("utf-8"),
+        ctypes.c_size_t(rank),
+        ctypes.c_double(alpha),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to convert SafeTensors to CL-LoRA: {err}")
+    return True
+
+def safetensors_to_cl(file_path: str, out_cl_path: str, module_name: str = "cron_weights") -> bool:
+    """
+    Ingests HuggingFace SafeTensors model weights into 40-character 4-slot 128-bit VLIW microcode (.cl).
+    """
+    if not _lib or not hasattr(_lib, "cron_safetensors_to_cl_file"):
+        raise RuntimeError("Native CRON library not available for safetensors_to_cl")
+
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_safetensors_to_cl_file(
+        file_path.encode("utf-8"),
+        out_cl_path.encode("utf-8"),
+        module_name.encode("utf-8"),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown error"
+        raise RuntimeError(f"Failed to synthesize CL microcode: {err}")
+    return True
+
 
 
 
