@@ -98,8 +98,9 @@ function startLanguageServer(context, outputChannel) {
 }
 
 function activate(context) {
+    const serverExe = resolveCronExecutable();
     const outputChannel = vscode.window.createOutputChannel('CRON Language Server');
-    outputChannel.appendLine('[CRON Extension] Activating CRON Cognitive Language extension v1.3.0...');
+    outputChannel.appendLine('[CRON Extension] Activating CRON Cognitive Language extension v1.5.0...');
 
     // 1. Initialize Status Bar Indicator
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -132,6 +133,8 @@ function activate(context) {
                 { label: '$(rocket) Super-Optimize VLIW Slots', description: 'Level-2 DAG Out-of-Order Compaction', command: 'cron.optCl' },
                 { label: '$(dashboard) Benchmark Silicon Roofline', description: 'Compute FLOPs/Byte, TOPS/W, and PPA metrics', command: 'cron.clPerf' },
                 { label: '$(pulse) Generate VCD Waveform', description: 'Cycle-accurate logic analyzer traces', command: 'cron.clVcd' },
+                { label: '$(server) 4D-Torus Cluster Topology', description: 'Inspect distributed multi-node 4D-Torus network', command: 'cron.clusterTop' },
+                { label: '$(flame) Synthesize & Flash Bitstream', description: 'Synthesize Verilog RTL & run automated FPGA bitstream build', command: 'cron.flashHw' },
                 { label: '$(server-process) Launch Swarm TUI Monitor', description: '256-Core 4D-Torus Live Silicon Monitor', command: 'cron.openSwarmTui' },
                 { label: '$(debug-alt) Start Hardware Debugger (DAP)', description: 'Cycle-accurate VLIW stepping & registers', command: 'cron.startDebugging' },
                 { label: '$(circuit-board) 4D-Torus & Wafer Visualizer', description: 'Live 65,536-Core silicon heatmap & packet telemetry', command: 'cron.openMeshVisualizer' },
@@ -264,6 +267,23 @@ function activate(context) {
     context.subscriptions.push(
         vscode.commands.registerCommand('cron.openSwarmTui', async () => {
             runCronInTerminal('CRON Swarm Silicon TUI', `"${serverExe}" cl-swarm --tui`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.clusterTop', async () => {
+            runCronInTerminal('CRON 4D-Torus Cluster Topology', `"${serverExe}" cluster top`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.flashHw', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !editor.document.fileName.endsWith('.cl')) {
+                vscode.window.showErrorMessage('Please open a .cl file to synthesize and flash.');
+                return;
+            }
+            runCronInTerminal('CRON Silicon Flash', `"${serverExe}" flash "${editor.document.fileName}" --target xilinx_u280 --build`);
         })
     );
 

@@ -2,7 +2,7 @@
   "name": "cron-lang",
   "displayName": "CRON Cognitive Language Support",
   "description": "Language support, LSP 3.17, DAP Hardware Debugger, 16-Bank PGAS SRAM Memory Inspector, and 4D-Torus & Wafer-65536 Silicon Visualizer for CRON Silicon Machine Language (.cl)",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "cron-ai",
   "engines": {
     "vscode": "^1.80.0"
@@ -123,6 +123,14 @@
       {
         "command": "cron.openMemoryInspector",
         "title": "CRON: Open 16-Bank PGAS SRAM Live Memory Inspector"
+      },
+      {
+        "command": "cron.clusterTop",
+        "title": "CRON: Inspect 4D-Torus Distributed Multi-Node Cluster Topology"
+      },
+      {
+        "command": "cron.flashHw",
+        "title": "CRON: Synthesize & Flash FPGA Bitstream Package"
       }
     ],
     "breakpoints": [
@@ -209,6 +217,11 @@
           "command": "cron.clPerf",
           "when": "editorLangId == cron-cl",
           "group": "cron_group@4"
+        },
+        {
+          "command": "cron.flashHw",
+          "when": "editorLangId == cron-cl",
+          "group": "cron_group@5"
         }
       ]
     },
