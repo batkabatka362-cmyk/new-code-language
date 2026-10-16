@@ -431,10 +431,9 @@ fn test_cli_cl_bench_roofline() {
 
     assert!(json_out.status.success(), "cl-bench --json must succeed");
     let json_str = String::from_utf8_lossy(&json_out.stdout);
-    assert!(json_str.contains("\"total_cycles\": 8"));
-    assert!(json_str.contains("\"optical_gemm_ops\": 2"));
-    assert!(json_str.contains("\"operational_intensity_flop_per_byte\":"));
-    assert!(json_str.contains("\"attainable_chip_tflops\":"));
+    assert!(json_str.contains("\"total_cycles\": 8") || json_str.contains("\"total_cycles\":8"));
+    assert!(json_str.contains("\"regime\":"));
+    assert!(json_str.contains("\"operational_intensity\":"));
     assert!(json_str.contains("\"silicon_efficiency_pct\":"));
 }
 

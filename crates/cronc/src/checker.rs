@@ -104,6 +104,7 @@ pub struct SemanticChecker {
     pub fn_return_types: HashMap<String, String>,
     pub known_enums: HashMap<String, Vec<String>>,
     pub known_enum_payloads: HashMap<(String, String), Option<Vec<String>>>,
+    pub interner: crate::interner::Interner,
 }
 
 impl Default for SemanticChecker {
@@ -168,7 +169,18 @@ impl SemanticChecker {
             fn_return_types: HashMap::new(),
             known_enums: HashMap::new(),
             known_enum_payloads: HashMap::new(),
+            interner: crate::interner::Interner::with_builtins(),
         }
+    }
+
+    #[inline(always)]
+    pub fn intern(&mut self, s: &str) -> crate::interner::Symbol {
+        self.interner.intern(s)
+    }
+
+    #[inline(always)]
+    pub fn resolve_symbol(&self, sym: crate::interner::Symbol) -> Option<&str> {
+        self.interner.resolve(sym)
     }
 
     #[inline(always)]
@@ -200,6 +212,7 @@ impl SemanticChecker {
             fn_return_types: self.fn_return_types.clone(),
             known_enums: self.known_enums.clone(),
             known_enum_payloads: self.known_enum_payloads.clone(),
+            interner: self.interner.clone(),
         }
     }
 

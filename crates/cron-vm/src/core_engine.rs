@@ -192,44 +192,45 @@ impl CoreEngine {
         }
     }
 
-    fn parse_slot_metadata(&self, slot: &str) -> (String, usize, usize, usize, usize, char) {
-        let chars: Vec<char> = slot.chars().collect();
-        if chars.len() < 3 {
-            return (String::new(), 0, 0, 0, 0, '$');
+    #[inline(always)]
+    fn parse_slot_metadata<'a>(&self, slot: &'a str) -> (&'a str, usize, usize, usize, usize, char) {
+        let bytes = slot.as_bytes();
+        if bytes.len() < 3 {
+            return ("", 0, 0, 0, 0, '$');
         }
 
-        let op: String = chars[1..3].iter().collect();
+        let op = &slot[1..3];
 
         // Parse destination bank (high nibble) and register (low nibble)
         // If immediate load with 1-char opcode (e.g. '=00#0A04>, '=06#0064>, index 4 is '#'):
         //   bank is index 2, reg is index 3
         // If standard 2-char opcode (e.g. '==04#000A>, _PO06G400>, _PO0A$000>, _POA0$000>):
         //   bank is index 3, reg is index 4
-        let (dest_bank, dest_reg) = if chars.len() >= 5 && chars.get(4) == Some(&'#') {
-            let h = chars.get(2).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
-            let l = chars.get(3).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
+        let (dest_bank, dest_reg) = if bytes.len() >= 5 && bytes[4] == b'#' {
+            let h = (bytes[2] as char).to_digit(16).unwrap_or(0) as usize;
+            let l = (bytes[3] as char).to_digit(16).unwrap_or(0) as usize;
             (h, l)
-        } else if chars.len() >= 5 {
-            let h = chars.get(3).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
-            let l = chars.get(4).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize;
+        } else if bytes.len() >= 5 {
+            let h = (bytes[3] as char).to_digit(16).unwrap_or(0) as usize;
+            let l = (bytes[4] as char).to_digit(16).unwrap_or(0) as usize;
             (h, l)
         } else {
             (0, 0)
         };
 
         // Parse mode (index 5)
-        let mode = *chars.get(5).unwrap_or(&'$');
+        let mode = if bytes.len() > 5 { bytes[5] as char } else { '$' };
 
         // Parse source register (index 6)
-        let src = if chars.len() >= 7 {
-            chars.get(6).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize
+        let src = if bytes.len() >= 7 {
+            (bytes[6] as char).to_digit(16).unwrap_or(0) as usize
         } else {
             0
         };
 
         // Parse immediate parameter (index 8)
-        let imm = if chars.len() >= 9 {
-            chars.get(8).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize
+        let imm = if bytes.len() >= 9 {
+            (bytes[8] as char).to_digit(16).unwrap_or(0) as usize
         } else {
             0
         };
@@ -238,13 +239,21 @@ impl CoreEngine {
     }
 }
 
+#[inline(always)]
 fn parse_target_or_offset(slot: &str, fallback: usize) -> usize {
     if let Some(hash_pos) = slot.find('#') {
-        let hex_str: String = slot[hash_pos + 1..]
-            .chars()
-            .take_while(|c| c.is_ascii_hexdigit())
-            .collect();
-        usize::from_str_radix(&hex_str, 16).unwrap_or(fallback)
+        let remainder = slot[hash_pos + 1..].as_bytes();
+        let mut val: usize = 0;
+        let mut found = false;
+        for &b in remainder {
+            if let Some(d) = (b as char).to_digit(16) {
+                val = (val << 4) | (d as usize);
+                found = true;
+            } else {
+                break;
+            }
+        }
+        if found { val } else { fallback }
     } else {
         fallback
     }
@@ -276,29 +285,29 @@ impl CoreEngine {
 
         // Milestone #035: Sovereign 4D Hyperspherical Geodesic ALU (0 FLOPs Multiplier-Free)
         if slot.starts_with('`') {
-            let chars: Vec<char> = slot.chars().collect();
-            if chars.len() == 10 {
-                let mode_val = decode_base64_val(chars[1]);
+            let bytes = slot.as_bytes();
+            if bytes.len() == 10 {
+                let mode_val = decode_base64_val(bytes[1] as char);
                 let s_id = ((mode_val >> 4) & 0x3) as usize;
                 let is_err = ((mode_val >> 3) & 1) == 1;
                 let _is_pen = ((mode_val >> 2) & 1) == 1;
                 let is_rd = ((mode_val >> 1) & 1) == 1;
                 let is_wr = (mode_val & 1) == 1;
 
-                let w = decode_base90_val(chars[2]) as u32;
-                let lat_x = decode_base90_val(chars[3]) as u32;
-                let lon_z = decode_base90_val(chars[4]) as u32;
-                let quad = match chars[5] {
-                    '1' | 'N' | 'A' => 1,
-                    '2' | 'W' | 'B' => 2,
-                    '3' | 'S' | 'C' => 3,
-                    '4' | 'E' | 'D' => 4,
+                let w = decode_base90_val(bytes[2] as char) as u32;
+                let lat_x = decode_base90_val(bytes[3] as char) as u32;
+                let lon_z = decode_base90_val(bytes[4] as char) as u32;
+                let quad = match bytes[5] {
+                    b'1' | b'N' | b'A' => 1,
+                    b'2' | b'W' | b'B' => 2,
+                    b'3' | b'S' | b'C' => 3,
+                    b'4' | b'E' | b'D' => 4,
                     _ => 1,
                 };
-                let step = decode_base90_val(chars[6]) as u32;
-                let alu_op = chars[7];
-                let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as usize % 16;
-                let val = chars[9].to_digit(16).unwrap_or(step % 16);
+                let step = decode_base90_val(bytes[6] as char) as u32;
+                let alu_op = bytes[7] as char;
+                let reg = (bytes[8] as char).to_digit(16).unwrap_or(s_id as u32) as usize % 16;
+                let val = (bytes[9] as char).to_digit(16).unwrap_or(step % 16);
 
                 let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
                 let radial_shift = (w % 4) + 1;
@@ -353,28 +362,35 @@ impl CoreEngine {
             self.registers[dest] = self.bank_registers[dest_bank.min(15)][dest];
         }
 
-        match op.as_str() {
+        match op {
             op if op.starts_with('=') || slot.starts_with("'=") => {
                 // Immediate load: e.g. '=00#0A04>, '=06#0064>, or '==04#000A>
                 let reg_idx = dest;
                 if reg_idx < 16 {
                     if let Some(hash_pos) = slot.find('#') {
-                        let hex_part: String = slot[hash_pos + 1..]
-                            .chars()
-                            .take_while(|c| c.is_ascii_hexdigit())
-                            .collect();
-                        if let Ok(val) = u32::from_str_radix(&hex_part, 16) {
-                            self.registers[reg_idx] = val;
-                        } else {
-                            self.registers[reg_idx] = imm as u32;
+                        let remainder = slot[hash_pos + 1..].as_bytes();
+                        let mut val: u32 = 0;
+                        let mut found = false;
+                        for &b in remainder {
+                            if let Some(d) = (b as char).to_digit(16) {
+                                val = (val << 4) | d;
+                                found = true;
+                            } else {
+                                break;
+                            }
                         }
+                        self.registers[reg_idx] = if found { val } else { imm as u32 };
                     } else {
-                        let imm_str: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
-                        if let Ok(val) = u32::from_str_radix(&imm_str, 16) {
-                            self.registers[reg_idx] = val;
-                        } else {
-                            self.registers[reg_idx] = imm as u32;
+                        let remainder = slot.as_bytes();
+                        let mut val: u32 = 0;
+                        let mut found = false;
+                        for &b in remainder.iter().skip(3) {
+                            if let Some(d) = (b as char).to_digit(16) {
+                                val = (val << 4) | d;
+                                found = true;
+                            }
                         }
+                        self.registers[reg_idx] = if found { val } else { imm as u32 };
                     }
                 }
             }

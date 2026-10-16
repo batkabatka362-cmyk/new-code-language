@@ -136,3 +136,39 @@ fn test_register_pressure_aware_scheduling_and_live_intervals() {
     assert!(core.is_halted);
 }
 
+#[test]
+fn test_interner_symbol_deduplication_and_builtins() {
+    use cronc::interner::{Interner, Symbol};
+
+    let mut interner = Interner::with_builtins();
+    assert!(interner.len() >= 30);
+
+    // Existing builtin should return same Symbol
+    let sym_simd_dot1: Symbol = interner.intern("simd_dot");
+    let sym_simd_dot2: Symbol = interner.intern("simd_dot");
+    assert_eq!(sym_simd_dot1, sym_simd_dot2);
+    assert_eq!(sym_simd_dot1.as_u32(), sym_simd_dot2.as_u32());
+    assert_eq!(interner.resolve(sym_simd_dot1), Some("simd_dot"));
+
+    // New unique identifiers
+    let sym_var_a = interner.intern("super_variable_alpha");
+    let sym_var_b = interner.intern("super_variable_beta");
+    let sym_var_a_dup = interner.intern("super_variable_alpha");
+
+    assert_ne!(sym_var_a, sym_var_b);
+    assert_eq!(sym_var_a, sym_var_a_dup);
+    assert_eq!(interner.resolve(sym_var_a), Some("super_variable_alpha"));
+    assert_eq!(interner.resolve(sym_var_b), Some("super_variable_beta"));
+}
+
+#[test]
+fn test_semantic_checker_symbol_interning() {
+    use cronc::checker::SemanticChecker;
+
+    let mut checker = SemanticChecker::new();
+    let s1 = checker.intern("affine_token_linear");
+    let s2 = checker.intern("affine_token_linear");
+    assert_eq!(s1, s2);
+    assert_eq!(checker.resolve_symbol(s1), Some("affine_token_linear"));
+}
+

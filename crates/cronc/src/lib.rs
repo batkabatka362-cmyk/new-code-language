@@ -16,6 +16,7 @@ pub mod cl_lang;
 pub mod codegen;
 pub mod diagnostic;
 pub mod fdo;
+pub mod interner;
 pub mod lexer;
 pub mod optimizer;
 pub mod parser;
@@ -212,6 +213,7 @@ pub use cl_cluster_net::{
     CLUSTER_MAGIC, HEADER_SIZE, PROTOCOL_VERSION,
 };
 
+pub use interner::{Interner, Symbol};
 pub use cl_matrix94::{FourTactPipeline94, PipelineOutput, NUM_STATES};
 pub use cl_htgm::{HierarchicalTBTMemory, AttractorResonanceOutput, D_BITS};
 pub use cl_cldb::{CldbVault, CldbHeader, TOTAL_CLDB_SIZE};

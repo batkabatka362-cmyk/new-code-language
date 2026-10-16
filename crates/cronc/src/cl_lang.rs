@@ -946,10 +946,11 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
 
             // RAW (Read-After-Write) hazard check within same cycle
             if let Some(src) = slot.src_reg {
-                if src > 0 && (dest_regs_mask & (1 << src)) != 0 {
+                let s = (src % 16) as usize;
+                if s > 0 && (dest_regs_mask & (1u16 << s)) != 0 {
                     let msg = format!(
                         "Line {}: Read-After-Write (RAW) latency hazard: Register R{:X} read in same cycle before write commits in {}",
-                        line_num, src, cycle_part
+                        line_num, s, cycle_part
                     );
                     report.hazards.push(msg);
                 }
@@ -968,12 +969,13 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
 
             // Hazard check: Write-After-Write (WAW) conflict detection
             if let Some(dest) = slot.dest_reg {
-                if dest > 0 && slot.opcode != "HL" && slot.opcode != "NO" {
-                    let mask = 1 << dest;
+                let d = (dest % 16) as usize;
+                if d > 0 && slot.opcode != "HL" && slot.opcode != "NO" {
+                    let mask = 1u16 << d;
                     if (dest_regs_mask & mask) != 0 {
                         let msg = format!(
                             "Line {}: Write-After-Write (WAW) hazard detected on Register R{:X} within cycle {}",
-                            line_num, dest, cycle_part
+                            line_num, d, cycle_part
                         );
                         report.hazards.push(msg);
                     } else {

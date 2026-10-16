@@ -10598,6 +10598,11 @@ fn handle_bench_command(args: &[String]) {
         return;
     }
 
+    if args.iter().any(|a| a == "all" || cronc::WorkloadKind::parse(a).is_some()) {
+        handle_cl_compare_command(args);
+        return;
+    }
+
     if args.iter().any(|a| a == "--bare-metal") {
         let mut samples = 10_000;
         let mut json_mode = false;
