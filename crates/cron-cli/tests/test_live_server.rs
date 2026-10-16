@@ -22,6 +22,7 @@ fn test_live_hard_backend_server_loopback() {
         host: "127.0.0.1".to_string(),
         port,
         workers: 2,
+        default_model: "cron-r1-7b-ternary".to_string(),
     };
     let server = LiveHttpServer::new(config);
     let (tx, rx) = channel();
