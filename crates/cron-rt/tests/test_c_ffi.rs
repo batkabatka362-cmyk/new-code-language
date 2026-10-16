@@ -1111,6 +1111,29 @@ fn test_ffi_bundle_playground() {
     let _ = std::fs::remove_file(out_file);
 }
 
+#[test]
+fn test_ffi_audio_synth() {
+    let out_file = "test_ffi_audio.wav";
+    let _ = std::fs::remove_file(out_file);
+    let text = CString::new("Сайн байна уу, CRON C-FFI аудио!").unwrap();
+    let out_path = CString::new(out_file).unwrap();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_audio_synthesize_wav(text.as_ptr(), out_path.as_ptr(), &mut err_ptr)
+    };
+
+    assert!(ok, "cron_audio_synthesize_wav must succeed");
+    assert!(std::path::Path::new(out_file).exists());
+
+    let bytes = std::fs::read(out_file).unwrap();
+    assert_eq!(&bytes[0..4], b"RIFF");
+    assert_eq!(&bytes[8..12], b"WAVE");
+
+    let _ = std::fs::remove_file(out_file);
+}
+
+
 
 
 

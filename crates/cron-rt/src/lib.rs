@@ -2088,6 +2088,56 @@ pub unsafe extern "C" fn cron_bundle_playground_html(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cron_audio_synthesize_wav(
+    text_ptr: *const c_char,
+    out_wav_path: *const c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if text_ptr.is_null() || out_wav_path.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let text = match CStr::from_ptr(text_ptr).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let path_str = match CStr::from_ptr(out_wav_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let out_path = std::path::Path::new(path_str);
+    match cronc::cl_audio::save_speech_wav(text, out_path, 16000) {
+        Ok(_) => {
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------

@@ -70,6 +70,7 @@ pub mod constrained_sampler;
 pub mod speculative_decoding;
 pub mod bpe_tokenizer;
 pub mod cl_multimodal;
+pub mod cl_audio;
 pub mod cl_swarm;
 pub mod cl_swarm_cluster;
 pub mod cl_swarm_synthesis;
@@ -375,6 +376,12 @@ pub use bpe_tokenizer::{
 pub use cl_multimodal::{
     AudioConfig, AudioSpectrogramProcessor, ModalityKind, MultiModalFusion, UnifiedToken,
     VisionConfig, VisionPatchProcessor,
+};
+
+pub use cl_audio::{
+    encode_wav_16bit, FormantFilter, PhonemeSpec, grapheme_to_phoneme, text_to_phonemes,
+    AudioSynthesisReport, synthesize_speech_waveform, synthesize_speech_wav, save_speech_wav,
+    render_ascii_waterfall,
 };
 
 pub use cl_swarm::{

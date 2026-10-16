@@ -263,6 +263,14 @@ def _setup_ffi(lib):
             ctypes.c_char_p,
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_audio_synthesize_wav
+    if hasattr(lib, "cron_audio_synthesize_wav"):
+        lib.cron_audio_synthesize_wav.restype = ctypes.c_bool
+        lib.cron_audio_synthesize_wav.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -1014,6 +1022,7 @@ __all__ = [
     "tapeout",
     "flash",
     "playground",
+    "audio_synth",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1817,6 +1826,35 @@ def playground(output_html: str = "cron_playground.html", auto_open: bool = Fals
     abs_path = os.path.abspath(output_html)
     if auto_open:
         webbrowser.open(abs_path)
+
+    return abs_path
+
+def audio_synth(text: str, output_wav: str = "speech.wav", play: bool = False) -> str:
+    """
+    Synthesizes natural Mongolian or English speech into a 16-bit PCM WAV file.
+    """
+    import os, subprocess
+    if not _lib or not hasattr(_lib, "cron_audio_synthesize_wav"):
+        raise RuntimeError("Audio speech synthesizer not available in native library")
+
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_audio_synthesize_wav(
+        text.encode("utf-8"),
+        output_wav.encode("utf-8"),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown audio synthesis error"
+        raise RuntimeError(f"Audio synthesis failed: {err}")
+
+    abs_path = os.path.abspath(output_wav)
+    if play:
+        if os.name == 'nt':
+            subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{abs_path}').PlaySync()"])
+        elif os.path.exists("/usr/bin/afplay"):
+            subprocess.run(["afplay", abs_path])
+        elif os.path.exists("/usr/bin/aplay"):
+            subprocess.run(["aplay", abs_path])
 
     return abs_path
 
