@@ -1951,6 +1951,102 @@ pub unsafe extern "C" fn cron_bench_kernel_roofline_json(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cron_generate_hardware_package_json(
+    cl_source_or_path: *const c_char,
+    target_str: *const c_char,
+    board_str: *const c_char,
+    out_dir_path: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if cl_source_or_path.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let input_src = match CStr::from_ptr(cl_source_or_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let content = if std::path::Path::new(input_src).exists() {
+        match std::fs::read_to_string(input_src) {
+            Ok(c) => c,
+            Err(e) => {
+                if !out_error.is_null() {
+                    *out_error = CString::new(format!("Failed to read file '{}': {}", input_src, e)).unwrap().into_raw();
+                }
+                return false;
+            }
+        }
+    } else {
+        input_src.to_string()
+    };
+
+    let mut config = cronc::FlashConfig::default();
+
+    if !target_str.is_null() {
+        if let Ok(t_str) = CStr::from_ptr(target_str).to_str() {
+            if !t_str.is_empty() {
+                if let Ok(tgt) = cronc::SiliconTarget::parse_target(t_str) {
+                    config.target = tgt;
+                }
+            }
+        }
+    }
+
+    if !board_str.is_null() {
+        if let Ok(b_str) = CStr::from_ptr(board_str).to_str() {
+            if !b_str.is_empty() {
+                if let Ok(b) = cronc::FpgaBoard::parse_board(b_str) {
+                    config.target = b.silicon_target();
+                    config.core_clock_mhz = b.clock_mhz();
+                    config.board = Some(b);
+                }
+            }
+        }
+    }
+
+    let verilog_rtl = if content.contains("module ") {
+        content.clone()
+    } else {
+        match cronc::verilog_backend::generate_verilog_hdl(&content, "cron_top") {
+            Ok(v) => v,
+            Err(e) => {
+                if !out_error.is_null() {
+                    *out_error = CString::new(format!("Verilog synthesis error: {}", e)).unwrap().into_raw();
+                }
+                return false;
+            }
+        }
+    };
+
+    let pkg = cronc::generate_hardware_package(&verilog_rtl, "cron_top", &config);
+
+    if !out_dir_path.is_null() {
+        if let Ok(dir_str) = CStr::from_ptr(out_dir_path).to_str() {
+            if !dir_str.is_empty() {
+                let out_dir = std::path::Path::new(dir_str);
+                let _ = cronc::emit_hardware_package(&pkg, out_dir);
+            }
+        }
+    }
+
+    *out_json = CString::new(pkg.manifest_json).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------

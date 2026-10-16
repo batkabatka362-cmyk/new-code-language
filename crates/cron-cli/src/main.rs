@@ -78,6 +78,9 @@ fn print_help() {
     println!("    serve [opts]                   Start OpenAI-compatible REST server (/v1/chat/completions, SSE)");
     println!("    finetune <dataset> [opts]      On-device sub-byte CL-LoRA fine-tuning (<4.1KB L1, 0-FLOP backprop)");
     println!("    bench [file.cl] [opts]         Multi-core 4D-Torus hardware roofline & silicon profiler");
+    println!("    fpga <file.cl> [opts]          Synthesize & package FPGA bitstream (iCE40, ECP5, Artix-7)");
+    println!("    tapeout <file.cl> [opts]       OpenLane SkyWater 130nm / TSMC N5 ASIC tape-out flow");
+    println!("    flash <file.cl> [opts]         Generate physical hardware synthesis package & drivers");
     println!("    cl-clifford [--angle a]        Clifford Geometric Algebra 4D/5D Spacetime & Quantum Rotor Compiler");
     println!("    cl-agi [options]               Living AGI Cognitive Mind: Holographic Memory, Neuromodulators & Sleep");
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
@@ -401,11 +404,11 @@ fn print_subcommand_help(cmd: &str) {
             println!("OPTIONS:\n    --tokens <N>        Maximum new tokens to generate (default: 32)\n    --temp <F>          Sampling temperature (default: 0.7)\n    --think             Enable DeepSeek-R1 test-time reasoning stream (<think>...)\n    --mode <t|f|h>      Compute precision mode (ternary, float, hybrid)\n    -h, --help          Display this help message\n");
             println!("EXAMPLE:\n    cron run-hf deepseek-r1 \"Explain quantum mechanics\"\n    cron run-hf bitnet \"Write Fibonacci in .cl\"");
         }
-        "flash" => {
-            println!("USAGE:\n    cron flash <file.cl> [OPTIONS]\n");
+        "flash" | "fpga" | "tapeout" | "asic" => {
+            println!("USAGE:\n    cron fpga <file.cl> [OPTIONS]\n    cron tapeout <file.cl> [OPTIONS]\n    cron flash <file.cl> [OPTIONS]\n");
             println!("DESCRIPTION:\n    Synthesizes complete FPGA/ASIC hardware deployment package with Verilog RTL, Vivado/Quartus/OpenLane synthesis scripts, PCIe Gen5 DMA drivers, and automated bitstream runners.\n");
-            println!("OPTIONS:\n    --target <target>     Target silicon: xilinx_u280, xilinx_vck190, intel_stratix10, openlane_sky130, yosys_nextpnr\n    --interface <bus>     Host bus: pcie_gen5_x16, cxl_3_0, dwdm_optical, axi4_stream\n    -o, --out-dir <dir>   Output directory for hardware package (default: silicon_deployment)\n    --dry-run             Perform package generation without touching physical hardware\n    --build, --run-synth  Trigger automated Vivado or Yosys bitstream synthesis runner\n    -h, --help            Display this help message\n");
-            println!("EXAMPLE:\n    cron flash model.cl --target xilinx_u280 -o build_hw --build");
+            println!("OPTIONS:\n    --board, -b <board>   Target FPGA board: icebreaker, colorlight-i5, arty-a7, generic-ecp5, generic-ice40\n    --target, --pdk <t>   Target silicon: openlane_sky130, yosys_nextpnr, xilinx_u280, intel_stratix10, asic_tapeout\n    --interface <bus>     Host bus: pcie_gen5_x16, uart_115200, jtag_axi\n    -o, --out-dir <dir>   Output directory (default: fpga_deployment / asic_tapeout / silicon_deployment)\n    --dry-run             Perform package generation without touching physical hardware\n    --build, --synth      Trigger automated Vivado or Yosys bitstream synthesis runner\n    --flash               Trigger 1-click physical FPGA flashing tool\n    --json                Output structured JSON hardware manifest\n    -h, --help            Display this help message\n");
+            println!("EXAMPLES:\n    cron fpga kernel.cl --board icebreaker\n    cron fpga kernel.cl --board colorlight-i5 --build\n    cron tapeout kernel.cl --pdk sky130 -o asic_run\n    cron flash model.cl --target xilinx_u280 -o build_hw");
         }
         "bootstrap" | "cl-bootstrap" => {
             println!("USAGE:\n    cron bootstrap [OPTIONS]\n");
@@ -6339,10 +6342,10 @@ fn main() {
                 }
             }
         }
-        "flash" => {
-            if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron flash <file.cl> [--board <b>] [--target <t>] [--interface <i>] [--out-dir <dir>|-o <dir>] [--dry-run] [--build|--run-synth] [--flash]");
-                std::process::exit(1);
+        "flash" | "fpga" | "tapeout" | "asic" => {
+            if args.len() < 3 || args.iter().any(|a| a == "-h" || a == "--help") {
+                print_subcommand_help(&args[1]);
+                return;
             }
             let input_path = &args[2];
             let content = match fs::read_to_string(input_path) {
@@ -6353,10 +6356,23 @@ fn main() {
                 }
             };
 
+            let sub = args[1].as_str();
             let mut config = cronc::FlashConfig::default();
-            let mut out_dir = std::path::PathBuf::from("silicon_deployment");
+            let mut out_dir = match sub {
+                "tapeout" | "asic" => {
+                    config.target = cronc::SiliconTarget::OpenLaneSky130;
+                    std::path::PathBuf::from("asic_tapeout")
+                }
+                "fpga" => {
+                    config.target = cronc::SiliconTarget::YosysNextPnr;
+                    config.board = Some(cronc::FpgaBoard::IceBreaker);
+                    std::path::PathBuf::from("fpga_deployment")
+                }
+                _ => std::path::PathBuf::from("silicon_deployment"),
+            };
             let mut run_synth = false;
             let mut run_flash = false;
+            let mut emit_json = false;
 
             let mut i = 3;
             while i < args.len() {
@@ -6369,7 +6385,7 @@ fn main() {
                     config.core_clock_mhz = b.clock_mhz();
                     config.board = Some(b);
                     i += 2;
-                } else if args[i] == "--target" && i + 1 < args.len() {
+                } else if (args[i] == "--target" || args[i] == "--pdk") && i + 1 < args.len() {
                     config.target = cronc::SiliconTarget::parse_target(&args[i + 1]).unwrap_or_else(|e| {
                         eprintln!("Error: {}", e);
                         std::process::exit(1);
@@ -6387,22 +6403,27 @@ fn main() {
                 } else if args[i] == "--dry-run" {
                     config.dry_run = true;
                     i += 1;
-                } else if args[i] == "--build" || args[i] == "--run-synth" {
+                } else if args[i] == "--build" || args[i] == "--run-synth" || args[i] == "--synth" {
                     run_synth = true;
                     i += 1;
                 } else if args[i] == "--flash" {
                     run_flash = true;
+                    i += 1;
+                } else if args[i] == "--json" {
+                    emit_json = true;
                     i += 1;
                 } else {
                     i += 1;
                 }
             }
 
-            print_banner();
-            println!("============================================================");
-            println!("     CRON PHYSICAL HARDWARE & FPGA DEPLOYMENT BRIDGE        ");
-            println!("============================================================\n");
-            println!("[1/4] Synthesizing IEEE 1364-2001 Verilog RTL Core...");
+            if !emit_json {
+                print_banner();
+                println!("============================================================");
+                println!("     CRON PHYSICAL HARDWARE & FPGA DEPLOYMENT BRIDGE        ");
+                println!("============================================================\n");
+                println!("[1/4] Synthesizing IEEE 1364-2001 Verilog RTL Core...");
+            }
             let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
             let verilog_rtl = if input_path.ends_with(".v") || input_path.ends_with(".sv") {
                 content.clone()
@@ -6445,13 +6466,22 @@ fn main() {
                     _ => "AMD Vivado Physical Synthesis Tcl & Timing Constraints",
                 }
             };
-            println!("[2/4] Generating {}...", toolchain_desc);
+            if !emit_json {
+                println!("[2/4] Generating {}...", toolchain_desc);
+            }
             let pkg = cronc::generate_hardware_package(&verilog_rtl, module_name, &config);
 
-            println!("[3/4] Generating Zero-Copy PCIe Gen5 x16 AXI4 DMA & Hardware UART Drivers...");
+            if !emit_json {
+                println!("[3/4] Generating Zero-Copy PCIe Gen5 x16 AXI4 DMA & Hardware UART Drivers...");
+            }
             if let Err(e) = cronc::emit_hardware_package(&pkg, &out_dir) {
                 eprintln!("Error emitting package: {}", e);
                 std::process::exit(1);
+            }
+
+            if emit_json {
+                println!("{}", pkg.manifest_json);
+                return;
             }
 
             println!("[4/4] Hardware Deployment Package Assembled in '{:?}':", out_dir);

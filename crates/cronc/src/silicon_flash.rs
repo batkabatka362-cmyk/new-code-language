@@ -1113,6 +1113,11 @@ echo "[SUCCESS] Flash script finished."
         prog_cmd = prog_cmd,
     );
 
+    let board_json = match &board_name {
+        Some(b) => format!("\"{}\"", b),
+        None => "null".to_string(),
+    };
+
     // 13. Hardware Manifest (flash_manifest.json)
     let manifest_json = format!(
 r#"{{
@@ -1120,7 +1125,7 @@ r#"{{
   "module": "{}",
   "target": "{}",
   "part_number": "{}",
-  "board": {:?},
+  "board": {},
   "interface": "{:?}",
   "core_count": {},
   "frequencies": {{
@@ -1164,7 +1169,7 @@ r#"{{
         module_name,
         display_name,
         part,
-        board_name,
+        board_json,
         config.interface,
         config.num_cores,
         config.core_clock_mhz,

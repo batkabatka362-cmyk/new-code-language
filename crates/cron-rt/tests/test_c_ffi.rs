@@ -1057,6 +1057,40 @@ fn test_ffi_hardware_bench() {
     }
 }
 
+#[test]
+fn test_ffi_hardware_package() {
+    let cl_code = CString::new("B0000: '==01#000> '==02#004> _MD03*120> _NO00#000>\n").unwrap();
+    let tgt = CString::new("openlane_sky130").unwrap();
+    let board = CString::new("").unwrap();
+    let out_dir = CString::new("").unwrap();
+    let mut json_ptr: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_generate_hardware_package_json(
+            cl_code.as_ptr(),
+            tgt.as_ptr(),
+            board.as_ptr(),
+            out_dir.as_ptr(),
+            &mut json_ptr,
+            &mut err_ptr,
+        )
+    };
+
+    assert!(ok, "cron_generate_hardware_package_json must succeed");
+    assert!(!json_ptr.is_null());
+
+    let json_str = unsafe { CStr::from_ptr(json_ptr).to_str().unwrap() };
+    assert!(json_str.contains("\"package\": \"cron_silicon_deployment\""));
+    assert!(json_str.contains("sky130_fd_sc_hd"));
+    assert!(json_str.contains("\"multiplier_free\": true"));
+
+    unsafe {
+        cron_string_free(json_ptr);
+    }
+}
+
+
 
 
 

@@ -245,6 +245,17 @@ def _setup_ffi(lib):
             ctypes.POINTER(ctypes.c_char_p),
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_generate_hardware_package_json
+    if hasattr(lib, "cron_generate_hardware_package_json"):
+        lib.cron_generate_hardware_package_json.restype = ctypes.c_bool
+        lib.cron_generate_hardware_package_json.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -992,6 +1003,9 @@ __all__ = [
     "serve",
     "finetune",
     "bench",
+    "fpga",
+    "tapeout",
+    "flash",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1718,6 +1732,66 @@ def bench(target: Optional[str] = None) -> Dict[str, Any]:
         _lib.cron_string_free(out_json)
 
     return json.loads(raw_json)
+
+def fpga(
+    source: str,
+    board: str = "icebreaker",
+    target: Optional[str] = None,
+    out_dir: str = "fpga_deployment",
+) -> Dict[str, Any]:
+    """
+    Synthesizes and packages an FPGA deployment bitstream bundle for Lattice iCE40, ECP5, or AMD Artix-7.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_generate_hardware_package_json"):
+        raise RuntimeError("Hardware FPGA package synthesis not available in native library")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+
+    tgt_bytes = target.encode("utf-8") if target else None
+    board_bytes = board.encode("utf-8") if board else None
+    out_dir_bytes = out_dir.encode("utf-8") if out_dir else None
+
+    ok = _lib.cron_generate_hardware_package_json(
+        source.encode("utf-8"),
+        tgt_bytes,
+        board_bytes,
+        out_dir_bytes,
+        ctypes.byref(out_json),
+        ctypes.byref(out_err),
+    )
+
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown synthesis error"
+        raise RuntimeError(f"FPGA synthesis failed: {err}")
+
+    raw_json = out_json.value.decode("utf-8") if out_json.value else "{}"
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+
+    return json.loads(raw_json)
+
+def tapeout(
+    source: str,
+    pdk: str = "sky130",
+    out_dir: str = "asic_tapeout",
+) -> Dict[str, Any]:
+    """
+    Generates OpenLane SkyWater 130nm or TSMC N5 ASIC tape-out GDSII synthesis package with Wishbone bus harness.
+    """
+    return fpga(source, board="", target=pdk, out_dir=out_dir)
+
+def flash(
+    source: str,
+    board: str = "icebreaker",
+    out_dir: str = "silicon_deployment",
+) -> Dict[str, Any]:
+    """
+    Synthesizes physical FPGA bitstream package with 1-click flashing scripts (iceprog / openFPGALoader).
+    """
+    return fpga(source, board=board, out_dir=out_dir)
+
 
 
 
