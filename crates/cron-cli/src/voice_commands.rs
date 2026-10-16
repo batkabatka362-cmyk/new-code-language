@@ -19,6 +19,8 @@ pub fn handle_voice_command(args: &[String]) {
         println!("    --play                   Play audio response immediately through system speaker");
         println!("    --stream                 Stream speech incrementally in real-time clause chunks (<45ms latency)");
         println!("    --interactive            Run continuous interactive voice conversation loop");
+        println!("    --mic                    Live continuous microphone voice REPL (hands-free)");
+        println!("    --record <seconds>       Record <N> seconds from microphone as voice query");
         println!("    --json                   Emit full turn telemetry in JSON format");
         println!();
         println!("EXAMPLES:");
@@ -35,6 +37,8 @@ pub fn handle_voice_command(args: &[String]) {
     let mut emit_json = false;
     let mut is_interactive = false;
     let mut is_streaming = false;
+    let mut is_mic = false;
+    let mut record_seconds: Option<f32> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -78,6 +82,21 @@ pub fn handle_voice_command(args: &[String]) {
             "--stream" => {
                 is_streaming = true;
                 i += 1;
+            }
+            "--mic" => {
+                is_mic = true;
+                auto_play = true; // Auto-play speech in live mic mode
+                i += 1;
+            }
+            "--record" => {
+                if i + 1 < args.len() {
+                    if let Ok(sec) = args[i + 1].parse::<f32>() {
+                        record_seconds = Some(sec);
+                    }
+                    i += 2;
+                } else {
+                    i += 1;
+                }
             }
             _ => {
                 if prompt_text.is_none() && !args[i].starts_with('-') {
@@ -161,6 +180,54 @@ pub fn handle_voice_command(args: &[String]) {
         println!("================================================================================");
         return;
     }
+
+    if is_mic {
+        println!("================================================================================");
+        println!(" CRON SOVEREIGN HANDS-FREE LIVE MICROPHONE VOICE AGENT");
+        println!(" Hardware Capture: Pure-Rust WinMM (winmm.dll) / ALSA / CoreAudio");
+        println!(" [Press Ctrl+C to exit conversation]");
+        println!("================================================================================");
+        let mut loop_session = cronc::LiveVoiceLoop::new(16000);
+
+        loop {
+            println!("\n🎙️  [LISTENING] Speak now (recording 3.5s window)...");
+            match loop_session.run_single_turn(3.5) {
+                Ok(turn) => {
+                    if turn.user_query.trim().is_empty() {
+                        println!("  (No speech detected)");
+                        continue;
+                    }
+                    println!("👤 User: \"{}\"", turn.user_query);
+                    println!("🧠 CRON Mind: \"{}\"", turn.response_text);
+                    println!("🗣️  Spoken: \"{}\"", turn.spoken_text);
+                    if auto_play {
+                        let temp_reply = std::env::temp_dir().join("live_mic_reply.wav");
+                        let _ = std::fs::write(&temp_reply, &turn.wav_bytes);
+                        cronc::VoiceAgent::play_wav_file(&temp_reply);
+                        let _ = std::fs::remove_file(&temp_reply);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[MIC ERROR] {}", e);
+                    break;
+                }
+            }
+        }
+        return;
+    }
+
+    let input_wav = if let Some(secs) = record_seconds {
+        let temp_in = std::env::temp_dir().join("mic_user_record.wav");
+        println!("🎙️  Recording {:.1} seconds from microphone...", secs);
+        if let Err(e) = cronc::record_mic_to_file(&temp_in, secs, 16000) {
+            eprintln!("[ERROR] Microphone recording failed: {}", e);
+            std::process::exit(1);
+        }
+        println!("  Recording complete. Processing through 0-DSP STT...");
+        Some(temp_in.to_str().unwrap().to_string())
+    } else {
+        input_wav
+    };
 
     let turn_result = if let Some(ref in_wav) = input_wav {
         match agent.interact_wav_file(std::path::Path::new(in_wav)) {
