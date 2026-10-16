@@ -11,6 +11,7 @@ pub struct PhotonicWave {
 }
 
 #[derive(Debug, Clone)]
+#[repr(align(64))]
 pub struct CoreEngine {
     pub id: usize,
     pub registers: [u32; 16],
@@ -557,38 +558,30 @@ impl CoreEngine {
                         self.trigger_trap(0x0001);
                     }
                 } else if imm == 5 || imm == 6 || mode == '.' {
-                    // Bit-exact 16-element ternary Dot Product (BitNet 1.58b)
+                    // Bit-exact 16-element ternary Dot Product (BitNet 1.58b) via hardware POPCNT
                     let reg_a = self.registers[d];
                     let reg_b = self.registers[s];
-                    let mut sum: i32 = 0;
-                    for i in 0..16 {
-                        let code_a = (reg_a >> (i * 2)) & 0x3;
-                        let code_b = (reg_b >> (i * 2)) & 0x3;
-                        let sa: i32 = match code_a {
-                            1 => 1,
-                            2 => -1,
-                            _ => 0,
-                        };
-                        let sb: i32 = match code_b {
-                            1 => 1,
-                            2 => -1,
-                            _ => 0,
-                        };
-                        sum = sum.wrapping_add(sa * sb);
-                    }
+                    const MASK_ODD: u32 = 0x55555555;
+                    let p_a = reg_a & MASK_ODD;
+                    let n_a = (reg_a >> 1) & MASK_ODD;
+                    let p_b = reg_b & MASK_ODD;
+                    let n_b = (reg_b >> 1) & MASK_ODD;
+                    let pos_matches = (p_a & p_b) | (n_a & n_b);
+                    let neg_matches = (p_a & n_b) | (n_a & p_b);
+                    let sum = (pos_matches.count_ones() as i32) - (neg_matches.count_ones() as i32);
                     self.registers[d] = sum as u32;
                 } else {
-                    // Default Ternary Dot Product MAC calculation
+                    // Default Ternary Dot Product MAC calculation via hardware POPCNT
                     let reg_a = self.registers[d];
                     let reg_b = self.registers[s];
-                    let mut sum: i32 = 0;
-                    for i in 0..16 {
-                        let code_a = (reg_a >> (i * 2)) & 0x3;
-                        let code_b = (reg_b >> (i * 2)) & 0x3;
-                        let sa: i32 = if code_a == 1 { 1 } else if code_a == 2 { -1 } else { 0 };
-                        let sb: i32 = if code_b == 1 { 1 } else if code_b == 2 { -1 } else { 0 };
-                        sum = sum.wrapping_add(sa * sb);
-                    }
+                    const MASK_ODD: u32 = 0x55555555;
+                    let p_a = reg_a & MASK_ODD;
+                    let n_a = (reg_a >> 1) & MASK_ODD;
+                    let p_b = reg_b & MASK_ODD;
+                    let n_b = (reg_b >> 1) & MASK_ODD;
+                    let pos_matches = (p_a & p_b) | (n_a & n_b);
+                    let neg_matches = (p_a & n_b) | (n_a & p_b);
+                    let sum = (pos_matches.count_ones() as i32) - (neg_matches.count_ones() as i32);
                     self.registers[d] = if sum != 0 { sum as u32 } else { self.registers[d] ^ self.registers[s] };
                 }
             }

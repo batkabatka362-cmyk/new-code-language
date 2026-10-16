@@ -28,8 +28,6 @@
 //             [9]    Terminator: '>' (Execute) or '!' (Halt/Trap)
 // ============================================================================
 
-use std::collections::HashSet;
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClSlot {
     pub raw: String,
@@ -908,19 +906,19 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
             ));
         }
 
-        let slot_tokens: Vec<&str> = slots_str.split_whitespace().collect();
-        if slot_tokens.is_empty() || slot_tokens.len() > 4 {
-            return Err(format!(
-                "Bundle Error at line {}: Each .cl VLIW bundle must contain between 1 and 4 slots, found {}",
-                line_num,
-                slot_tokens.len()
-            ));
-        }
-
-        let mut dest_regs_in_bundle: HashSet<usize> = HashSet::new();
+        let mut slot_count = 0;
+        let mut dest_regs_mask: u16 = 0;
         let mut optical_count_in_bundle = 0;
 
-        for slot_str in slot_tokens {
+        for slot_str in slots_str.split_whitespace() {
+            slot_count += 1;
+            if slot_count > 4 {
+                return Err(format!(
+                    "Bundle Error at line {}: Each .cl VLIW bundle must contain between 1 and 4 slots, found > 4",
+                    line_num
+                ));
+            }
+
             let slot = parse_slot(slot_str)
                 .map_err(|e| format!("Line {}: {}", line_num, e))?;
 
@@ -948,7 +946,7 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
 
             // RAW (Read-After-Write) hazard check within same cycle
             if let Some(src) = slot.src_reg {
-                if src > 0 && dest_regs_in_bundle.contains(&src) {
+                if src > 0 && (dest_regs_mask & (1 << src)) != 0 {
                     let msg = format!(
                         "Line {}: Read-After-Write (RAW) latency hazard: Register R{:X} read in same cycle before write commits in {}",
                         line_num, src, cycle_part
@@ -971,17 +969,25 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
             // Hazard check: Write-After-Write (WAW) conflict detection
             if let Some(dest) = slot.dest_reg {
                 if dest > 0 && slot.opcode != "HL" && slot.opcode != "NO" {
-                    if dest_regs_in_bundle.contains(&dest) {
+                    let mask = 1 << dest;
+                    if (dest_regs_mask & mask) != 0 {
                         let msg = format!(
                             "Line {}: Write-After-Write (WAW) hazard detected on Register R{:X} within cycle {}",
                             line_num, dest, cycle_part
                         );
                         report.hazards.push(msg);
                     } else {
-                        dest_regs_in_bundle.insert(dest);
+                        dest_regs_mask |= mask;
                     }
                 }
             }
+        }
+
+        if slot_count == 0 {
+            return Err(format!(
+                "Bundle Error at line {}: Each .cl VLIW bundle must contain between 1 and 4 slots, found 0",
+                line_num
+            ));
         }
 
         report.total_bundles += 1;
