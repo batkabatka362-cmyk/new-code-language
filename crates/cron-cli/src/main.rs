@@ -67,7 +67,7 @@ fn print_help() {
     println!("    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench");
     println!("    cl-macro <file.clm> [-o out.cl] High-Level Macro Assembler (.clm) to VLIW 10-char bundles");
     println!("    cl-import [options]            Neural Model & Tensor Importer (BitNet 1.58b ternary quantization)");
-    println!("    cl-lsp <file.cl>               Real-time Language Server Protocol & CRC/Hazard diagnostic linter");
+    println!("    lsp [file.cl] [--stdio|--dap]  Start LSP 3.17 language server or analyze .cl file");
     println!("    visualize [opts] [-o out.html] Unified 3D Torus, Hexagonal ATP & CL-LoRA interactive visualizer");
     println!("    mla [opts]                     Multi-Head Latent Attention (MLA / DeepSeek-V3) & 0-DSP RTL");
     println!("    morph [opts]                   Agglutinative Mongolian morphological tokenizer & script bridge");
@@ -9458,9 +9458,43 @@ fn handle_import_fx_command(args: &[String]) {
 }
 
 fn handle_cl_lsp_command(args: &[String]) {
-    if args.is_empty() {
-        eprintln!("Usage: cron cl-lsp <file.cl>");
-        std::process::exit(1);
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        println!("================================================================================");
+        println!(" CRON LANGUAGE SERVER PROTOCOL (LSP 3.17) & DAP DEBUGGER");
+        println!("================================================================================");
+        println!("Provides real-time IDE language features for VS Code, Neovim, and Antigravity IDE:\n");
+        println!("  - Real-time VLIW 4-slot structure and hazard linting");
+        println!("  - CRC-8 ATM auto-repair QuickFix code actions");
+        println!("  - Micro-architecture hover docs (Cycles, Energy pJ, FLOPs, Bank Access)");
+        println!("  - Auto-completions, Inlay hints, and DAP hardware debugging");
+        println!();
+        println!("USAGE:");
+        println!("    cron lsp [options] [file.cl]");
+        println!();
+        println!("OPTIONS:");
+        println!("    --stdio, start     Start stdio JSON-RPC 2.0 language server daemon (default)");
+        println!("    --dap              Start Debug Adapter Protocol (DAP) hardware debugger");
+        println!("    <file.cl>          Analyze specific .cl file offline and print diagnostics");
+        println!("    -h, --help         Display this help message");
+        return;
+    }
+
+    if args.is_empty() || args.iter().any(|a| a == "--stdio" || a == "start" || a == "serve") {
+        if let Err(e) = cron_lsp::run_stdio_server() {
+            eprintln!("[CRON LSP ERROR] {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if args.iter().any(|a| a == "--dap" || a == "dap") {
+        let stdin = std::io::stdin();
+        let stdout = std::io::stdout();
+        if let Err(e) = cron_lsp::run_dap_server(stdin.lock(), stdout.lock()) {
+            eprintln!("[CRON DAP ERROR] {}", e);
+            std::process::exit(1);
+        }
+        return;
     }
 
     let input_path = &args[0];

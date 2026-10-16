@@ -2,7 +2,7 @@
   "name": "cron-lang",
   "displayName": "CRON Cognitive Language Support",
   "description": "Language support, LSP 3.17, DAP Hardware Debugger, 16-Bank PGAS SRAM Memory Inspector, and 4D-Torus & Wafer-65536 Silicon Visualizer for CRON Silicon Machine Language (.cl)",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "publisher": "cron-ai",
   "engines": {
     "vscode": "^1.80.0"

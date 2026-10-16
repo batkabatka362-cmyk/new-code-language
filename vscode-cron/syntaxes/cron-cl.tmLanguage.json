@@ -27,7 +27,7 @@
     "semantic_directives": {
       "patterns": [
         {
-          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include|target|ipc_target|data|pgas|circuit|sync|align|clifford))\\b",
+          "match": "^\\s*(\\.(stage|tensor|fuse|flow|layout|weights|const|lut|include|target|ipc_target|data|pgas|circuit|sync|align|clifford|mla|titans|liquid|lora|mongol|reasoning))\\b",
           "captures": {
             "1": { "name": "keyword.control.directive.cron-cl" }
           }
