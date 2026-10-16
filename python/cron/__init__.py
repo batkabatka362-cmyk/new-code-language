@@ -6,6 +6,7 @@ High-performance binding for the 256-Core 4D-Torus Living AGI & .cl Machine Code
 import ctypes
 import os
 import sys
+import subprocess
 from typing import Dict, List, Optional, Tuple, Any
 
 # Locate compiled native shared library (Windows .dll, Linux .so, macOS .dylib)
@@ -1042,6 +1043,12 @@ __all__ = [
     "audio_synth",
     "audio_transcribe",
     "voice_interact",
+    "pkg_init",
+    "pkg_add",
+    "pkg_install",
+    "pkg_build",
+    "pkg_test",
+    "pkg_search",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1941,6 +1948,59 @@ def voice_interact(query_or_wav: str, output_wav: Optional[str] = "voice_reply.w
             subprocess.run(["aplay", abs_path])
 
     return res
+
+def _find_cron_cli() -> str:
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    candidates = [
+        os.path.join(base_dir, "target", "debug", "cron.exe"),
+        os.path.join(base_dir, "target", "release", "cron.exe"),
+        os.path.join(base_dir, "target", "debug", "cron"),
+        os.path.join(base_dir, "target", "release", "cron"),
+    ]
+    found = next((c for c in candidates if os.path.exists(c)), None)
+    return found if found else "cron"
+
+def pkg_init(name: str, path: str = ".") -> str:
+    """Initializes a new CRON package project."""
+    res = subprocess.run([_find_cron_cli(), "pkg", "init", name, path], capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"cron pkg init failed: {res.stderr or res.stdout}")
+    return res.stdout.strip()
+
+def pkg_add(dep: str, project_dir: str = ".") -> str:
+    """Adds a dependency to the current CRON project."""
+    res = subprocess.run([_find_cron_cli(), "pkg", "add", dep], cwd=project_dir, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"cron pkg add failed: {res.stderr or res.stdout}")
+    return res.stdout.strip()
+
+def pkg_install(project_dir: str = ".") -> str:
+    """Resolves and installs dependencies for the project."""
+    res = subprocess.run([_find_cron_cli(), "pkg", "install"], cwd=project_dir, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"cron pkg install failed: {res.stderr or res.stdout}")
+    return res.stdout.strip()
+
+def pkg_build(project_dir: str = ".") -> str:
+    """Builds all .cl kernel source files in the project."""
+    res = subprocess.run([_find_cron_cli(), "pkg", "build"], cwd=project_dir, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"cron pkg build failed: {res.stderr or res.stdout}")
+    return res.stdout.strip()
+
+def pkg_test(project_dir: str = ".") -> str:
+    """Runs test kernels in the project tests/ directory."""
+    res = subprocess.run([_find_cron_cli(), "pkg", "test"], cwd=project_dir, capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"cron pkg test failed: {res.stderr or res.stdout}")
+    return res.stdout.strip()
+
+def pkg_search(query: str = "") -> str:
+    """Searches the CRON online package registry."""
+    res = subprocess.run([_find_cron_cli(), "pkg", "search", query], capture_output=True, text=True)
+    if res.returncode != 0:
+        raise RuntimeError(f"cron pkg search failed: {res.stderr or res.stdout}")
+    return res.stdout.strip()
 
 
 

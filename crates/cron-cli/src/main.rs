@@ -1455,12 +1455,104 @@ fn main() {
             }
         }
         "pkg" => {
-            if args.len() < 3 {
-                println!("USAGE: cron pkg <tree|list|publish|verify|search>");
+            if args.len() < 3 || args[2] == "--help" || args[2] == "-h" {
+                println!("================================================================================");
+                println!(" CRON PACKAGE MANAGER (cron pkg)");
+                println!("================================================================================");
+                println!("USAGE:");
+                println!("    cron pkg <subcommand> [options]");
+                println!();
+                println!("SUBCOMMANDS:");
+                println!("    init <name> [dir]    Initialize a new CRON package project");
+                println!("    add <dep>            Add a dependency to cron.toml and update lockfile");
+                println!("    remove <dep>         Remove a dependency from cron.toml");
+                println!("    install              Resolve and fetch dependencies from registry");
+                println!("    build                Build all .cl kernels in project");
+                println!("    test                 Run tests in tests/ directory");
+                println!("    tree, list           Display dependency tree graph");
+                println!("    verify               Cryptographically verify SHA-256 package checksums");
+                println!("    search [query]       Search online CRON package registry");
+                println!("    publish              Package and publish project to registry bundle");
                 return;
             }
             let cur_dir = env::current_dir().unwrap();
             match args[2].as_str() {
+                "init" | "new" => {
+                    let name = if args.len() >= 4 { &args[3] } else { "cron_project" };
+                    let target_dir = if args.len() >= 5 {
+                        cur_dir.join(&args[4])
+                    } else if args.len() == 4 && name != "." {
+                        cur_dir.join(name)
+                    } else {
+                        cur_dir.clone()
+                    };
+                    match pkg::init_project(&target_dir, name) {
+                        Ok(msg) => println!("[SUCCESS] {}", msg),
+                        Err(e) => {
+                            eprintln!("[ERROR] Init failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "add" => {
+                    if args.len() < 4 {
+                        eprintln!("Usage: cron pkg add <dependency-name>");
+                        std::process::exit(1);
+                    }
+                    let dep_name = &args[3];
+                    match pkg::add_dependency_to_project(&cur_dir, dep_name, None, Vec::new()) {
+                        Ok(msg) => println!("[SUCCESS] {}", msg),
+                        Err(e) => {
+                            eprintln!("[ERROR] Add failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "remove" | "rm" => {
+                    if args.len() < 4 {
+                        eprintln!("Usage: cron pkg remove <dependency-name>");
+                        std::process::exit(1);
+                    }
+                    let dep_name = &args[3];
+                    match pkg::remove_dependency_from_project(&cur_dir, dep_name) {
+                        Ok(msg) => println!("[SUCCESS] {}", msg),
+                        Err(e) => {
+                            eprintln!("[ERROR] Remove failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "install" | "restore" => {
+                    match pkg::install_project_dependencies(&cur_dir) {
+                        Ok(res) => {
+                            println!("[SUCCESS] Resolved and installed {} package(s)", res.total_packages);
+                            let lock_path = cur_dir.join("cron.lock");
+                            println!("  Updated lockfile: '{}'", lock_path.display());
+                        }
+                        Err(e) => {
+                            eprintln!("[ERROR] Install failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "build" => {
+                    match pkg::build_project(&cur_dir) {
+                        Ok(msg) => println!("[BUILD SUCCESS] {}", msg),
+                        Err(e) => {
+                            eprintln!("[BUILD ERROR] {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "test" => {
+                    match pkg::test_project(&cur_dir) {
+                        Ok(msg) => println!("[TEST SUCCESS] {}", msg),
+                        Err(e) => {
+                            eprintln!("[TEST ERROR] {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 "tree" | "list" => {
                     let manifest_path = cur_dir.join("cron.toml");
                     let lock_path = cur_dir.join("cron.lock");
@@ -1524,7 +1616,7 @@ fn main() {
                     }
                 }
                 other => {
-                    eprintln!("Unknown pkg subcommand '{}'. Valid: tree, list, publish, verify, search", other);
+                    eprintln!("Unknown pkg subcommand '{}'. Valid: init, add, remove, install, build, test, tree, list, publish, verify, search", other);
                 }
             }
         }

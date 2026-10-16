@@ -131,8 +131,9 @@ impl Manifest {
                         _ => {}
                     },
                     "dependencies" => {
-                        let dep = parse_dependency(key, raw_val)?;
-                        manifest.dependencies.insert(key.to_string(), dep);
+                        let clean_k = clean_string(key);
+                        let dep = parse_dependency(&clean_k, raw_val)?;
+                        manifest.dependencies.insert(clean_k, dep);
                     }
                     _ => {}
                 }
