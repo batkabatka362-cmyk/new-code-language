@@ -112,3 +112,27 @@ fn test_direct_jump_table_jit_stress_test() {
     assert!(core.is_halted);
 }
 
+#[test]
+fn test_register_pressure_aware_scheduling_and_live_intervals() {
+    let cl_code = r#"
+    B0000: '==01#00A> _NO00#000> _NO00#000> _NO00#000>
+    B0001: '==02#014> _NO00#000> _NO00#000> _NO00#000>
+    B0002: '==03#01E> _NO00#000> _NO00#000> _NO00#000>
+    B0003: '==04#028> _NO00#000> _NO00#000> _NO00#000>
+    B0004: _PO01+200> _NO00#000> _NO00#000> _NO00#000>
+    B0005: _PO03+400> _NO00#000> _NO00#000> _NO00#000>
+    B0006: _HL00$008! _NO00#000> _NO00#000> _NO00#000>
+    "#;
+
+    let report = optimize_cl_program(cl_code).expect("Optimizer must succeed");
+    assert!(report.max_register_pressure > 0);
+    assert!(report.max_register_pressure <= 16, "Register pressure must never exceed 16 registers");
+    assert!(report.optimized_bundles < 7, "Compaction should schedule operations in parallel");
+
+    // Verify JIT functional execution correctness
+    let core = run_cl_jit(&report.optimized_code).expect("JIT execution must succeed");
+    assert_eq!(core.r[1], 0x0A + 0x14);
+    assert_eq!(core.r[3], 0x1E + 0x28);
+    assert!(core.is_halted);
+}
+

@@ -12,7 +12,6 @@
 // 100% Pure Rust - Zero External Dependencies.
 // ============================================================================
 
-use std::collections::HashSet;
 use crate::cl_heal::{heal_slot_crc, CANONICAL_NOP};
 use crate::cl_lang::{parse_slot, ClSlot};
 
@@ -55,6 +54,7 @@ pub struct ClOptReport {
     pub speedup_percentage: f64,
     pub peephole_rewrites_count: usize,
     pub critical_path_depth: usize,
+    pub max_register_pressure: usize,
     pub optimized_code: String,
 }
 
@@ -67,6 +67,8 @@ struct ClDagNode {
     slot: ClSlot,
     read_regs: Vec<usize>,
     write_regs: Vec<usize>,
+    read_mask: u16,
+    write_mask: u16,
     parents: Vec<usize>,
     children: Vec<usize>,
     critical_path_depth: usize,
@@ -74,6 +76,7 @@ struct ClDagNode {
     is_optical: bool,
     is_halt: bool,
     is_barrier: bool,
+    kills_mask: u16,
 }
 
 /// Default entry point: Super-optimizes .cl machine code with Level 2 DAG scheduler
@@ -123,7 +126,7 @@ pub fn optimize_cl_program_advanced(source: &str, config: &ClOptConfig) -> Resul
     }
 }
 
-/// Level 1: Fast In-Order Greedy Hazard Packer
+/// Level 1: Fast In-Order Greedy Hazard Packer (Zero-Allocation Bitmask Engine)
 fn optimize_level1_greedy(
     source: &str,
     slots: Vec<String>,
@@ -133,8 +136,8 @@ fn optimize_level1_greedy(
 ) -> Result<ClOptReport, String> {
     let mut optimized_bundles: Vec<Vec<String>> = Vec::new();
     let mut current_bundle: Vec<String> = Vec::with_capacity(4);
-    let mut current_dest_regs: HashSet<usize> = HashSet::new();
-    let mut current_src_regs: HashSet<usize> = HashSet::new();
+    let mut current_dest_mask: u16 = 0;
+    let mut current_src_mask: u16 = 0;
     let mut has_optical_in_current = false;
 
     for slot_str in slots {
@@ -146,29 +149,26 @@ fn optimize_level1_greedy(
             }
 
             if let Some(src) = slot.src_reg {
-                if src > 0 && current_dest_regs.contains(&src) {
+                if src > 0 && src < 16 && (current_dest_mask & (1 << src)) != 0 {
                     can_pack = false;
                 }
             }
 
             if let Some(dest) = slot.dest_reg {
-                if dest > 0 && current_dest_regs.contains(&dest) {
-                    can_pack = false;
-                }
-                if dest > 0 && current_src_regs.contains(&dest) {
+                if dest > 0 && dest < 16 && ((current_dest_mask | current_src_mask) & (1 << dest)) != 0 {
                     can_pack = false;
                 }
             }
 
             if can_pack {
                 if let Some(d) = slot.dest_reg {
-                    if d > 0 {
-                        current_dest_regs.insert(d);
+                    if d > 0 && d < 16 {
+                        current_dest_mask |= 1 << d;
                     }
                 }
                 if let Some(s) = slot.src_reg {
-                    if s > 0 {
-                        current_src_regs.insert(s);
+                    if s > 0 && s < 16 {
+                        current_src_mask |= 1 << s;
                     }
                 }
                 if slot.opcode == "OP" {
@@ -182,18 +182,18 @@ fn optimize_level1_greedy(
                 optimized_bundles.push(current_bundle);
 
                 current_bundle = Vec::with_capacity(4);
-                current_dest_regs.clear();
-                current_src_regs.clear();
+                current_dest_mask = 0;
+                current_src_mask = 0;
                 has_optical_in_current = false;
 
                 if let Some(d) = slot.dest_reg {
-                    if d > 0 {
-                        current_dest_regs.insert(d);
+                    if d > 0 && d < 16 {
+                        current_dest_mask |= 1 << d;
                     }
                 }
                 if let Some(s) = slot.src_reg {
-                    if s > 0 {
-                        current_src_regs.insert(s);
+                    if s > 0 && s < 16 {
+                        current_src_mask |= 1 << s;
                     }
                 }
                 if slot.opcode == "OP" {
@@ -211,7 +211,7 @@ fn optimize_level1_greedy(
         optimized_bundles.push(current_bundle);
     }
 
-    finalize_report(source, optimized_bundles, total_input_bundles, active_input_slots, original_ipc, 0, 1)
+    finalize_report(source, optimized_bundles, total_input_bundles, active_input_slots, original_ipc, 0, 1, 0)
 }
 
 /// Level 2: Advanced DAG-Based Critical-Path List Scheduler with Peephole Rewrites
@@ -240,8 +240,8 @@ fn optimize_level2_dag(
     // 3. Critical-Path Analysis
     let max_depth = calculate_critical_paths(&mut dag_nodes);
 
-    // 4. Critical-Path List Scheduling with Heterogeneous Way Placement
-    let scheduled_bundles = schedule_dag_list(&dag_nodes);
+    // 4. Critical-Path List Scheduling with Register-Pressure Awareness
+    let (scheduled_bundles, peak_register_pressure) = schedule_dag_list(&dag_nodes);
 
     finalize_report(
         source,
@@ -251,6 +251,7 @@ fn optimize_level2_dag(
         original_ipc,
         peephole_count,
         max_depth,
+        peak_register_pressure,
     )
 }
 
@@ -421,12 +422,27 @@ fn build_dependency_dag(slots: &[String]) -> Result<Vec<ClDagNode>, String> {
         let is_halt = slot.opcode == "HL";
         let is_barrier = slot.opcode == "bb";
 
+        let mut read_mask = 0u16;
+        for &r in &read_regs {
+            if r < 16 {
+                read_mask |= 1 << r;
+            }
+        }
+        let mut write_mask = 0u16;
+        for &w in &write_regs {
+            if w < 16 {
+                write_mask |= 1 << w;
+            }
+        }
+
         nodes.push(ClDagNode {
             id: idx,
             raw: slot_str.clone(),
             slot,
             read_regs,
             write_regs,
+            read_mask,
+            write_mask,
             parents: Vec::new(),
             children: Vec::new(),
             critical_path_depth: 1,
@@ -434,40 +450,28 @@ fn build_dependency_dag(slots: &[String]) -> Result<Vec<ClDagNode>, String> {
             is_optical,
             is_halt,
             is_barrier,
+            kills_mask: 0,
         });
     }
 
-    // Connect DAG edges based on RAW, WAR, WAW, and Control dependencies
+    // Connect DAG edges based on RAW, WAR, WAW, and Control dependencies using fast bitmasks
     for i in 0..nodes.len() {
         for j in 0..i {
             let mut has_dep = false;
 
             // 1. RAW: j writes what i reads
-            for &w in &nodes[j].write_regs {
-                if nodes[i].read_regs.contains(&w) {
-                    has_dep = true;
-                    break;
-                }
+            if (nodes[j].write_mask & nodes[i].read_mask) != 0 {
+                has_dep = true;
             }
 
             // 2. WAR: j reads what i writes (cannot reorder i before j)
-            if !has_dep {
-                for &r in &nodes[j].read_regs {
-                    if nodes[i].write_regs.contains(&r) {
-                        has_dep = true;
-                        break;
-                    }
-                }
+            if !has_dep && (nodes[j].read_mask & nodes[i].write_mask) != 0 {
+                has_dep = true;
             }
 
             // 3. WAW: j writes what i writes
-            if !has_dep {
-                for &w in &nodes[j].write_regs {
-                    if nodes[i].write_regs.contains(&w) {
-                        has_dep = true;
-                        break;
-                    }
-                }
+            if !has_dep && (nodes[j].write_mask & nodes[i].write_mask) != 0 {
+                has_dep = true;
             }
 
             // 4. Control / Barrier: Halt and global barrier serialize dependencies
@@ -480,6 +484,25 @@ fn build_dependency_dag(slots: &[String]) -> Result<Vec<ClDagNode>, String> {
                 nodes[j].children.push(i);
             }
         }
+    }
+
+    // Live Interval Analysis: Find last use for each register across the DAG
+    let mut last_use: [Option<usize>; 16] = [None; 16];
+    for (node_id, node) in nodes.iter().enumerate() {
+        for &r in &node.read_regs {
+            if r > 0 && r < 16 {
+                last_use[r] = Some(node_id);
+            }
+        }
+    }
+    for (node_id, node) in nodes.iter_mut().enumerate() {
+        let mut kills = 0u16;
+        for &r in &node.read_regs {
+            if r > 0 && r < 16 && last_use[r] == Some(node_id) {
+                kills |= 1 << r;
+            }
+        }
+        node.kills_mask = kills;
     }
 
     Ok(nodes)
@@ -507,11 +530,11 @@ fn calculate_critical_paths(nodes: &mut [ClDagNode]) -> usize {
     max_global_depth
 }
 
-/// List Scheduler: Fills 4-slot VLIW bundles prioritizing critical-path depth and heterogeneous silicon ways
-fn schedule_dag_list(nodes: &[ClDagNode]) -> Vec<Vec<String>> {
+/// List Scheduler: Fills 4-slot VLIW bundles prioritizing critical-path depth, register pressure, and heterogeneous silicon ways
+fn schedule_dag_list(nodes: &[ClDagNode]) -> (Vec<Vec<String>>, usize) {
     let n = nodes.len();
     if n == 0 {
-        return Vec::new();
+        return (Vec::new(), 0);
     }
 
     let mut scheduled = vec![false; n];
@@ -519,15 +542,32 @@ fn schedule_dag_list(nodes: &[ClDagNode]) -> Vec<Vec<String>> {
     let mut in_degrees: Vec<usize> = nodes.iter().map(|node| node.parents.len()).collect();
 
     let mut bundles: Vec<Vec<String>> = Vec::new();
+    let mut live_regs_mask: u16 = 0;
+    let mut peak_register_pressure: usize = 0;
 
     while scheduled.iter().any(|&s| !s) {
+        let current_pressure = live_regs_mask.count_ones() as usize;
+        peak_register_pressure = peak_register_pressure.max(current_pressure);
+
         // Collect ready candidates (all parents completed in earlier cycles)
         let mut ready: Vec<usize> = (0..n)
             .filter(|&i| !scheduled[i] && in_degrees[i] == 0)
             .collect();
 
-        // Sort ready candidates by critical_path_depth descending, then id ascending
+        // Register Pressure-Aware Prioritization:
+        // When register pressure is high (>= 10), prioritize nodes that kill/consume live registers
         ready.sort_by(|&a, &b| {
+            let node_a = &nodes[a];
+            let node_b = &nodes[b];
+
+            if current_pressure >= 10 {
+                let kills_a = node_a.kills_mask.count_ones();
+                let kills_b = node_b.kills_mask.count_ones();
+                if kills_a != kills_b {
+                    return kills_b.cmp(&kills_a);
+                }
+            }
+
             nodes[b].critical_path_depth
                 .cmp(&nodes[a].critical_path_depth)
                 .then_with(|| a.cmp(&b))
@@ -536,8 +576,8 @@ fn schedule_dag_list(nodes: &[ClDagNode]) -> Vec<Vec<String>> {
         // Current cycle VLIW bundle: 4 slots
         let mut current_bundle: [Option<String>; 4] = [None, None, None, None];
         let mut cycle_scheduled_nodes: Vec<usize> = Vec::new();
-        let mut current_dest_regs: HashSet<usize> = HashSet::new();
-        let mut current_src_regs: HashSet<usize> = HashSet::new();
+        let mut current_dest_mask: u16 = 0;
+        let mut current_src_mask: u16 = 0;
         let mut has_optical_in_current = false;
         let mut halt_scheduled = false;
 
@@ -554,36 +594,12 @@ fn schedule_dag_list(nodes: &[ClDagNode]) -> Vec<Vec<String>> {
                 continue;
             }
 
-            // Intra-cycle RAW hazard: cannot read a register written in the same cycle
-            let mut hazard = false;
-            for &r in &node.read_regs {
-                if current_dest_regs.contains(&r) {
-                    hazard = true;
-                    break;
-                }
-            }
+            // Branchless intra-cycle RAW, WAW, and WAR hazard detection via bitmasks:
+            let raw_hazard = (node.read_mask & current_dest_mask) != 0;
+            let waw_hazard = (node.write_mask & current_dest_mask) != 0;
+            let war_hazard = (node.write_mask & current_src_mask) != 0;
 
-            // Intra-cycle WAW hazard: cannot write to the same register twice in same cycle
-            if !hazard {
-                for &w in &node.write_regs {
-                    if current_dest_regs.contains(&w) {
-                        hazard = true;
-                        break;
-                    }
-                }
-            }
-
-            // Intra-cycle WAR hazard: cannot overwrite a register being read in the same cycle
-            if !hazard {
-                for &w in &node.write_regs {
-                    if current_src_regs.contains(&w) {
-                        hazard = true;
-                        break;
-                    }
-                }
-            }
-
-            if hazard {
+            if raw_hazard || waw_hazard || war_hazard {
                 continue;
             }
 
@@ -606,12 +622,12 @@ fn schedule_dag_list(nodes: &[ClDagNode]) -> Vec<Vec<String>> {
                 scheduled[node_id] = true;
                 cycle_scheduled_nodes.push(node_id);
 
-                for &w in &node.write_regs {
-                    current_dest_regs.insert(w);
-                }
-                for &r in &node.read_regs {
-                    current_src_regs.insert(r);
-                }
+                current_dest_mask |= node.write_mask;
+                current_src_mask |= node.read_mask;
+
+                live_regs_mask |= node.write_mask & 0xFFFE;
+                live_regs_mask &= !node.kills_mask;
+
                 if node.is_optical {
                     has_optical_in_current = true;
                 }
@@ -634,6 +650,8 @@ fn schedule_dag_list(nodes: &[ClDagNode]) -> Vec<Vec<String>> {
                 current_bundle[0] = Some(node.raw.clone());
                 scheduled[forced_id] = true;
                 cycle_scheduled_nodes.push(forced_id);
+                live_regs_mask |= node.write_mask & 0xFFFE;
+                live_regs_mask &= !node.kills_mask;
                 if node.is_halt {
                     halt_scheduled = true;
                 }
@@ -687,7 +705,7 @@ fn schedule_dag_list(nodes: &[ClDagNode]) -> Vec<Vec<String>> {
         }
     }
 
-    bundles
+    (bundles, peak_register_pressure)
 }
 
 /// Finalizes the report and formats the optimized .cl source code
@@ -699,6 +717,7 @@ fn finalize_report(
     original_ipc: f64,
     peephole_rewrites_count: usize,
     critical_path_depth: usize,
+    max_register_pressure: usize,
 ) -> Result<ClOptReport, String> {
     let final_bundles = bundles.len().max(1);
     let optimized_ipc = active_slots as f64 / final_bundles as f64;
@@ -716,8 +735,8 @@ fn finalize_report(
         total_input_bundles, final_bundles, speedup, original_ipc, optimized_ipc
     ));
     optimized_code.push_str(&format!(
-        "; Critical Path Depth: {} cycles | Peephole Rewrites: {} | Active Ops: {}\n",
-        critical_path_depth, peephole_rewrites_count, active_slots
+        "; Critical Path Depth: {} cycles | Peephole Rewrites: {} | Active Ops: {} | Peak Reg Pressure: {}/16\n",
+        critical_path_depth, peephole_rewrites_count, active_slots, max_register_pressure
     ));
     optimized_code.push_str("; ============================================================\n\n");
 
@@ -737,6 +756,7 @@ fn finalize_report(
         speedup_percentage: speedup,
         peephole_rewrites_count,
         critical_path_depth,
+        max_register_pressure,
         optimized_code,
     })
 }
