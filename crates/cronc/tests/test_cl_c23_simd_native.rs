@@ -41,6 +41,8 @@ fn test_c23_code_generation_preamble_and_simd_headers() {
     assert!(c23_code.contains("#include <time.h>"));
     assert!(c23_code.contains("CRON_SIMD_AVX512"));
     assert!(c23_code.contains("CRON_SIMD_AVX2"));
+    assert!(c23_code.contains("CRON_SIMD_NEON"));
+    assert!(c23_code.contains("cron_subbyte_ternary_dot_neon"));
     assert!(c23_code.contains("cron_subbyte_ternary_dot"));
     assert!(c23_code.contains("cron_photonic_simd_dot"));
     assert!(c23_code.contains("cron_silu"));
