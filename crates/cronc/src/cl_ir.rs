@@ -158,42 +158,45 @@ impl MicroOp {
     }
 
     fn parse_sphere_geodesic_slot(slot_str: &str) -> Self {
-        let chars: Vec<char> = slot_str.chars().collect();
-        let decode_b64 = |c: char| -> u8 {
+        let bytes = slot_str.as_bytes();
+        if bytes.len() != 10 {
+            return MicroOp::Raw { raw: slot_str.to_string() };
+        }
+        let decode_b64 = |c: u8| -> u8 {
             match c {
-                'A'..='Z' => c as u8 - b'A',
-                'a'..='z' => c as u8 - b'a' + 26,
-                '0'..='9' => c as u8 - b'0' + 52,
-                '+' | '-' => 62,
-                '/' | '_' => 63,
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' | b'-' => 62,
+                b'/' | b'_' => 63,
                 _ => 0,
             }
         };
         const BASE90: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[]^_{|}~";
-        let decode_b90 = |c: char| -> u8 {
-            BASE90.iter().position(|&b| b == c as u8).unwrap_or(0) as u8
+        let decode_b90 = |c: u8| -> u8 {
+            BASE90.iter().position(|&b| b == c).unwrap_or(0) as u8
         };
 
-        let mode_val = decode_b64(chars[1]);
+        let mode_val = decode_b64(bytes[1]);
         let s_id = ((mode_val >> 4) & 0x3) as u8;
         let is_err = ((mode_val >> 3) & 1) == 1;
         let is_rd = ((mode_val >> 1) & 1) == 1;
         let is_wr = (mode_val & 1) == 1;
 
-        let w = decode_b90(chars[2]) as u32;
-        let lat_x = decode_b90(chars[3]) as u32;
-        let lon_z = decode_b90(chars[4]) as u32;
-        let quad = match chars[5] {
-            '1' | 'N' | 'A' => 1,
-            '2' | 'W' | 'B' => 2,
-            '3' | 'S' | 'C' => 3,
-            '4' | 'E' | 'D' => 4,
+        let w = decode_b90(bytes[2]) as u32;
+        let lat_x = decode_b90(bytes[3]) as u32;
+        let lon_z = decode_b90(bytes[4]) as u32;
+        let quad = match bytes[5] {
+            b'1' | b'N' | b'A' => 1,
+            b'2' | b'W' | b'B' => 2,
+            b'3' | b'S' | b'C' => 3,
+            b'4' | b'E' | b'D' => 4,
             _ => 1,
         };
-        let step = decode_b90(chars[6]) as u32;
-        let alu_op = chars[7];
-        let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as u8 % 16;
-        let val = chars[9].to_digit(16).unwrap_or(step % 16);
+        let step = decode_b90(bytes[6]) as u32;
+        let alu_op = bytes[7] as char;
+        let reg = (bytes[8] as char).to_digit(16).unwrap_or(s_id as u32) as u8 % 16;
+        let val = (bytes[9] as char).to_digit(16).unwrap_or(step % 16);
 
         MicroOp::SphereGeodesic {
             head: s_id,

@@ -20,6 +20,12 @@ pub struct Coord4D {
     pub w: usize,
 }
 
+impl Default for Coord4D {
+    fn default() -> Self {
+        Self { x: 0, y: 0, z: 0, w: 0 }
+    }
+}
+
 impl Coord4D {
     pub fn new(x: usize, y: usize, z: usize, w: usize) -> Result<Self, String> {
         if x >= 4 || y >= 4 || z >= 4 || w >= 4 {
@@ -157,7 +163,7 @@ impl ClLinker {
 
     /// Parse a multi-core .cl file and perform spatial linking
     pub fn parse_and_link(&mut self, source: &str) -> Result<ClLinkReport, String> {
-        let mut current_coord = Coord4D::new(0, 0, 0, 0).unwrap();
+        let mut current_coord = Coord4D::default();
         let mut core_lines: HashMap<Coord4D, Vec<String>> = HashMap::new();
 
         // Pass 1: Partition lines by .core [x, y, z, w]: directives
@@ -168,17 +174,19 @@ impl ClLinker {
                 if let Some(bracket_start) = trimmed.find('[') {
                     if let Some(bracket_end) = trimmed.find(']') {
                         let inner = &trimmed[bracket_start + 1..bracket_end];
-                        let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
-                        if parts.len() != 4 {
+                        let mut parts = inner.split(',').map(|s| s.trim());
+                        let (Some(x_str), Some(y_str), Some(z_str), Some(w_str)) =
+                            (parts.next(), parts.next(), parts.next(), parts.next())
+                        else {
                             return Err(format!(
                                 "Malformed .core directive '{}': expected 4 coordinates [x, y, z, w]",
                                 trimmed
                             ));
-                        }
-                        let x = parts[0].parse::<usize>().map_err(|_| format!("Invalid x coord in '{}'", trimmed))?;
-                        let y = parts[1].parse::<usize>().map_err(|_| format!("Invalid y coord in '{}'", trimmed))?;
-                        let z = parts[2].parse::<usize>().map_err(|_| format!("Invalid z coord in '{}'", trimmed))?;
-                        let w = parts[3].parse::<usize>().map_err(|_| format!("Invalid w coord in '{}'", trimmed))?;
+                        };
+                        let x = x_str.parse::<usize>().map_err(|_| format!("Invalid x coord in '{}'", trimmed))?;
+                        let y = y_str.parse::<usize>().map_err(|_| format!("Invalid y coord in '{}'", trimmed))?;
+                        let z = z_str.parse::<usize>().map_err(|_| format!("Invalid z coord in '{}'", trimmed))?;
+                        let w = w_str.parse::<usize>().map_err(|_| format!("Invalid w coord in '{}'", trimmed))?;
                         current_coord = Coord4D::new(x, y, z, w)?;
                         core_lines.entry(current_coord).or_default();
                         continue;
