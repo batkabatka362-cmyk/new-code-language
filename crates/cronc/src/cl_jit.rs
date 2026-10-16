@@ -8,6 +8,7 @@
 use crate::cl_lang::parse_slot;
 
 #[derive(Debug, Clone)]
+#[repr(align(64))]
 pub struct ClJitCore {
     pub r: [u32; 16],
     pub bank_r: [[u32; 16]; 16],
@@ -117,14 +118,16 @@ fn parse_imm_val(slot: &str) -> Option<u32> {
 
 #[inline(always)]
 fn subbyte_ternary_dot(reg_a: u32, reg_b: u32) -> u32 {
-    let mut sum: i32 = 0;
-    for i in 0..16 {
-        let code_a = (reg_a >> (i * 2)) & 0x3;
-        let code_b = (reg_b >> (i * 2)) & 0x3;
-        let sa: i32 = if code_a == 1 { 1 } else if code_a == 2 { -1 } else { 0 };
-        let sb: i32 = if code_b == 1 { 1 } else if code_b == 2 { -1 } else { 0 };
-        sum += sa * sb;
-    }
+    const MASK_ODD: u32 = 0x55555555;
+    let p_a = reg_a & MASK_ODD;
+    let n_a = (reg_a >> 1) & MASK_ODD;
+    let p_b = reg_b & MASK_ODD;
+    let n_b = (reg_b >> 1) & MASK_ODD;
+
+    let pos_matches = (p_a & p_b) | (n_a & n_b);
+    let neg_matches = (p_a & n_b) | (n_a & p_b);
+
+    let sum = (pos_matches.count_ones() as i32) - (neg_matches.count_ones() as i32);
     sum as u32
 }
 
@@ -164,8 +167,15 @@ pub fn run_cl_jit(cl_code: &str) -> Result<ClJitCore, String> {
     Ok(core)
 }
 
+struct JitBundle {
+    cycle: usize,
+    slots: Vec<crate::cl_lang::ClSlot>,
+    imm_vals: Vec<u32>,
+}
+
 pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), String> {
-    let mut bundles: Vec<(usize, Vec<String>)> = Vec::new();
+    let mut bundles: Vec<JitBundle> = Vec::new();
+    let mut cycle_to_idx: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
 
     for line in cl_code.lines() {
         let trimmed = line.trim();
@@ -188,8 +198,23 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
 
         if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
             let cycle_num = cycle_part.trim().trim_start_matches('B').parse::<usize>().unwrap_or(bundles.len() + 1);
-            let slots: Vec<String> = slots_part.split_whitespace().map(|s| s.to_string()).collect();
-            bundles.push((cycle_num, slots));
+            let mut parsed_slots = Vec::new();
+            let mut imm_vals = Vec::new();
+            for slot_str in slots_part.split_whitespace() {
+                if let Ok(slot) = parse_slot(slot_str) {
+                    let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
+                    let imm_val = parse_imm_val(slot_str).unwrap_or(imm_nibble as u32);
+                    imm_vals.push(imm_val);
+                    parsed_slots.push(slot);
+                }
+            }
+            let idx = bundles.len();
+            cycle_to_idx.insert(cycle_num, idx);
+            bundles.push(JitBundle {
+                cycle: cycle_num,
+                slots: parsed_slots,
+                imm_vals,
+            });
         }
     }
 
@@ -203,51 +228,51 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
     while pc < bundles.len() && !core.is_halted && total_cycles < 10_000_000 {
         total_cycles += 1;
         core.cycle_count += 1;
-        let (cycle_num, ref slots) = bundles[pc];
+        let bundle = &bundles[pc];
 
-        for slot_str in slots {
+        for (slot_idx, slot) in bundle.slots.iter().enumerate() {
             if core.is_halted {
                 break;
             }
 
-                if let Ok(slot) = parse_slot(slot_str) {
-                    if slot.opcode == "NO" {
-                        continue;
-                    }
+            if slot.opcode == "NO" {
+                continue;
+            }
 
-                    let d = slot.dest_reg.unwrap_or_else(|| {
-                        if slot_str.len() >= 5 {
-                            usize::from_str_radix(&slot_str[3..5], 16).unwrap_or(0)
-                        } else {
-                            0
-                        }
-                    }) % 16;
-                    let s = slot.src_reg.unwrap_or(0) % 16;
-                    let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
-                    if slot.prefix == '`' {
-                        let chars: Vec<char> = slot_str.chars().collect();
-                        if chars.len() == 10 {
-                            let mode_val = decode_base64_val(chars[1]);
-                            let s_id = ((mode_val >> 4) & 0x3) as usize;
-                            let is_err = ((mode_val >> 3) & 1) == 1;
-                            let _is_pen = ((mode_val >> 2) & 1) == 1;
-                            let is_rd = ((mode_val >> 1) & 1) == 1;
-                            let is_wr = (mode_val & 1) == 1;
+            let d = slot.dest_reg.unwrap_or_else(|| {
+                let bytes = slot.raw.as_bytes();
+                if bytes.len() >= 5 {
+                    crate::cl_lang::parse_hex2_bytes(bytes[3], bytes[4]).unwrap_or(0)
+                } else {
+                    0
+                }
+            }) % 16;
+            let s = slot.src_reg.unwrap_or(0) % 16;
+            let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
+            if slot.prefix == '`' {
+                let bytes = slot.raw.as_bytes();
+                if bytes.len() == 10 {
+                    let mode_val = decode_base64_val(bytes[1] as char);
+                    let s_id = ((mode_val >> 4) & 0x3) as usize;
+                    let is_err = ((mode_val >> 3) & 1) == 1;
+                    let _is_pen = ((mode_val >> 2) & 1) == 1;
+                    let is_rd = ((mode_val >> 1) & 1) == 1;
+                    let is_wr = (mode_val & 1) == 1;
 
-                            let w = decode_base90_val(chars[2]) as u32;
-                            let lat_x = decode_base90_val(chars[3]) as u32;
-                            let lon_z = decode_base90_val(chars[4]) as u32;
-                            let quad = match chars[5] {
-                                '1' | 'N' | 'A' => 1,
-                                '2' | 'W' | 'B' => 2,
-                                '3' | 'S' | 'C' => 3,
-                                '4' | 'E' | 'D' => 4,
-                                _ => 1,
-                            };
-                            let step = decode_base90_val(chars[6]) as u32;
-                            let alu_op = chars[7];
-                            let reg = chars[8].to_digit(16).unwrap_or(s_id as u32) as usize % 16;
-                            let val = chars[9].to_digit(16).unwrap_or(step % 16);
+                    let w = decode_base90_val(bytes[2] as char) as u32;
+                    let lat_x = decode_base90_val(bytes[3] as char) as u32;
+                    let lon_z = decode_base90_val(bytes[4] as char) as u32;
+                    let quad = match bytes[5] {
+                        b'1' | b'N' | b'A' => 1,
+                        b'2' | b'W' | b'B' => 2,
+                        b'3' | b'S' | b'C' => 3,
+                        b'4' | b'E' | b'D' => 4,
+                        _ => 1,
+                    };
+                    let step = decode_base90_val(bytes[6] as char) as u32;
+                    let alu_op = bytes[7] as char;
+                    let reg = (bytes[8] as char).to_digit(16).unwrap_or(s_id as u32) as usize % 16;
+                    let val = (bytes[9] as char).to_digit(16).unwrap_or(step % 16);
 
                             // Discrete Spherical Curvature Metric:
                             // R = W (Radial Layer Depth)
@@ -290,7 +315,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         continue;
                     }
 
-                    let imm_val = parse_imm_val(slot_str).unwrap_or(imm_nibble as u32);
+                    let imm_val = bundle.imm_vals[slot_idx];
 
                     match slot.opcode.as_str() {
                         op if op.starts_with('=') || slot.prefix == '\'' => {
@@ -736,7 +761,7 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                             }
                         }
                         "JS" => {
-                            core.ras.push(cycle_num + 1);
+                            core.ras.push(bundle.cycle + 1);
                             core.branch_target = Some(imm_val as usize);
                         }
                         "RT" => {
@@ -772,11 +797,10 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
                         }
                         _ => {}
                     }
-                }
             }
 
         if let Some(target) = core.branch_target.take() {
-            let tgt_idx = bundles.iter().position(|(c, _)| *c == target).unwrap_or(target);
+            let tgt_idx = *cycle_to_idx.get(&target).unwrap_or(&target);
             pc = tgt_idx;
         } else {
             pc += 1;

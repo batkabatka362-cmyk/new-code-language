@@ -298,6 +298,29 @@ fn apply_algebraic_peephole(slots: &[String]) -> (Vec<String>, usize) {
                     }
                 }
             }
+
+            // Self-XOR cancellation: R_d ^ R_d = 0 (rewrites to canonical immediate load 0)
+            if (slot.opcode == "XO" || (slot.opcode == "PO" && slot.mode == '^'))
+                && slot.dest_reg == slot.src_reg
+                && slot.dest_reg.is_some()
+            {
+                let d = slot.dest_reg.unwrap();
+                let zero_slot = format!("'=={:02X}#000>", d);
+                result.push(zero_slot);
+                rewrites += 1;
+                i += 1;
+                continue;
+            }
+
+            // Identity Add/Sub by 0: PO+ or PO- with R0/imm 0 when adding to itself with zero delta
+            if (slot.opcode == "PO" && (slot.mode == '+' || slot.mode == '-'))
+                && slot.src_reg == Some(0)
+                && slot.imm_token == '0'
+            {
+                rewrites += 1;
+                i += 1;
+                continue;
+            }
         }
 
         result.push(slots[i].clone());

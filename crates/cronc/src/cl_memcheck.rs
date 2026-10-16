@@ -11,7 +11,6 @@
 // 100% Pure Rust - Zero External Dependencies.
 // ============================================================================
 
-use std::collections::HashMap;
 use crate::cl_lang::{parse_slot, ClSlot};
 
 pub const NUM_BANKS: usize = 16;
@@ -106,7 +105,7 @@ pub fn prove_strided_conflict_freedom(stride_bytes: usize, num_elements: usize, 
 }
 
 /// Memory access descriptor extracted from a VLIW slot
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Default)]
 #[allow(dead_code)]
 struct ExtractedMemOp {
     slot_idx: usize,
@@ -139,12 +138,14 @@ pub fn verify_cl_memory_access(cl_source: &str, options: &MemcheckOptions) -> Re
             if let Some(start_bracket) = trimmed.find('[') {
                 if let Some(end_bracket) = trimmed.find(']') {
                     let coords_str = &trimmed[start_bracket + 1..end_bracket];
-                    let parts: Vec<&str> = coords_str.split(',').map(|s| s.trim()).collect();
-                    if parts.len() == 4 {
-                        let x: usize = parts[0].parse().unwrap_or(0) % 4;
-                        let y: usize = parts[1].parse().unwrap_or(0) % 4;
-                        let z: usize = parts[2].parse().unwrap_or(0) % 4;
-                        let w: usize = parts[3].parse().unwrap_or(0) % 4;
+                    let mut parts = coords_str.split(',').map(|s| s.trim());
+                    if let (Some(x_str), Some(y_str), Some(z_str), Some(w_str)) =
+                        (parts.next(), parts.next(), parts.next(), parts.next())
+                    {
+                        let x: usize = x_str.parse().unwrap_or(0) % 4;
+                        let y: usize = y_str.parse().unwrap_or(0) % 4;
+                        let z: usize = z_str.parse().unwrap_or(0) % 4;
+                        let w: usize = w_str.parse().unwrap_or(0) % 4;
                         current_core_id = x + 4 * y + 16 * z + 64 * w;
                     }
                 }
@@ -162,10 +163,10 @@ pub fn verify_cl_memory_access(cl_source: &str, options: &MemcheckOptions) -> Re
                 break;
             }
 
-            let slot_strs: Vec<&str> = slots_part.split_whitespace().collect();
-            let mut cycle_mem_ops: Vec<ExtractedMemOp> = Vec::new();
+            let mut cycle_mem_ops = [ExtractedMemOp::default(); 4];
+            let mut mem_ops_count = 0;
 
-            for (slot_idx, &s_str) in slot_strs.iter().enumerate().take(4) {
+            for (slot_idx, s_str) in slots_part.split_whitespace().take(4).enumerate() {
                 if let Ok(slot) = parse_slot(s_str) {
                     let d = slot.dest_reg.unwrap_or(0) % 16;
                     let s = slot.src_reg.unwrap_or(0) % 16;
@@ -191,25 +192,29 @@ pub fn verify_cl_memory_access(cl_source: &str, options: &MemcheckOptions) -> Re
                             ));
                         }
 
-                        cycle_mem_ops.push(ExtractedMemOp {
-                            slot_idx,
-                            addr,
-                            is_write,
-                        });
+                        if mem_ops_count < 4 {
+                            cycle_mem_ops[mem_ops_count] = ExtractedMemOp {
+                                slot_idx,
+                                addr,
+                                is_write,
+                            };
+                            mem_ops_count += 1;
+                        }
                         total_accesses += 1;
                     }
                 }
             }
 
             // Check for bank conflicts among all memory operations in this cycle
-            if cycle_mem_ops.is_empty() {
+            if mem_ops_count == 0 {
                 conflict_free_cycles += 1;
                 continue;
             }
 
-            let mut bank_counts: HashMap<usize, Vec<usize>> = HashMap::new();
+            let mut bank_counts = [0u8; NUM_BANKS];
+            let mut bank_slots: [[usize; 4]; NUM_BANKS] = [[0; 4]; NUM_BANKS];
 
-            for op in &cycle_mem_ops {
+            for op in &cycle_mem_ops[..mem_ops_count] {
                 let bank = if options.enable_swizzling {
                     compute_swizzled_bank(op.addr)
                 } else {
@@ -217,25 +222,30 @@ pub fn verify_cl_memory_access(cl_source: &str, options: &MemcheckOptions) -> Re
                 };
 
                 histogram[bank] += 1;
-                bank_counts.entry(bank).or_default().push(op.slot_idx);
+                let cnt = bank_counts[bank] as usize;
+                if cnt < 4 {
+                    bank_slots[bank][cnt] = op.slot_idx;
+                    bank_counts[bank] += 1;
+                }
             }
 
             let mut cycle_has_conflict = false;
             let mut cycle_penalty = 0;
 
-            for (bank, slots) in bank_counts {
-                if slots.len() > 1 {
+            for bank in 0..NUM_BANKS {
+                let cnt = bank_counts[bank] as usize;
+                if cnt > 1 {
                     cycle_has_conflict = true;
-                    let penalty = slots.len() - 1;
+                    let penalty = cnt - 1;
                     cycle_penalty += penalty;
 
                     conflict_details.push(CycleBankConflict {
                         cycle: cycles_analyzed,
                         core_id: current_core_id,
                         conflicted_bank: bank,
-                        access_count: slots.len(),
+                        access_count: cnt,
                         stall_penalty_cycles: penalty,
-                        slots,
+                        slots: bank_slots[bank][..cnt].to_vec(),
                     });
                 }
             }

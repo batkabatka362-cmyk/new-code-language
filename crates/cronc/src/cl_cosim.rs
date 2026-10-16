@@ -495,14 +495,16 @@ fn parse_imm_val(slot: &str) -> Option<u32> {
 
 #[inline(always)]
 fn subbyte_ternary_dot(reg_a: u32, reg_b: u32) -> u32 {
-    let mut sum: i32 = 0;
-    for i in 0..16 {
-        let code_a = (reg_a >> (i * 2)) & 0x3;
-        let code_b = (reg_b >> (i * 2)) & 0x3;
-        let sa: i32 = if code_a == 1 { 1 } else if code_a == 2 { -1 } else { 0 };
-        let sb: i32 = if code_b == 1 { 1 } else if code_b == 2 { -1 } else { 0 };
-        sum += sa * sb;
-    }
+    const MASK_ODD: u32 = 0x55555555;
+    let p_a = reg_a & MASK_ODD;
+    let n_a = (reg_a >> 1) & MASK_ODD;
+    let p_b = reg_b & MASK_ODD;
+    let n_b = (reg_b >> 1) & MASK_ODD;
+
+    let pos_matches = (p_a & p_b) | (n_a & n_b);
+    let neg_matches = (p_a & n_b) | (n_a & p_b);
+
+    let sum = (pos_matches.count_ones() as i32) - (neg_matches.count_ones() as i32);
     sum as u32
 }
 

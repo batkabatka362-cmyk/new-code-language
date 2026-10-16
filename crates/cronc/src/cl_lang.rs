@@ -378,8 +378,48 @@ pub fn audit_alphabet_coverage(cl_code: &str) -> AlphabetAuditReport {
     }
 }
 
+#[inline(always)]
+pub fn hex_digit_val(b: u8) -> Option<usize> {
+    match b {
+        b'0'..=b'9' => Some((b - b'0') as usize),
+        b'a'..=b'f' => Some((b - b'a' + 10) as usize),
+        b'A'..=b'F' => Some((b - b'A' + 10) as usize),
+        _ => None,
+    }
+}
+
+#[inline(always)]
+pub fn parse_hex2_bytes(b0: u8, b1: u8) -> Option<usize> {
+    let hi = hex_digit_val(b0)?;
+    let lo = hex_digit_val(b1)?;
+    Some((hi << 4) | lo)
+}
+
+#[inline(always)]
+pub fn is_valid_cl_prefix(b: u8) -> bool {
+    matches!(
+        b,
+        b'_' | b'\'' | b'~' | b'@' | b'%' | b'&' | b'^' | b'|'
+        | b'$' | b'#' | b':' | b'\\' | b'*' | b'+' | b'-' | b'/'
+        | b'?' | b'!' | b'=' | b'<' | b'>' | b'.' | b'(' | b')' | b'`'
+    )
+}
+
+#[inline(always)]
+pub fn is_non_writer_opcode(op: &[u8; 2]) -> bool {
+    matches!(
+        op,
+        b"SH" | b"RS" | b"HL" | b"DW" | b"YD" | b"NO"
+        | b"JP" | b"BZ" | b"BN" | b"BL" | b"BG" | b"JL" | b"LT" | b"JS" | b"SR" | b"BY"
+        | b"TI" | b"TD" | b"TW" | b"ZL" | b"DE" | b"PW" | b"DN" | b"DS" | b"bb" | b"BB"
+        | b"RT" | b"FE" | b"PR" | b"CC" | b"DD" | b"EE" | b"11" | b"88" | b"99" | b"aa"
+        | b"cc" | b"co" | b"dd" | b"ee" | b"ff" | b"00" | b"FF"
+    )
+}
+
 pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
-    if raw.len() != 10 {
+    let bytes = raw.as_bytes();
+    if bytes.len() != 10 {
         return Err(format!(
             "Slot width violation: Each .cl slot must be exactly 10 characters, found {} ('{}')",
             raw.len(),
@@ -387,58 +427,44 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
         ));
     }
 
-    let chars: Vec<char> = raw.chars().collect();
-    let prefix = chars[0];
-    let is_valid_prefix = prefix == '_' || prefix == '\'' || prefix == '~' || prefix == '@'
-        || prefix == '%' || prefix == '&' || prefix == '^' || prefix == '|'
-        || prefix == '$' || prefix == '#' || prefix == ':' || prefix == '\\'
-        || prefix == '*' || prefix == '+' || prefix == '-' || prefix == '/'
-        || prefix == '?' || prefix == '!' || prefix == '=' || prefix == '<' || prefix == '>'
-        || prefix == '.' || prefix == '(' || prefix == ')' || prefix == '`';
-    if !is_valid_prefix {
-        return Err(format!("Invalid slot prefix '{}' in '{}'", prefix, raw));
+    let prefix_b = bytes[0];
+    if !is_valid_cl_prefix(prefix_b) {
+        return Err(format!("Invalid slot prefix '{}' in '{}'", prefix_b as char, raw));
     }
+    let prefix = prefix_b as char;
 
-    let opcode: String = if prefix == '`' {
+    let op_bytes: [u8; 2] = [bytes[1], bytes[2]];
+    let opcode: String = if prefix_b == b'`' {
         "SM".to_string()
-    } else if chars[1..3].iter().collect::<String>() == "_N" || raw.starts_with("__NOP") {
+    } else if (op_bytes[0] == b'_' && op_bytes[1] == b'N') || raw.starts_with("__NOP") {
         "NO".to_string()
     } else {
-        chars[1..3].iter().collect()
+        match std::str::from_utf8(&op_bytes) {
+            Ok(s) => s.to_string(),
+            Err(_) => return Err(format!("Invalid non-UTF8 opcode bytes in '{}'", raw)),
+        }
     };
-    let terminator = chars[9];
-    let is_valid_terminator = terminator.is_ascii_graphic();
-    if !is_valid_terminator {
+
+    let term_b = bytes[9];
+    if !term_b.is_ascii_graphic() {
         return Err(format!(
             "Invalid slot terminator '{}' in '{}' (expected valid CL terminator)",
-            terminator, raw
+            term_b as char, raw
         ));
     }
+    let terminator = term_b as char;
 
-    // Parse dest register if applicable (only for instructions that write to a register)
-    let dest_str: String = chars[3..5].iter().collect();
-    let is_writer = opcode != "SH" && opcode != "RS" 
-                 && opcode != "HL" && opcode != "DW" && opcode != "YD" && opcode != "NO"
-                 && opcode != "JP" && opcode != "BZ" && opcode != "BN" && opcode != "BL" && opcode != "BG"
-                 && opcode != "JL" && opcode != "LT" && opcode != "JS" && opcode != "SR" && opcode != "BY"
-                 && opcode != "TI" && opcode != "TD" && opcode != "TW" && opcode != "ZL"
-                 && opcode != "DE" && opcode != "PW" && opcode != "DW" && opcode != "DN" && opcode != "DS"
-                 && opcode != "bb" && opcode != "BB" && opcode != "RT" && opcode != "FE" && opcode != "PR"
-                 && opcode != "CC" && opcode != "DD" && opcode != "EE" && opcode != "11"
-                 && opcode != "88" && opcode != "99" && opcode != "aa" && opcode != "cc"
-                 && opcode != "co" && opcode != "dd" && opcode != "ee" && opcode != "ff"
-                 && opcode != "00" && opcode != "FF";
+    let is_writer = !is_non_writer_opcode(&op_bytes);
     let dest_reg = if is_writer {
-        usize::from_str_radix(&dest_str, 16).ok()
+        parse_hex2_bytes(bytes[3], bytes[4])
     } else {
         None
     };
 
-    let mode = chars[5];
-    let src_str: String = chars[6..7].iter().collect();
-    let src_reg = usize::from_str_radix(&src_str, 16).ok();
-    let parity_token = chars[7];
-    let imm_token = chars[8];
+    let mode = bytes[5] as char;
+    let src_reg = hex_digit_val(bytes[6]);
+    let parity_token = bytes[7] as char;
+    let imm_token = bytes[8] as char;
 
     Ok(ClSlot {
         raw: raw.to_string(),
@@ -790,8 +816,10 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
             ("sram", r.trim())
         } else if let Some(r) = trimmed.strip_prefix(".hbm") {
             ("hbm", r.trim())
+        } else if let Some(r) = trimmed.strip_prefix(".noc") {
+            ("noc", r.trim())
         } else {
-            ("noc", trimmed.strip_prefix(".noc").unwrap().trim())
+            ("unknown", trimmed)
         };
         let mut size_kb = if space == "sram" { 64 } else if space == "hbm" { 16777216 } else { 0 };
         let mut bank = 0usize;
@@ -995,7 +1023,8 @@ pub fn pack_slot_with_crc8(
 ) -> String {
     let payload = format!("{}{}{}{}{}{}", prefix, op, dest_hex, mode, src_char, imm_char);
     let crc8 = compute_crc8_atm(payload.as_bytes());
-    let crc_nibble = format!("{:1X}", crc8 & 0x0F).chars().next().unwrap();
+    const HEX_DIGITS: &[u8; 16] = b"0123456789ABCDEF";
+    let crc_nibble = HEX_DIGITS[(crc8 & 0x0F) as usize] as char;
     format!(
         "{}{}{}{}{}{}{}{}",
         prefix, op, dest_hex, mode, src_char, crc_nibble, imm_char, term
@@ -1021,53 +1050,83 @@ pub fn verify_token_crc8(raw: &str) -> bool {
 /// Standard 10-character slots store 12-bit immediate in chars [6..9] and parity/term in [9].
 /// Branch targets store full 16-bit cycle target in chars [6..10].
 pub fn parse_slot_immediate(slot: &str) -> Option<u32> {
-    if slot.len() == 10 {
-        if let Some(hash_pos) = slot.find('#') {
-            let is_branch = slot.starts_with('!')
-                || slot[1..3].eq("JP") || slot[1..3].eq("BZ")
-                || slot[1..3].eq("BN") || slot[1..3].eq("BL")
-                || slot[1..3].eq("BG") || slot[1..3].eq("JL")
-                || slot[1..3].eq("JS");
+    let bytes = slot.as_bytes();
+    if bytes.len() == 10 {
+        if let Some(hash_pos) = bytes.iter().position(|&b| b == b'#') {
+            let is_branch = bytes[0] == b'!'
+                || &bytes[1..3] == b"JP" || &bytes[1..3] == b"BZ"
+                || &bytes[1..3] == b"BN" || &bytes[1..3] == b"BL"
+                || &bytes[1..3] == b"BG" || &bytes[1..3] == b"JL"
+                || &bytes[1..3] == b"JS";
 
+            let rest = &bytes[hash_pos + 1..];
             if is_branch {
-                let hex_part: String = slot[hash_pos + 1..]
-                    .chars()
-                    .take(4)
-                    .take_while(|c| c.is_ascii_hexdigit())
-                    .collect();
-                return u32::from_str_radix(&hex_part, 16).ok();
+                let mut val = 0u32;
+                let mut count = 0;
+                for &b in rest.iter().take(4) {
+                    if let Some(d) = hex_digit_val(b) {
+                        val = (val << 4) | (d as u32);
+                        count += 1;
+                    } else {
+                        break;
+                    }
+                }
+                return if count > 0 { Some(val) } else { None };
             }
 
-            let part3: String = slot[hash_pos + 1..]
-                .chars()
-                .take(3)
-                .take_while(|c| c.is_ascii_hexdigit())
-                .collect();
-            let v3 = u32::from_str_radix(&part3, 16).ok();
-
-            let part4: String = slot[hash_pos + 1..]
-                .chars()
-                .take(4)
-                .take_while(|c| c.is_ascii_hexdigit())
-                .collect();
-            if let Ok(v4) = u32::from_str_radix(&part4, 16) {
-                if v3 == Some(0) && v4 > 0 {
-                    return Some(v4);
+            let mut v3 = 0u32;
+            let mut c3 = 0;
+            for &b in rest.iter().take(3) {
+                if let Some(d) = hex_digit_val(b) {
+                    v3 = (v3 << 4) | (d as u32);
+                    c3 += 1;
+                } else {
+                    break;
                 }
             }
-            v3
+
+            let mut v4 = 0u32;
+            let mut c4 = 0;
+            for &b in rest.iter().take(4) {
+                if let Some(d) = hex_digit_val(b) {
+                    v4 = (v4 << 4) | (d as u32);
+                    c4 += 1;
+                } else {
+                    break;
+                }
+            }
+
+            if c4 > 0 && c3 > 0 && v3 == 0 && v4 > 0 {
+                return Some(v4);
+            }
+            if c3 > 0 {
+                return Some(v3);
+            }
+            return None;
         } else {
-            let chars: Vec<char> = slot.chars().collect();
-            chars[8].to_digit(16)
+            return hex_digit_val(bytes[8]).map(|d| d as u32);
         }
-    } else if let Some(hash_pos) = slot.find('#') {
-        let hex_part: String = slot[hash_pos + 1..]
-            .chars()
-            .take_while(|c| c.is_ascii_hexdigit())
-            .collect();
-        u32::from_str_radix(&hex_part, 16).ok()
+    } else if let Some(hash_pos) = bytes.iter().position(|&b| b == b'#') {
+        let mut val = 0u32;
+        let mut count = 0;
+        for &b in &bytes[hash_pos + 1..] {
+            if let Some(d) = hex_digit_val(b) {
+                val = (val << 4) | (d as u32);
+                count += 1;
+            } else {
+                break;
+            }
+        }
+        if count > 0 { Some(val) } else { None }
     } else {
-        let imm_digits: String = slot.chars().skip(3).filter(|c| c.is_ascii_hexdigit()).collect();
-        u32::from_str_radix(&imm_digits, 16).ok()
+        let mut val = 0u32;
+        let mut count = 0;
+        for &b in bytes.iter().skip(3) {
+            if let Some(d) = hex_digit_val(b) {
+                val = (val << 4) | (d as u32);
+                count += 1;
+            }
+        }
+        if count > 0 { Some(val) } else { None }
     }
 }
