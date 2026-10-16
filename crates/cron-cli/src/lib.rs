@@ -14,3 +14,6 @@ pub mod topological_commands;
 pub mod matrix4_commands;
 pub mod sovereign_commands;
 pub mod hf_commands;
+pub mod audio_commands;
+pub mod voice_commands;
+pub mod pkg_commands;
