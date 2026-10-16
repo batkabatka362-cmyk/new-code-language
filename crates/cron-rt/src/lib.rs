@@ -2047,6 +2047,47 @@ pub unsafe extern "C" fn cron_generate_hardware_package_json(
     true
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cron_bundle_playground_html(
+    out_html_path: *const c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    let out_path = if out_html_path.is_null() {
+        "cron_playground.html".to_string()
+    } else {
+        match CStr::from_ptr(out_html_path).to_str() {
+            Ok(s) => s.to_string(),
+            Err(e) => {
+                if !out_error.is_null() {
+                    *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+                }
+                return false;
+            }
+        }
+    };
+
+    match cronc::cl_playground::bundle_standalone_playground_html(None) {
+        Ok(html) => {
+            if let Err(e) = std::fs::write(&out_path, html) {
+                if !out_error.is_null() {
+                    *out_error = CString::new(format!("Write error: {}", e)).unwrap().into_raw();
+                }
+                return false;
+            }
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------

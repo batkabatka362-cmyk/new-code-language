@@ -78,6 +78,7 @@ fn print_help() {
     println!("    serve [opts]                   Start OpenAI-compatible REST server (/v1/chat/completions, SSE)");
     println!("    finetune <dataset> [opts]      On-device sub-byte CL-LoRA fine-tuning (<4.1KB L1, 0-FLOP backprop)");
     println!("    bench [file.cl] [opts]         Multi-core 4D-Torus hardware roofline & silicon profiler");
+    println!("    playground [opts]              WebAssembly In-Browser Playground & 3D 4D-Torus Simulator");
     println!("    fpga <file.cl> [opts]          Synthesize & package FPGA bitstream (iCE40, ECP5, Artix-7)");
     println!("    tapeout <file.cl> [opts]       OpenLane SkyWater 130nm / TSMC N5 ASIC tape-out flow");
     println!("    flash <file.cl> [opts]         Generate physical hardware synthesis package & drivers");
@@ -3998,45 +3999,144 @@ fn main() {
                 }
             }
         }
-        "cl-playground" => {
-            if args.len() < 3 {
-                eprintln!("Usage: cron cl-playground <file.cl> [--cycles N]");
-                std::process::exit(1);
+        "playground" | "web" | "cl-playground" => {
+            if args.iter().any(|a| a == "-h" || a == "--help") {
+                println!("================================================================================");
+                println!(" CRON WEBASSEMBLY INTERACTIVE 4D-TORUS PLAYGROUND & SIMULATOR");
+                println!("================================================================================");
+                println!("Launches or exports the WebAssembly-powered in-browser IDE with 3D 4D-Torus simulation:\n");
+                println!("USAGE:");
+                println!("    cron playground [options] [file.cl]");
+                println!();
+                println!("OPTIONS:");
+                println!("    --open             Automatically open interactive playground in default browser");
+                println!("    --bundle           Generate standalone offline single-file HTML (cron_playground.html)");
+                println!("    -o, --out <path>   Output path for bundled playground HTML (default: cron_playground.html)");
+                println!("    --cycles <N>       Run CLI terminal step simulator for N cycles (when file.cl given)");
+                println!("    -h, --help         Display this help message");
+                println!();
+                println!("EXAMPLES:");
+                println!("    cron playground --open");
+                println!("    cron playground --bundle -o my_playground.html");
+                println!("    cron cl-playground kernel.cl --cycles 20");
+                return;
             }
-            let input_path = &args[2];
-            let mut max_cycles = 10;
 
-            let mut i = 3;
+            let mut input_file: Option<String> = None;
+            let mut max_cycles = 10;
+            let mut auto_open = false;
+            let mut is_bundle = false;
+            let mut out_file = "cron_playground.html".to_string();
+
+            let mut i = 2;
             while i < args.len() {
-                if args[i] == "--cycles" && i + 1 < args.len() {
-                    if let Ok(c) = args[i + 1].parse::<usize>() {
-                        max_cycles = c;
+                match args[i].as_str() {
+                    "--cycles" => {
+                        if i + 1 < args.len() {
+                            if let Ok(c) = args[i + 1].parse::<usize>() {
+                                max_cycles = c;
+                            }
+                            i += 2;
+                        } else {
+                            i += 1;
+                        }
                     }
-                    i += 2;
-                } else {
-                    i += 1;
+                    "-o" | "--out" => {
+                        if i + 1 < args.len() {
+                            out_file = args[i + 1].clone();
+                            is_bundle = true;
+                            i += 2;
+                        } else {
+                            i += 1;
+                        }
+                    }
+                    "--open" => {
+                        auto_open = true;
+                        i += 1;
+                    }
+                    "--bundle" => {
+                        is_bundle = true;
+                        i += 1;
+                    }
+                    arg if !arg.starts_with('-') && input_file.is_none() => {
+                        input_file = Some(arg.to_string());
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
-            let cl_code = fs::read_to_string(input_path).unwrap_or_else(|e| {
-                eprintln!("Error reading '{}': {}", input_path, e);
-                std::process::exit(1);
-            });
+            if let Some(ref file_path) = input_file {
+                if !is_bundle && !auto_open {
+                    let cl_code = fs::read_to_string(file_path).unwrap_or_else(|e| {
+                        eprintln!("Error reading '{}': {}", file_path, e);
+                        std::process::exit(1);
+                    });
 
-            let mut session = cronc::cl_playground::ClPlaygroundSession::new(&cl_code);
-            let frames = session.run_all(max_cycles);
+                    let mut session = cronc::cl_playground::ClPlaygroundSession::new(&cl_code);
+                    let frames = session.run_all(max_cycles);
 
-            println!("================================================================================");
-            println!(" CRON 256-CORE MICROCODE INTERACTIVE PLAYGROUND & STEP SIMULATOR");
-            println!(" Target File: {} | Total Bundles Executed: {}", input_path, frames.len());
-            println!("================================================================================\n");
+                    println!("================================================================================");
+                    println!(" CRON 256-CORE MICROCODE INTERACTIVE PLAYGROUND & STEP SIMULATOR");
+                    println!(" Target File: {} | Total Bundles Executed: {}", file_path, frames.len());
+                    println!("================================================================================\n");
 
-            for f in &frames {
-                print!("{}", cronc::cl_playground::ClPlaygroundSession::render_frame(f));
-                println!();
+                    for f in &frames {
+                        print!("{}", cronc::cl_playground::ClPlaygroundSession::render_frame(f));
+                        println!();
+                    }
+
+                    println!("STATUS: PLAYGROUND SIMULATION COMPLETED WITH NOMINAL 4.0 IPC & ZERO HAZARDS");
+                    return;
+                }
             }
 
-            println!("STATUS: PLAYGROUND SIMULATION COMPLETED WITH NOMINAL 4.0 IPC & ZERO HAZARDS");
+            println!("================================================================================");
+            println!(" CRON WEBASSEMBLY IN-BROWSER PLAYGROUND & 4D-TORUS SIMULATOR");
+            println!("================================================================================");
+
+            match cronc::cl_playground::bundle_standalone_playground_html(None) {
+                Ok(html_content) => {
+                    if let Err(e) = fs::write(&out_file, html_content) {
+                        eprintln!("Error writing bundled playground to '{}': {}", out_file, e);
+                        std::process::exit(1);
+                    }
+
+                    println!("  [SUCCESS] Standalone Single-File WebAssembly Playground Created!");
+                    println!("  [Bundle File]  -> {}", out_file);
+                    println!("  [Architecture] -> Embedded Wasm (cron_wasm.wasm Base64) + 4D-Torus Three.js");
+                    println!("  [Offline Use]  -> 100% Zero-server dependency, works double-clicked in any browser!");
+                    println!("================================================================================");
+
+                    if auto_open {
+                        println!("  [*] Launching playground in default web browser...");
+                        #[cfg(target_os = "windows")]
+                        {
+                            let _ = std::process::Command::new("cmd")
+                                .args(["/C", "start", &out_file])
+                                .spawn();
+                        }
+                        #[cfg(target_os = "macos")]
+                        {
+                            let _ = std::process::Command::new("open")
+                                .arg(&out_file)
+                                .spawn();
+                        }
+                        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+                        {
+                            let _ = std::process::Command::new("xdg-open")
+                                .arg(&out_file)
+                                .spawn();
+                        }
+                    }
+                }
+                Err(err) => {
+                    eprintln!("[!] Could not bundle playground: {}", err);
+                    std::process::exit(1);
+                }
+            }
         }
         "cl-kernel" => {
             if args.len() < 3 {

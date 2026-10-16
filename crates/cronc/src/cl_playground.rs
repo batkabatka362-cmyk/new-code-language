@@ -165,3 +165,65 @@ impl ClPlaygroundSession {
         out
     }
 }
+
+/// Bundle the full WebAssembly interactive playground into a single offline HTML file.
+pub fn bundle_standalone_playground_html(custom_dir: Option<&std::path::Path>) -> Result<String, String> {
+    let base_dir = if let Some(d) = custom_dir {
+        d.to_path_buf()
+    } else if std::path::Path::new("playground").exists() {
+        std::path::PathBuf::from("playground")
+    } else if std::path::Path::new("../playground").exists() {
+        std::path::PathBuf::from("../playground")
+    } else if std::path::Path::new("../../playground").exists() {
+        std::path::PathBuf::from("../../playground")
+    } else if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
+        let p = std::path::Path::new(&manifest).join("../../playground");
+        if p.exists() {
+            p
+        } else {
+            std::path::Path::new(&manifest).join("../playground")
+        }
+    } else {
+        return Err("Playground directory not found. Ensure 'playground/' exists in the workspace.".to_string());
+    };
+
+    let index_html_path = base_dir.join("index.html");
+    let style_css_path = base_dir.join("style.css");
+    let torus_js_path = base_dir.join("torus.js");
+    let app_js_path = base_dir.join("app.js");
+    let wasm_js_path = base_dir.join("cron_wasm_base64.js");
+
+    let index_html = std::fs::read_to_string(&index_html_path)
+        .map_err(|e| format!("Failed to read {}: {}", index_html_path.display(), e))?;
+    let style_css = std::fs::read_to_string(&style_css_path)
+        .map_err(|e| format!("Failed to read {}: {}", style_css_path.display(), e))?;
+    let torus_js = std::fs::read_to_string(&torus_js_path)
+        .map_err(|e| format!("Failed to read {}: {}", torus_js_path.display(), e))?;
+    let app_js = std::fs::read_to_string(&app_js_path)
+        .map_err(|e| format!("Failed to read {}: {}", app_js_path.display(), e))?;
+    let wasm_js = std::fs::read_to_string(&wasm_js_path)
+        .map_err(|e| format!("Failed to read {}: {}", wasm_js_path.display(), e))?;
+
+    let mut standalone = index_html;
+
+    standalone = standalone.replace(
+        r#"<link rel="stylesheet" href="style.css">"#,
+        &format!("<style>\n{}\n</style>", style_css),
+    );
+
+    standalone = standalone.replace(
+        r#"<script src="cron_wasm_base64.js"></script>"#,
+        &format!("<script>\n{}\n</script>", wasm_js),
+    );
+    standalone = standalone.replace(
+        r#"<script src="torus.js"></script>"#,
+        &format!("<script>\n{}\n</script>", torus_js),
+    );
+    standalone = standalone.replace(
+        r#"<script src="app.js"></script>"#,
+        &format!("<script>\n{}\n</script>", app_js),
+    );
+
+    Ok(standalone)
+}
+

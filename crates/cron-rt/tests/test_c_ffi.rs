@@ -1090,6 +1090,28 @@ fn test_ffi_hardware_package() {
     }
 }
 
+#[test]
+fn test_ffi_bundle_playground() {
+    let out_file = "test_ffi_playground.html";
+    let _ = std::fs::remove_file(out_file);
+    let out_path = CString::new(out_file).unwrap();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_bundle_playground_html(out_path.as_ptr(), &mut err_ptr)
+    };
+
+    assert!(ok, "cron_bundle_playground_html must succeed");
+    assert!(std::path::Path::new(out_file).exists());
+
+    let content = std::fs::read_to_string(out_file).unwrap();
+    assert!(content.contains("CRON Interactive Playground"));
+    assert!(content.contains("4D-Torus"));
+
+    let _ = std::fs::remove_file(out_file);
+}
+
+
 
 
 

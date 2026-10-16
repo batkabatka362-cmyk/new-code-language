@@ -256,6 +256,13 @@ def _setup_ffi(lib):
             ctypes.POINTER(ctypes.c_char_p),
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_bundle_playground_html
+    if hasattr(lib, "cron_bundle_playground_html"):
+        lib.cron_bundle_playground_html.restype = ctypes.c_bool
+        lib.cron_bundle_playground_html.argtypes = [
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -1006,6 +1013,7 @@ __all__ = [
     "fpga",
     "tapeout",
     "flash",
+    "playground",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1791,6 +1799,26 @@ def flash(
     Synthesizes physical FPGA bitstream package with 1-click flashing scripts (iceprog / openFPGALoader).
     """
     return fpga(source, board=board, out_dir=out_dir)
+
+def playground(output_html: str = "cron_playground.html", auto_open: bool = False) -> str:
+    """
+    Bundles the interactive WebAssembly 4D-Torus live playground into a standalone single-file HTML.
+    """
+    import os, webbrowser
+    if not _lib or not hasattr(_lib, "cron_bundle_playground_html"):
+        raise RuntimeError("Playground bundler not available in native library")
+
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_bundle_playground_html(output_html.encode("utf-8"), ctypes.byref(out_err))
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown bundling error"
+        raise RuntimeError(f"Playground bundling failed: {err}")
+
+    abs_path = os.path.abspath(output_html)
+    if auto_open:
+        webbrowser.open(abs_path)
+
+    return abs_path
 
 
 
