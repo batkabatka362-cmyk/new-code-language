@@ -3,6 +3,8 @@ CRON Python / PyTorch Accelerator Bridge (cron-py)
 High-performance binding for the 256-Core 4D-Torus Living AGI & .cl Machine Code Engine.
 """
 
+__version__ = "1.7.0"
+
 import ctypes
 import os
 import sys
