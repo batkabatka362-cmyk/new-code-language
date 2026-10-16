@@ -95,3 +95,20 @@ fn test_peephole_self_xor_and_identity_elimination() {
     let core = run_cl_jit(&report.optimized_code).expect("Optimized code must run in JIT");
     assert_eq!(core.r[1], 0);
 }
+
+#[test]
+fn test_direct_jump_table_jit_stress_test() {
+    // 1,000-iteration arithmetic and memory stress test on pre-decoded direct jump table
+    let cl_code = r#"
+    B0000: '==01#000> '==02#3E8> '==03#001> '==04#007>
+    B0001: _PO01+300> _PO02-300> _PO05*400> _NO00#000>
+    B0002: !BN02#001> _NO00#000> _NO00#000> _NO00#000>
+    B0003: _HL00$008! _NO00#000> _NO00#000> _NO00#000>
+    "#;
+
+    let core = run_cl_jit(cl_code).expect("Direct jump table stress test must succeed");
+    assert_eq!(core.r[1], 1000);
+    assert_eq!(core.r[2], 0);
+    assert!(core.is_halted);
+}
+

@@ -167,10 +167,977 @@ pub fn run_cl_jit(cl_code: &str) -> Result<ClJitCore, String> {
     Ok(core)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum OpId {
+    Nop = 0,
+    ImmLoad,
+    OpticalGemm,
+    ForwardStack,
+    TileTranspose,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Exp,
+    Sqrt,
+    FixedPoint,
+    Load,
+    Copy,
+    Mask,
+    PolyAlu,
+    TernaryDot,
+    ReversibleSwap,
+    Toffoli,
+    ReversiblePop,
+    StdpUpdate,
+    LeakyIntegrate,
+    LeakyFire,
+    BroadcastTx,
+    BroadcastRx,
+    Wavefront,
+    Barrier,
+    ResetR1,
+    PackTrits,
+    TileLoad,
+    PermuteCopy,
+    CordicRotate,
+    PrngStep,
+    RotateXor,
+    PatchCrc,
+    SymbioticHash,
+    GuSubHalf,
+    FusedOp,
+    Colorize,
+    ColorFilter,
+    SpatialOverlap,
+    TapeInc,
+    TapeDec,
+    TapeRead,
+    TapeWrite,
+    ZohlCounter,
+    PrintChar,
+    TritCrazy,
+    TritDot,
+    SystolicHop,
+    Unify,
+    RmsNorm,
+    Softmax,
+    Silu,
+    Gelu,
+    SsmStateSpace,
+    Jump,
+    BranchZero,
+    BranchNonZero,
+    BranchLess,
+    BranchGreater,
+    Call,
+    Return,
+    StoreWord,
+    LoadByte,
+    StoreByte,
+    Halt,
+    SphereGeodesic,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PredecodedSphere {
+    pub s_id: usize,
+    pub is_rd: bool,
+    pub is_wr: bool,
+    pub is_err: bool,
+    pub coords: [u32; 4],
+    pub curvature_weight: u32,
+    pub radial_shift: u32,
+    pub geo_term: i32,
+    pub cell_addr: usize,
+    pub alu_op: char,
+    pub reg: usize,
+    pub val: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PredecodedSlot {
+    pub op_id: OpId,
+    pub mode: char,
+    pub d: usize,
+    pub s: usize,
+    pub imm_nibble: usize,
+    pub imm_val: u32,
+    pub print_char: char,
+    pub sphere: PredecodedSphere,
+}
+
+#[inline(always)]
+fn decode_slot_op(slot: &crate::cl_lang::ClSlot) -> OpId {
+    if slot.prefix == '`' {
+        return OpId::SphereGeodesic;
+    }
+    if slot.opcode.starts_with('=') || slot.prefix == '\'' {
+        return OpId::ImmLoad;
+    }
+    match slot.opcode.as_str() {
+        "NO" => OpId::Nop,
+        "OP" | "WD" => OpId::OpticalGemm,
+        "FA" => OpId::ForwardStack,
+        "TT" => OpId::TileTranspose,
+        "AD" => OpId::Add,
+        "SB" | "SU" => OpId::Sub,
+        "ML" => OpId::Mul,
+        "DV" => OpId::Div,
+        "EX" => OpId::Exp,
+        "SQ" => OpId::Sqrt,
+        "FX" => OpId::FixedPoint,
+        "LD" => OpId::Load,
+        "CP" => OpId::Copy,
+        "MA" => OpId::Mask,
+        "PO" | "P0" | "P1" => OpId::PolyAlu,
+        "MD" => OpId::TernaryDot,
+        "RF" => OpId::ReversibleSwap,
+        "TO" => OpId::Toffoli,
+        "BK" => OpId::ReversiblePop,
+        "ST" => OpId::StdpUpdate,
+        "LI" => OpId::LeakyIntegrate,
+        "LF" => OpId::LeakyFire,
+        "TX" | "aa" => OpId::BroadcastTx,
+        "RX" => OpId::BroadcastRx,
+        "WH" => OpId::Wavefront,
+        "bb" | "BB" => OpId::Barrier,
+        "RS" | "88" => OpId::ResetR1,
+        "PK" => OpId::PackTrits,
+        "TL" => OpId::TileLoad,
+        "PS" => OpId::PermuteCopy,
+        "CD" => OpId::CordicRotate,
+        "GF" | "RN" => OpId::PrngStep,
+        "CG" => OpId::RotateXor,
+        "PT" => OpId::PatchCrc,
+        "SY" => OpId::SymbioticHash,
+        "GU" => OpId::GuSubHalf,
+        "FU" | "FE" => OpId::FusedOp,
+        "CI" => OpId::Colorize,
+        "CF" => OpId::ColorFilter,
+        "SP" => OpId::SpatialOverlap,
+        "TI" => OpId::TapeInc,
+        "TD" => OpId::TapeDec,
+        "TR" => OpId::TapeRead,
+        "TW" => OpId::TapeWrite,
+        "ZL" => OpId::ZohlCounter,
+        "PR" => OpId::PrintChar,
+        "TC" => OpId::TritCrazy,
+        "TM" => OpId::TritDot,
+        "DE" | "DW" | "PW" | "DN" | "DS" => OpId::SystolicHop,
+        "UN" => OpId::Unify,
+        "RM" => OpId::RmsNorm,
+        "SM" => OpId::Softmax,
+        "SI" => OpId::Silu,
+        "GE" => OpId::Gelu,
+        "SS" => OpId::SsmStateSpace,
+        "JP" => OpId::Jump,
+        "BZ" => OpId::BranchZero,
+        "BN" => OpId::BranchNonZero,
+        "BL" | "JL" | "LT" => OpId::BranchLess,
+        "BG" => OpId::BranchGreater,
+        "JS" => OpId::Call,
+        "RT" => OpId::Return,
+        "SR" => OpId::StoreWord,
+        "LB" => OpId::LoadByte,
+        "BY" => OpId::StoreByte,
+        "HL" => OpId::Halt,
+        _ => OpId::Unknown,
+    }
+}
+
+fn predecode_slot(slot: &crate::cl_lang::ClSlot, _slot_str: &str, imm_nibble: usize, imm_val: u32) -> PredecodedSlot {
+    let op_id = decode_slot_op(slot);
+    let d = slot.dest_reg.unwrap_or_else(|| {
+        let bytes = slot.raw.as_bytes();
+        if bytes.len() >= 5 {
+            crate::cl_lang::parse_hex2_bytes(bytes[3], bytes[4]).unwrap_or(0)
+        } else {
+            0
+        }
+    }) % 16;
+    let s = slot.src_reg.unwrap_or(0) % 16;
+
+    let mut print_char = '\0';
+    if op_id == OpId::PrintChar && slot.mode == '#' {
+        let hex_str: String = slot.raw.chars().skip(6).take(2).filter(|c| c.is_ascii_hexdigit()).collect();
+        if let Ok(val) = u8::from_str_radix(&hex_str, 16) {
+            print_char = val as char;
+        } else {
+            print_char = (imm_val as u8) as char;
+        }
+    }
+
+    let mut sphere = PredecodedSphere::default();
+    if slot.prefix == '`' {
+        let bytes = slot.raw.as_bytes();
+        if bytes.len() == 10 {
+            let mode_val = decode_base64_val(bytes[1] as char);
+            let s_id = ((mode_val >> 4) & 0x3) as usize;
+            let is_err = ((mode_val >> 3) & 1) == 1;
+            let _is_pen = ((mode_val >> 2) & 1) == 1;
+            let is_rd = ((mode_val >> 1) & 1) == 1;
+            let is_wr = (mode_val & 1) == 1;
+
+            let w = decode_base90_val(bytes[2] as char) as u32;
+            let lat_x = decode_base90_val(bytes[3] as char) as u32;
+            let lon_z = decode_base90_val(bytes[4] as char) as u32;
+            let quad = match bytes[5] {
+                b'1' | b'N' | b'A' => 1,
+                b'2' | b'W' | b'B' => 2,
+                b'3' | b'S' | b'C' => 3,
+                b'4' | b'E' | b'D' => 4,
+                _ => 1,
+            };
+            let step = decode_base90_val(bytes[6] as char) as u32;
+            let alu_op = bytes[7] as char;
+            let reg = (bytes[8] as char).to_digit(16).unwrap_or(s_id as u32) as usize % 16;
+            let val = (bytes[9] as char).to_digit(16).unwrap_or(step % 16);
+
+            let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
+            let radial_shift = (w % 4) + 1;
+            let q_sign: i32 = if quad == 1 || quad == 4 { 1 } else { -1 };
+            let geo_term = q_sign * (((val * curvature_weight) >> radial_shift) as i32);
+            let cell_addr = ((w * 360 + lat_x * 90 + lon_z) as usize) % 16384;
+
+            sphere = PredecodedSphere {
+                s_id,
+                is_rd,
+                is_wr,
+                is_err,
+                coords: [w, lat_x, lon_z, quad],
+                curvature_weight,
+                radial_shift,
+                geo_term,
+                cell_addr,
+                alu_op,
+                reg,
+                val,
+            };
+        }
+    }
+
+    PredecodedSlot {
+        op_id,
+        mode: slot.mode,
+        d,
+        s,
+        imm_nibble,
+        imm_val,
+        print_char,
+        sphere,
+    }
+}
+
+type OpcodeHandler = fn(core: &mut ClJitCore, slot: &PredecodedSlot, current_cycle: usize);
+
+#[inline(always)]
+fn h_nop(_: &mut ClJitCore, _: &PredecodedSlot, _: usize) {}
+
+#[inline(always)]
+fn h_imm_load(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = slot.imm_val;
+}
+
+#[inline(always)]
+fn h_optical_gemm(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.optical_gemm_count += 1;
+    let val_a = core.r[slot.d];
+    let val_b = core.r[slot.s];
+    let a_lo = (val_a & 0xFFFF) as i16 as i32;
+    let a_hi = ((val_a >> 16) & 0xFFFF) as i16 as i32;
+    let b_lo = (val_b & 0xFFFF) as i16 as i32;
+    let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
+    let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
+    let optical_mag = (optical_dot.unsigned_abs() & 0xFFFF) | 0x00FF_0000;
+    core.r[slot.d] = optical_mag;
+}
+
+#[inline(always)]
+fn h_forward_stack(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    if core.rev_stack.len() < 256 {
+        core.rev_stack.push(core.r[slot.s]);
+    }
+    core.r[slot.d] = core.r[slot.s];
+}
+
+#[inline(always)]
+fn h_tile_transpose(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = tile_transpose(core.r[slot.s]);
+}
+
+#[inline(always)]
+fn h_add(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.imm_nibble])
+    } else {
+        (core.r[slot.d], core.r[slot.s])
+    };
+    core.r[slot.d] = val1.wrapping_add(val2);
+}
+
+#[inline(always)]
+fn h_sub(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.spatial_broadcast_count += 1;
+    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.imm_nibble])
+    } else {
+        (core.r[slot.d], core.r[slot.s])
+    };
+    core.r[slot.d] = val1.wrapping_sub(val2);
+}
+
+#[inline(always)]
+fn h_mul(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.imm_nibble])
+    } else {
+        (core.r[slot.d], core.r[slot.s])
+    };
+    core.r[slot.d] = val1.wrapping_mul(val2);
+}
+
+#[inline(always)]
+fn h_div(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.imm_nibble])
+    } else {
+        (core.r[slot.d], core.r[slot.s])
+    };
+    core.r[slot.d] = val1.checked_div(val2).unwrap_or(0);
+}
+
+#[inline(always)]
+fn h_exp(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let input_val = core.r[slot.s];
+    let scaled = ((input_val as f32 / 100.0).exp() * 100.0) as u32;
+    core.r[slot.d] = scaled & 0xFFFF;
+}
+
+#[inline(always)]
+fn h_sqrt(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let input_val = core.r[slot.s];
+    core.r[slot.d] = (input_val as f64).sqrt() as u32;
+}
+
+#[inline(always)]
+fn h_fixed_point(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = (core.r[slot.s] << 8) | (slot.imm_val & 0xFF);
+}
+
+#[inline(always)]
+fn h_load(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    if slot.mode == '@' || slot.mode == ':' {
+        let bank = slot.s % 16;
+        let offset = slot.imm_nibble % 16;
+        let b_val = core.bank_r[bank][offset];
+        core.r[slot.d] = if b_val != 0 { b_val } else { core.r[slot.s] ^ (slot.imm_val & 0xFFFF) };
+    } else {
+        let addr = (core.r[slot.s].wrapping_add(slot.imm_val) as usize) % 16384;
+        core.r[slot.d] = core.dmem[addr];
+    }
+}
+
+#[inline(always)]
+fn h_copy(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = core.r[slot.s];
+}
+
+#[inline(always)]
+fn h_mask(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let mask = if slot.imm_val != 0 { slot.imm_val } else { 0x00FF_FFFF };
+    core.r[slot.d] = (core.r[slot.d] & !mask) | (core.r[slot.s] & mask);
+}
+
+#[inline(always)]
+fn h_poly_alu(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    if slot.mode == '@' {
+        core.r[slot.d] = core.bank_r[slot.s][slot.imm_nibble % 16];
+        return;
+    }
+    if slot.mode == ':' {
+        core.bank_r[slot.d][slot.imm_nibble % 16] = core.r[slot.s];
+        return;
+    }
+
+    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.imm_nibble])
+    } else {
+        (core.r[slot.d], core.r[slot.s])
+    };
+
+    let res = match slot.mode {
+        '+' => val1.wrapping_add(val2),
+        '-' => val1.wrapping_sub(val2),
+        '*' => val1.wrapping_mul(val2),
+        '/' => val1.checked_div(val2).unwrap_or(0),
+        '%' => if val2 != 0 { val1 % val2 } else { 0 },
+        '&' => val1 & val2,
+        '|' => val1 | val2,
+        '^' => val1 ^ val2,
+        '<' => if (val1 as i32) < (val2 as i32) { 1 } else { 0 },
+        '>' => if (val1 as i32) > (val2 as i32) { 1 } else { 0 },
+        '=' => if val1 == val2 { 1 } else { 0 },
+        'G' => if (val1 as i32) >= (val2 as i32) { 1 } else { 0 },
+        'M' => {
+            let factor = if slot.imm_nibble > 0 && slot.imm_nibble < 16 { core.r[slot.imm_nibble] } else { 1 };
+            core.r[slot.d].wrapping_add(core.r[slot.s].wrapping_mul(factor))
+        }
+        'S' => {
+            let factor = if slot.imm_nibble > 0 && slot.imm_nibble < 16 { core.r[slot.imm_nibble] } else { 1 };
+            core.r[slot.d].wrapping_sub(core.r[slot.s].wrapping_mul(factor))
+        }
+        'L' => val1 << (val2 & 31),
+        'R' => val1 >> (val2 & 31),
+        'A' => val1.saturating_add(val2),
+        'X' => !(val1 ^ val2),
+        'N' => !(val1 & val2),
+        'O' => !(val1 | val2),
+        'B' => core.r[slot.s].count_ones(),
+        _ => val1.wrapping_add(val2),
+    };
+    core.r[slot.d] = res;
+}
+
+#[inline(always)]
+fn h_ternary_dot(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    if slot.mode == '.' || slot.imm_nibble == 5 || slot.imm_nibble == 6 {
+        core.r[slot.d] = subbyte_ternary_dot(core.r[slot.d], core.r[slot.s]);
+    } else if slot.mode == '*' || slot.imm_nibble == 3 {
+        core.r[slot.d] = core.r[slot.d].wrapping_mul(core.r[slot.s]);
+    } else {
+        let dot = subbyte_ternary_dot(core.r[slot.d], core.r[slot.s]);
+        core.r[slot.d] = if dot != 0 { dot } else { core.r[slot.d] ^ core.r[slot.s] };
+    }
+}
+
+#[inline(always)]
+fn h_reversible_swap(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.reversible_ops_count += 1;
+    core.r.swap(slot.d, slot.s);
+}
+
+#[inline(always)]
+fn h_toffoli(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.reversible_ops_count += 1;
+    if (core.r[10] & 1 != 0) && (core.r[11] & 1 != 0) {
+        core.r[slot.d] ^= 1;
+    }
+}
+
+#[inline(always)]
+fn h_reversible_pop(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.reversible_ops_count += 1;
+    core.r[slot.d] = core.rev_stack.pop().map(|v| v ^ 0xFFFFFFFF).unwrap_or(0);
+}
+
+#[inline(always)]
+fn h_stdp_update(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.stdp_updates_count += 1;
+    let mut syn_acc: u32 = 0;
+    for (idx, w) in core.stdp_weights.iter_mut().enumerate() {
+        *w = w.saturating_add(2);
+        syn_acc = syn_acc.wrapping_add((*w as u32) << ((idx % 4) * 8));
+    }
+    core.r[slot.d] = if syn_acc != 0 { syn_acc } else { 0x0000_0084 };
+}
+
+#[inline(always)]
+fn h_leaky_integrate(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.stdp_updates_count += 1;
+    core.r[slot.d] = if core.r[slot.s] >= 50 { 1 } else { 0 };
+}
+
+#[inline(always)]
+fn h_leaky_fire(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.stdp_updates_count += 1;
+    core.r[slot.d] = if core.r[slot.s] > 100 { 1 } else { 0 };
+}
+
+#[inline(always)]
+fn h_broadcast_tx(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    core.spatial_broadcast_count += 1;
+}
+
+#[inline(always)]
+fn h_broadcast_rx(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = core.r[slot.s];
+}
+
+#[inline(always)]
+fn h_wavefront(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = core.r[slot.s] | 0x8000;
+}
+
+#[inline(always)]
+fn h_barrier(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    core.barrier_count += 1;
+}
+
+#[inline(always)]
+fn h_reset_r1(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    core.r[1] = 0;
+}
+
+#[inline(always)]
+fn h_pack_trits(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let val = core.r[slot.s];
+    let mut packed_trits: u32 = 0;
+    for i in 0..16 {
+        let b = ((val >> ((i % 4) * 8)) & 0xFF) as i8;
+        let trit = if b > 20 { 1u32 } else if b < -20 { 2u32 } else { 0u32 };
+        packed_trits |= trit << (i * 2);
+    }
+    core.r[slot.d] = if packed_trits != 0 { packed_trits } else if val != 0 { val } else { 0x5555_AAAA };
+}
+
+#[inline(always)]
+fn h_tile_load(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = slot.imm_val;
+}
+
+#[inline(always)]
+fn h_permute_copy(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = core.r[slot.s];
+}
+
+#[inline(always)]
+fn h_cordic_rotate(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let x = (core.r[slot.d] & 0xFFFF) as i16 as i32;
+    let y = ((core.r[slot.d] >> 16) & 0xFFFF) as i16 as i32;
+    let angle = (core.r[slot.s] & 0xFF) as f64 * (std::f64::consts::PI / 128.0);
+    let (sin_a, cos_a) = angle.sin_cos();
+    let nx = ((x as f64 * cos_a - y as f64 * sin_a) as i32) & 0xFFFF;
+    let ny = ((x as f64 * sin_a + y as f64 * cos_a) as i32) & 0xFFFF;
+    core.r[slot.d] = (ny << 16) as u32 | (nx as u32);
+}
+
+#[inline(always)]
+fn h_prng_step(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let feedback = core.lfsr_state & 1;
+    core.lfsr_state >>= 1;
+    if feedback == 1 {
+        core.lfsr_state ^= 0xA000_0003;
+    }
+    core.r[slot.d] = core.lfsr_state;
+}
+
+#[inline(always)]
+fn h_rotate_xor(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let q = core.r[slot.d];
+    core.r[slot.d] = (q.rotate_left(1)) ^ core.r[slot.s];
+}
+
+#[inline(always)]
+fn h_patch_crc(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let patch_crc = (core.r[slot.d] ^ core.r[slot.s]) & 0xFF;
+    core.r[slot.d] = 0x5A00_0000 | patch_crc;
+}
+
+#[inline(always)]
+fn h_symbiotic_hash(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let unified = core.r[slot.d].wrapping_mul(2654435761) ^ core.r[slot.s].wrapping_mul(2246822519);
+    core.r[slot.d] = (unified & 0x00FF_FFFF) | 0xCA00_0000;
+}
+
+#[inline(always)]
+fn h_gu_sub_half(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = core.r[slot.d].wrapping_sub(core.r[slot.s] / 2);
+}
+
+#[inline(always)]
+fn h_fused_op(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    core.fused_ops_count += 1;
+    core.hbm_bytes_saved += 64;
+}
+
+#[inline(always)]
+fn h_colorize(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = (core.r[slot.s] & 0x00FF_FFFF) | 0xCA00_0000;
+}
+
+#[inline(always)]
+fn h_color_filter(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.r[slot.d] = core.r[slot.d].wrapping_add(core.r[slot.s]) ^ 0x00CF_CF00;
+}
+
+#[inline(always)]
+fn h_spatial_overlap(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let raw_overlap = core.r[slot.s];
+    core.r[slot.d] = if raw_overlap >= 5 { raw_overlap * 2 } else { raw_overlap / 2 };
+}
+
+#[inline(always)]
+fn h_tape_inc(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    let prev = core.tape_ptrs[0];
+    core.tape_ptrs[0] = (prev + 1) & 0xFF;
+    if core.tape_ptrs[0] == 0 {
+        core.tape_wrap = true;
+    }
+}
+
+#[inline(always)]
+fn h_tape_dec(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    let prev = core.tape_ptrs[0];
+    core.tape_ptrs[0] = (prev + 255) & 0xFF;
+    if prev == 0 {
+        core.tape_wrap = true;
+    }
+}
+
+#[inline(always)]
+fn h_tape_read(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let ptr = core.tape_ptrs[0];
+    core.r[slot.d] = core.tape_buf[ptr];
+    core.tape_ptrs[0] = (ptr + 1) & 0xFF;
+    core.esoteric_energy_pj += 0.02;
+}
+
+#[inline(always)]
+fn h_tape_write(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let ptr = core.tape_ptrs[0];
+    core.tape_buf[ptr] = core.r[slot.s];
+    core.tape_ptrs[0] = (ptr + 1) & 0xFF;
+    core.esoteric_energy_pj += 0.02;
+}
+
+#[inline(always)]
+fn h_zohl_counter(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.zohl_counter = slot.imm_val as usize;
+}
+
+#[inline(always)]
+fn h_print_char(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let ch = if slot.mode == '#' {
+        slot.print_char
+    } else {
+        (core.r[slot.s] & 0xFF) as u8 as char
+    };
+    print!("{}", ch);
+    use std::io::Write;
+    let _ = std::io::stdout().flush();
+}
+
+#[inline(always)]
+fn h_trit_crazy(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.trit_macs_count += 1;
+    core.esoteric_energy_pj += 0.05;
+    core.r[slot.d] = crate::cl_esoteric::TritWord(core.r[slot.d])
+        .crazy_simd(crate::cl_esoteric::TritWord(core.r[slot.s])).0;
+}
+
+#[inline(always)]
+fn h_trit_dot(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.trit_macs_count += 1;
+    core.esoteric_energy_pj += 0.08;
+    core.r[slot.d] = crate::cl_esoteric::TritWord::trit_dot(
+        crate::cl_esoteric::TritWord(core.r[slot.d]),
+        crate::cl_esoteric::TritWord(core.r[slot.s]),
+    ) as u32;
+}
+
+#[inline(always)]
+fn h_systolic_hop(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    core.systolic_hops_count += 1;
+    core.esoteric_energy_pj += 0.04;
+}
+
+#[inline(always)]
+fn h_unify(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.unify_matches_count += 1;
+    core.esoteric_energy_pj += 0.05;
+    let match_found = (core.r[slot.d] & 0xFFFF) == (core.r[slot.s] & 0xFFFF);
+    core.r[slot.d] = if match_found { 1 } else { 0 };
+}
+
+#[inline(always)]
+fn h_rms_norm(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.ai_isa_ops_count += 1;
+    let (x, scale) = if slot.mode == '@' {
+        let w_bits = core.bank_r[slot.s][slot.imm_nibble % 16];
+        let sc = f32::from_bits(w_bits);
+        let inp_bits = if core.r[slot.d] != 0 { core.r[slot.d] } else { core.r[slot.s] };
+        (f32::from_bits(inp_bits), if sc == 0.0 { 1.0f32 } else { sc })
+    } else {
+        let sc = if slot.imm_nibble > 0 && slot.imm_nibble < 16 {
+            let sw = f32::from_bits(core.r[slot.imm_nibble]);
+            if sw == 0.0 { 1.0f32 } else { sw }
+        } else {
+            1.0f32
+        };
+        (f32::from_bits(core.r[slot.s]), sc)
+    };
+    let rms = (x * x + 1.0e-5f32).sqrt();
+    let norm = (x / rms) * scale;
+    core.r[slot.d] = norm.to_bits();
+}
+
+#[inline(always)]
+fn h_softmax(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.ai_isa_ops_count += 1;
+    let (x, scale) = if slot.mode == '@' {
+        let w_bits = core.bank_r[slot.s][slot.imm_nibble % 16];
+        let sc = f32::from_bits(w_bits);
+        (f32::from_bits(core.r[slot.d]), if sc == 0.0 { 1.0f32 } else { sc })
+    } else {
+        let sc = if slot.imm_nibble > 0 && slot.imm_nibble < 16 {
+            let sw = f32::from_bits(core.r[slot.imm_nibble]);
+            if sw == 0.0 { 1.0f32 } else { sw }
+        } else {
+            1.0f32
+        };
+        (f32::from_bits(core.r[slot.s]), sc)
+    };
+    let scaled_x = x * scale;
+    if core.softmax_sum <= 0.0 || slot.mode == '!' {
+        core.softmax_max = scaled_x;
+        core.softmax_sum = 1.0f32;
+        core.r[slot.d] = 1.0f32.to_bits();
+    } else {
+        let old_m = core.softmax_max;
+        let new_m = if scaled_x > old_m { scaled_x } else { old_m };
+        let exp_old = (old_m - new_m).exp();
+        let exp_cur = (scaled_x - new_m).exp();
+        let new_sum = core.softmax_sum * exp_old + exp_cur;
+        core.softmax_max = new_m;
+        core.softmax_sum = new_sum;
+        let p = exp_cur / new_sum;
+        core.r[slot.d] = p.to_bits();
+    }
+}
+
+#[inline(always)]
+fn h_silu(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.ai_isa_ops_count += 1;
+    let x = f32::from_bits(core.r[slot.s]);
+    let sig = 1.0f32 / (1.0f32 + (-x).exp());
+    let res = x * sig;
+    core.r[slot.d] = res.to_bits();
+}
+
+#[inline(always)]
+fn h_gelu(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.ai_isa_ops_count += 1;
+    let x = f32::from_bits(core.r[slot.s]);
+    let sqrt_2_over_pi = 0.797_884_6_f32;
+    let inner = sqrt_2_over_pi * (x + 0.044715f32 * x * x * x);
+    let res = 0.5f32 * x * (1.0f32 + inner.tanh());
+    core.r[slot.d] = res.to_bits();
+}
+
+#[inline(always)]
+fn h_ssm(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.ai_isa_ops_count += 1;
+    let bank = if slot.imm_nibble > 0 { slot.imm_nibble % 16 } else { slot.s % 16 };
+    let ch = bank;
+    let inp_val = if slot.imm_nibble > 0 || core.r[slot.s] != 0 {
+        core.r[slot.s]
+    } else if core.r[slot.d] != 0 {
+        core.r[slot.d]
+    } else {
+        core.r[1]
+    };
+    let x = f32::from_bits(inp_val);
+    let (a_bar, b_bar) = if slot.mode == '@' {
+        let a = f32::from_bits(core.bank_r[bank][0]);
+        let b = f32::from_bits(core.bank_r[bank][1]);
+        (if a == 0.0 { 0.9f32 } else { a }, if b == 0.0 { 0.1f32 } else { b })
+    } else {
+        (0.9f32, 0.1f32)
+    };
+    let prev_h = core.ssm_state[ch];
+    let next_h = a_bar * prev_h + b_bar * x;
+    core.ssm_state[ch] = next_h;
+    let y = next_h + 0.05f32 * x;
+    core.r[slot.d] = y.to_bits();
+}
+
+#[inline(always)]
+fn h_jump(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.branch_target = Some(slot.imm_val as usize);
+}
+
+#[inline(always)]
+fn h_branch_zero(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let reg = if slot.d > 0 { slot.d } else { slot.s };
+    if core.r[reg] == 0 {
+        core.branch_target = Some(slot.imm_val as usize);
+    }
+}
+
+#[inline(always)]
+fn h_branch_non_zero(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let reg = if slot.d > 0 { slot.d } else { slot.s };
+    if core.r[reg] != 0 {
+        core.branch_target = Some(slot.imm_val as usize);
+    }
+}
+
+#[inline(always)]
+fn h_branch_less(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let reg = if slot.d > 0 { slot.d } else { slot.s };
+    if (core.r[reg] as i32) < 0 {
+        core.branch_target = Some(slot.imm_val as usize);
+    }
+}
+
+#[inline(always)]
+fn h_branch_greater(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let reg = if slot.d > 0 { slot.d } else { slot.s };
+    if (core.r[reg] as i32) > 0 {
+        core.branch_target = Some(slot.imm_val as usize);
+    }
+}
+
+#[inline(always)]
+fn h_call(core: &mut ClJitCore, slot: &PredecodedSlot, current_cycle: usize) {
+    core.ras.push(current_cycle + 1);
+    core.branch_target = Some(slot.imm_val as usize);
+}
+
+#[inline(always)]
+fn h_return(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    if let Some(ret) = core.ras.pop() {
+        core.branch_target = Some(ret);
+    }
+}
+
+#[inline(always)]
+fn h_store_word(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let src_r = if slot.d > 0 { slot.d } else { slot.s };
+    let base_r = if slot.s > 0 && slot.d > 0 { slot.s } else { 0 };
+    let addr = (core.r[base_r].wrapping_add(slot.imm_val) as usize) % 16384;
+    core.dmem[addr] = core.r[src_r];
+}
+
+#[inline(always)]
+fn h_load_byte(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let byte_addr = (core.r[slot.s].wrapping_add(slot.imm_val) as usize) % 65536;
+    let word_idx = byte_addr / 4;
+    let byte_shift = (byte_addr % 4) * 8;
+    core.r[slot.d] = (core.dmem[word_idx] >> byte_shift) & 0xFF;
+}
+
+#[inline(always)]
+fn h_store_byte(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let src_r = if slot.d > 0 { slot.d } else { slot.s };
+    let base_r = if slot.s > 0 && slot.d > 0 { slot.s } else { 0 };
+    let byte_addr = (core.r[base_r].wrapping_add(slot.imm_val) as usize) % 65536;
+    let word_idx = byte_addr / 4;
+    let byte_shift = (byte_addr % 4) * 8;
+    let mask = !(0xFF << byte_shift);
+    let b_val = (core.r[src_r] & 0xFF) << byte_shift;
+    core.dmem[word_idx] = (core.dmem[word_idx] & mask) | b_val;
+}
+
+#[inline(always)]
+fn h_halt(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
+    core.is_halted = true;
+}
+
+#[inline(always)]
+fn h_sphere_geodesic(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let sp = &slot.sphere;
+    core.sphere_matrix_acc[sp.s_id] += sp.geo_term;
+    core.sphere_curvature_ops_count += 1;
+    core.sphere_coords[sp.s_id] = sp.coords;
+    core.sphere_errors[sp.s_id] = sp.is_err;
+
+    if sp.is_rd {
+        core.r[sp.reg] = core.dmem[sp.cell_addr];
+    }
+    if sp.is_wr {
+        core.dmem[sp.cell_addr] = core.r[sp.reg];
+    }
+
+    match sp.alu_op {
+        '+' => core.r[sp.reg] = core.r[sp.reg].wrapping_add(sp.val * sp.curvature_weight),
+        '-' => core.r[sp.reg] = core.r[sp.reg].wrapping_sub(sp.val * sp.curvature_weight),
+        '*' => core.r[sp.reg] ^= (sp.val * sp.curvature_weight) << sp.radial_shift,
+        '^' => core.r[sp.reg] ^= sp.val * sp.curvature_weight,
+        '=' => core.r[sp.reg] = sp.val * sp.curvature_weight,
+        '!' => core.is_halted = true,
+        _ => {}
+    }
+}
+
+static DISPATCH_TABLE: [OpcodeHandler; 69] = [
+    h_nop,
+    h_imm_load,
+    h_optical_gemm,
+    h_forward_stack,
+    h_tile_transpose,
+    h_add,
+    h_sub,
+    h_mul,
+    h_div,
+    h_exp,
+    h_sqrt,
+    h_fixed_point,
+    h_load,
+    h_copy,
+    h_mask,
+    h_poly_alu,
+    h_ternary_dot,
+    h_reversible_swap,
+    h_toffoli,
+    h_reversible_pop,
+    h_stdp_update,
+    h_leaky_integrate,
+    h_leaky_fire,
+    h_broadcast_tx,
+    h_broadcast_rx,
+    h_wavefront,
+    h_barrier,
+    h_reset_r1,
+    h_pack_trits,
+    h_tile_load,
+    h_permute_copy,
+    h_cordic_rotate,
+    h_prng_step,
+    h_rotate_xor,
+    h_patch_crc,
+    h_symbiotic_hash,
+    h_gu_sub_half,
+    h_fused_op,
+    h_colorize,
+    h_color_filter,
+    h_spatial_overlap,
+    h_tape_inc,
+    h_tape_dec,
+    h_tape_read,
+    h_tape_write,
+    h_zohl_counter,
+    h_print_char,
+    h_trit_crazy,
+    h_trit_dot,
+    h_systolic_hop,
+    h_unify,
+    h_rms_norm,
+    h_softmax,
+    h_silu,
+    h_gelu,
+    h_ssm,
+    h_jump,
+    h_branch_zero,
+    h_branch_non_zero,
+    h_branch_less,
+    h_branch_greater,
+    h_call,
+    h_return,
+    h_store_word,
+    h_load_byte,
+    h_store_byte,
+    h_halt,
+    h_sphere_geodesic,
+    h_nop, // Unknown
+];
+
 struct JitBundle {
     cycle: usize,
-    slots: Vec<crate::cl_lang::ClSlot>,
-    imm_vals: Vec<u32>,
+    slots: Vec<PredecodedSlot>,
 }
 
 pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), String> {
@@ -199,13 +1166,12 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
         if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
             let cycle_num = cycle_part.trim().trim_start_matches('B').parse::<usize>().unwrap_or(bundles.len() + 1);
             let mut parsed_slots = Vec::new();
-            let mut imm_vals = Vec::new();
             for slot_str in slots_part.split_whitespace() {
                 if let Ok(slot) = parse_slot(slot_str) {
                     let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
                     let imm_val = parse_imm_val(slot_str).unwrap_or(imm_nibble as u32);
-                    imm_vals.push(imm_val);
-                    parsed_slots.push(slot);
+                    let predecoded = predecode_slot(&slot, slot_str, imm_nibble, imm_val);
+                    parsed_slots.push(predecoded);
                 }
             }
             let idx = bundles.len();
@@ -213,7 +1179,6 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
             bundles.push(JitBundle {
                 cycle: cycle_num,
                 slots: parsed_slots,
-                imm_vals,
             });
         }
     }
@@ -230,574 +1195,19 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
         core.cycle_count += 1;
         let bundle = &bundles[pc];
 
-        for (slot_idx, slot) in bundle.slots.iter().enumerate() {
+        for slot in &bundle.slots {
             if core.is_halted {
                 break;
             }
-
-            if slot.opcode == "NO" {
-                continue;
+            let op_idx = slot.op_id as usize;
+            if op_idx < DISPATCH_TABLE.len() {
+                DISPATCH_TABLE[op_idx](core, slot, bundle.cycle);
             }
+        }
 
-            let d = slot.dest_reg.unwrap_or_else(|| {
-                let bytes = slot.raw.as_bytes();
-                if bytes.len() >= 5 {
-                    crate::cl_lang::parse_hex2_bytes(bytes[3], bytes[4]).unwrap_or(0)
-                } else {
-                    0
-                }
-            }) % 16;
-            let s = slot.src_reg.unwrap_or(0) % 16;
-            let imm_nibble = slot.imm_token.to_digit(16).unwrap_or(0) as usize;
-            if slot.prefix == '`' {
-                let bytes = slot.raw.as_bytes();
-                if bytes.len() == 10 {
-                    let mode_val = decode_base64_val(bytes[1] as char);
-                    let s_id = ((mode_val >> 4) & 0x3) as usize;
-                    let is_err = ((mode_val >> 3) & 1) == 1;
-                    let _is_pen = ((mode_val >> 2) & 1) == 1;
-                    let is_rd = ((mode_val >> 1) & 1) == 1;
-                    let is_wr = (mode_val & 1) == 1;
-
-                    let w = decode_base90_val(bytes[2] as char) as u32;
-                    let lat_x = decode_base90_val(bytes[3] as char) as u32;
-                    let lon_z = decode_base90_val(bytes[4] as char) as u32;
-                    let quad = match bytes[5] {
-                        b'1' | b'N' | b'A' => 1,
-                        b'2' | b'W' | b'B' => 2,
-                        b'3' | b'S' | b'C' => 3,
-                        b'4' | b'E' | b'D' => 4,
-                        _ => 1,
-                    };
-                    let step = decode_base90_val(bytes[6] as char) as u32;
-                    let alu_op = bytes[7] as char;
-                    let reg = (bytes[8] as char).to_digit(16).unwrap_or(s_id as u32) as usize % 16;
-                    let val = (bytes[9] as char).to_digit(16).unwrap_or(step % 16);
-
-                            // Discrete Spherical Curvature Metric:
-                            // R = W (Radial Layer Depth)
-                            // Curvature Weight = ((X + Z) / 32) + 1
-                            let curvature_weight = ((lat_x + lon_z) >> 5) + 1;
-                            let radial_shift = (w % 4) + 1;
-                            let q_sign: i32 = if quad == 1 || quad == 4 { 1 } else { -1 };
-
-                            // 4D Sphere Matrix Projection Accumulator:
-                            let geo_term = q_sign * (((val * curvature_weight) >> radial_shift) as i32);
-                            core.sphere_matrix_acc[s_id] += geo_term;
-                            core.sphere_curvature_ops_count += 1;
-
-                            // Update 4-Head spatial state
-                            core.sphere_coords[s_id] = [w, lat_x, lon_z, quad];
-                            core.sphere_errors[s_id] = is_err;
-
-                            // Spatial grid memory access
-                            let cell_addr = ((w * 360 + lat_x * 90 + lon_z) as usize) % core.dmem.len();
-                            if is_rd {
-                                core.r[reg] = core.dmem[cell_addr];
-                            }
-                            if is_wr {
-                                core.dmem[cell_addr] = core.r[reg];
-                            }
-
-                            // Curvature-weighted integer ALU operations (0 FLOPs)
-                            match alu_op {
-                                '+' => core.r[reg] = core.r[reg].wrapping_add(val * curvature_weight),
-                                '-' => core.r[reg] = core.r[reg].wrapping_sub(val * curvature_weight),
-                                '*' => {
-                                    core.r[reg] ^= (val * curvature_weight) << radial_shift;
-                                }
-                                '^' => core.r[reg] ^= val * curvature_weight,
-                                '=' => core.r[reg] = val * curvature_weight,
-                                '!' => core.is_halted = true,
-                                _ => {}
-                            }
-                        }
-                        continue;
-                    }
-
-                    let imm_val = bundle.imm_vals[slot_idx];
-
-                    match slot.opcode.as_str() {
-                        op if op.starts_with('=') || slot.prefix == '\'' => {
-                            core.r[d] = imm_val;
-                        }
-                        "OP" | "WD" => {
-                            core.optical_gemm_count += 1;
-                            let val_a = core.r[d];
-                            let val_b = core.r[s];
-                            let a_lo = (val_a & 0xFFFF) as i16 as i32;
-                            let a_hi = ((val_a >> 16) & 0xFFFF) as i16 as i32;
-                            let b_lo = (val_b & 0xFFFF) as i16 as i32;
-                            let b_hi = ((val_b >> 16) & 0xFFFF) as i16 as i32;
-                            let optical_dot = (a_lo * b_lo + a_hi * b_hi) >> 8;
-                            let optical_mag = (optical_dot.unsigned_abs() & 0xFFFF) | 0x00FF_0000;
-                            core.r[d] = optical_mag;
-                        }
-                        "FA" => {
-                            if core.rev_stack.len() < 256 {
-                                core.rev_stack.push(core.r[s]);
-                            }
-                            core.r[d] = core.r[s];
-                        }
-                        "TT" => {
-                            core.r[d] = tile_transpose(core.r[s]);
-                        }
-                        "AD" => {
-                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
-                                (core.r[s], core.r[imm_nibble])
-                            } else {
-                                (core.r[d], core.r[s])
-                            };
-                            core.r[d] = val1.wrapping_add(val2);
-                        }
-                        "SB" | "SU" => {
-                            core.spatial_broadcast_count += 1;
-                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
-                                (core.r[s], core.r[imm_nibble])
-                            } else {
-                                (core.r[d], core.r[s])
-                            };
-                            core.r[d] = val1.wrapping_sub(val2);
-                        }
-                        "ML" => {
-                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
-                                (core.r[s], core.r[imm_nibble])
-                            } else {
-                                (core.r[d], core.r[s])
-                            };
-                            core.r[d] = val1.wrapping_mul(val2);
-                        }
-                        "DV" => {
-                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
-                                (core.r[s], core.r[imm_nibble])
-                            } else {
-                                (core.r[d], core.r[s])
-                            };
-                            core.r[d] = val1.checked_div(val2).unwrap_or(0);
-                        }
-                        "EX" => {
-                            let input_val = core.r[s];
-                            let scaled = ((input_val as f32 / 100.0).exp() * 100.0) as u32;
-                            core.r[d] = scaled & 0xFFFF;
-                        }
-                        "SQ" => {
-                            let input_val = core.r[s];
-                            core.r[d] = (input_val as f64).sqrt() as u32;
-                        }
-                        "FX" => {
-                            core.r[d] = (core.r[s] << 8) | (imm_val & 0xFF);
-                        }
-                        "LD" => {
-                            if slot.mode == '@' || slot.mode == ':' {
-                                let bank = s % 16;
-                                let offset = imm_nibble % 16;
-                                let b_val = core.bank_r[bank][offset];
-                                core.r[d] = if b_val != 0 { b_val } else { core.r[s] ^ (imm_val & 0xFFFF) };
-                            } else {
-                                let addr = (core.r[s].wrapping_add(imm_val) as usize) % 16384;
-                                core.r[d] = core.dmem[addr];
-                            }
-                        }
-                        "CP" => {
-                            core.r[d] = core.r[s];
-                        }
-                        "MA" => {
-                            let mask = if imm_val != 0 { imm_val } else { 0x00FF_FFFF };
-                            core.r[d] = (core.r[d] & !mask) | (core.r[s] & mask);
-                        }
-                        "PO" | "P0" | "P1" => {
-                            if slot.mode == '@' {
-                                core.r[d] = core.bank_r[s][imm_nibble % 16];
-                                continue;
-                            }
-                            if slot.mode == ':' {
-                                core.bank_r[d][imm_nibble % 16] = core.r[s];
-                                continue;
-                            }
-
-                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
-                                (core.r[s], core.r[imm_nibble])
-                            } else {
-                                (core.r[d], core.r[s])
-                            };
-
-                            let res = match slot.mode {
-                                '+' => val1.wrapping_add(val2),
-                                '-' => val1.wrapping_sub(val2),
-                                '*' => val1.wrapping_mul(val2),
-                                '/' => val1.checked_div(val2).unwrap_or(0),
-                                '%' => if val2 != 0 { val1 % val2 } else { 0 },
-                                '&' => val1 & val2,
-                                '|' => val1 | val2,
-                                '^' => val1 ^ val2,
-                                '<' => if (val1 as i32) < (val2 as i32) { 1 } else { 0 },
-                                '>' => if (val1 as i32) > (val2 as i32) { 1 } else { 0 },
-                                '=' => if val1 == val2 { 1 } else { 0 },
-                                'G' => if (val1 as i32) >= (val2 as i32) { 1 } else { 0 },
-                                'M' => {
-                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { core.r[imm_nibble] } else { 1 };
-                                    core.r[d].wrapping_add(core.r[s].wrapping_mul(factor))
-                                }
-                                'S' => {
-                                    let factor = if imm_nibble > 0 && imm_nibble < 16 { core.r[imm_nibble] } else { 1 };
-                                    core.r[d].wrapping_sub(core.r[s].wrapping_mul(factor))
-                                }
-                                'L' => val1 << (val2 & 31),
-                                'R' => val1 >> (val2 & 31),
-                                'A' => val1.saturating_add(val2),
-                                'X' => !(val1 ^ val2),
-                                'N' => !(val1 & val2),
-                                'O' => !(val1 | val2),
-                                'B' => core.r[s].count_ones(),
-                                _ => val1.wrapping_add(val2),
-                            };
-                            core.r[d] = res;
-                        }
-                        "MD" => {
-                            if slot.mode == '.' || imm_nibble == 5 || imm_nibble == 6 {
-                                core.r[d] = subbyte_ternary_dot(core.r[d], core.r[s]);
-                            } else if slot.mode == '*' || imm_nibble == 3 {
-                                core.r[d] = core.r[d].wrapping_mul(core.r[s]);
-                            } else {
-                                let dot = subbyte_ternary_dot(core.r[d], core.r[s]);
-                                core.r[d] = if dot != 0 { dot } else { core.r[d] ^ core.r[s] };
-                            }
-                        }
-                        "RF" => {
-                            core.reversible_ops_count += 1;
-                            core.r.swap(d, s);
-                        }
-                        "TO" => {
-                            core.reversible_ops_count += 1;
-                            if (core.r[10] & 1 != 0) && (core.r[11] & 1 != 0) {
-                                core.r[d] ^= 1;
-                            }
-                        }
-                        "BK" => {
-                            core.reversible_ops_count += 1;
-                            core.r[d] = core.rev_stack.pop().map(|v| v ^ 0xFFFFFFFF).unwrap_or(0);
-                        }
-                        "ST" => {
-                            core.stdp_updates_count += 1;
-                            let mut syn_acc: u32 = 0;
-                            for (idx, w) in core.stdp_weights.iter_mut().enumerate() {
-                                *w = w.saturating_add(2);
-                                syn_acc = syn_acc.wrapping_add((*w as u32) << ((idx % 4) * 8));
-                            }
-                            core.r[d] = if syn_acc != 0 { syn_acc } else { 0x0000_0084 };
-                        }
-                        "LI" => {
-                            core.stdp_updates_count += 1;
-                            core.r[d] = if core.r[s] >= 50 { 1 } else { 0 };
-                        }
-                        "LF" => {
-                            core.stdp_updates_count += 1;
-                            core.r[d] = if core.r[s] > 100 { 1 } else { 0 };
-                        }
-                        "TX" | "aa" => {
-                            core.spatial_broadcast_count += 1;
-                        }
-                        "RX" => {
-                            core.r[d] = core.r[s];
-                        }
-                        "WH" => {
-                            core.r[d] = core.r[s] | 0x8000;
-                        }
-                        "bb" | "BB" => {
-                            core.barrier_count += 1;
-                        }
-                        "RS" | "88" => {
-                            core.r[1] = 0;
-                        }
-                        "PK" => {
-                            let val = core.r[s];
-                            let mut packed_trits: u32 = 0;
-                            for i in 0..16 {
-                                let b = ((val >> ((i % 4) * 8)) & 0xFF) as i8;
-                                let trit = if b > 20 { 1u32 } else if b < -20 { 2u32 } else { 0u32 };
-                                packed_trits |= trit << (i * 2);
-                            }
-                            core.r[d] = if packed_trits != 0 { packed_trits } else if val != 0 { val } else { 0x5555_AAAA };
-                        }
-                        "TL" => {
-                            core.r[d] = imm_val;
-                        }
-                        "PS" => {
-                            core.r[d] = core.r[s];
-                        }
-                        "CD" => {
-                            let x = (core.r[d] & 0xFFFF) as i16 as i32;
-                            let y = ((core.r[d] >> 16) & 0xFFFF) as i16 as i32;
-                            let angle = (core.r[s] & 0xFF) as f64 * (std::f64::consts::PI / 128.0);
-                            let (sin_a, cos_a) = angle.sin_cos();
-                            let nx = ((x as f64 * cos_a - y as f64 * sin_a) as i32) & 0xFFFF;
-                            let ny = ((x as f64 * sin_a + y as f64 * cos_a) as i32) & 0xFFFF;
-                            core.r[d] = (ny << 16) as u32 | (nx as u32);
-                        }
-                        "GF" | "RN" => {
-                            let feedback = core.lfsr_state & 1;
-                            core.lfsr_state >>= 1;
-                            if feedback == 1 {
-                                core.lfsr_state ^= 0xA000_0003;
-                            }
-                            core.r[d] = core.lfsr_state;
-                        }
-                        "CG" => {
-                            let q = core.r[d];
-                            core.r[d] = (q.rotate_left(1)) ^ core.r[s];
-                        }
-                        "PT" => {
-                            let patch_crc = (core.r[d] ^ core.r[s]) & 0xFF;
-                            core.r[d] = 0x5A00_0000 | patch_crc;
-                        }
-                        "SY" => {
-                            let unified = core.r[d].wrapping_mul(2654435761) ^ core.r[s].wrapping_mul(2246822519);
-                            core.r[d] = (unified & 0x00FF_FFFF) | 0xCA00_0000;
-                        }
-                        "GU" => {
-                            core.r[d] = core.r[d].wrapping_sub(core.r[s] / 2);
-                        }
-                        "FU" | "FE" => {
-                            core.fused_ops_count += 1;
-                            core.hbm_bytes_saved += 64;
-                        }
-                        "CI" => {
-                            core.r[d] = (core.r[s] & 0x00FF_FFFF) | 0xCA00_0000;
-                        }
-                        "CF" => {
-                            core.r[d] = core.r[d].wrapping_add(core.r[s]) ^ 0x00CF_CF00;
-                        }
-                        "SP" => {
-                            let raw_overlap = core.r[s];
-                            core.r[d] = if raw_overlap >= 5 { raw_overlap * 2 } else { raw_overlap / 2 };
-                        }
-                        // Milestone #021: Esolang-Inspired Silicon Coprocessor Execution
-                        "TI" => {
-                            let prev = core.tape_ptrs[0];
-                            core.tape_ptrs[0] = (prev + 1) & 0xFF;
-                            if core.tape_ptrs[0] == 0 {
-                                core.tape_wrap = true;
-                            }
-                        }
-                        "TD" => {
-                            let prev = core.tape_ptrs[0];
-                            core.tape_ptrs[0] = (prev + 255) & 0xFF;
-                            if prev == 0 {
-                                core.tape_wrap = true;
-                            }
-                        }
-                        "TR" => {
-                            let ptr = core.tape_ptrs[0];
-                            core.r[d] = core.tape_buf[ptr];
-                            core.tape_ptrs[0] = (ptr + 1) & 0xFF;
-                            core.esoteric_energy_pj += 0.02;
-                        }
-                        "TW" => {
-                            let ptr = core.tape_ptrs[0];
-                            core.tape_buf[ptr] = core.r[s];
-                            core.tape_ptrs[0] = (ptr + 1) & 0xFF;
-                            core.esoteric_energy_pj += 0.02;
-                        }
-                        "ZL" => {
-                            core.zohl_counter = imm_val as usize;
-                        }
-                        "PR" => {
-                            let ch = if slot.mode == '#' {
-                                let hex_str: String = slot.raw.chars().skip(6).take(2).filter(|c| c.is_ascii_hexdigit()).collect();
-                                if let Ok(val) = u8::from_str_radix(&hex_str, 16) {
-                                    val as char
-                                } else {
-                                    (imm_val as u8) as char
-                                }
-                            } else {
-                                (core.r[s] & 0xFF) as u8 as char
-                            };
-                            print!("{}", ch);
-                            use std::io::Write;
-                            let _ = std::io::stdout().flush();
-                        }
-                        "TC" => {
-                            core.trit_macs_count += 1;
-                            core.esoteric_energy_pj += 0.05;
-                            core.r[d] = crate::cl_esoteric::TritWord(core.r[d])
-                                .crazy_simd(crate::cl_esoteric::TritWord(core.r[s])).0;
-                        }
-                        "TM" => {
-                            core.trit_macs_count += 1;
-                            core.esoteric_energy_pj += 0.08;
-                            core.r[d] = crate::cl_esoteric::TritWord::trit_dot(
-                                crate::cl_esoteric::TritWord(core.r[d]),
-                                crate::cl_esoteric::TritWord(core.r[s]),
-                            ) as u32;
-                        }
-                        "DE" | "DW" | "PW" | "DN" | "DS" => {
-                            core.systolic_hops_count += 1;
-                            core.esoteric_energy_pj += 0.04;
-                        }
-                        "UN" => {
-                            core.unify_matches_count += 1;
-                            core.esoteric_energy_pj += 0.05;
-                            let match_found = (core.r[d] & 0xFFFF) == (core.r[s] & 0xFFFF);
-                            core.r[d] = if match_found { 1 } else { 0 };
-                        }
-                        // Milestone #029: Dedicated AI Silicon ISA Extensions
-                        "RM" => {
-                            core.ai_isa_ops_count += 1;
-                            let (x, scale) = if slot.mode == '@' {
-                                let w_bits = core.bank_r[s][imm_nibble % 16];
-                                let sc = f32::from_bits(w_bits);
-                                let inp_bits = if core.r[d] != 0 { core.r[d] } else { core.r[s] };
-                                (f32::from_bits(inp_bits), if sc == 0.0 { 1.0f32 } else { sc })
-                            } else {
-                                let sc = if imm_nibble > 0 && imm_nibble < 16 {
-                                    let sw = f32::from_bits(core.r[imm_nibble]);
-                                    if sw == 0.0 { 1.0f32 } else { sw }
-                                } else {
-                                    1.0f32
-                                };
-                                (f32::from_bits(core.r[s]), sc)
-                            };
-                            let rms = (x * x + 1.0e-5f32).sqrt();
-                            let norm = (x / rms) * scale;
-                            core.r[d] = norm.to_bits();
-                        }
-                        "SM" => {
-                            core.ai_isa_ops_count += 1;
-                            let (x, scale) = if slot.mode == '@' {
-                                let w_bits = core.bank_r[s][imm_nibble % 16];
-                                let sc = f32::from_bits(w_bits);
-                                (f32::from_bits(core.r[d]), if sc == 0.0 { 1.0f32 } else { sc })
-                            } else {
-                                let sc = if imm_nibble > 0 && imm_nibble < 16 {
-                                    let sw = f32::from_bits(core.r[imm_nibble]);
-                                    if sw == 0.0 { 1.0f32 } else { sw }
-                                } else {
-                                    1.0f32
-                                };
-                                (f32::from_bits(core.r[s]), sc)
-                            };
-                            let scaled_x = x * scale;
-                            if core.softmax_sum <= 0.0 || slot.mode == '!' {
-                                core.softmax_max = scaled_x;
-                                core.softmax_sum = 1.0f32;
-                                core.r[d] = 1.0f32.to_bits();
-                            } else {
-                                let old_m = core.softmax_max;
-                                let new_m = if scaled_x > old_m { scaled_x } else { old_m };
-                                let exp_old = (old_m - new_m).exp();
-                                let exp_cur = (scaled_x - new_m).exp();
-                                let new_sum = core.softmax_sum * exp_old + exp_cur;
-                                core.softmax_max = new_m;
-                                core.softmax_sum = new_sum;
-                                let p = exp_cur / new_sum;
-                                core.r[d] = p.to_bits();
-                            }
-                        }
-                        "SI" => {
-                            core.ai_isa_ops_count += 1;
-                            let x = f32::from_bits(core.r[s]);
-                            let sig = 1.0f32 / (1.0f32 + (-x).exp());
-                            let res = x * sig;
-                            core.r[d] = res.to_bits();
-                        }
-                        "GE" => {
-                            core.ai_isa_ops_count += 1;
-                            let x = f32::from_bits(core.r[s]);
-                            let sqrt_2_over_pi = 0.797_884_6_f32;
-                            let inner = sqrt_2_over_pi * (x + 0.044715f32 * x * x * x);
-                            let res = 0.5f32 * x * (1.0f32 + inner.tanh());
-                            core.r[d] = res.to_bits();
-                        }
-                        "SS" => {
-                            core.ai_isa_ops_count += 1;
-                            let bank = if imm_nibble > 0 { imm_nibble % 16 } else { s % 16 };
-                            let ch = bank;
-                            let inp_val = if imm_nibble > 0 || core.r[s] != 0 {
-                                core.r[s]
-                            } else if core.r[d] != 0 {
-                                core.r[d]
-                            } else {
-                                core.r[1]
-                            };
-                            let x = f32::from_bits(inp_val);
-                            let (a_bar, b_bar) = if slot.mode == '@' {
-                                let a = f32::from_bits(core.bank_r[bank][0]);
-                                let b = f32::from_bits(core.bank_r[bank][1]);
-                                (if a == 0.0 { 0.9f32 } else { a }, if b == 0.0 { 0.1f32 } else { b })
-                            } else {
-                                (0.9f32, 0.1f32)
-                            };
-                            let prev_h = core.ssm_state[ch];
-                            let next_h = a_bar * prev_h + b_bar * x;
-                            core.ssm_state[ch] = next_h;
-                            let y = next_h + 0.05f32 * x;
-                            core.r[d] = y.to_bits();
-                        }
-                        "JP" => {
-                            core.branch_target = Some(imm_val as usize);
-                        }
-                        "BZ" => {
-                            let reg = if d > 0 { d } else { s };
-                            if core.r[reg] == 0 {
-                                core.branch_target = Some(imm_val as usize);
-                            }
-                        }
-                        "BN" => {
-                            let reg = if d > 0 { d } else { s };
-                            if core.r[reg] != 0 {
-                                core.branch_target = Some(imm_val as usize);
-                            }
-                        }
-                        "BL" | "JL" | "LT" => {
-                            let reg = if d > 0 { d } else { s };
-                            if (core.r[reg] as i32) < 0 {
-                                core.branch_target = Some(imm_val as usize);
-                            }
-                        }
-                        "BG" => {
-                            let reg = if d > 0 { d } else { s };
-                            if (core.r[reg] as i32) > 0 {
-                                core.branch_target = Some(imm_val as usize);
-                            }
-                        }
-                        "JS" => {
-                            core.ras.push(bundle.cycle + 1);
-                            core.branch_target = Some(imm_val as usize);
-                        }
-                        "RT" => {
-                            if let Some(ret) = core.ras.pop() {
-                                core.branch_target = Some(ret);
-                            }
-                        }
-                        "SR" => {
-                            let src_r = if d > 0 { d } else { s };
-                            let base_r = if s > 0 && d > 0 { s } else { 0 };
-                            let addr = (core.r[base_r].wrapping_add(imm_val) as usize) % 16384;
-                            core.dmem[addr] = core.r[src_r];
-                        }
-                        "LB" => {
-                            let byte_addr = (core.r[s].wrapping_add(imm_val) as usize) % 65536;
-                            let word_idx = byte_addr / 4;
-                            let byte_shift = (byte_addr % 4) * 8;
-                            core.r[d] = (core.dmem[word_idx] >> byte_shift) & 0xFF;
-                        }
-                        "BY" => {
-                            let src_r = if d > 0 { d } else { s };
-                            let base_r = if s > 0 && d > 0 { s } else { 0 };
-                            let byte_addr = (core.r[base_r].wrapping_add(imm_val) as usize) % 65536;
-                            let word_idx = byte_addr / 4;
-                            let byte_shift = (byte_addr % 4) * 8;
-                            let mask = !(0xFF << byte_shift);
-                            let b_val = (core.r[src_r] & 0xFF) << byte_shift;
-                            core.dmem[word_idx] = (core.dmem[word_idx] & mask) | b_val;
-                        }
-                        "HL" => {
-                            core.is_halted = true;
-                            return Ok(());
-                        }
-                        _ => {}
-                    }
-            }
+        if core.is_halted {
+            return Ok(());
+        }
 
         if let Some(target) = core.branch_target.take() {
             let tgt_idx = *cycle_to_idx.get(&target).unwrap_or(&target);
