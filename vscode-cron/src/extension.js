@@ -139,6 +139,13 @@ function activate(context) {
                 { label: '$(debug-alt) Start Hardware Debugger (DAP)', description: 'Cycle-accurate VLIW stepping & registers', command: 'cron.startDebugging' },
                 { label: '$(circuit-board) 4D-Torus & Wafer Visualizer', description: 'Live 65,536-Core silicon heatmap & packet telemetry', command: 'cron.openMeshVisualizer' },
                 { label: '$(database) 16-Bank PGAS SRAM Memory Inspector', description: 'Zero-conflict 16-bank PGAS SRAM memory heatmap & inspection', command: 'cron.openMemoryInspector' },
+                { label: '$(mic) Launch Sovereign Voice Agent', description: 'End-to-end 0-DSP STT -> 4D-Torus Mind -> Formant Speech', command: 'cron.voice' },
+                { label: '$(unmute) Synthesize Mongolian Speech (TTS)', description: 'Convert text to 16-bit PCM WAV waveform', command: 'cron.audioSynth' },
+                { label: '$(package) Package Manager Build', description: 'Compile all .cl kernels in project (cron pkg build)', command: 'cron.pkgBuild' },
+                { label: '$(beaker) Package Manager Test', description: 'Execute test kernels in tests/ (cron pkg test)', command: 'cron.pkgTest' },
+                { label: '$(circuit-board) Synthesize FPGA Bitstream', description: 'Target iCE40 / ECP5 / Artix-7 (cron fpga)', command: 'cron.fpgaBuild' },
+                { label: '$(layers) OpenLane ASIC Tape-Out', description: 'Generate GDSII for SkyWater 130nm (cron tapeout)', command: 'cron.tapeoutAsic' },
+                { label: '$(globe) Open In-Browser Wasm Playground', description: 'Interactive 3D 4D-Torus simulator in web browser', command: 'cron.playground' },
             ];
 
             const selected = await vscode.window.showQuickPick(items, {
@@ -284,6 +291,70 @@ function activate(context) {
                 return;
             }
             runCronInTerminal('CRON Silicon Flash', `"${serverExe}" flash "${editor.document.fileName}" --target xilinx_u280 --build`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.voice', async () => {
+            const prompt = await vscode.window.showInputBox({
+                prompt: 'Enter prompt for CRON Sovereign Voice AI Agent:',
+                placeHolder: 'Сайн байна уу, CRON цахиурын хэл!'
+            });
+            if (prompt !== undefined) {
+                runCronInTerminal('CRON Voice Agent', `"${serverExe}" voice -p "${prompt}" --play`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.audioSynth', async () => {
+            const text = await vscode.window.showInputBox({
+                prompt: 'Enter Mongolian/English text to synthesize into spoken audio:',
+                placeHolder: 'Сайн байна уу, цахиурын хэл!'
+            });
+            if (text) {
+                runCronInTerminal('CRON Speech Synth', `"${serverExe}" audio synth "${text}" --play`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.pkgBuild', async () => {
+            runCronInTerminal('CRON Package Build', `"${serverExe}" pkg build`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.pkgTest', async () => {
+            runCronInTerminal('CRON Package Test', `"${serverExe}" pkg test`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.fpgaBuild', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !editor.document.fileName.endsWith('.cl')) {
+                vscode.window.showErrorMessage('Please open a .cl file to synthesize FPGA bitstream.');
+                return;
+            }
+            runCronInTerminal('CRON FPGA Bitstream', `"${serverExe}" fpga "${editor.document.fileName}" --target ice40`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.tapeoutAsic', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !editor.document.fileName.endsWith('.cl')) {
+                vscode.window.showErrorMessage('Please open a .cl file to run ASIC tape-out flow.');
+                return;
+            }
+            runCronInTerminal('CRON ASIC Tape-Out', `"${serverExe}" tapeout "${editor.document.fileName}" --pdk sky130`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cron.playground', async () => {
+            runCronInTerminal('CRON Wasm Playground', `"${serverExe}" playground --bundle -o playground.html --open`);
         })
     );
 

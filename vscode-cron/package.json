@@ -2,7 +2,7 @@
   "name": "cron-lang",
   "displayName": "CRON Cognitive Language Support",
   "description": "Language support, LSP 3.17, DAP Hardware Debugger, 16-Bank PGAS SRAM Memory Inspector, and 4D-Torus & Wafer-65536 Silicon Visualizer for CRON Silicon Machine Language (.cl)",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "publisher": "cron-ai",
   "engines": {
     "vscode": "^1.80.0"
@@ -131,6 +131,34 @@
       {
         "command": "cron.flashHw",
         "title": "CRON: Synthesize & Flash FPGA Bitstream Package"
+      },
+      {
+        "command": "cron.voice",
+        "title": "CRON: Launch Sovereign Voice AI Agent (STT/TTS)"
+      },
+      {
+        "command": "cron.audioSynth",
+        "title": "CRON: Synthesize Mongolian Speech to WAV"
+      },
+      {
+        "command": "cron.pkgBuild",
+        "title": "CRON: Package Manager Build (cron pkg build)"
+      },
+      {
+        "command": "cron.pkgTest",
+        "title": "CRON: Package Manager Test (cron pkg test)"
+      },
+      {
+        "command": "cron.fpgaBuild",
+        "title": "CRON: Synthesize Physical FPGA Bitstream (iCE40/ECP5/Artix-7)"
+      },
+      {
+        "command": "cron.tapeoutAsic",
+        "title": "CRON: OpenLane SkyWater 130nm ASIC Tape-Out Flow"
+      },
+      {
+        "command": "cron.playground",
+        "title": "CRON: Launch In-Browser 4D-Torus WebAssembly Playground"
       }
     ],
     "breakpoints": [
