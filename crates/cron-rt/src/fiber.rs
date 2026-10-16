@@ -9,6 +9,7 @@
 //   4. Atomic state tracking: Ready, Running, Suspended, Completed.
 // ============================================================================
 
+use std::cell::UnsafeCell;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -270,50 +271,161 @@ impl FiberScheduler {
     }
 }
 
-/// Zero-allocation Ring Buffer Inter-Fiber Channel
-pub struct FiberChannel<T> {
-    buffer: Mutex<VecDeque<T>>,
-    capacity: usize,
-    items_count: AtomicUsize,
+#[repr(align(64))]
+struct CachePadded<T> {
+    value: T,
 }
+
+impl<T> CachePadded<T> {
+    const fn new(value: T) -> Self {
+        Self { value }
+    }
+}
+
+impl<T> std::ops::Deref for CachePadded<T> {
+    type Target = T;
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> std::ops::DerefMut for CachePadded<T> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+struct Slot<T> {
+    sequence: AtomicUsize,
+    value: UnsafeCell<Option<T>>,
+}
+
+unsafe impl<T: Send> Sync for Slot<T> {}
+unsafe impl<T: Send> Send for Slot<T> {}
+
+/// Cache-Line Aligned Lock-Free Bounded MPMC Ring Buffer Channel
+/// Zero mutexes, zero heap allocations on hot path, zero false-sharing between cores.
+pub struct FiberChannel<T> {
+    buffer: Box<[Slot<T>]>,
+    mask: usize,
+    capacity: usize,
+    enqueue_pos: CachePadded<AtomicUsize>,
+    dequeue_pos: CachePadded<AtomicUsize>,
+    items_count: CachePadded<AtomicUsize>,
+}
+
+unsafe impl<T: Send> Sync for FiberChannel<T> {}
+unsafe impl<T: Send> Send for FiberChannel<T> {}
 
 impl<T> FiberChannel<T> {
     pub fn new(capacity: usize) -> Self {
+        let cap = capacity.max(2).next_power_of_two();
+        let mask = cap - 1;
+        let mut slots = Vec::with_capacity(cap);
+        for i in 0..cap {
+            slots.push(Slot {
+                sequence: AtomicUsize::new(i),
+                value: UnsafeCell::new(None),
+            });
+        }
         Self {
-            buffer: Mutex::new(VecDeque::with_capacity(capacity)),
-            capacity,
-            items_count: AtomicUsize::new(0),
+            buffer: slots.into_boxed_slice(),
+            mask,
+            capacity: cap,
+            enqueue_pos: CachePadded::new(AtomicUsize::new(0)),
+            dequeue_pos: CachePadded::new(AtomicUsize::new(0)),
+            items_count: CachePadded::new(AtomicUsize::new(0)),
         }
     }
 
     #[inline(always)]
     pub fn send(&self, val: T) -> Result<(), T> {
-        let mut buf = self.buffer.lock().unwrap();
-        if buf.len() >= self.capacity {
-            return Err(val);
+        let mut pos = self.enqueue_pos.load(Ordering::Relaxed);
+        loop {
+            let slot = &self.buffer[pos & self.mask];
+            let seq = slot.sequence.load(Ordering::Acquire);
+            let dif = seq as isize - pos as isize;
+
+            if dif == 0 {
+                match self.enqueue_pos.compare_exchange_weak(
+                    pos,
+                    pos + 1,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                ) {
+                    Ok(_) => {
+                        unsafe {
+                            *slot.value.get() = Some(val);
+                        }
+                        slot.sequence.store(pos + 1, Ordering::Release);
+                        self.items_count.fetch_add(1, Ordering::Relaxed);
+                        return Ok(());
+                    }
+                    Err(actual) => {
+                        pos = actual;
+                    }
+                }
+            } else if dif < 0 {
+                return Err(val);
+            } else {
+                pos = self.enqueue_pos.load(Ordering::Relaxed);
+            }
         }
-        buf.push_back(val);
-        self.items_count.fetch_add(1, Ordering::Release);
-        Ok(())
     }
 
     #[inline(always)]
     pub fn try_recv(&self) -> Option<T> {
-        let mut buf = self.buffer.lock().unwrap();
-        let item = buf.pop_front();
-        if item.is_some() {
-            self.items_count.fetch_sub(1, Ordering::Release);
+        let mut pos = self.dequeue_pos.load(Ordering::Relaxed);
+        loop {
+            let slot = &self.buffer[pos & self.mask];
+            let seq = slot.sequence.load(Ordering::Acquire);
+            let dif = seq as isize - (pos + 1) as isize;
+
+            if dif == 0 {
+                match self.dequeue_pos.compare_exchange_weak(
+                    pos,
+                    pos + 1,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                ) {
+                    Ok(_) => {
+                        let item = unsafe { (*slot.value.get()).take() };
+                        slot.sequence.store(pos + self.mask + 1, Ordering::Release);
+                        self.items_count.fetch_sub(1, Ordering::Relaxed);
+                        return item;
+                    }
+                    Err(actual) => {
+                        pos = actual;
+                    }
+                }
+            } else if dif < 0 {
+                return None;
+            } else {
+                pos = self.dequeue_pos.load(Ordering::Relaxed);
+            }
         }
-        item
     }
 
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.items_count.load(Ordering::Acquire)
+        self.items_count.load(Ordering::Relaxed)
     }
 
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    #[inline(always)]
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+}
+
+impl<T> Drop for FiberChannel<T> {
+    fn drop(&mut self) {
+        while self.try_recv().is_some() {}
     }
 }

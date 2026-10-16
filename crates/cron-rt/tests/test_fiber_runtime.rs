@@ -79,3 +79,61 @@ fn test_fiber_individual_spawn_and_handle() {
 
     scheduler.shutdown();
 }
+
+#[test]
+fn test_lock_free_mpmc_concurrent_stress() {
+    let chan = Arc::new(FiberChannel::<u64>::new(2048));
+    let num_producers = 8;
+    let num_consumers = 8;
+    let items_per_producer = 5_000u64;
+    let total_items = num_producers * items_per_producer;
+
+    let received_sum = Arc::new(AtomicU64::new(0));
+    let received_count = Arc::new(AtomicU64::new(0));
+
+    // Spawn consumers
+    let mut consumer_handles = Vec::new();
+    for _ in 0..num_consumers {
+        let ch = Arc::clone(&chan);
+        let sum_ref = Arc::clone(&received_sum);
+        let cnt_ref = Arc::clone(&received_count);
+        let handle = std::thread::spawn(move || {
+            while cnt_ref.load(Ordering::Acquire) < total_items {
+                if let Some(val) = ch.try_recv() {
+                    sum_ref.fetch_add(val, Ordering::Relaxed);
+                    cnt_ref.fetch_add(1, Ordering::Release);
+                } else {
+                    std::hint::spin_loop();
+                }
+            }
+        });
+        consumer_handles.push(handle);
+    }
+
+    // Spawn producers
+    let mut producer_handles = Vec::new();
+    for p in 0..num_producers {
+        let ch = Arc::clone(&chan);
+        let handle = std::thread::spawn(move || {
+            for i in 0..items_per_producer {
+                let val = (p as u64) * items_per_producer + i + 1;
+                while ch.send(val).is_err() {
+                    std::hint::spin_loop();
+                }
+            }
+        });
+        producer_handles.push(handle);
+    }
+
+    for h in producer_handles {
+        h.join().unwrap();
+    }
+    for h in consumer_handles {
+        h.join().unwrap();
+    }
+
+    let expected_sum: u64 = (1..=total_items).sum();
+    assert_eq!(received_count.load(Ordering::Acquire), total_items);
+    assert_eq!(received_sum.load(Ordering::Acquire), expected_sum);
+    assert!(chan.is_empty());
+}
