@@ -112,67 +112,94 @@ impl Default for SemanticChecker {
     }
 }
 
+#[inline(always)]
+pub fn is_builtin_function(name: &str) -> bool {
+    matches!(
+        name,
+        "simd_splat" | "simd_load" | "simd_store" | "simd_fma" | "simd_dot"
+        | "simd_reduce_sum" | "simd_add" | "simd_sub" | "simd_mul" | "simd_div"
+        | "vec4f" | "vec8f" | "vec16f" | "vec4i" | "vec8i"
+        | "channel_new" | "channel_send" | "channel_recv" | "channel_try_recv" | "channel_close"
+        | "spawn_at" | "torus_core_id" | "torus_coord_x" | "torus_coord_y" | "torus_coord_z" | "torus_coord_w"
+        | "torus_distance" | "torus_send" | "torus_recv" | "torus_broadcast"
+        | "simd_ternary_dot" | "pack_ternary" | "unpack_ternary"
+        | "pack_i4" | "unpack_i4" | "simd_f4_gemm"
+        | "tile4x4_f32" | "tile4x4_i32" | "tile_matmul" | "tile_transpose" | "tile_add" | "tile_fma"
+        | "tile_get" | "tile_set"
+        | "dma_sync" | "await_dma_channel"
+        | "sram_swizzle_index" | "tile_swizzle"
+        | "pgas_read" | "pgas_write" | "pgas_barrier"
+        | "tensor_matmul" | "tensor_transpose" | "tensor_add" | "tensor_reshape" | "tensor_slice"
+        | "tensor_init" | "tensor_ones" | "tensor_zeros"
+        | "tensor_scale" | "tensor_softmax_maxsub" | "tensor_gelu" | "tensor_bias"
+        | "cron_telemetry_init" | "cron_telemetry_log" | "cron_telemetry_close" | "cron_save_agi_state"
+        | "send_noc" | "recv_noc" | "noc_barrier" | "pack_trits" | "pack_trit16" | "unpack_trits"
+        | "stdp_update" | "stdp_learn" | "ternary_mac" | "bitnet_mac" | "ternary_linear"
+        | "clifford_rotor_sandwich" | "clifford_wedge" | "clifford_rotor"
+        | "fma" | "fms" | "popcount" | "saturating_add" | "xnor" | "nand" | "nor"
+    )
+}
+
+#[inline(always)]
+pub fn is_builtin_type(name: &str) -> bool {
+    matches!(
+        name,
+        "vec4f" | "vec8f" | "vec16f" | "vec4i" | "vec8i" | "channel" | "Channel"
+        | "i2" | "i4" | "f4" | "f8" | "f16" | "bf16"
+        | "tile4x4_f32" | "tile4x4_i32" | "tile16x16_i2"
+        | "tensor"
+    )
+}
+
 impl SemanticChecker {
     pub fn new() -> Self {
-        let mut known_functions = HashSet::new();
-        for f in &[
-            "simd_splat", "simd_load", "simd_store", "simd_fma", "simd_dot",
-            "simd_reduce_sum", "simd_add", "simd_sub", "simd_mul", "simd_div",
-            "vec4f", "vec8f", "vec16f", "vec4i", "vec8i",
-            "channel_new", "channel_send", "channel_recv", "channel_try_recv", "channel_close",
-            "spawn_at", "torus_core_id", "torus_coord_x", "torus_coord_y", "torus_coord_z", "torus_coord_w",
-            "torus_distance", "torus_send", "torus_recv", "torus_broadcast",
-            // Sub-byte & BitNet AI intrinsics
-            "simd_ternary_dot", "pack_ternary", "unpack_ternary",
-            "pack_i4", "unpack_i4", "simd_f4_gemm",
-            // Systolic Tile Hardware intrinsics
-            "tile4x4_f32", "tile4x4_i32", "tile_matmul", "tile_transpose", "tile_add", "tile_fma",
-            "tile_get", "tile_set",
-            "dma_sync", "await_dma_channel",
-            // Phase 9: Bank-Free Swizzling & 4D-Torus PGAS intrinsics
-            "sram_swizzle_index", "tile_swizzle",
-            "pgas_read", "pgas_write", "pgas_barrier",
-            // Phase 10: Dependent Tensor & Silicon Autotuner builtins
-            "tensor_matmul", "tensor_transpose", "tensor_add", "tensor_reshape", "tensor_slice",
-            "tensor_init", "tensor_ones", "tensor_zeros",
-            // Phase 12: Kernel Fusion & Streaming builtins
-            "tensor_scale", "tensor_softmax_maxsub", "tensor_gelu", "tensor_bias",
-            // Real-World Training & AGI Telemetry builtins
-            "cron_telemetry_init", "cron_telemetry_log", "cron_telemetry_close", "cron_save_agi_state",
-            // Advanced .CL hardware intrinsics lowered from .CR
-            "send_noc", "recv_noc", "noc_barrier", "pack_trits", "pack_trit16", "unpack_trits",
-            "stdp_update", "stdp_learn", "ternary_mac", "bitnet_mac", "ternary_linear",
-            "clifford_rotor_sandwich", "clifford_wedge", "clifford_rotor",
-            "fma", "fms", "popcount", "saturating_add", "xnor", "nand", "nor",
-        ] {
-            known_functions.insert(f.to_string());
-        }
-
-        let mut known_types = HashMap::new();
-        for t in &[
-            "vec4f", "vec8f", "vec16f", "vec4i", "vec8i", "channel", "Channel",
-            "i2", "i4", "f4", "f8", "f16", "bf16",
-            "tile4x4_f32", "tile4x4_i32", "tile16x16_i2",
-            "tensor",
-        ] {
-            known_types.insert(t.to_string(), "builtin".to_string());
-        }
-
         Self {
             scopes: vec![Scope::new()],
             in_region: false,
             in_fuse: false,
             exported_vars: HashSet::new(),
             region_allocated_vars: HashMap::new(),
-            known_functions,
+            known_functions: HashSet::new(),
             known_structs: HashMap::new(),
-            known_types,
+            known_types: HashMap::new(),
             known_traits: HashMap::new(),
             known_impls: HashMap::new(),
             fn_param_types: HashMap::new(),
             fn_return_types: HashMap::new(),
             known_enums: HashMap::new(),
             known_enum_payloads: HashMap::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_known_function(&self, name: &str) -> bool {
+        is_builtin_function(name) || self.known_functions.contains(name)
+    }
+
+    #[inline(always)]
+    pub fn is_known_type(&self, name: &str) -> bool {
+        is_builtin_type(name)
+            || self.known_types.contains_key(name)
+            || self.known_structs.contains_key(name)
+            || self.known_enums.contains_key(name)
+    }
+
+    pub fn clone_for_child(&self) -> Self {
+        Self {
+            scopes: vec![Scope::new()],
+            in_region: self.in_region,
+            in_fuse: self.in_fuse,
+            exported_vars: HashSet::new(),
+            region_allocated_vars: HashMap::new(),
+            known_functions: self.known_functions.clone(),
+            known_structs: self.known_structs.clone(),
+            known_types: self.known_types.clone(),
+            known_traits: self.known_traits.clone(),
+            known_impls: self.known_impls.clone(),
+            fn_param_types: self.fn_param_types.clone(),
+            fn_return_types: self.fn_return_types.clone(),
+            known_enums: self.known_enums.clone(),
+            known_enum_payloads: self.known_enum_payloads.clone(),
         }
     }
 
@@ -308,21 +335,13 @@ impl SemanticChecker {
             // Register impl methods as known functions and check their bodies
             for method in &impl_decl.methods {
                 self.known_functions.insert(method.name.clone());
-                let mut func_checker = SemanticChecker::new();
-                func_checker.known_functions = self.known_functions.clone();
-                func_checker.known_structs = self.known_structs.clone();
-                func_checker.known_types = self.known_types.clone();
+                let mut func_checker = self.clone_for_child();
                 for gp in &impl_decl.generic_params {
                     func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
                 }
                 for gp in &method.generic_params {
                     func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
                 }
-                func_checker.known_traits = self.known_traits.clone();
-                func_checker.known_impls = self.known_impls.clone();
-                func_checker.known_enums = self.known_enums.clone();
-                func_checker.fn_param_types = self.fn_param_types.clone();
-                func_checker.fn_return_types = self.fn_return_types.clone();
                 for param in &method.params {
                     if param.name == "self" { continue; }
                     func_checker.insert_var(VarInfo {
@@ -345,18 +364,10 @@ impl SemanticChecker {
 
         // Check functions
         for func in &program.functions {
-            let mut func_checker = SemanticChecker::new();
-            func_checker.known_functions = self.known_functions.clone();
-            func_checker.known_structs = self.known_structs.clone();
-            func_checker.known_types = self.known_types.clone();
+            let mut func_checker = self.clone_for_child();
             for gp in &func.generic_params {
                 func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
             }
-            func_checker.known_traits = self.known_traits.clone();
-            func_checker.known_impls = self.known_impls.clone();
-            func_checker.known_enums = self.known_enums.clone();
-            func_checker.fn_param_types = self.fn_param_types.clone();
-            func_checker.fn_return_types = self.fn_return_types.clone();
             for param in &func.params {
                 func_checker.insert_var(VarInfo {
                     name: param.name.clone(),
@@ -377,22 +388,14 @@ impl SemanticChecker {
 
         // Check cognitive brain blocks
         for brain in &program.brains {
-            let mut brain_checker = SemanticChecker::new();
-            brain_checker.known_functions = self.known_functions.clone();
-            brain_checker.known_structs = self.known_structs.clone();
-            brain_checker.known_types = self.known_types.clone();
-            brain_checker.known_traits = self.known_traits.clone();
-            brain_checker.known_impls = self.known_impls.clone();
-            brain_checker.known_enums = self.known_enums.clone();
-            brain_checker.fn_param_types = self.fn_param_types.clone();
-            brain_checker.fn_return_types = self.fn_return_types.clone();
+            let mut brain_checker = self.clone_for_child();
             brain_checker.check_statements(&brain.body)?;
             brain_checker.verify_all_linear_consumed()?;
         }
 
         // Check decoupled schedule declarations
         for sched in &program.schedules {
-            let fn_exists = self.known_functions.contains(&sched.target_fn)
+            let fn_exists = self.is_known_function(&sched.target_fn)
                 || program.functions.iter().any(|f| f.name == sched.target_fn)
                 || program.impls.iter().any(|imp| imp.methods.iter().any(|m| m.name == sched.target_fn));
             if !fn_exists {
@@ -595,21 +598,13 @@ impl SemanticChecker {
             // Register impl methods as known functions and check their bodies
             for method in &impl_decl.methods {
                 self.known_functions.insert(method.name.clone());
-                let mut func_checker = SemanticChecker::new();
-                func_checker.known_functions = self.known_functions.clone();
-                func_checker.known_structs = self.known_structs.clone();
-                func_checker.known_types = self.known_types.clone();
+                let mut func_checker = self.clone_for_child();
                 for gp in &impl_decl.generic_params {
                     func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
                 }
                 for gp in &method.generic_params {
                     func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
                 }
-                func_checker.known_traits = self.known_traits.clone();
-                func_checker.known_impls = self.known_impls.clone();
-                func_checker.known_enums = self.known_enums.clone();
-                func_checker.fn_param_types = self.fn_param_types.clone();
-                func_checker.fn_return_types = self.fn_return_types.clone();
                 for param in &method.params {
                     if param.name == "self" { continue; }
                     func_checker.insert_var(VarInfo {
@@ -632,18 +627,10 @@ impl SemanticChecker {
 
         // Check functions
         for func in &program.functions {
-            let mut func_checker = SemanticChecker::new();
-            func_checker.known_functions = self.known_functions.clone();
-            func_checker.known_structs = self.known_structs.clone();
-            func_checker.known_types = self.known_types.clone();
+            let mut func_checker = self.clone_for_child();
             for gp in &func.generic_params {
                 func_checker.known_types.insert(gp.clone(), "generic_param".to_string());
             }
-            func_checker.known_traits = self.known_traits.clone();
-            func_checker.known_impls = self.known_impls.clone();
-            func_checker.known_enums = self.known_enums.clone();
-            func_checker.fn_param_types = self.fn_param_types.clone();
-            func_checker.fn_return_types = self.fn_return_types.clone();
             for param in &func.params {
                 func_checker.insert_var(VarInfo {
                     name: param.name.clone(),
@@ -664,22 +651,14 @@ impl SemanticChecker {
 
         // Check cognitive brain blocks
         for brain in &program.brains {
-            let mut brain_checker = SemanticChecker::new();
-            brain_checker.known_functions = self.known_functions.clone();
-            brain_checker.known_structs = self.known_structs.clone();
-            brain_checker.known_types = self.known_types.clone();
-            brain_checker.known_traits = self.known_traits.clone();
-            brain_checker.known_impls = self.known_impls.clone();
-            brain_checker.known_enums = self.known_enums.clone();
-            brain_checker.fn_param_types = self.fn_param_types.clone();
-            brain_checker.fn_return_types = self.fn_return_types.clone();
+            let mut brain_checker = self.clone_for_child();
             brain_checker.check_statements_multi(&brain.body, &mut errors);
             brain_checker.verify_all_linear_consumed_multi(&mut errors);
         }
 
         // Check decoupled schedule declarations
         for sched in &program.schedules {
-            let fn_exists = self.known_functions.contains(&sched.target_fn)
+            let fn_exists = self.is_known_function(&sched.target_fn)
                 || program.functions.iter().any(|f| f.name == sched.target_fn)
                 || program.impls.iter().any(|imp| imp.methods.iter().any(|m| m.name == sched.target_fn));
             if !fn_exists {
