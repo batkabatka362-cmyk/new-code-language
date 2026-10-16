@@ -381,7 +381,7 @@ pub use cl_multimodal::{
 pub use cl_audio::{
     encode_wav_16bit, FormantFilter, PhonemeSpec, grapheme_to_phoneme, text_to_phonemes,
     AudioSynthesisReport, synthesize_speech_waveform, synthesize_speech_wav, save_speech_wav,
-    render_ascii_waterfall,
+    render_ascii_waterfall, AudioTranscriptionReport, transcribe_speech_pcm, transcribe_speech_wav,
 };
 
 pub use cl_swarm::{

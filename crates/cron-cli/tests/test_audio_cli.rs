@@ -51,5 +51,17 @@ fn test_cli_audio_synth_and_stft() {
     assert!(json_str.contains("\"duration_seconds\""));
     assert!(json_str.contains("\"peak_amplitude\""));
 
+    // 4. Speech-to-Text Transcription (STT)
+    let stt_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+        .args(["audio", "transcribe", out_file, "--json"])
+        .output()
+        .expect("Failed to run cron audio transcribe");
+
+    assert!(stt_out.status.success(), "cron audio transcribe must succeed");
+    let stt_json = String::from_utf8_lossy(&stt_out.stdout);
+    assert!(stt_json.contains("\"transcription\""));
+    assert!(stt_json.contains("\"confidence\""));
+    assert!(stt_json.contains("\"zero_dsp_ops\""));
+
     let _ = fs::remove_file(out_file);
 }

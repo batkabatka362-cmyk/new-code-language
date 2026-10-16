@@ -271,6 +271,14 @@ def _setup_ffi(lib):
             ctypes.c_char_p,
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_audio_transcribe_wav_json
+    if hasattr(lib, "cron_audio_transcribe_wav_json"):
+        lib.cron_audio_transcribe_wav_json.restype = ctypes.c_bool
+        lib.cron_audio_transcribe_wav_json.argtypes = [
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -1023,6 +1031,7 @@ __all__ = [
     "flash",
     "playground",
     "audio_synth",
+    "audio_transcribe",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1857,6 +1866,30 @@ def audio_synth(text: str, output_wav: str = "speech.wav", play: bool = False) -
             subprocess.run(["aplay", abs_path])
 
     return abs_path
+
+def audio_transcribe(wav_path: str) -> Dict[str, Any]:
+    """
+    Transcribes Mongolian or English speech from a WAV audio file using multiplier-free 0-DSP acoustic inference.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_audio_transcribe_wav_json"):
+        raise RuntimeError("Speech-to-text transcriber not available in native library")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    ok = _lib.cron_audio_transcribe_wav_json(
+        wav_path.encode("utf-8"),
+        ctypes.byref(out_json),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown transcription error"
+        raise RuntimeError(f"Audio transcription failed: {err}")
+
+    raw_json = out_json.value.decode("utf-8") if out_json.value else "{}"
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+    return json.loads(raw_json)
 
 
 

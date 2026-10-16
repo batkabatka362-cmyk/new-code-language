@@ -2138,6 +2138,58 @@ pub unsafe extern "C" fn cron_audio_synthesize_wav(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cron_audio_transcribe_wav_json(
+    wav_path: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if wav_path.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let path_str = match CStr::from_ptr(wav_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    match cronc::cl_audio::transcribe_speech_wav(std::path::Path::new(path_str)) {
+        Ok(report) => {
+            let phonemes_json: Vec<String> = report.phonemes.iter().map(|p| format!("\"{}\"", p)).collect();
+            let json = format!(
+                r#"{{"transcription":"{}","confidence":{:.4},"duration_seconds":{:.3},"sample_rate":{},"total_frames":{},"zero_dsp_ops":{},"latency_us":{:.1},"phonemes":[{}]}}"#,
+                report.text.replace('"', "\\\""),
+                report.confidence,
+                report.duration_seconds,
+                report.sample_rate,
+                report.total_frames,
+                report.zero_dsp_ops,
+                report.latency_us,
+                phonemes_json.join(", ")
+            );
+            *out_json = CString::new(json).unwrap().into_raw();
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            true
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            false
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------
