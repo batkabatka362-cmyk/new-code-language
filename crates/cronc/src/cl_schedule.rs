@@ -33,7 +33,7 @@ pub fn resolve_hazards(cl_source: &str) -> ClScheduleReport {
     let mut hazards_resolved = 0usize;
 
     let mut cur: Vec<String> = Vec::new();
-    let mut writes: Vec<usize> = Vec::new();
+    let mut writes_mask: u16 = 0;
     let mut seen_bundle = false;
 
     for line in cl_source.lines() {
@@ -46,20 +46,22 @@ pub fn resolve_hazards(cl_source: &str) -> ClScheduleReport {
         }
         seen_bundle = true;
         bundles_before += 1;
-        let (_, slots_part) = line.trim().split_once(':').unwrap();
+        let Some((_, slots_part)) = line.trim().split_once(':') else {
+            continue;
+        };
         for slot in slots_part.split_whitespace() {
             let mut conflict = false;
             let mut dest = None;
             if let Ok(p) = parse_slot(slot) {
                 if p.opcode != "NO" && p.opcode != "HL" {
                     if let Some(d) = p.dest_reg {
-                        if writes.contains(&d) {
+                        if (writes_mask & (1 << (d % 16))) != 0 {
                             conflict = true;
                         }
-                        dest = Some(d);
+                        dest = Some(d % 16);
                     }
                     if let Some(s) = p.src_reg {
-                        if writes.contains(&s) && p.opcode != "==" {
+                        if (writes_mask & (1 << (s % 16))) != 0 && p.opcode != "==" {
                             conflict = true;
                         }
                     }
@@ -67,21 +69,21 @@ pub fn resolve_hazards(cl_source: &str) -> ClScheduleReport {
             }
             if conflict && !cur.is_empty() {
                 bundles.push(std::mem::take(&mut cur));
-                writes.clear();
+                writes_mask = 0;
                 hazards_resolved += 1;
             }
             if let Some(d) = dest {
-                writes.push(d);
+                writes_mask |= 1 << d;
             }
             cur.push(slot.to_string());
             if cur.len() == 4 {
                 bundles.push(std::mem::take(&mut cur));
-                writes.clear();
+                writes_mask = 0;
             }
         }
         if !cur.is_empty() {
             bundles.push(std::mem::take(&mut cur));
-            writes.clear();
+            writes_mask = 0;
         }
     }
 
