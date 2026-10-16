@@ -10597,6 +10597,7 @@ fn handle_bench_command(args: &[String]) {
 
     let mut target_file: Option<String> = None;
     let mut json_mode = false;
+    let mut sota_mode = false;
     let mut out_file: Option<String> = None;
 
     let mut i = 0;
@@ -10604,6 +10605,10 @@ fn handle_bench_command(args: &[String]) {
         match args[i].as_str() {
             "--json" => {
                 json_mode = true;
+                i += 1;
+            }
+            "--sota" | "--report" => {
+                sota_mode = true;
                 i += 1;
             }
             "-o" | "--out" => {
@@ -10618,6 +10623,24 @@ fn handle_bench_command(args: &[String]) {
             }
             _ => { i += 1; }
         }
+    }
+
+    if sota_mode {
+        let rep = cronc::run_sota_benchmark_suite();
+        let ascii_report = cronc::render_sota_ascii_report(&rep);
+        print!("{}", ascii_report);
+
+        if let Some(ref path) = out_file {
+            if path.ends_with(".html") || path.ends_with(".htm") {
+                let html = cronc::render_sota_html_dashboard(&rep);
+                let _ = std::fs::write(path, &html);
+                println!("[SUCCESS] Interactive SOTA benchmark HTML dashboard written -> {}", path);
+            } else {
+                let _ = std::fs::write(path, &ascii_report);
+                println!("[SUCCESS] SOTA benchmark report written -> {}", path);
+            }
+        }
+        return;
     }
 
     if let Some(ref file_path) = target_file {

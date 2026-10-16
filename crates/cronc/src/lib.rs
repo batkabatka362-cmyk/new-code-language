@@ -73,6 +73,7 @@ pub mod cl_multimodal;
 pub mod cl_audio;
 pub mod cl_voice;
 pub mod cl_mic;
+pub mod cl_sota_bench;
 pub mod cl_swarm;
 pub mod cl_swarm_cluster;
 pub mod cl_swarm_synthesis;
@@ -388,6 +389,10 @@ pub use cl_audio::{
 
 pub use cl_voice::{AudioStreamChunk, StreamingVad, VoiceAgent, VoiceTurnResult};
 pub use cl_mic::{record_mic_to_file, record_mic_pcm, LiveVoiceLoop};
+pub use cl_sota_bench::{
+    run_sota_benchmark_suite, render_sota_ascii_report, render_sota_html_dashboard,
+    FrameworkBenchmark, SotaBenchmarkReport,
+};
 
 pub use cl_swarm::{
     AgentRole, AgentState, AutonomousAgent, DimensionOrderRouter, PacketKind, SwarmMesh,
