@@ -385,7 +385,7 @@ pub use cl_audio::{
     render_ascii_waterfall, AudioTranscriptionReport, transcribe_speech_pcm, transcribe_speech_wav,
 };
 
-pub use cl_voice::{VoiceAgent, VoiceTurnResult};
+pub use cl_voice::{AudioStreamChunk, StreamingVad, VoiceAgent, VoiceTurnResult};
 
 pub use cl_swarm::{
     AgentRole, AgentState, AutonomousAgent, DimensionOrderRouter, PacketKind, SwarmMesh,

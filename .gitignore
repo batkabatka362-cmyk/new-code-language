@@ -16,6 +16,7 @@ __pycache__/
 *.vcd
 *.clb
 *.dll
+*.wav
 build_native/
 
 # Generated telemetry data

@@ -17,6 +17,7 @@ pub fn handle_voice_command(args: &[String]) {
         println!("    --input, -i <file.wav>   Audio input WAV file to transcribe and respond to");
         println!("    --out, -o <file.wav>     Save synthesized spoken response to WAV file (default: voice_reply.wav)");
         println!("    --play                   Play audio response immediately through system speaker");
+        println!("    --stream                 Stream speech incrementally in real-time clause chunks (<45ms latency)");
         println!("    --interactive            Run continuous interactive voice conversation loop");
         println!("    --json                   Emit full turn telemetry in JSON format");
         println!();
@@ -33,6 +34,7 @@ pub fn handle_voice_command(args: &[String]) {
     let mut auto_play = false;
     let mut emit_json = false;
     let mut is_interactive = false;
+    let mut is_streaming = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -71,6 +73,10 @@ pub fn handle_voice_command(args: &[String]) {
             }
             "--interactive" => {
                 is_interactive = true;
+                i += 1;
+            }
+            "--stream" => {
+                is_streaming = true;
                 i += 1;
             }
             _ => {
@@ -119,6 +125,40 @@ pub fn handle_voice_command(args: &[String]) {
             cronc::VoiceAgent::play_wav_file(temp_file);
             let _ = std::fs::remove_file(temp_file);
         }
+        return;
+    }
+
+    if is_streaming {
+        println!("================================================================================");
+        println!(" CRON REAL-TIME STREAMING VOICE PIPELINE (<45ms LATENCY)");
+        println!("================================================================================");
+        let text = prompt_text.unwrap_or_else(|| "Сайн байна уу, CRON цахиурын хэл!".to_string());
+        println!("  Input Query : \"{}\"", text);
+        println!("  Streaming Audio Chunks (Real-Time Sub-Clause Synthesis):");
+        println!("--------------------------------------------------------------------------------");
+
+        let turn_result = agent.stream_interact_text(&text, |chunk| {
+            println!(
+                "  [Chunk #{}] \"{:<30}\" | Duration: {:.2}s | Latency: {:.1}µs | Size: {} bytes",
+                chunk.chunk_index + 1,
+                chunk.clause_text,
+                chunk.duration_seconds,
+                chunk.latency_us,
+                chunk.wav_bytes.len(),
+            );
+            if auto_play {
+                let temp_path = std::env::temp_dir().join(format!("stream_chunk_{}.wav", chunk.chunk_index));
+                let _ = std::fs::write(&temp_path, &chunk.wav_bytes);
+                cronc::VoiceAgent::play_wav_file(&temp_path);
+                let _ = std::fs::remove_file(&temp_path);
+            }
+        });
+
+        if let Some(ref out_file) = out_wav {
+            let _ = std::fs::write(out_file, &turn_result.wav_bytes);
+            println!("  Complete Assembled Audio: '{}' ({:.3}s)", out_file, turn_result.speech_duration_s);
+        }
+        println!("================================================================================");
         return;
     }
 
