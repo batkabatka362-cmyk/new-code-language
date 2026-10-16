@@ -5419,6 +5419,8 @@ fn main() {
             let default_dir = if Path::new("libcl").exists() { "libcl".to_string() } else { "examples".to_string() };
             let mut target_path = default_dir;
             let mut verilog_mode = false;
+            let mut fuzz_mode = false;
+            let mut fuzz_iterations = 30_000usize;
             let mut max_cycles = 2000usize;
             let mut strict = false;
             let mut json_mode = false;
@@ -5430,6 +5432,12 @@ fn main() {
                 if args[i] == "--verilog" || args[i] == "-v" || args[i] == "--cosim" {
                     verilog_mode = true;
                     i += 1;
+                } else if args[i] == "--fuzz" {
+                    fuzz_mode = true;
+                    i += 1;
+                } else if (args[i] == "--iterations" || args[i] == "-n") && i + 1 < args.len() {
+                    if let Ok(it) = args[i + 1].parse::<usize>() { fuzz_iterations = it; }
+                    i += 2;
                 } else if (args[i] == "--cycles" || args[i] == "--max-cycles") && i + 1 < args.len() {
                     if let Ok(c) = args[i + 1].parse::<usize>() { max_cycles = c; }
                     i += 2;
@@ -5451,6 +5459,23 @@ fn main() {
                 } else {
                     i += 1;
                 }
+            }
+
+            if fuzz_mode {
+                let options = cronc::FuzzOptions {
+                    iterations: fuzz_iterations,
+                    test_optimizer: true,
+                    test_memcheck: true,
+                    test_jit_execution: true,
+                    ..Default::default()
+                };
+                let rep = cronc::run_cl_fuzz(&options);
+                if json_mode {
+                    println!("{}", rep.to_json());
+                } else {
+                    println!("{}", rep.format_ascii_report());
+                }
+                return;
             }
 
             fn collect_test_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
