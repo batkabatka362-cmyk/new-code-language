@@ -279,6 +279,15 @@ def _setup_ffi(lib):
             ctypes.POINTER(ctypes.c_char_p),
             ctypes.POINTER(ctypes.c_char_p),
         ]
+    # cron_voice_interact_json
+    if hasattr(lib, "cron_voice_interact_json"):
+        lib.cron_voice_interact_json.restype = ctypes.c_bool
+        lib.cron_voice_interact_json.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_char_p),
+            ctypes.POINTER(ctypes.c_char_p),
+        ]
     # cron_string_free
     if hasattr(lib, "cron_string_free"):
         lib.cron_string_free.restype = None
@@ -1032,6 +1041,7 @@ __all__ = [
     "playground",
     "audio_synth",
     "audio_transcribe",
+    "voice_interact",
 ]
 
 def compile(target: str = "cl", sphere: bool = True, dim: int = 64, opt_level: str = "3"):
@@ -1890,6 +1900,47 @@ def audio_transcribe(wav_path: str) -> Dict[str, Any]:
     if hasattr(_lib, "cron_string_free"):
         _lib.cron_string_free(out_json)
     return json.loads(raw_json)
+
+def voice_interact(query_or_wav: str, output_wav: Optional[str] = "voice_reply.wav", play: bool = False) -> Dict[str, Any]:
+    """
+    End-to-end sovereign voice agent interaction:
+    Processes text or audio WAV via 0-DSP STT -> Sovereign Mind Cognition -> Formant Speech TTS.
+    """
+    import json
+    if not _lib or not hasattr(_lib, "cron_voice_interact_json"):
+        raise RuntimeError("Voice agent not available in native library")
+
+    out_json = ctypes.c_char_p()
+    out_err = ctypes.c_char_p()
+    out_wav_c = output_wav.encode("utf-8") if output_wav else None
+
+    ok = _lib.cron_voice_interact_json(
+        query_or_wav.encode("utf-8"),
+        out_wav_c,
+        ctypes.byref(out_json),
+        ctypes.byref(out_err),
+    )
+    if not ok:
+        err = out_err.value.decode("utf-8") if out_err.value else "Unknown voice agent error"
+        raise RuntimeError(f"Voice interaction failed: {err}")
+
+    raw_json = out_json.value.decode("utf-8") if out_json.value else "{}"
+    if hasattr(_lib, "cron_string_free"):
+        _lib.cron_string_free(out_json)
+
+    res = json.loads(raw_json)
+
+    if play and output_wav and os.path.exists(output_wav):
+        abs_path = os.path.abspath(output_wav)
+        if sys.platform == "win32":
+            cmd = f'(New-Object Media.SoundPlayer "{abs_path}").PlaySync()'
+            subprocess.run(["powershell", "-c", cmd], capture_output=True)
+        elif sys.platform == "darwin":
+            subprocess.run(["afplay", abs_path])
+        elif os.path.exists("/usr/bin/aplay"):
+            subprocess.run(["aplay", abs_path])
+
+    return res
 
 
 

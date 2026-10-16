@@ -71,6 +71,7 @@ pub mod speculative_decoding;
 pub mod bpe_tokenizer;
 pub mod cl_multimodal;
 pub mod cl_audio;
+pub mod cl_voice;
 pub mod cl_swarm;
 pub mod cl_swarm_cluster;
 pub mod cl_swarm_synthesis;
@@ -383,6 +384,8 @@ pub use cl_audio::{
     AudioSynthesisReport, synthesize_speech_waveform, synthesize_speech_wav, save_speech_wav,
     render_ascii_waterfall, AudioTranscriptionReport, transcribe_speech_pcm, transcribe_speech_wav,
 };
+
+pub use cl_voice::{VoiceAgent, VoiceTurnResult};
 
 pub use cl_swarm::{
     AgentRole, AgentState, AutonomousAgent, DimensionOrderRouter, PacketKind, SwarmMesh,

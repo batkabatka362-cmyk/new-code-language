@@ -2190,6 +2190,71 @@ pub unsafe extern "C" fn cron_audio_transcribe_wav_json(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn cron_voice_interact_json(
+    query_or_wav_path: *const c_char,
+    out_wav_path: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> bool {
+    if query_or_wav_path.is_null() || out_json.is_null() {
+        if !out_error.is_null() {
+            *out_error = CString::new("Null pointer passed").unwrap().into_raw();
+        }
+        return false;
+    }
+
+    let input_str = match CStr::from_ptr(query_or_wav_path).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 error: {}", e)).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    let mut agent = cronc::cl_voice::VoiceAgent::default();
+    let res = if input_str.ends_with(".wav") && std::path::Path::new(input_str).exists() {
+        match agent.interact_wav_file(std::path::Path::new(input_str)) {
+            Ok(r) => r,
+            Err(e) => {
+                if !out_error.is_null() {
+                    *out_error = CString::new(e).unwrap().into_raw();
+                }
+                return false;
+            }
+        }
+    } else {
+        agent.interact_text(input_str)
+    };
+
+    if !out_wav_path.is_null() {
+        if let Ok(wav_target) = CStr::from_ptr(out_wav_path).to_str() {
+            let _ = std::fs::write(wav_target, &res.wav_bytes);
+        }
+    }
+
+    let json = format!(
+        r#"{{"user_query":"{}","input_was_audio":{},"response_text":"{}","spoken_text":"{}","brain_sector":"{}","cognition_latency_us":{:.1},"speech_latency_us":{:.1},"speech_duration_s":{:.3},"wav_bytes_len":{}}}"#,
+        res.user_query.replace('"', "\\\""),
+        res.input_was_audio,
+        res.response_text.replace('"', "\\\""),
+        res.spoken_text.replace('"', "\\\""),
+        res.brain_sector.replace('"', "\\\""),
+        res.cognition_latency_us,
+        res.speech_latency_us,
+        res.speech_duration_s,
+        res.wav_bytes.len()
+    );
+
+    *out_json = CString::new(json).unwrap().into_raw();
+    if !out_error.is_null() {
+        *out_error = std::ptr::null_mut();
+    }
+    true
+}
+
 // ----------------------------------------------------------------------------
 // 11. BPE Tokenizer & Autoregressive Inference C-ABI
 // ----------------------------------------------------------------------------

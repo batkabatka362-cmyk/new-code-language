@@ -1133,6 +1133,31 @@ fn test_ffi_audio_synth() {
     let _ = std::fs::remove_file(out_file);
 }
 
+#[test]
+fn test_ffi_voice_interact() {
+    let out_file = "test_ffi_voice.wav";
+    let _ = std::fs::remove_file(out_file);
+    let query = CString::new("Сайн байна уу, CRON дуут туслах!").unwrap();
+    let out_path = CString::new(out_file).unwrap();
+    let mut out_json: *mut c_char = std::ptr::null_mut();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let ok = unsafe {
+        cron_voice_interact_json(query.as_ptr(), out_path.as_ptr(), &mut out_json, &mut err_ptr)
+    };
+
+    assert!(ok, "cron_voice_interact_json must succeed");
+    assert!(std::path::Path::new(out_file).exists());
+
+    let json_str = unsafe { CStr::from_ptr(out_json).to_str().unwrap() };
+    assert!(json_str.contains("\"user_query\""));
+    assert!(json_str.contains("\"response_text\""));
+    assert!(json_str.contains("\"spoken_text\""));
+
+    let _ = std::fs::remove_file(out_file);
+}
+
+
 
 
 
