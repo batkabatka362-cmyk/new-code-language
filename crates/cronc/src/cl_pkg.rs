@@ -1012,12 +1012,15 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
          autodiff_grad_descent = \"libcl/autodiff_grad_descent.cl\"\n\
          neural_packet_router = \"libcl/neural_packet_router.cl\"\n\
          baremetal_pgas_boot = \"libcl/baremetal_pgas_boot.cl\"\n\
-         metaplastic_bcm_adaptation = \"libcl/metaplastic_bcm_adaptation.cl\"\n\
-         time_reversible_rewind = \"libcl/time_reversible_rewind.cl\"\n\
-         cognitive_transformer_snn = \"libcl/cognitive_transformer_snn.cl\"\n\
-         torus_csp_pipeline = \"libcl/torus_csp_pipeline.cl\"\n\
-         sagi_superintelligence_e2e = \"libcl/sagi_superintelligence_e2e.cl\"\n";
-    fs::write(target_dir.join("libcl.toml"), manifest_toml).map_err(|e| e.to_string())?;
+          metaplastic_bcm_adaptation = \"libcl/metaplastic_bcm_adaptation.cl\"\n\
+          time_reversible_rewind = \"libcl/time_reversible_rewind.cl\"\n\
+          cognitive_transformer_snn = \"libcl/cognitive_transformer_snn.cl\"\n\
+          torus_csp_pipeline = \"libcl/torus_csp_pipeline.cl\"\n\
+          sagi_superintelligence_e2e = \"libcl/sagi_superintelligence_e2e.cl\"\n";
+    let toml_file = target_dir.join("libcl.toml");
+    if !toml_file.exists() {
+        fs::write(toml_file, manifest_toml).map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
@@ -1086,6 +1089,22 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("agentic_tool_reasoning.cl", "Self-Reflective Agentic Tool Dispatch & Action Router", "silicon.agentic_core", 4.0),
         ("tensor_shape_verifier.cl", "Static Tensor Dimension Verification & In-Silicon Bounds Checking", "silicon.tensor_verifier", 4.0),
         ("epigenetic_memory_sleep.cl", "Epigenetic Methylation Tags & Offline Sleep Consolidation Replay", "silicon.epigenetic_memory", 4.0),
+        ("data_processing.cl", "Section 1: Min-Max, Z-Score, Quantile & Tokenization Preprocessing", "silicon.data_preprocessing", 4.0),
+        ("classical_ml.cl", "Section 2: Ridge OLS Normal Eq, XGBoost Gain & K-Means Centroids", "silicon.classical_ml", 4.0),
+        ("vector_ann.cl", "Section 3: Cosine MIPS, Hamming POPCNT & HNSW/PQ Sub-Space Search", "silicon.vector_ann", 4.0),
+        ("graph_ai.cl", "Section 4: MPNN Message Passing, GCN/GAT Attention & MCTS PUCT Search", "silicon.causal_graph", 4.0),
+        ("breakthroughs.cl", "Section 5: KAN B-Splines, SSD Mamba-2, Clifford GA & Muon Orthogonalizer", "silicon.frontier_math", 4.0),
+        ("frontier_models.cl", "Section 7: Llama 4 128-MoE, DeepSeek-V4 Engram & Claude 3.7 Thinking", "silicon.frontier_flagship", 4.0),
+        ("heterogeneous_offload.cl", "Section 9: KTransformers AMX, FlashInfer & Async DMA Double-Buffering", "silicon.heterogeneous_offload", 4.0),
+        ("mtp_speculative.cl", "Section 10: Multi-Token Prediction t+1/t+2 & Built-in Speculative Verification", "silicon.speculative_engine", 4.0),
+        ("video_diffusion.cl", "Section 11: 3D Causal VAE Spatiotemporal Compression & DiT Flow Matching", "silicon.video_diffusion", 4.0),
+        ("domain_models.cl", "Section 13: Oasis World Model, Flux AG, 4DGS & ESM3 3D Biology", "silicon.domain_verticals", 4.0),
+        ("agi_vla_datacenter.cl", "Section 15: Moshi Mimi Audio RVQ, Pi-Zero 50Hz VLA & DeepEP Asymm Dispatch", "silicon.agi_robotics", 4.0),
+        ("liquid_jepa_lightning.cl", "Section 17: Liquid ODE State, Meta JEPA Energy & Lightning Attention 4M", "silicon.liquid_intelligence", 4.0),
+        ("gflownet_bitblas.cl", "Section 18: GFlowNets Trajectory Balance & BitBLAS Sub-4-Bit Matrix Math", "silicon.causal_flow", 4.0),
+        ("gated_delta_muonclip.cl", "Section 19: Qwen3.5 GDN Delta Recurrence & Audiovisual Cross-Diffusion", "silicon.delta_recurrent", 4.0),
+        ("loihi_active_inference.cl", "Section 20: Intel Loihi 2 Graded Spikes, 3-Factor STDP & Active Inference", "silicon.neuromorphic_core", 4.0),
+        ("frontier_verticals.cl", "Section 22: Sana 32x DC-AE, Cosmos Tokenizer & PhysGaussian MPM Stress", "silicon.physics_world", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
