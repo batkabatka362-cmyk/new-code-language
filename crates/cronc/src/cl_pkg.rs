@@ -1108,6 +1108,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("subquadratic_recurrent.cl", "Section 24: RWKV-7 In-Context Weight, Griffin RG-LRU & RetNet Decay", "silicon.subquadratic_recurrent", 4.0),
         ("accelerated_kernels.cl", "Section 25: EAGLE Latent Speculation, Medusa Multi-Head & Liger Fused Ops", "silicon.accelerated_kernels", 4.0),
         ("embodied_physics.cl", "Section 26: ACT Action Chunking, Diffusion Policy & Genesis SPH/MPM", "silicon.embodied_physics", 4.0),
+        ("diffusion_llm.cl", "Section 27: SEDD Discrete Ratios, MDLM Unmasking & LLaDA In-Filling", "silicon.discrete_diffusion", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
