@@ -1109,6 +1109,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("accelerated_kernels.cl", "Section 25: EAGLE Latent Speculation, Medusa Multi-Head & Liger Fused Ops", "silicon.accelerated_kernels", 4.0),
         ("embodied_physics.cl", "Section 26: ACT Action Chunking, Diffusion Policy & Genesis SPH/MPM", "silicon.embodied_physics", 4.0),
         ("diffusion_llm.cl", "Section 27: SEDD Discrete Ratios, MDLM Unmasking & LLaDA In-Filling", "silicon.discrete_diffusion", 4.0),
+        ("equivariant_sciml.cl", "Section 28: NequIP Clebsch-Gordan, Allegro Local Potential & EGNN Updates", "silicon.equivariant_sciml", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
