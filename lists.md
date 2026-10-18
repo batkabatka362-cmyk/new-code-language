@@ -438,22 +438,69 @@ U-Net архитектурыг бүрэн халж, **3D Causal VAE + Diffusion 
 // 14. Optimal Transport Flow Matching Интегратор (DiT ODE Solver)
 .op.flow_match_step dt=0.05, method=midpoint;
 
-// 15. Хетероген CPU-AMX / GPU Асинхрон Оффлоуд (KTransformers Bridge)
-.op.hetero_offload target=cpu_amx, async_prefetch=true;
 
-// 16. O-Voxel & SLAT 3D Бүтцийн Декодер (TRELLIS 3D Generator)
-.op.ovoxel_decode res=1536, format=pbr_mesh;
+---
 
-// 17. 4D Gaussian Splatting Растеризатор (Real-time Spatial Rendering)
-.op.gaussian_splat_rasterize mode=4d_temporal, tile_size=16;
+## 15. AGI / ASI Архитектур, Full-Duplex Яриа, Роботик VLA ба Дата Төвийн Дэд Бүтэц (Frontier Deep Dive 2026)
 
-// 18. B-Rep Parametric CAD Extruder (Text-to-CAD Engine)
-.op.cad_brep_extrude tolerance=0.001, format=step;
+2026 оны сүүл үеийн AGI/ASI түвшний цогц системүүд, бодит ертөнцтэй шууд харьцах бүрэн дуплекс аудио, робот удирдлагын хөдөлгүүрүүд болон дата төвийн түрээсийн кластеруудын гүн технологи:
 
-// 19. Biomolecular Pairformer & Diffusion Module (ESM3 / Chai-1)
-.op.biomolecule_pairformer channels=128, num_blocks=48;
+### 15.1 Kyutai Moshi (Бүрэн Дуплекс Аудио Сэтгэхүйн Архитектур)
+- **Уламжлалт VAD $\rightarrow$ STT $\rightarrow$ LLM $\rightarrow$ TTS шатлалыг бүрэн халсан нь**:
+  - Хүний яриаг сонсох ба өөрийн дуу хоолойгоо гаргах үйлдлийг нэгэн зэрэг (Full-Duplex) 2 зэрэгцээ аудио урсгалаар боловсруулдаг.
+- **Mimi Neural Audio Codec**:
+  - 24kHz аудио долгионыг Residual Vector Quantization (RVQ) ашиглан ердөө **12.5 Hz фрэйм** болгон шахдаг (Эхний давхарга семантик утга, дараагийн 7 давхарга акустик дууны өнгө).
+- **RQ-Transformer & "Inner Monologue" (Дотоод Монолог)**:
+  - Аудио дуугарахын өмнөхөн загвар өөрийн дотор текст токеноор "дотоод бодол"-оо цаг хугацаатай нь уялдуулан бодож, дараа нь дуу авиа болгон хувиргадаг. Саатал (latency) нь ердөө **~200 миллисекунд** бөгөөд дундуур нь таслах (interruption), ярианы завсарлага, эргэх холбоог бодит хүнтэй ярилцаж буй мэт байгалийн болгодог.
+
+### 15.2 Physical Intelligence $\pi_0$ & $\pi_{0.5}$ (Роботын Тасралтгүй Flow Matching VLA)
+- **Дискрет токений саатлыг давсан нь**:
+  - Уламжлалт Vision-Language загварууд зөвхөн салангид текстийн токен гаргадаг тул роботын нарийн хөдөлгөөнд чичиргээтэй (jitter), удаан байдаг.
+  - $\pi_0$ загвар нь VLM суурин дээр **Flow-Matching Action Expert** суулгаж, роботын үе мөчүүдийн тасралтгүй моторт тушаалыг **50 Hz давтамжтайгаар** уян хатан, мултимодаль траектороор шулуун замын урсгалаар бодож гаргадаг.
+- **Олон Төрлийн Робот дээр ерөнхийжих чадвар**:
+  - Ганц гартай, 2 гартай, болон хөдөлгөөнт манипуляторуудад хайрцаг эвхэх, аяга таваг хураах, угаалга эвхэх нарийн хурууны хөдөлгөөнийг бие даан гүйцэтгэдэг.
+
+### 15.3 DeepSeek DeepEP (Дата Төвийн Тэгш Бус MoE Харилцааны Номын Сан)
+- **Дата төвийн NVLink ба RDMA-ийн гацааг шийдсэн нь**:
+  - Загварын токенууд зангилаа доторх өндөр хурдтай NVLink (160 GB/s) болон зангилаа хоорондын харьцангуй удаан RDMA InfiniBand (50 GB/s) сүлжээгээр дайран өнгөрдөг.
+  - DeepEP нь энэхүү **тэгш бус зурвасын өргөнийг (Asymmetric Domain Forwarding)** тооцоолж, токен чиглүүлэлтийг дотооддоо нэгтгэн дараа нь алсын зангилаа руу дамжуулдаг.
+- **Low-Precision FP8 Dispatch**:
+  - Токеныг бусад GPU руу дамжуулахдаа FP8-аар шахаж, хариуг нэгтгэхдээ BF16 нарийвчлалаар аккамуляци хийдэг.
+- **GPU-Initiated Direct Streaming**:
+  - CPU-ийн оролцоогүйгээр GPU нь өөрөө шууд RDMA пакетуудыг илгээдэг бөгөөд тодорхой цөөн тооны Streaming Multiprocessor (SM)-ийг харилцаанд тусгаарлан хуваарилж, тооцооллын хүчин чадлыг алдагдалгүй хадгалдаг.
+
+### 15.4 ThunderKittens (Stanford Hazy Research - GPU Bare-Metal DSL)
+- **Triton болон CUDA-г давсан Hardware-Native абстракци**:
+  - Modern GPU-ийн Tensor Core, TMA (Tensor Memory Accelerator), болон Shared Memory-ийн бүтцийг шууд **Tile (Матрицын Хавтанцар)** хэлбэрээр нэгдүгээр зэрэглэлийн объект болгон програмчилдаг C++ embedded DSL.
+  - Асинхрон TMA хуулбарлах шугамыг ашиглан NVIDIA Hopper (H100) болон Blackwell (B200/NVFP4)-ийн онолын дээд хязгаарт тулсан FLOPS-ийг цөөн мөр код дотор гаргаж авдаг.
+
+### 15.5 Flash Linear Attention (FLA)
+- **Шугаман Анхаарлын Нэгдсэн Стандарт**:
+  - Triton дээр тусгайлан оновчилсон chunkwise болон параллель ассоциатив сканирлалын цөмүүд.
+  - RWKV-6/7, Mamba-2, Gated Linear Attention (GLA), болон RetNet архитектуруудыг $O(N)$ хугацааны нарийн төвөгтэй байдлаар сая токен дамнасан өгөгдөл дээр гацалтгүй сургаж ажиллуулдаг.
+
+---
+
+## 16. CL (Cron Machine Language) Өргөтгөсөн Тулгуур Синтакс (Universal Primitives 20–25)
+
+CL хэл дээр программист дээрх бүх AGI, Аудио, Роботик, Дата төвийн харилцааг бичихэд зориулагдсан универсаль үйлдлүүдийн үргэлжлэл:
+
+```cl
+// 20. Mimi Neural Audio Codec RVQ шахалт ба задлалт (Kyutai Moshi)
+.op.audio_mimi_codec sample_rate=24000, frame_rate=12.5, num_codebooks=8;
+
+// 21. Time-Aligned Inner Monologue RQ-Transformer блок
+.op.inner_monologue_rq text_dim=2048, audio_dim=1024, max_latency_ms=200;
+
+// 22. Robotics Continuous Flow-Matching Motor Trajectory (Pi-Zero 50Hz)
+.op.robot_flow_action freq_hz=50, action_dim=14, steps=10;
+
+// 23. DeepEP Тэгш Бус NVLink/RDMA MoE All-to-All Dispatcher
+.op.deepep_dispatch format=fp8, nvlink_bw=160, rdma_bw=50, sm_budget=4;
+
+// 24. ThunderKittens TMA Tile Matrix Engine (Hopper/Blackwell)
+.op.thunder_tile_gemm tile_m=64, tile_n=64, tile_k=32, async_tma=true;
+
+// 25. Flash Linear Attention Parallel Chunkwise Scan (FLA)
+.op.fla_linear_attention chunk_size=64, gate_dim=16, mode=causal_linear;
 ```
-
-
-
-
