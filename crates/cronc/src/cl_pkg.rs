@@ -1112,6 +1112,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("equivariant_sciml.cl", "Section 28: NequIP Clebsch-Gordan, Allegro Local Potential & EGNN Updates", "silicon.equivariant_sciml", 4.0),
         ("agent_sandbox.cl", "Section 29: CodeAct Terminal Pipe, Firecracker MicroVM & SWE-bench Guard", "silicon.agent_sandbox", 4.0),
         ("custom_silicon_dataflow.cl", "Section 31: Tenstorrent Tensix, Groq TSP Determinism & Cerebras Fabric", "silicon.custom_silicon", 4.0),
+        ("formal_theorem_prover.cl", "Section 32: Lean 4 Calculus, DeepSeek-Prover RLPAF & AlphaProof", "silicon.formal_prover", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
