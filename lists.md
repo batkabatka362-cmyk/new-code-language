@@ -504,3 +504,88 @@ CL хэл дээр программист дээрх бүх AGI, Аудио, Р�
 // 25. Flash Linear Attention Parallel Chunkwise Scan (FLA)
 .op.fla_linear_attention chunk_size=64, gate_dim=16, mode=causal_linear;
 ```
+
+---
+
+## 17. Liquid AI, Energy-Based JEPA, Бодит Цагийн In-Browser VM ба 4M-Контекст Загварууд (Frontier Deep Dive 2026)
+
+### 17.1 Liquid Foundation Models (LFM2 & LFM2.5 — Liquid AI / MIT CSAIL)
+- **Тасралтгүй хувьсах динамик сүлжээ**:
+  - Сонгодог Transformer-ийн бүх давхарга дээрх глобал self-attention-ийг халж, **Gated Short Convolutions ба Grouped-Query Attention (GQA)**-ийг 10-аас 6-ийн харьцаатай (10:6 split) хослуулсан.
+  - Дифференциал тэгшитгэлийн тасралтгүй төлөвийн шилжилтээр өгөгдлийг боловсруулдаг тул CPU болон Edge төхөөрөмж дээр Transformer-оос **2 дахин хурдан prefill/decode** хийдэг.
+  - 230M-350M параметр бүхий embedded хувилбарууд нь ердөө **~220 MB RAM**-д бүрэн багтаж ажилладаг.
+- **Decision Models (`d1` цуврал)**:
+  - Текст үүсгэдэггүй (Zero output tokens), оролтын төлөвийг хүлээн аваад 1 forward pass-аар шууд магадлалын ангилал, чиглүүлэлт, эрэмбэлэлтийг хийдэг хэт бага хоцрогдолтой агентын загварууд.
+
+### 17.2 Meta V-JEPA & I-JEPA (Yann LeCun — Energy-Based Machine Intelligence)
+- **Дараагийн токен/пиксел таахыг эсэргүүцсэн нь**:
+  - Ян ЛеКуны дэвшүүлсэн Energy-Based Models (EBMs) онол: Өндөр хэмжээст бодит ертөнцийн бүх пикселийг тааж гаргах нь хий үзэгдэл (hallucination) үүсгэдэг. Үүний оронд систем ертөнцийн төлөв хоорондын нийцлийг **Energy (Энерги)** хэмээх скаляр утгаар үнэлдэг (Физикийн хууль зөрчвөл өндөр энерги, байгалийн хөдөлгөөн бол бага энерги).
+- **Латент Орон Зайн Таамаглал**:
+  - Видео болон зургийн пикселийг биш, харин хийсвэр төлөөлөл (latent embeddings)-ийг таамагладаг. Ингэснээр загвар гадны шуугианд сатаарахгүйгээр **физик ертөнцийн хөдөлгөөн, роботын төлөвлөлтийг 0-shot аргаар шууд тооцоолох** чадвартай бие даасан World Model болдог.
+
+### 17.3 StackBlitz Bolt.new & In-Browser WebContainers
+- **Браузер доторх бүрэн Node.js/Wasm Виртуалчлал**:
+  - Аппликейшн хөгжүүлэлтийн AI нь алсын серверт биш хэрэглэгчийн вэб хөтөч дотор WebAssembly, Service Workers, SharedArrayBuffer ашиглан жинхэнэ Node.js орчныг үүсгэдэг.
+- **Битүү Хүрээний Self-Healing Кодчилол**:
+  - Агент файлын системийг өөрөө үүсгэж, `npm install` ажиллуулж, серверийг асаадаг.
+  - Хөтчийн runtime console дээр алдаа гармагц агент алдааны стэкийг уншиж, коддоо патч тавьж, апп бүрэн ажиллатал автоматаар засаж дуусгадаг.
+
+### 17.4 MiniMax-01 (Lightning Attention & 4 САЯ Контекст)
+- **456B MoE (45.9B идэвхтэй)**:
+  - Сонгодог $\mathcal{O}(N^2)$ анхаарлын гацааг халсан **Lightning Attention**: Блок доторх сонгодог анхаарал болон блокууд хоорондын шугаман (Linear) анхаарлыг kernel tricks-ээр хослуулсан.
+  - Инференс дээр **4 САЯ (4,000,000) Токен Контекст Цонхыг** тогтвортой санах ойн зарцуулалтаар удирдан ажиллуулдаг.
+
+### 17.5 Moonshot AI Kimi k1.5 & K2 (128k Long-Context RL & Partial Rollouts)
+- **128k Хүртэлх Урт Контекстийн Бэхжүүлэх Сургалт (RL)**:
+  - Богино хариулт дээр биш, 128 мянган токен дамнасан урт сэтгэхүйн гинжин хэлхээ (Chain-of-Thought) дээр RL сургалт явуулснаар загвар өөрөө төлөвлөгөө зохиох, алдаагаа нягтлах чадварыг эзэмшсэн.
+- **Partial Rollouts**:
+  - Урт бодолтын замыг эхнээс нь давтан үүсгэх асар өндөр зардлаас зайлсхийж, өмнөх амжилттай замын хэсгүүдийг дахин ашиглан (reuse хийн) шинэ салааг үүсгэдэг тул үнэтэй MCTS-гүйгээр $o1$-түвшний сэтгэхүйг гаргаж авсан.
+
+---
+
+## 18. GFlowNets (System 2 Causal Exploration), MoE-Infinity NVMe Offloading ба BitBLAS
+
+### 18.1 Yoshua Bengio-ийн GFlowNets (Generative Flow Networks)
+- **AGI-ийн System 2 Логик Сэтгэхүйн Математик Суурь**:
+  - Сонгодог autoregressive магадлалын оронд Directed Acyclic Graph (DAG) дээрх шингэний урсгалын (Flow) тэгшитгэлийг шийдэж, нийлмэл бүтцүүдийг (молекул граф, кодын бүтцийн мод, шалтгаан-үр дагаврын сүлжээ) **шагналын функцийн утгатай шууд пропорционалаар ($P(x) \propto R(x)$)** түүвэрлэдэг.
+- **Detailed Balance & Trajectory Balance**:
+  - MCMC-ийн удаан давталтыг мэдрэлийн сүлжээгээр нэгтгэн, олон янзын таамаглал, бодолтын замыг нэгэн зэрэг ямар ч mode-collapse үүсгэхгүйгээр гаргаж авдаг.
+
+### 18.2 MoE-Infinity (1T+ MoE-ийг NVMe/SSD-ээс Шууд Ажиллуулах)
+- **Спарсе Идэвхжилд Тулгуурласан Кэшийн Систем**:
+  - Дэд экспертүүдийг бүхэлд нь VRAM-д багтаах шаардлагагүй. Хэрэглэгчийн хүсэлтийн дарааллын түүхийг мөшгин, **дараагийн такт дээр аль экспертүүд идэвхжихийг урьдчилан тааж, NVMe SSD-ээс VRAM рүү урьдчилан татан авдаг (trace-based prefetching)**.
+  - Энэ нь 671B–1.6T MoE загваруудыг дата төвийн бус энгийн ажлын станц дээр хурдны алдагдалгүй ажиллуулах үндэс болдог.
+
+### 18.3 Microsoft BitBLAS (Sub-4-Bit Custom Kernel Generator)
+- **1-бит, 2-бит, 4-бит Тооцооллын Хурдатгал**:
+  - Стандарт бус битийн өргөнтэй квантчлагдсан жингүүдийг zadlah/nemeh зардалгүйгээр GPU-ийн Tensor Core болон SIMD нэгж дээр шууд бодох зориулалттай тусгайлан оновчлогдсон C++/CUDA кернел үүсгэгч.
+
+---
+
+## 19. CL (Cron Machine Language) Бүх Нийтийн Тулгуур Синтакс (Universal Primitives 26–32)
+
+CL хэл дээр программист дээрх бүх хамгийн сүүлийн үеийн дэвшилтэт аргуудыг бичихэд зориулагдсан универсаль үйлдлүүдийн төгсгөл:
+
+```cl
+// 26. Liquid Gated Short Conv + GQA 10:6 динамик блок (Liquid AI LFM2)
+.op.liquid_conv_gqa conv_kernel=3, conv_dim=2048, gqa_heads=16, gqa_kv_heads=4;
+
+// 27. Energy-Based JEPA Compatibility Scorer (Meta V-JEPA 2)
+.op.jepa_energy_score latent_dim=1024, predictor_depth=6, metric=l1_smooth;
+
+// 28. MiniMax Lightning Attention Intra/Inter-Block Hybrid (4M Context)
+.op.lightning_attention block_size=256, linear_kernel=elu_plus_one;
+
+// 29. Partial Rollout RL Trajectory Cache (Kimi k1.5 128k RL)
+.op.partial_rollout_rl max_trajectory_len=131072, reuse_ratio=0.75;
+
+// 30. GFlowNets Detailed Balance Compositional Flow Sampler (Yoshua Bengio)
+.op.gflownet_trajectory flow_dim=512, objective=detailed_balance, beta=1.0;
+
+// 31. MoE-Infinity Trace-Based SSD/NVMe Expert Prefetcher
+.op.moe_infinity_cache vram_budget_gb=24, prefetch_lookahead=2, storage=nvme_direct;
+
+// 32. BitBLAS Sub-4-Bit Mixed-Precision Matrix Multiplier
+.op.bitblas_sub4bit_gemm weight_bits=2, compute_dtype=bf16, pack_layout=interleaved;
+```
+
