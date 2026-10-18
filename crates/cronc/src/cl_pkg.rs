@@ -1116,6 +1116,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("generative_audio_speech.cl", "Section 33: SWivid F5-TTS Flow, CosyVoice 2 Prosody & ChatTTS Fillers", "silicon.generative_audio", 4.0),
         ("autonomous_driving_vla.cl", "Section 34: UniAD Planning Queries, BEVFormer v2 & OccNet Voxels", "silicon.autonomous_driving", 4.0),
         ("sub4bit_microscale.cl", "Section 35: QuIP# E8 Lattice, AQLM Sum & NVFP4 Block Scales", "silicon.microscale_quant", 4.0),
+        ("causal_dag_discovery.cl", "Section 36: Pearl Do-Calculus, NOTEARS Matrix Exp & DAGMA LogDet", "silicon.causal_dag", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
