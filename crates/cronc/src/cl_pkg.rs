@@ -1105,6 +1105,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("gated_delta_muonclip.cl", "Section 19: Qwen3.5 GDN Delta Recurrence & Audiovisual Cross-Diffusion", "silicon.delta_recurrent", 4.0),
         ("loihi_active_inference.cl", "Section 20: Intel Loihi 2 Graded Spikes, 3-Factor STDP & Active Inference", "silicon.neuromorphic_core", 4.0),
         ("frontier_verticals.cl", "Section 22: Sana 32x DC-AE, Cosmos Tokenizer & PhysGaussian MPM Stress", "silicon.physics_world", 4.0),
+        ("subquadratic_recurrent.cl", "Section 24: RWKV-7 In-Context Weight, Griffin RG-LRU & RetNet Decay", "silicon.subquadratic_recurrent", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
