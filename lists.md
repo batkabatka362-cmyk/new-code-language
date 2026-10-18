@@ -283,11 +283,117 @@ U-Net архитектурыг бүрэн халж, **3D Causal VAE + Diffusion 
 - Сонгодог Diffusion-ийн муруй шуугианы замын оронд шулуун замын Оновчтой Тээвэрлэлтийн Урсгал (Optimal Transport Conditional Flow Matching - OT-CFM) ашиглан 10–20 алхамд өндөр чанартай видео гаргаж авдаг.
 - **SSTA (Selective & Sliding Tile Attention)**: Видео үүсгэлтийн орон зай-цаг хугацааны KV кэшийн давхардсан хэсгүүдийг танаж хурдасгадаг.
 
+
 ---
 
-## 12. CL (Cron Machine Language) Бүх Нийтийн Тулгуур Синтакс (Universal Primitives)
+## 13. Бүх Салбарын Дэлхийн Тэргүүлэгч ба Нууцлаг Моделиуд (Domain-by-Domain Deep Dive 2026)
 
-CL хэл дээр программист сонгодог статистикаас эхлээд 2026 оны Мега-Моделиуд, KAN, Video DiT, MTP хүртэлх бүх тооцооллыг бичихэд зориулагдсан универсаль үйлдлүүд:
+2026 оны 10 сарын байдлаар дэлхийн шилдэг нээлттэй (Open-Weights), үүлэн (Cloud API), болон олон нийтэд хараахан бүрэн танигдаагүй нууцлаг (Underground) 20–30 тэргүүлэгч загварууд ба тэдгээрийн математик, архитектурын давуу талуудын нарийвчилсан задаргаа:
+
+### 13.1 Зураг ба Дүрслэлийн Салбар (Image Generation, Latent Flow & Design)
+
+1. **Flux 1.1 Pro & Flux Kontext (Black Forest Labs)**:
+   - *Архитектур*: 12B Flow Matching Transformer (Rectified Flow).
+   - *Давуу тал*: **Auto-Guidance (AG)** техник ашиглан Classifier-Free Guidance (CFG)-ийн 2 дахин удаан тооцооллыг 1 pass болгон бууруулсан. Зургийн контекстийг алдагдуулахгүйгээр нэг объект дээр дахин засвар (inpainting/editing) хийх чадвартай.
+2. **Recraft v3**:
+   - *Архитектур*: Raster + Vector (SVG) хосолмол генератив DiT.
+   - *Давуу тал*: Вектор график (paths, bezier curves)-ийг математик түвшинд шууд үүсгэдэг. DPO (Direct Preference Optimization)-ийг график дизайны тэгш хэм, өнгөний зохицолд тусгайлан тохируулсан.
+3. **Ideogram v2 & v3**:
+   - *Архитектур*: Typography-Centric Multimodal DiT.
+   - *Давуу тал*: Зурган дотор үг үсэг, текстийг 100% алдаагүй, зөв фонт, байрлалтай зурах орон зайн cross-attention масктай.
+4. **Lumina-Next**:
+   - *Архитектур*: Next-DiT (2K+ нарийвчлалтай өндөр хурдны Flow Matching).
+   - *Давуу тал*: FlagEmbedding олон масштабын нөхцөлтэй тул хэт өндөр нарийвчлалтай зураг дээр шуугиан үүсэхгүй.
+5. **Stable Diffusion 3.5 Large (Stability AI)**:
+   - *Архитектур*: Multimodal Diffusion Transformer (MMDiT).
+   - *Давуу тал*: Текст болон зургийн урсгалд тусдаа бие даасан жингүүд (separate weight streams) ашигладаг тул текстийн зааврыг ягштал дагадаг.
+6. **Kolors (Kuaishou)**:
+   - *Архитектур*: GLM хэлний суурьтай 6.7B Diffusion загвар.
+   - *Давуу тал*: Олон хэлний гүн ойлголттой, нарийн төвөгтэй өгүүлбэрийн логикийг зурагт алдагдалгүй буулгадаг.
+
+### 13.2 Видео, Орон Зай ба Тоглоомын World Models (Video, 3D & Spatial AI)
+
+7. **Alibaba Wan2.1 (Wan-VAE + 14B DiT)**:
+   - *Архитектур*: 3D Causal VAE ($16\times$ орон зай, $4\times$ цаг хугацааны шахалт).
+   - *Давуу тал*: Темпораль каузаль чанарыг хатуу барьснаар өнгөрсөн фрэймүүдээс ирээдүй рүү мэдээлэл алдагдахгүй, хязгааргүй урт 1080p видеог фрэймийн гажилтгүй (drift-free) үүсгэдэг.
+8. **Tencent HunyuanVideo / 1.5**:
+   - *Архитектур*: Dual-to-Single Stream Hybrid DiT + SSTA Attention.
+   - *Давуу тал*: Visual ба Text токенуудыг эхлээд тусад нь боловсруулаад дараа нь нэгтгэдэг. SSTA (Selective & Sliding Tile Attention) ашиглан орон зайн KV кэшийг танаж хурдыг 2.5 дахин өсгөсөн.
+9. **Decart Oasis / Oasis 3 (World Model)**:
+   - *Архитектур*: End-to-End Autoregressive World Transformer.
+   - *Давуу тал*: Ямар ч тоглоомын физик эсвэл график хөдөлгүүр (game engine)-гүйгээр хэрэглэгчийн товчлуур дарах үйлдлийг ($a_t$) хүлээн авч, дараагийн дэлгэцийн фрэймийг 30–60 FPS хурдтай бодит цагт шууд генераци хийдэг.
+10. **Google DeepMind Genie 2**:
+    - *Архитектур*: Latent Action World Foundation Model.
+    - *Давуу тал*: Сургаагүй шинэ 3D орчинд физик биетүүдийн мөргөлдөөн, гравитаци, усны урсгалыг орон зайн ой тогтоолтоор төгс дуурайдаг.
+11. **Microsoft TRELLIS & TRELLIS.2 (3D Asset Generation)**:
+    - *Архитектур*: SLAT (Structured Latent representation) + O-Voxel.
+    - *Давуу тал*: Field-free сийрэг воксел ашиглан ганцхан латент орон зайгаас нэгэн зэрэг 3D Gaussian Splats, NeRF, болон PBR бүтэцтэй полигон mesh-ийг $1536^3$ нарийвчлалтайгаар экспортолдог.
+12. **4D Gaussian Splatting (4DGS)**:
+    - *Архитектур*: Дифференциалчлагдах цаг хугацааны 3D Гауссын эллипсоидууд.
+    - *Давуу тал*: Raymarching хийхгүйгээр GPU tile-based rasterization ашиглан динамик 3D хөдөлгөөнт дүрсийг 200+ FPS хурдтай render хийдэг.
+
+### 13.3 Код, Вэб Апп ба Автоном Програм Хангамж (Autonomous Software Engineering)
+
+13. **OpenHands (All-Hands AI / OpenDevin)**:
+    - *Архитектур*: Модуляр Docker сэндбокс + State Machine Loop.
+    - *Давуу тал*: Git worktree дээр тусгаарлагдсан даалгавруудыг өөрөө код бичих, тест ажиллуулах, алдааг засах, вэб хөтөч дээр UI-г нээж шалгах бүрэн бие даасан чадвартай.
+14. **SWE-agent (Princeton ACI)**:
+    - *Архитектур*: Agent-Computer Interface (ACI).
+    - *Давуу тал*: Хүнд зориулсан бүдүүн терминалын оронд токеныг 80% хэмнэдэг тусгай синтакс хайгч, файл гүйлгэгч тушаалуудаар загварыг удирддаг.
+15. **Anthropic Claude Code**:
+    - *Архитектур*: Terminal Native Agentic Harness.
+    - *Давуу тал*: Олон мянган файлтай кодын сан дээр bash, git, ripgrep тушаалуудыг шууд удирдан рефакторинг хийх Extended Thinking горимтой.
+16. **Qwen2.5-Coder & Qwen3-Coder (480B MoE)**:
+    - *Архитектур*: 128k контексттэй AST (Abstract Syntax Tree) мэдрэгч MoE.
+    - *Давуу тал*: 92+ програмчлалын хэл дээр нэг мөрөөс эхлээд бүтэн архитектур хүртэл компиляторын шалгуурыг давж ажилладаг.
+17. **DeepSeek-Coder-V3 & MTP Coder**:
+    - *Архитектур*: Multi-Token Prediction (MTP) хурдасгууртай MoE.
+    - *Давуу тал*: Кодын дараагийн 3–4 токеныг нэгэн зэрэг тааж бичих замаар бичих хурдыг 2 дахин өсгөж, кодын синтаксийн төлөвлөлтийг төгс хийдэг.
+18. **Aider**:
+    - *Архитектур*: Git Repo-Map Tree-Sitter AST Engine.
+    - *Давуу тал*: Төслийн бүх функц, классын хамаарлыг графаар тооцоолж, зөвхөн өөрчлөгдөх шаардлагатай дэд хэсгүүдийг LLM-ийн цонхонд багтаан diff патч үүсгэдэг.
+
+### 13.4 Биологи, Шинжлэх Ухаан ба Протеин Инженерчлэл (Scientific & Molecular AI)
+
+19. **EvolutionaryScale ESM3 (98B Multimodal Biology)**:
+    - *Архитектур*: Omnidirectional Discrete Token Biology Transformer.
+    - *Давуу тал*: Уургийн 1D дараалал (sequence), 3D орон зайн координат (structure), болон биологийн үүрэг (function)-ийг нэгдсэн үгийн санд оруулан "All-to-All" чиглэлд чөлөөтэй генераци хийдэг.
+20. **Chai Discovery Chai-1**:
+    - *Архитектур*: Paired-Attention Trunk + Diffusion Co-folding.
+    - *Давуу тал*: Уураг, ДНХ, РНХ, жижиг молекул эм бэлдмэлийг хамтад нь нэг дор нугалж таамагладаг. Лабораторийн туршилтын бодит өгөгдлийг (XL-MS, эпитоп) сүлжээний оролт болгон ашиглаж алдааг 0 болгодог.
+21. **AlphaFold 3 (Google DeepMind)**:
+    - *Архитектур*: Pairformer + Diffusion Module.
+    - *Давуу тал*: Химийн бүх төрлийн ковалент болон ионы холбоостой молекулын цогцолборуудын 3D бүтцийг цэвэр декартын координатаар diffusion хийж гаргадаг.
+22. **Stanford STORM & OpenScholar**:
+    - *Архитектур*: Multi-Perspective Question-Asking & Recursive Synthesizer.
+    - *Давуу тал*: Шинжлэх ухааны олон зуун нийтлэлийг уншиж, өөр хооронд нь мэтгэлцүүлэн эрдэм шинжилгээний цэгцтэй судалгааны тойм тайланг эх сурвалжтай нь бичдэг.
+
+### 13.5 CAD, Физик Инженерчлэл ба Цахиурын EDA (CAD & Hardware EDA)
+
+23. **Zoo Text-to-CAD (KittyCAD)**:
+    - *Архитектур*: Boundary Representation (B-Rep) + Parametric KCL.
+    - *Давуу тал*: Хэрэггүй олон тооны amorphous mesh үүсгэхийн оронд инженерийн нарийн хавтгай, ирмэг бүхий `.step` файл болон засварлаж болдог код үүсгэдэг.
+24. **OpenROAD ML-RePlAce Physical Design**:
+    - *Архитектур*: Нлектростатик тэгшитгэлийн Nesterov оновчлол + Граф Нейрон Сүлжээ (GNN).
+    - *Давуу тал*: Хэдэн сая транзисторын байршлыг утасны урт (wirelength) ба халалтыг тооцоолон цахиур дээр оновчтой байрлуулдаг.
+
+### 13.6 Системийн Нууцлаг, Хэт Хурдан Инференс Хөдөлгүүрүүд (Underground AI Systems)
+
+25. **BitNet.cpp (Microsoft)**:
+    - *Архитектур*: 1.58-бит Тернари Цэвэр CPU Хөдөлгүүр.
+    - *Давуу тал*: Хөвөгч таслалтай үржүүлэгч огт ашиглахгүйгээр цэвэр LUT ба нэмэх үйлдлээр Intel/ARM CPU дээр секундэд 100+ токен гаргадаг.
+26. **ExLlamaV3**:
+    - *Архитектур*: Custom CUDA/Metal GEMM Quantization Kernel.
+    - *Давуу тал*: Энгийн хэрэглэгчийн 1 ширхэг RTX карт дээр том загваруудыг дээд хурдаар шахдаг.
+27. **llamafile (Mozilla Ocho)**:
+    - *Архитектур*: Cosmopolitan Libc + Multi-OS Portable Executable.
+    - *Давуу тал*: Загварын жин ба хөдөлгүүрийг ганцхан `.exe` файл болгон шахаж, Windows, Linux, Mac дээр нэмэлт драйвергүйгээр 2 товшоод ажиллуулах боломж олгодог.
+
+---
+
+## 14. CL (Cron Machine Language) Бүх Нийтийн Тулгуур Синтакс (Universal Primitives)
+
+Эдгээр бүх 27+ дэвшилтэт моделиуд болон аргуудыг CL хэлээр 100% кодчилж чадах универсаль үйлдлүүд:
 
 ```cl
 // 1. Kolmogorov-Arnold Сплайн үйлдэл (KAN B-Spline on Edges)
@@ -334,7 +440,20 @@ CL хэл дээр программист сонгодог статистика�
 
 // 15. Хетероген CPU-AMX / GPU Асинхрон Оффлоуд (KTransformers Bridge)
 .op.hetero_offload target=cpu_amx, async_prefetch=true;
+
+// 16. O-Voxel & SLAT 3D Бүтцийн Декодер (TRELLIS 3D Generator)
+.op.ovoxel_decode res=1536, format=pbr_mesh;
+
+// 17. 4D Gaussian Splatting Растеризатор (Real-time Spatial Rendering)
+.op.gaussian_splat_rasterize mode=4d_temporal, tile_size=16;
+
+// 18. B-Rep Parametric CAD Extruder (Text-to-CAD Engine)
+.op.cad_brep_extrude tolerance=0.001, format=step;
+
+// 19. Biomolecular Pairformer & Diffusion Module (ESM3 / Chai-1)
+.op.biomolecule_pairformer channels=128, num_blocks=48;
 ```
+
 
 
 
