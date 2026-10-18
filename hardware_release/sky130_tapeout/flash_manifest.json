@@ -1,0 +1,45 @@
+{
+  "package": "cron_silicon_deployment",
+  "module": "main",
+  "target": "OpenLane SkyWater 130nm ASIC Tapeout (Open-Source Silicon)",
+  "part_number": "sky130_fd_sc_hd",
+  "board": null,
+  "interface": "PcieGen5x16",
+  "core_count": 256,
+  "frequencies": {
+    "core_clock_mhz": 1000,
+    "noc_clock_mhz": 500
+  },
+  "bandwidth_gbps": 64.00,
+  "estimated_resources": {
+    "luts": 245000,
+    "dsps": 0,
+    "bram_blocks": 1800,
+    "hbm2_channels": 16,
+    "multiplier_free": true,
+    "zero_flops": true
+  },
+  "supported_toolchains": [
+    "AMD Vivado 2023.2+ (synth.tcl, timing.xdc)",
+    "Intel Quartus Prime Pro 23.4+ (synth_quartus.tcl, timing.sdc)",
+    "OpenLane SkyWater 130nm ASIC (config.json, run_openlane.sh)",
+    "Yosys + NextPNR (synth_yosys.ys, run_nextpnr.sh)"
+  ],
+  "artifacts": [
+    "cron_top.v",
+    "cron_uart.v",
+    "synth.tcl",
+    "synth_vivado.tcl",
+    "synth_quartus.tcl",
+    "config.json",
+    "run_openlane.sh",
+    "synth_yosys.ys",
+    "run_nextpnr.sh",
+    "timing.xdc",
+    "timing.sdc",
+    "cron_pcie_dma.h",
+    "cron_pcie_dma.c",
+    "flash_device.bat",
+    "flash_device.sh"
+  ]
+}

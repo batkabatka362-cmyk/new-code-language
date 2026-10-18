@@ -1,0 +1,87 @@
+{
+  "project": "Cron Programming Language & Silicon Architecture",
+  "version": "1.7.0",
+  "release_name": "Sovereign Silicon & 4D-Torus Release",
+  "release_date": "2026-10-19",
+  "license": "Apache-2.0",
+  "architecture": {
+    "compute_paradigm": "Zero-Multiplier Spatial Streaming",
+    "topology": "4D Torus Spatial Mesh Interconnect",
+    "weight_encoding": "1.58-bit Ternary {-1, 0, +1}",
+    "hardware_targets": [
+      "xilinx_u280",
+      "lattice_ice40",
+      "skywater_130nm_asic",
+      "pcie_gen5_dma",
+      "webassembly_webgpu"
+    ]
+  },
+  "artifacts": [
+    {
+      "name": "cron_lang-1.7.0-py3-none-any.whl",
+      "type": "python_wheel",
+      "description": "Python pip package containing high-level Cron runtime and PyTorch zero-copy bridge",
+      "sha256": "5db80e2d2a839452c35c4f3c10efa3fbc6049c11921e8dd01477ad21ca960090"
+    },
+    {
+      "name": "cron-lang-1.7.0.vsix",
+      "type": "vscode_extension",
+      "description": "Visual Studio Code Marketplace extension with LSP 3.17, DAP Silicon Debugger, and 4D-Torus visualizer",
+      "sha256": "08198edc2fa9d437217ed5f8a86cf0c8ce60e8eb9eaa92b9cafe99f825090941"
+    },
+    {
+      "name": "cron_playground.html",
+      "type": "wasm_playground",
+      "description": "Standalone single-file WebAssembly & WebGPU 3D 4D-Torus interactive playground",
+      "sha256": "86f9f45d7ed410d27957890527d96e14e60ee156e3f726847be670c8aee9511c"
+    },
+    {
+      "name": "cron.hpp",
+      "type": "cxx_header",
+      "description": "C++20 Zero-overhead native Cron header-only integration library",
+      "sha256": "60f11eaba921d8c395f5d78a992189504590c0f017a7934e096bd3b477d82217"
+    },
+    {
+      "name": "cron.cuh",
+      "type": "cuda_header",
+      "description": "NVIDIA CUDA / Tensor Core zero-multiplier ternary GEMV runtime kernel",
+      "sha256": "04e68cc1e3b21e7d14722379b6add2993fd6d1d3d53b3e3b0d61cd1403dbe205"
+    },
+    {
+      "name": "CronNative.cs",
+      "type": "csharp_bindings",
+      "description": "C# .NET 8/9 P/Invoke bindings with zero-copy Memory<T> interop",
+      "sha256": "2b9a5fcbc1ab950524dc03ee1d36193fb937db302eb6c843c9e6e61e22223954"
+    },
+    {
+      "name": "CRON_RESEARCH_PAPER_ARXIV.md",
+      "type": "publication_markdown",
+      "description": "Formal research paper formatted for computer science preprint",
+      "sha256": "9d396bd8cfacf67647b2a9a3c1482a9a28082bae90a9d28af4020c9fdccc263e"
+    },
+    {
+      "name": "arxiv_paper.tex",
+      "type": "publication_latex",
+      "description": "Camera-ready LaTeX publication source with empirical graphs and tables",
+      "sha256": "738d33f6a5f4233b2c03e0409a8d5441a9745bbf4af1cc483a05cf741b509f07"
+    },
+    {
+      "name": "CRON_BENCHMARK_WHITEPAPER.md",
+      "type": "whitepaper",
+      "description": "Comprehensive empirical benchmark whitepaper across FPGA, ASIC, GPU, and CPU",
+      "sha256": "d67ee94ce61a5a10ead7cd4729acd98c506e4b8bb33dd104f560abd3ca0ef0f6"
+    },
+    {
+      "name": "CRON_QUICKSTART_MN.md",
+      "type": "documentation",
+      "description": "Quickstart and developer onboarding manual in Mongolian",
+      "sha256": "c97fd40f3b395270e767f80bdce08183fe4ec413c968b2afb5a364018d7d0399"
+    },
+    {
+      "name": "CRON_QUICKSTART_EN.md",
+      "type": "documentation",
+      "description": "Quickstart and developer onboarding manual in English",
+      "sha256": "3a664e271540294125a5ec1bcf16f24f5cafb68b42e2a40caa63365fe7c0cff1"
+    }
+  ]
+}
