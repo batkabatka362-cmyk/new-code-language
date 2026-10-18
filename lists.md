@@ -247,20 +247,94 @@
 
 ---
 
-## 8. CL Хэлний Тулгуур Синтакс Загварчлал (Universal Primitives)
+## 9. Хетероген Тооцоолол & Моделийн Ачааллын Оновчлол (Heterogeneous Execution & Offloading)
 
-CL хэл дээр программист дээрх бүх аргачлал, мега-моделиудыг бичихэд зориулагдсан тулгуур үйлдлүүд:
+Хамгийн аварга 671B–1.6T MoE загваруудыг энгийн сервер эсвэл нэг ширхэг GPU дээр гацалтгүй ажиллуулах системийн цөм технологиуд:
 
-1. `.op.kan_spline basis=bspline, order=3, knots=8;` (KAN сплайн үйлдэл)
-2. `.op.ssd_block chunk_size=64, decay_dim=16;` (Mamba-2 Semiseparable үйлдэл)
-3. `.op.clifford_geom p=3, q=0, r=0;` (Clifford Geometric Algebra үйлдэл)
-4. `.op.newton_schulz steps=5, coeffs=[3.4445, -4.7750, 2.0315];` (Muon матриц ортогоналчлал)
-5. `.op.ternary_accumulate_lut weights=ternary, dsp=0;` (MatMul-free нэмэх мод)
-6. `.op.mcts_branch policy=puct, c_puct=1.414;` (Reasoning хайлтын зангилаа)
-7. `.op.moe_route num_experts=128, top_k=8, capacity_factor=1.25;` (Llama 4 / DeepSeek MoE чиглүүлэгч)
-8. `.op.irope_interpolate dim=128, max_seq_len=10000000;` (10 сая токен дамнасан iRoPE)
-9. `.op.hybrid_deliberate budget_tokens=4096;` (Claude 3.7 / Grok 3 маягийн бодолтын нөөц тохируулагч)
-10. `.op.engram_lookup hash=murmur3, table_dim=4096;` (DeepSeek-V4 $O(1)$ статик мэдлэгийн энграм хайлт)
-11. `.op.mhc_residual manifold=stiefel, constraint=orthogonal;` (Manifold-Constrained Hyper-Connections)
+### 9.1 KTransformers + FlashInfer + SGLang Синержи Дэд Бүтэц
+- **VRAM-ийн ханыг эвдсэн CPU-GPU Hybrid Execution**:
+  - **GPU Хэсэг (Attention & Shared Experts)**: Байнга ачаалагддаг Attention давхарга ба Shared Экспертүүд GPU-ийн өндөр хурдтай VRAM дотор FlashInfer-ийн block-sparse кэшээр ажиллана.
+  - **CPU/DRAM Хэсэг (Sparse Routed Experts)**: Токен тутамд цөөн идэвхждэг хэдэн зуун экспертүүдийн асар том жингүүд хямд System RAM (DDR5/NUMA)-д хадгалагдана.
+  - **Intel AMX / AVX-512 CPU Acceleration**: Экспертийн тооцооллыг PCIe-ээр GPU рүү зөөж цаг алдахын оронд CPU-ийн AMX матриц хөдөлгүүр дээр шууд бодож дуусгадаг.
+  - **Expert Deferral & Asynchronous Pipelining**: CPU болон GPU-ийн тооцооллыг зэрэгцүүлж (overlap), PCIe дамжуулалтын хүлээлтийн саатлыг 100% нуун далдалдаг механизм.
+
+---
+
+## 10. Multi-Token Prediction (MTP) & Суурилуулсан Спекулятив Декодинг
+
+DeepSeek-V3/V4 болон шинэ үеийн загваруудад суусан үндсэн тооцооллын өөрчлөлт:
+- **Дараагийн 1 токен таахыг халсан нь**:
+  - Сонгодог Next-Token Prediction ($t+1$) биш, загварын орой дээр дараалсан $k$ ширхэг хөнгөн Transformer MTP блок нэмж $t+1, t+2, \dots, t+k$ токенуудыг нэгэн зэрэг таамагладаг.
+- **Давуу талууд**:
+  - *Сургалтын өндөр нягтрал*: Загвар өгүүлбэрийн цаашдын бүтцийг урьдчилан төлөвлөж (pre-planning) сурдаг.
+  - *Суурилуулсан Спекулятив Декодинг*: Тусдаа жижиг Draft загвар ашиглах шаардлагагүй. Үндсэн загвар өөрийн MTP толгойгоороо 2–4 ирээдүйн токеныг зэрэг санал болгож, нэг forward pass-аар шалгаснаар хурд **1.5x–2x дахин нэмэгддэг**.
+
+---
+
+## 11. Видео ба Олон Төрөлт Фундаменталь Архитектурууд (Wan2.1 & HunyuanVideo)
+
+U-Net архитектурыг бүрэн халж, **3D Causal VAE + Diffusion Transformers (DiT) + Flow Matching** стандартад шилжсэн:
+
+### 11.1 3D Causal VAE (CausalConv3D)
+- Түүхий видео пикселийг орон зайн хувьд **16 дахин ($16\times$)**, цаг хугацааны хувьд **4 дахин ($4\times$)** шахаж тасралтгүй латент орон зайд оруулдаг.
+- **Темпораль Каузаль чанар**: Одоогийн фрэйм нь зөвхөн өнгөрсөн ба одоо үеэс хамаарч ирээдүйн фрэйм рүү мэдээлэл алдагдахгүй (leakage үүсэхгүй), ингэснээр хязгааргүй урт видеог тогтвортой үүсгэдэг.
+
+### 11.2 Flow Matching on DiT (Diffusion Transformer)
+- Сонгодог Diffusion-ийн муруй шуугианы замын оронд шулуун замын Оновчтой Тээвэрлэлтийн Урсгал (Optimal Transport Conditional Flow Matching - OT-CFM) ашиглан 10–20 алхамд өндөр чанартай видео гаргаж авдаг.
+- **SSTA (Selective & Sliding Tile Attention)**: Видео үүсгэлтийн орон зай-цаг хугацааны KV кэшийн давхардсан хэсгүүдийг танаж хурдасгадаг.
+
+---
+
+## 12. CL (Cron Machine Language) Бүх Нийтийн Тулгуур Синтакс (Universal Primitives)
+
+CL хэл дээр программист сонгодог статистикаас эхлээд 2026 оны Мега-Моделиуд, KAN, Video DiT, MTP хүртэлх бүх тооцооллыг бичихэд зориулагдсан универсаль үйлдлүүд:
+
+```cl
+// 1. Kolmogorov-Arnold Сплайн үйлдэл (KAN B-Spline on Edges)
+.op.kan_spline basis=bspline, order=3, knots=8;
+
+// 2. Semiseparable Matrix SSD үйлдэл (Mamba-2 Linear Block Attention)
+.op.ssd_block chunk_size=64, decay_dim=16;
+
+// 3. Clifford Geometric Multivector үйлдэл (Clifford GA Multivector Product)
+.op.clifford_geom p=3, q=0, r=0;
+
+// 4. Muon Newton-Schulz 5-step Ортогоналчлал (Matrix Spectral Descent)
+.op.newton_schulz steps=5, coeffs=[3.4445, -4.7750, 2.0315];
+
+// 5. Zero-Multiplier BitNet Ternary GEMV (MatMul-free Adder-Tree)
+.op.ternary_accumulate_lut weights=ternary, dsp=0;
+
+// 6. Test-Time Reasoning MCTS / Tree Search зангилаа
+.op.mcts_branch policy=puct, c_puct=1.414;
+
+// 7. Спарсе MoE 128-Expert Чиглүүлэгч (Llama 4 / DeepSeek-V4)
+.op.moe_route num_experts=128, top_k=8, capacity_factor=1.25;
+
+// 8. 10 Сая токен дамнасан iRoPE интерполяци
+.op.irope_interpolate dim=128, max_seq_len=10000000;
+
+// 9. Хосолмол Бодолтын Нөөц Тохируулагч (Claude 3.7 / Grok 3)
+.op.hybrid_deliberate budget_tokens=4096;
+
+// 10. Engram O(1) Статик Мэдлэгийн Энграм Хайлт (DeepSeek-V4-Pro)
+.op.engram_lookup hash=murmur3, table_dim=4096;
+
+// 11. Manifold-Constrained Hyper-Connections Residual (mHC)
+.op.mhc_residual manifold=stiefel, constraint=orthogonal;
+
+// 12. Multi-Token Prediction Спекулятив Шахалт (MTP Module)
+.op.mtp_speculate heads=4, depth=1, temperature=0.7;
+
+// 13. 3D Causal Convolutional VAE блок (Wan2.1 / HunyuanVideo)
+.op.causal_conv3d kernel=[3, 3, 3], stride=[1, 2, 2], temporal_causal=true;
+
+// 14. Optimal Transport Flow Matching Интегратор (DiT ODE Solver)
+.op.flow_match_step dt=0.05, method=midpoint;
+
+// 15. Хетероген CPU-AMX / GPU Асинхрон Оффлоуд (KTransformers Bridge)
+.op.hetero_offload target=cpu_amx, async_prefetch=true;
+```
+
 
 
