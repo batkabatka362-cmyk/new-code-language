@@ -941,5 +941,240 @@ CL хэл дээр программист сонгодог статистик, K
 .op.neuromorphic_bus spike_threshold=0.5, leak_decay=0.95, axon_fanout=1024;
 ```
 
+---
+
+## 24. Дэд-Квадрат (Sub-Quadratic) ба Сонгодог Бус Рекуррент Архитектурууд (Beyond Transformers)
+
+$\mathcal{O}(N^2)$ анхаарлын санах ойн тэсрэлтийг халж, $\mathcal{O}(N)$ шугаман хугацааны нарийн төвөгтэй байдалтай боловч сонгодог Transformer-той дүйцэхүйц болон давсан илэрхийлэх чадвартай 2026 оны шинэ үеийн загварууд:
+
+### 24.1 RWKV-7 "Goose" (BlinkDL)
+- **Хугацаанаас Хамаарсан Динамик Төлөвийн Хувьсал (Dynamic State Evolution)**:
+  - Сонгодог Transformer-ийн бүх өнгөрсөн токенуудыг хадгалдаг KV-cache-ийг халж, тогтмол хэмжээтэй рекуррент төлөвийн матриц ашигладаг.
+  - Өмнөх RWKV-6 хувилбараас ялгаатай нь RWKV-7 нь **$W_t = W_0 + \Delta W(x_t)$** буюу оролтын токен бүрт матриц динамикаар өөрчлөгддөг "In-Context Learning Matrix"-тэй болсон.
+- **Хязгааргүй Контекст & Өчүүхэн Санах Ой**:
+  - Токены урт 1 сая хүрсэн ч санах ойн (VRAM) хэрэглээ нь эхний токентойгоо яг адил тогтмол $\mathcal{O}(1)$ байна.
+  - Тритон болон Wind-RWKV тусгай CUDA кернелээр сургалтын үед 100% зэрэгцээ (Parallel Scan), харин инференсийн үед аянга мэт хурдан рекуррент горимоор ажилладаг.
+
+### 24.2 RecurrentGemma (Griffin & Hawk - Google DeepMind)
+- **Real Gated Linear Recurrent Units (RG-LRU)**:
+  - Комплекс тооны орон зайд шилжихгүйгээр бодит тоон дээрх хаалгатай шугаман рекуррент нэгж: $h_t = a_t \odot h_{t-1} + \sqrt{1 - a_t^2} \odot (W x_t)$.
+  - RNN-ийн мартах ба санах чадварыг тогтвортой байлгах гөлгөр хязгаарлагчтай.
+- **Хайбрид Гулсах Цонх (Sliding Window Multi-Head Attention)**:
+  - Орон нутгийн (Local 2048 tokens) хурц анхаарлыг хөнгөн Transformer-оор бодож, түүнээс хол түүхийг RG-LRU-ээр хадгалдаг.
+  - Урт хугацааны контекст дээр Gemma-2-оос 2 дахин бага санах ой зарцуулж, 3 дахин хурдан ажилладаг.
+
+### 24.3 Based Архитектур (Stanford Hazy Research)
+- **Тейлорын Цувааны 2-р Эрэмбийн Фичер Буулгалт (Taylor Expansion Feature Maps)**:
+  - $\text{Softmax}(Q K^\top)$ матрицыг шууд бодохын оронд Тейлорын цуваагаар задалж: $\phi(x) = \left[1, x, \frac{1}{\sqrt{2}} x^{\otimes 2}\right]$ фичер вектор үүсгэдэг.
+  - Ингэснээр матрицын үржвэрийн холбоост чанарыг ашиглан: $(Q K^\top) V = \phi(Q) (\phi(K)^\top V)$ болгон $\mathcal{O}(N)$ шугаман болгодог.
+- **Богино 1D Конволюцийн Хослол**:
+  - Ойрын токенуудын уялдааг (Induction heads) алдагдуулахгүйн тулд 3-тоот 1D causal convolution-тэй хослуулсан.
+
+### 24.4 RetNet (Microsoft Retentive Network) & Hedgehog
+- **Retention Механизм**:
+  - $\text{Retention}(X) = (Q K^\top \odot D) V$, энд $D_{ij} = \gamma^{i-j}$ нь геометр бууралтын матриц.
+  - Сургалтын үед Parallel горимоор параллельчлагдаж, инференсийн үед Recurrent горимоор $\mathcal{O}(1)$ санах ойтой, Chunkwise горимоор урт дарааллыг хэсэгчлэн боддог 3 талт нэгдмэл парадигм.
+
+---
+
+## 25. Тооцооллын Хурдатгал, Спекулятив Декодинг ба Нэгтгэсэн Кернелүүд (Accelerated Decoding & Kernels)
+
+LLM-ийн инференс болон сургалтыг техник хангамжийн түвшинд 3x–5x хурдасгаж буй GitHub дээрх гол хөдөлгүүрүүд:
+
+### 25.1 EAGLE-2 & EAGLE-3 (SafeAILab)
+- **Латент Фичерийн Түвшний Спекулятив Декодинг**:
+  - Өмнөх үеийн тусдаа жижиг Draft Model шаарддаг аргыг халсан.
+  - Том загварын хамгийн дээд нууц давхаргын фичер векторыг (Hidden States) уншиж, дараагийн токенуудын латент төлөвийг агшин зуурт таамагладаг 1-давхаргат хэт хөнгөн сүлжээ.
+- **Динамик Контекст Мэдрэмжит Дэд Мод (Dynamic Draft Trees)**:
+  - Токен бүрт ганц замыг бус, өндөр магадлалтай салаануудаар мод үүсгэн нэг forward pass-аар (Tree Attention Mask ашиглан) шалгадаг.
+  - Үр дүнд нь загварын нарийвчлалыг **100% алдагдалгүйгээр (Lossless)** хадгалан 3.5x–5x дахин хурдан үг үүсгэдэг.
+
+### 25.2 Medusa (FasterDecoding)
+- **Multi-Head Зэрэгцээ Таамаглагч Толгойнууд**:
+  - Загварын үндсэн жинг царцааж (Frozen), дээд хэсэгт нь $K$ ширхэг параллель Medusa толгой ($H_1, H_2, \dots, H_K$) залгадаг.
+  - Нэг алхамд зөвхөн $t+1$ токен биш, $t+2, t+3, t+4$ дахь токенуудыг нэгэн зэрэг таамаглаж, дараагийн такт дээр тэдгээрийг нэг дор шалгадаг.
+
+### 25.3 LinkedIn Liger-Kernel
+- **Triton дээр Бүрэн Нэгтгэгдсэн (Fully Fused) Операторууд**:
+  - PyTorch-ийн RMSNorm, RoPE, SwiGLU, CrossEntropy, болон DPO/ORPO алдагдлын функцүүдийн дундуур үүсдэг түр зуурын санах ойн завсрын тензоруудыг устгасан.
+  - GPU-ийн глобал HBM санах ой руу бичих/унших үйлдлийг арилгаж, чипийн дотоод SRAM дээр бүх үйлдлийг нэг цохилтоор нэгтгэн гүйцэтгэдэг.
+  - **Үр дүн:** Сургалтын үеийн GPU санах ойн оргил ачааллыг **60% бууруулж**, тооцооллын нэвтрүүлэх чадварыг **20% өсгөсөн**.
+
+### 25.4 Lookahead Decoding (Jacobi Fixed-Point Iteration)
+- **Тусдаа Загваргүй Спекулятив Хурдатгал**:
+  - Ямар ч нэмэлт draft model, толгой ашиглахгүйгээр, математикийн Якобигийн шугаман бус тэгшитгэлийн систем бодох fixed-point iteration зарчмаар ирээдүйн $N$-граммуудыг нэг зэрэг таамаглан шалгадаг цэвэр алгоритмын шийдэл.
+
+---
+
+## 26. Роботик, Физик Үйлдлийн Бодлого ба Дифференчлэгдэх Симуляторууд (Embodied AI & Differentiable Physics)
+
+Хиймэл оюуныг компьютерийн дэлгэцээс бодит ертөнцийн мотор удирдлага, робот гар, хөдөлгөөнд холбогч үндсэн системүүд:
+
+### 26.1 Action Chunking with Transformers (ACT / ALOHA - Stanford)
+- **Хугацааны Багц Үйлдлийн Төлөвлөлт (Temporal Ensembling)**:
+  - Роботыг миллисекунд тутамд 1 үйлдэл таах байдлаар удирдвал алдаа нь шат дараалан үржигдэж (compounding errors) систем гацдаг.
+  - ACT нь **Conditional VAE (C-VAE)** болон Transformer ашиглан ирээдүйн 50–100 алхамт бүхэл бүтэн траекторын багцыг (Action Chunk) нэг дор таамаглаж, цаг хугацааны экспоненциал жигдрүүлэлтээр гөлгөр гүйцэтгэдэг.
+- **Хоёр Гарт ALOHA Систем**:
+  - Зүү сүвлэх, гутал үдэх, зай хураагуур угсрах нарийн моторт үйлдлүүдийг хүний теле-операторын жишээнээс цөөн давталтаар сурдаг.
+
+### 26.2 Diffusion Policy (Visuomotor Policy via Action Diffusion)
+- **Тасралтгүй Үйлдлийн Орон Зай дахь Диффузи**:
+  - Роботын камерын дүрс болон үе мөчний байрлалыг нөхцөл (conditioning) болгон авч, дуу чимээтэй санамсаргүй вектор дээр DDIM/DPM-Solver диффузи ажиллуулан үе мөчний хурд, хүчний хөдөлгөөнийг үүсгэдэг.
+  - Мультимодаль олон хувилбарт замуудыг (жишээ нь саадыг зүүн эсвэл баруунаар тойрох) дундажлахгүйгээр аль нэг зөв замыг төгс сонгон авдаг.
+
+### 26.3 OpenVLA (7B Open Vision-Language-Action Model)
+- **Роботын Бүх Нийтийн Үйлдэл-Хэлний Суурь**:
+  - Prismatic VLM дээр суурилсан, Dino-v2 болон SigLIP хос визуал фичертэй, Llama 2 хэлний бүтэцтэй.
+  - Дэлхийн 22 төрлийн роботын 970,000 бичлэг бүхий **Open X-Embodiment** датасет дээр сургагдсан бөгөөд англи хэлээр өгөгдсөн "аяга угаа", "хаалга нээ" тушаалыг роботын 7 хэмжээст үений координат руу шууд хөрвүүлдэг.
+
+### 26.4 Genesis-World (Differentiable Universal Physics Engine)
+- **100% Python/Taichi Архитектуртай Бүхнийг Багтаасан Симулятор**:
+  - Уламжлалт MuJoCo зөвхөн хатуу биет симуляци хийдэг бол Genesis нь:
+    - **MPM (Material Point Method)**: Элс, шавар, цас, хуванцар, шингэн
+    - **FEM (Finite Element Method)**: Уян резин, хүний арьс, булчин
+    - **SPH (Smoothed Particle Hydrodynamics)**: Ус, тос, гидродинамик
+    - **PBD/XPBD**: Даавуу, олс, утас
+    - **Rigid-Body & Articulated**: Роботын араг яс, араа, холхивчийг нэгэн зэрэг GPU дээр миллион параллель орчинд секундэд 100,000+ фрэйм хурдаар тооцоолдог.
+  - Бүх симуляци нь дифференчлэгдэх тул градиент нь физик ертөнцөөр дамжин мэдрэлийн сүлжээ рүү шууд буцаж урсах (Analytical Gradients) боломжтой.
+
+---
+
+## 27. Дискрет Диффузи ба Текстийн Тасралтгүй Задлал (Diffusion LLMs)
+
+Зүүнээс баруун тийш нэг нэгээр нь цувуулан бичдэг Autoregressive (AR) хязгаарлалтыг эвдэж, текстийг зургийн диффузи мэт бүхэлд нь нэгэн зэрэг сийлэх 2026 оны шинэ парадигм:
+
+### 27.1 SEDD (Score Entropy Discrete Diffusion - ICML Best Paper)
+- **Дискрет Орон Зай дахь Score Matching**:
+  - Текстийн токенууд тасралтгүй биш дискрет салангид бүтэцтэй тул стандарт градиент $\nabla_x \log p(x)$ бодох боломжгүй байсан асуудлыг **Токен Шилжилтийн Харьцааны Магадлал (Probability Ratios)**-аар шийдсэн.
+- **Reversal Curse-ийг Бүрэн Арилгасан**:
+  - "А бол Б-ийн эх" гэж сурсан ч "Б-ийн эх хэн бэ" гэдгийг мэддэггүй AR загваруудын төрөлхийн дутагдлыг хоёр чиглэлд (Bidirectional) нэгэн зэрэг сэтгэдгээрээ 100% арилгадаг.
+
+### 27.2 MDLM (Masked Diffusion Language Models - Cornell)
+- **Rao-Blackwellized MLM Алдагдал**:
+  - Тасралтгүй цагийн Марковын үсрэлтийн процесс (Continuous-time Markov Jump Process) ашиглан, токенуудыг санамсаргүй `[MASK]` токеноор орлуулж, загвар нь тэдгээрийг нэгэн зэрэг буцаан нээж цэвэрлэх замаар суралцдаг.
+  - Тооцооллын хувьд BERT шиг хялбар боловч GPT-4 шиг текст үүсгэх чадвартай.
+
+### 27.3 LLaDA (Large Language Diffusion Models - 8B)
+- **8 Тэрбум Параметрийн Түвшинд Өргөжсөн Анхны Диффузи LLM**:
+  - LLaMA-3 загвартай эн тэнцүү чадвартай болохыг баталсан.
+  - Текстийн дунд засвар оруулах (In-filling), шүлгийн төгсгөлийн мөрийг өгөөд эхлэлийг нь зохиох, кодыг бүтэцлэхэд AR загваруудаас хамаагүй илүү уян хатан чадвартай.
+
+### 27.4 Block Diffusion (BD3-LM)
+- **AR ба Диффузийн Нэгдэл**:
+  - Текстийг блокуудад хувааж, блокуудын хооронд AR маягаар KV-cache хадгалан, харин блок тус бүрийн дотор дискрет диффузи хийдэг. Энэ нь хязгааргүй урт өгүүллэг, номыг секундэд хэдэн мянган үгээр зэрэгцүүлэн үүсгэх боломж олгодог.
+
+---
+
+## 28. Молекулын Динамик ба $E(3)$-Equivariant Граф Нейрон Сүлжээнүүд (SciML & Materials)
+
+Квант механик ба молекулын физик хуулиудыг геометрийн хувьд 100% хатуу мөрддөг граф хиймэл оюуны загварууд:
+
+### 28.1 NequIP (Neural Equivariant Interatomic Potentials - Harvard)
+- **$E(3)$ Тэгш Хэмт Конволюци**:
+  - 3D орон зайн эргүүлэлт (Rotation), шилжилт (Translation), ба толин ойлт (Inversion)-ийг математикийн Сферик Гармоник (Spherical Harmonics $Y_{lm}$) болон Клебш-Горданы тензор үржвэрээр (Clebsch-Gordan Products) сүлжээний давхарга бүрт хадгалдаг.
+  - Молекулыг яаж ч эргүүлсэн атомын хүч ба потенциал энерги нь физикийн хуулийн дагуу яг бодитоор хувирдаг (Equivariance).
+- **Ab-Initio Нарийвчлал**:
+  - Density Functional Theory (DFT)-ийн сар дамнан боддог өндөр нарийвчлалыг хэдхэн секундэд симуляци хийдэг.
+
+### 28.2 Allegro (Strictly Local Equivariant Potential)
+- **Шугаман $\mathcal{O}(N)$ Хэмжээст Тэлэлт (Linear Scaling)**:
+  - NequIP-ийн хөршүүд хоорондын мэдээлэл дамжуулах (Message Passing) удаан ажиллагааг халж, зөвхөн цэвэр локал олон биетийн орчны төлөв дээр $E(3)$ тэнцвэрт үйлдлийг хэрэгжүүлсэн.
+  - Үр дүнд нь **100 сая гаруй атомтай** асар том уураг, вирусийн бүрхүүл, шинэ хайлшийг суперкомпьютер дээр зэрэгцүүлэн бодох боломжтой болсон.
+
+### 28.3 EGNN (E(n) Equivariant Graph Neural Networks)
+- **Сферик Гармоникгүй Хөнгөн Геометр Граф**:
+  - Төвөгтэй Клебш-Горданы задралыг алгасаж, цэгүүдийн харьцангуй зайн вектор $(x_i - x_j)$ болон скаляр зайн функцээр координатуудыг шууд шинэчилдэг хэт хөнгөн загвар:
+    $$m_{ij} = \phi_m(h_i, h_j, \|x_i - x_j\|^2), \quad x_i^{l+1} = x_i^l + \sum_j (x_i^l - x_j^l) \phi_x(m_{ij})$$
+
+---
+
+## 29. Автоном Агентын Тусгаарлагдсан Орчин ба Хамгаалалттай Элчүүд (Agent Sandboxing & MicroVMs)
+
+Хиймэл оюун өөрийн бүтээсэн дурын код, скриптүүдийг бодит цагт аюулгүй ажиллуулах, турших орчны дэд бүтэц:
+
+### 29.1 CodeAct 2.1 Парадигм (OpenHands)
+- **Код бол Үйлдэл (Executable Code Actions)**:
+  - Сонгодог JSON багаж дуудалтыг халж, агент шууд бодит Python код эсвэл Bash тушаал бичиж орчинтойгоо харьцдаг.
+  - Үр дүнд нь агент давталт (loops), нөхцөлт шалгалт (if/else), завсрын өгөгдлийг өөрөө код дотроо боловсруулж, гарсан Traceback алдааг харангуутаа засаж чаддаг.
+
+### 29.2 Firecracker MicroVMs & E2B Runtime
+- **AWS Firecracker Технологи**:
+  - Энгийн Docker контейнер нь хост машины Linux кернелийг хуваалцдаг тул контейнероос хальж систем рүү халдах (Container Escape) эрсдэлтэй байдаг.
+  - Firecracker нь тусдаа бие даасан өөрийн Linux цөмтэй, тоног төхөөрөмжийн түвшинд (KVM) тусгаарлагдсан, **5-хан миллисекундэд асдаг**, ердөө 5MB санах ой эзэлдэг бичил виртуаль машин (MicroVM).
+- **E2B Snapshot & State Caching**:
+  - Агентын ажиллаж буй орчны санах ойн хуулбарыг (Memory Snapshot) секундын хэсэгт хадгалж, алдаа гарвал өмнөх цэг рүү шууд буцаах (Rollback) боломжтой систем.
+
+### 29.3 SWE-bench Verified Аюулгүй Тестлэлийн Хүрээ
+- 500+ бодит GitHub асуудлуудыг загвар бүр өөрийн Firecracker орчинд тусгаарлан хуулж ажиллуулан, нэгж тестийг (Unit tests) давж буй эсэхийг баталгаажуулдаг стандарт дэд бүтэц.
+
+---
+
+## 30. CL (Cron Machine Language) Бүх Нийтийн Тулгуур Синтакс (Universal Primitives 56–75)
+
+Дээрх бүх дэд-квадрат рекуррент загварууд, спекулятив задлагчид, роботын мотор удирдлага, дискрет диффузи, болон молекулын $E(3)$ тэнцвэрт геометр тооцооллыг CL хэл дээр шууд цахиур дээр програмчлах 20 шинэ машины тулгуур командын бүрэн жагсаалт:
+
+```cl
+// 56. RWKV-7 In-Context Dynamic State Evolution Кернел (BlinkDL Goose)
+.op.rwkv7_state_update state_dim=64, head_dim=64, dynamic_decay=true;
+
+// 57. Real Gated Linear Recurrent Unit (Griffin / Hawk RG-LRU)
+.op.rg_lru_recurrence dim=2048, gate_activation=sigmoid, real_decay=true;
+
+// 58. EAGLE-2/3 Дэд Мод Спекулятив Баталгаажуулагч (Dynamic Draft Tree)
+.op.eagle_tree_verify max_tree_nodes=64, depth=4, tree_mask=sparse_dag;
+
+// 59. Medusa Multi-Head Зэрэгцээ Токен Салаалагч
+.op.medusa_heads_gather num_heads=4, topk_per_head=4;
+
+// 60. LinkedIn Liger Нэгтгэгдсэн CrossEntropy + RMSNorm Кернел
+.op.liger_fused_cross_entropy vocab_size=152064, reduction=mean, in_place_grad=true;
+
+// 61. Action Chunking with Transformers (ACT / ALOHA C-VAE Trajectory)
+.op.act_action_chunk chunk_size=50, action_dim=14, latent_style=gaussian;
+
+// 62. Diffusion Policy Тасралтгүй Үйлдлийн Траектор Диффузийн Алхам
+.op.diffusion_policy_step solver=dpm_solver_pp, num_steps=16, action_horizon=16;
+
+// 63. OpenVLA 7B Роботын 7-Хэмжээст Мотор Вектор Токенизатор
+.op.openvla_token_action action_bins=256, axes=7;
+
+// 64. Genesis-World Дифференчлэгдэх Физикийн Материалын Цэгийн Алхам (MPM)
+.op.genesis_mpm_step grid_size=64, particle_mass=1.0, constitutive_model=neo_hookean;
+
+// 65. Score Entropy Discrete Diffusion (SEDD) Токен Харьцааны Матриц
+.op.sedd_discrete_score vocab_size=50257, rate_matrix=uniform_absorbing;
+
+// 66. Masked Diffusion Language Model (MDLM) Rao-Blackwellized Unmasking
+.op.mdlm_absorbing_unmask mask_token_id=50258, sampling_temp=0.7;
+
+// 67. LLaDA 8B Хоёр Чиглэлт Диффузи Дүрсийг Текстэнд Буулгагч
+.op.llada_bidirectional_denoise sequence_len=4096, remasking_strategy=low_confidence;
+
+// 68. e3nn Клебш-Горданы Тензор Үржвэр ($E(3)$ Сферик Гармоник Задрал)
+.op.nequip_clebsch_gordan l_max=3, irreps_in="1x0e + 1x1o", irreps_out="1x0e";
+
+// 69. Allegro Локал Олон Биетийн $E(3)$ Тэнцвэрт Потенциал Хүчний Задрал
+.op.allegro_local_potential cutoff_radius=5.0, radial_basis=bessel;
+
+// 70. EGNN Координатын Харьцангуй Вектор Шинэчлэгч (Equivariant Update)
+.op.egnn_coordinate_update coord_dim=3, velocity_damping=0.98;
+
+// 71. CodeAct POSIX Псевдо-Терминал (PTY) Дамжуулах Шугам
+.op.codeact_terminal_pipe buffer_kb=64, non_blocking=true, timeout_ms=3000;
+
+// 72. Firecracker MicroVM Санах Ойн Snapshot Restore Гогцоо
+.op.firecracker_vm_snapshot cow_cache=true, boot_time_budget_ms=5;
+
+// 73. MLIR Linalg Structured Dialect Полихедрал Гогцоо Буулгагч
+.op.mlir_linalg_generic iterator_types=["parallel", "parallel", "reduction"];
+
+// 74. OpenAI Triton Block Tile PGAS SRAM Санах Ойн Төлөвлөгч
+.op.triton_block_tile block_m=128, block_n=64, block_k=32, num_stages=3;
+
+// 75. IREE Hardware Abstraction Layer (HAL) Асинхрон Compute Stream
+.op.iree_hal_dispatch queue_priority=high, memory_pool=device_local;
+```
+
+
 
 
