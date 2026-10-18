@@ -562,9 +562,53 @@ CL хэл дээр программист дээрх бүх AGI, Аудио, Р�
 
 ---
 
-## 19. CL (Cron Machine Language) Бүх Нийтийн Тулгуур Синтакс (Universal Primitives 26–32)
+## 19. Qwen3.5 Gated Delta Networks (GDN), Kimi K2 MuonClip ба Дэлхийн Физик Симуляторууд (Veo 2 & Sora 2)
 
-CL хэл дээр программист дээрх бүх хамгийн сүүлийн үеийн дэвшилтэт аргуудыг бичихэд зориулагдсан универсаль үйлдлүүдийн төгсгөл:
+### 19.1 Qwen3.5 цуврал (Gated Delta Networks & 3:1 Hybrid Attention)
+- **KV-Cache санах ойг 75% хэмнэсэн 3:1 харьцаат гибрид дизайн**:
+  - Сонгодог $\mathcal{O}(N^2)$ Transformer давхаргын 75%-ийг **Gated Delta Networks (GDN / Шугаман анхаарал)** болгон сольж, үлдсэн 25%-д Gated Full Attention (GQA/RoPE) тавьсан.
+  - Үр дүнд нь 256k-аас 1M хүртэлх урт контекст дээр санах ойн I/O ачаалал 4 дахин буурч, детекцийн хурд 3 дахин өссөн.
+- **Qwen3.5-397B-A17B (Флагман нээлттэй жинтэй загвар)**:
+  - Нийт 397 тэрбум параметр, токен тутамд **17 тэрбум идэвхтэй** MoE бүтэцтэй. Өмнөх үеийн >1 Их Наяд (1T+) параметр бүхий Qwen3-Max загвартай дүйцэхүйц чадварыг хэд дахин хурдан декодинг хурдтайгаар үзүүлдэг.
+
+### 19.2 Moonshot AI Kimi K2 / K2.6 (1.04 Их Наяд MoE & MuonClip Оновчлол)
+- **1 Их Наяд Параметр бүхий Агент Swarm сүлжээ**:
+  - Нийт 1.04 Их Наяд параметр, токен тутамд **32 тэрбум идэвхтэй** (384 экспертээс 8 routed + 1 shared эксперт идэвхждэг).
+  - 15.5 их наяд токен дээр урт контекст бүхий multi-agent координаци хийхэд тусгайлан сургагдсан.
+- **MuonClip Оновчлогч**:
+  - 1 их наяд параметртэй MoE загварыг олон зуун GPU дээр сургахад үүсдэг Attention logits-ийн тэсрэлт (loss spikes)-ийг арилгах зориулалттай **Query-Key `qk-clip`** техникийг Muon оновчлогчтой нэгтгэн бүтээсэн.
+
+### 19.3 Google Veo 2 & OpenAI Sora 2 (Физикийн Загварчлал ба Аудио Хамтарсан Диффузи)
+- **4D Spatiotemporal Patch Tokenization**:
+  - Видео фрэймүүдийг салангид 2D зураг гэж харахгүйгээр цаг хугацаа ба орон зайн 4D тензор болгон шахаж боловсруулдаг.
+- **Physics Simulation (Хий үзэгдэлгүй бодит физик)**:
+  - Объект хана нэвтрэх, эсвэл татах хүчийг зөрчих гажилтыг арилгаж, шингэний динамик (fluid dynamics), даавууны долгиорол (cloth simulation), болон биетүүдийн мөргөлдөөнийг бодит ертөнцийн хуулийн дагуу загварчилдаг.
+- **Audiovisual Latent Cross-Diffusion (Sora 2)**:
+  - Зөвхөн дүрс биш, дүрс доторх үйл явдлын чимээ (Foley effects, алхаа, дуу хоолой, орчны шуугиан)-г харгалзах цаг хугацааны цэгт нь видеоны латент орон зайтай хамтад нь синхрончлон үүсгэдэг.
+
+---
+
+## 20. Intel Loihi 2 Neuromorphic Тооцоолол ба Карл Фристоны Active Inference
+
+### 20.1 Intel Loihi 2 & Lava Framework (Үйл явдлаар өдөөгдөх Асинхрон Тооцоолол)
+- **Фон Нейманы бус 128 Асинхрон Цөм (Intel 4 процесс)**:
+  - 1 сая нейрон, 120 сая синапсыг нэг чип дээр байрлуулсан.
+  - Тэжээлийн зарцуулалт ердөө **~1 Ватт** бөгөөд зөвхөн өгөгдөл ирэх үед л (Event-driven) ажиллаж, сул зогсолтын үед энерги зарцуулалт 0 болдог.
+- **Graded Spikes & Three-Factor Local Plasticity**:
+  - Зөвхөн 0 ба 1 гэсэн бинар биш, олон битийн тоон утгатай импульс (Graded Spikes) дамжуулдаг.
+  - Сүлжээний бүх параметрүүдэд дэлхийн хэмжээний backprop хийх шаардлагагүйгээр **синапсын локал хувьслын дүрмээр (On-chip plasticity)** чип өөрөө дасан зохицож сурдаг.
+
+### 20.2 Карл Фристоны Active Inference ба Free Energy Principle (FEP)
+- **Expected Free Energy (EFE) багасгах AGI шийдвэр гаргалтын гогцоо**:
+  - Сонгодог бэхжүүлэх сургалт (RL)-ийн хэврэг шагналын функцийн оронд систем **Чөлөөт Энерги (Free Energy)** буюу ертөнцийн тодорхойгүй байдлыг багасгахын төлөө тэмцдэг.
+- **Epistemic Value (Суралцах эрмэлзэл) vs Pragmatic Value (Зорилгодоо хүрэх)**:
+  - Загвар тодорхойгүй байдал өндөр байгааг мэдэрмэгц (өндөр EFE) зохиомол худал хариулт (hallucination) өгөхийн оронд **нэмэлт асуулт асуух, эсвэл хайлтын хэрэгсэл дуудаж баримт шалгах үйлдлийг** автоматаар сонгодог.
+
+---
+
+## 21. CL (Cron Machine Language) Бүх Нийтийн Тулгуур Синтакс (Universal Primitives 26–37)
+
+CL хэл дээр программист сонгодог статистик, KAN, MoE, MTP, Video DiT, LFM, GFlowNet болон Neuromorphic Active Inference хүртэлх бүх тооцооллыг бичихэд зориулагдсан универсаль үйлдлүүдийн төгс матриц:
 
 ```cl
 // 26. Liquid Gated Short Conv + GQA 10:6 динамик блок (Liquid AI LFM2)
@@ -587,5 +631,21 @@ CL хэл дээр программист дээрх бүх хамгийн сү�
 
 // 32. BitBLAS Sub-4-Bit Mixed-Precision Matrix Multiplier
 .op.bitblas_sub4bit_gemm weight_bits=2, compute_dtype=bf16, pack_layout=interleaved;
+
+// 33. Qwen3.5 Gated Delta Network (GDN) Шугаман Анхаарлын Кернел
+.op.gdn_delta_attention state_dim=128, delta_rule=normalized_decay;
+
+// 34. Kimi K2 MuonClip Query-Key Логит Хязгаарлагч (QK-Clip)
+.op.muon_qk_clip clip_threshold=100.0, spectral_steps=5;
+
+// 35. 4D Spatiotemporal Spacetime Patch Tokenizer (Veo 2 / Sora 2)
+.op.spatiotemporal_patch4d patch_t=2, patch_h=16, patch_w=16;
+
+// 36. Intel Loihi 2 Graded Spike & 3-Factor Synaptic Plasticity
+.op.loihi_graded_spike precision_bits=8, plasticity_rule=triplet_stdp;
+
+// 37. Active Inference Expected Free Energy (EFE) Тодорхойгүй Байдал Бууруулагч
+.op.active_inference_efe belief_dim=512, epistemic_weight=1.0, pragmatic_weight=1.0;
 ```
+
 
