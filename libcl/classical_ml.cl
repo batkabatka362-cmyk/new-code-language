@@ -1,0 +1,20 @@
+; CRON Standard Microcode Kernel: libcl/classical_ml.cl
+; Section 2: Classical Machine Learning, Linear Regression, Tree Splitting & K-Means
+@kernel classical_ml_simd
+.target silicon.4d_torus
+.ipc_target 4.0
+
+B0000: '==01#010> '==02#0C0> '==03#0F0> '==04#020>
+B0001: _MD05*220> _NO00#000> _NO00#000> _NO00#000>
+B0002: _PO06+510> _NO00#000> _NO00#000> _NO00#000>
+B0003: _TT05$2B0> _MD07*230> _NO00#000> _NO00#000>
+B0004: _PO08/760> _PO09-380> _NO00#000> _NO00#000>
+B0005: '==0A#0D0> '==0B#0A0> _NO00#000> _NO00#000>
+B0006: _MD0C*AA0> _NO00#000> _NO00#000> _NO00#000>
+B0007: _PO0D+B10> _PO0E/CD0> _NO00#000> _NO00#000>
+B0008: _PO0F-240> _NO00#000> _NO00#000> _NO00#000>
+B0009: _MD01*FF0> _NO00#000> _NO00#000> _NO00#000>
+B0010: _PO02+110> _NO00#000> _NO00#000> _NO00#000>
+B0011: _PO03-210> _NO00#000> _NO00#000> _NO00#000>
+B0012: _ST08#040> _ST0E#050> _ST02#060> _NO00#000>
+B0013: _SB00#060> _NO00#000> _NO00#000> !HL00#000(
