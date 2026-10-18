@@ -1111,6 +1111,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("diffusion_llm.cl", "Section 27: SEDD Discrete Ratios, MDLM Unmasking & LLaDA In-Filling", "silicon.discrete_diffusion", 4.0),
         ("equivariant_sciml.cl", "Section 28: NequIP Clebsch-Gordan, Allegro Local Potential & EGNN Updates", "silicon.equivariant_sciml", 4.0),
         ("agent_sandbox.cl", "Section 29: CodeAct Terminal Pipe, Firecracker MicroVM & SWE-bench Guard", "silicon.agent_sandbox", 4.0),
+        ("custom_silicon_dataflow.cl", "Section 31: Tenstorrent Tensix, Groq TSP Determinism & Cerebras Fabric", "silicon.custom_silicon", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
