@@ -1107,6 +1107,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("frontier_verticals.cl", "Section 22: Sana 32x DC-AE, Cosmos Tokenizer & PhysGaussian MPM Stress", "silicon.physics_world", 4.0),
         ("subquadratic_recurrent.cl", "Section 24: RWKV-7 In-Context Weight, Griffin RG-LRU & RetNet Decay", "silicon.subquadratic_recurrent", 4.0),
         ("accelerated_kernels.cl", "Section 25: EAGLE Latent Speculation, Medusa Multi-Head & Liger Fused Ops", "silicon.accelerated_kernels", 4.0),
+        ("embodied_physics.cl", "Section 26: ACT Action Chunking, Diffusion Policy & Genesis SPH/MPM", "silicon.embodied_physics", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
