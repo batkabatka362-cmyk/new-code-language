@@ -161,7 +161,7 @@ def atp_kinetics(atp, adp):
     let mut transpiler = PyToCronTranspiler::new(64, true);
     transpiler.parse_and_lower(py_code).expect("Parsing must succeed");
 
-    let cl_code = transpiler.emit_cl_machine_code();
+    let cl_code = transpiler.emit_cl_machine_code_10();
     let mut bundles_checked = 0;
     let mut slots_checked = 0;
 
@@ -173,7 +173,7 @@ def atp_kinetics(atp, adp):
             let slots: Vec<&str> = parts[1].split_whitespace().collect();
             assert_eq!(slots.len(), 4, "Every VLIW bundle must have exactly 4 slots");
             for slot in slots {
-                assert_eq!(slot.len(), 10, "Every slot must be exactly 10 characters");
+                assert_eq!(slot.len(), 10, "Every slot must be exactly 10 characters in 10-char mode");
                 let parsed = cronc::cl_lang::parse_slot(slot).expect("Slot must be valid .cl syntax");
                 assert!(cronc::cl_lang::KNOWN_OPCODES.contains(&parsed.opcode.as_str()));
                 assert!(cronc::cl_lang::verify_token_crc8(slot), "CRC-8 ATM checksum must be valid");
@@ -185,6 +185,58 @@ def atp_kinetics(atp, adp):
 
     assert!(bundles_checked >= 8, "Must generate at least 8 bundles");
     assert!(slots_checked >= 32, "Must verify at least 32 slots");
-    println!("Emitted CL Microcode Verification Passed: {} bundles, {} slots verified with 100% CRC-8 ATM integrity.", bundles_checked, slots_checked);
+    println!("Emitted CL Microcode (10-char) Verification Passed: {} bundles, {} slots verified with 100% CRC-8 ATM integrity.", bundles_checked, slots_checked);
 }
+
+#[test]
+fn test_emitted_cl_16char_passes_canonical_slot_and_crc8_verification() {
+    let py_code = r#"
+def sphere_matrix(x, w):
+    return x @ w
+
+def neural_net(x, a, b):
+    return relu(x)
+
+def tree_dag(node):
+    return node
+
+def atp_kinetics(atp, adp):
+    return atp
+"#;
+    let mut transpiler = PyToCronTranspiler::new(64, true);
+    transpiler.parse_and_lower(py_code).expect("Parsing must succeed");
+
+    let cl_code = transpiler.emit_cl_machine_code_16();
+    let mut bundles_checked = 0;
+    let mut slots_checked = 0;
+
+    for line in cl_code.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('B') && trimmed.contains(':') {
+            let parts: Vec<&str> = trimmed.split(':').collect();
+            assert_eq!(parts.len(), 2);
+            let slots: Vec<&str> = parts[1].split_whitespace().collect();
+            assert_eq!(slots.len(), 4, "Every VLIW bundle must have exactly 4 slots");
+            for slot in slots {
+                assert_eq!(slot.len(), 16, "Every slot must be exactly 16 characters in 16-char mode");
+                let parsed = cronc::cl_lang::parse_slot(slot).expect("Slot must be valid .cl syntax");
+                assert!(parsed.is_16char, "Slot must be marked as 16-char");
+                assert!(cronc::cl_lang::KNOWN_OPCODES.contains(&parsed.opcode.as_str()));
+                assert!(cronc::cl_lang::verify_token_crc8(slot), "CRC-8 ATM checksum must be valid");
+                slots_checked += 1;
+            }
+            bundles_checked += 1;
+        }
+    }
+
+    assert!(bundles_checked >= 8, "Must generate at least 8 bundles");
+    assert!(slots_checked >= 32, "Must verify at least 32 slots");
+
+    // Also verify with zero-copy SIMD parser
+    let (simd_bundles, _report) = cronc::cl_simd_parser::parse_cl_stream(&cl_code);
+    assert_eq!(simd_bundles.len(), bundles_checked);
+
+    println!("Emitted CL Microcode (16-char) Verification Passed: {} bundles, {} slots verified with 100% CRC-8 ATM and SIMD parser.", bundles_checked, slots_checked);
+}
+
 

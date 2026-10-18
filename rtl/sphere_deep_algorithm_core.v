@@ -27,7 +27,13 @@ module sphere_deep_algorithm (
     output reg  [31:0] sphere_acc_2,
     output reg  [31:0] sphere_acc_3,
     output reg  [31:0] sphere_curvature_ops,
-    output reg  [31:0] total_cycles
+    output reg  [31:0] total_cycles,
+    // AXI4-Stream Master Interface for autonomous burst DMA streaming
+    output reg  [31:0] m_axis_tdata,
+    output reg         m_axis_tvalid,
+    input  wire        m_axis_tready,
+    output reg         m_axis_tlast,
+    output reg  [3:0]  m_axis_tkeep
 );
 
     // 1. Instruction Memory ROM (Pre-synthesized microcode from .cl)
@@ -785,6 +791,8 @@ module sphere_deep_algorithm (
     // 3. Register File & 4D Sphere Matrix Accumulators
     reg [31:0] rf [0:15];
     reg signed [31:0] sphere_acc [0:3];
+    reg [1:0]  dma_burst_idx;
+    reg [31:0] dma_total_flits;
     integer i;
 
     // Register inspection assign
@@ -811,6 +819,12 @@ module sphere_deep_algorithm (
             sentry_alert <= 1'b0;
             total_cycles <= 32'd0;
             sphere_curvature_ops <= 32'd0;
+            m_axis_tdata <= 32'd0;
+            m_axis_tvalid <= 1'b0;
+            m_axis_tlast <= 1'b0;
+            m_axis_tkeep <= 4'hF;
+            dma_burst_idx <= 2'd0;
+            dma_total_flits <= 32'd0;
             sphere_acc[0] <= 32'sd0;
             sphere_acc[1] <= 32'sd0;
             sphere_acc[2] <= 32'sd0;
@@ -820,6 +834,21 @@ module sphere_deep_algorithm (
             end
         end else if (enable && !halted) begin
             total_cycles <= total_cycles + 1'b1;
+
+            // AXI4-Stream Autonomous Burst DMA Streamer
+            if (m_axis_tready) begin
+                m_axis_tvalid <= 1'b1;
+                m_axis_tdata <= (dma_burst_idx == 2'd0) ? sphere_acc[0] :
+                                (dma_burst_idx == 2'd1) ? sphere_acc[1] :
+                                (dma_burst_idx == 2'd2) ? sphere_acc[2] : sphere_acc[3];
+                m_axis_tlast <= (dma_burst_idx == 2'd3);
+                m_axis_tkeep <= 4'hF;
+                dma_burst_idx <= dma_burst_idx + 2'd1;
+                dma_total_flits <= dma_total_flits + 32'd1;
+            end else begin
+                m_axis_tvalid <= 1'b0;
+                m_axis_tlast <= 1'b0;
+            end
 
             // ALU & Coprocessor Dispatch
             case (opcode)

@@ -17,6 +17,13 @@ module tb_sphere_deep_algorithm;
     wire [31:0] sphere_acc_0, sphere_acc_1, sphere_acc_2, sphere_acc_3;
     wire [31:0] sphere_curvature_ops;
     wire [31:0] total_cycles;
+    wire [31:0] m_axis_tdata;
+    wire        m_axis_tvalid;
+    reg         m_axis_tready;
+    wire        m_axis_tlast;
+    wire [3:0]  m_axis_tkeep;
+    reg  [31:0] dma_flits_received;
+    reg  [31:0] dma_packets_received;
 
     // Instantiate Device Under Test (DUT)
     sphere_deep_algorithm dut (
@@ -33,16 +40,35 @@ module tb_sphere_deep_algorithm;
         .sphere_acc_2(sphere_acc_2),
         .sphere_acc_3(sphere_acc_3),
         .sphere_curvature_ops(sphere_curvature_ops),
-        .total_cycles(total_cycles)
+        .total_cycles(total_cycles),
+        .m_axis_tdata(m_axis_tdata),
+        .m_axis_tvalid(m_axis_tvalid),
+        .m_axis_tready(m_axis_tready),
+        .m_axis_tlast(m_axis_tlast),
+        .m_axis_tkeep(m_axis_tkeep)
     );
 
     // 100MHz clock generation (10ns period)
     always #5 clk = ~clk;
 
+    // AXI4-Stream Receiver Monitor
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            dma_flits_received   <= 32'd0;
+            dma_packets_received <= 32'd0;
+        end else if (m_axis_tvalid && m_axis_tready) begin
+            dma_flits_received <= dma_flits_received + 32'd1;
+            if (m_axis_tlast) begin
+                dma_packets_received <= dma_packets_received + 32'd1;
+            end
+        end
+    end
+
     initial begin
         clk = 0;
         rst_n = 0;
         enable = 0;
+        m_axis_tready = 1;
 
         // Reset sequence
         #20 rst_n = 1;
@@ -63,13 +89,18 @@ module tb_sphere_deep_algorithm;
         $display("  Sphere Acc [0]: %0d  Sphere Acc [1]: %0d", sphere_acc_0, sphere_acc_1);
         $display("  Sphere Acc [2]: %0d  Sphere Acc [3]: %0d", sphere_acc_2, sphere_acc_3);
         $display("  Sphere Geodesic Ops:  %0d", sphere_curvature_ops);
+        $display("  AXI4-Stream DMA Flits : %0d", dma_flits_received);
+        $display("  AXI4-Stream Packets   : %0d", dma_packets_received);
         $display("==================================================");
 
         if (sentry_alert) begin
             $display("[FAIL] Sentry alert was triggered during execution!");
             $finish(1);
+        end else if (dma_flits_received == 0) begin
+            $display("[FAIL] AXI4-Stream burst DMA produced zero flits!");
+            $finish(1);
         end else begin
-            $display("[PASS] Hardware RTL verification successful!");
+            $display("[PASS] Hardware RTL and AXI4-Stream burst DMA verification successful!");
             $finish(0);
         end
     end

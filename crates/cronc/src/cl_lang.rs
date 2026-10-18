@@ -39,7 +39,12 @@ pub struct ClSlot {
     pub parity_token: char,
     pub imm_token: char,
     pub terminator: char,
+    // 16-character slot extensions (3-Address code & 16-bit immediate)
+    pub src2_reg: Option<usize>,
+    pub imm_u16: u16,
+    pub is_16char: bool,
 }
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClBundle {
@@ -53,6 +58,67 @@ pub struct ClWeightBinding {
     pub offset: usize,
     pub values: Vec<u32>,
     pub file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClNativeType {
+    Trit16,
+    Int4x8,
+    Fp16x2,
+    Geom4d,
+    Bit32,
+    Custom(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClTensorArg {
+    pub name: String,
+    pub dtype: String,
+    pub dims: Vec<usize>,
+}
+
+impl ClTensorArg {
+    pub fn native_type(&self) -> ClNativeType {
+        match self.dtype.to_lowercase().as_str() {
+            "trit16" | "ternary" | "1.58b" => ClNativeType::Trit16,
+            "int4x8" | "int4" | "i4" => ClNativeType::Int4x8,
+            "fp16x2" | "fp16" | "f16" => ClNativeType::Fp16x2,
+            "geom4d" | "rotor4d" | "clifford" => ClNativeType::Geom4d,
+            "bit32" | "u32" | "i32" | "int" => ClNativeType::Bit32,
+            _ => ClNativeType::Custom(self.dtype.clone()),
+        }
+    }
+
+    pub fn total_bits(&self) -> usize {
+        let elements = if self.dims.is_empty() { 1 } else { self.dims.iter().product() };
+        match self.native_type() {
+            ClNativeType::Trit16 => elements * 2,
+            ClNativeType::Int4x8 => elements * 4,
+            ClNativeType::Fp16x2 => elements * 16,
+            ClNativeType::Geom4d => elements * 32 * 4,
+            ClNativeType::Bit32 => elements * 32,
+            ClNativeType::Custom(_) => elements * 32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClKernelDef {
+    pub name: String,
+    pub inputs: Vec<ClTensorArg>,
+    pub outputs: Vec<ClTensorArg>,
+    pub attributes: std::collections::HashMap<String, String>,
+    pub body_statements: Vec<String>,
+}
+
+impl ClKernelDef {
+    pub fn total_input_bits(&self) -> usize {
+        self.inputs.iter().map(|arg| arg.total_bits()).sum()
+    }
+
+    pub fn total_output_bits(&self) -> usize {
+        self.outputs.iter().map(|arg| arg.total_bits()).sum()
+    }
 }
 
 /// Rich semantic directives supported in .cl machine language
@@ -117,6 +183,7 @@ pub enum ClDirective {
         size_kb: usize,
         bank: usize,
     },
+    Kernel(ClKernelDef),
     Custom {
         name: String,
         content: String,
@@ -242,6 +309,10 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "CR", // Clifford Algebra Cl(4,0) Spin(4) Multivector Rotor Rotation (v' = R*v*~R)
     "TS", // Tropical Semi-Ring (Max, +) Winner-Take-All Arbiter Step
     "UP", // Sub-Byte 1.58-bit Ternary Unpack / Decode into 8-bit registers
+    "VR", // Step-Level Process Reward Model (PRM) Verifier Register & Early Prune
+    "FM", // Fused Multiply-Add (FMA) 3-Address Operation
+    "MX", // Max / Min / ReLU / Clamp 3-Address Operation
+    "FP", // In-Slot 16-Bit Floating Point (FP16 IEEE 754) Operation
     // Extended Arithmetic, Logical & Neuromorphic Opcodes
     "AD", // Add
     "SU", // Subtract (Canonical 0-FLOPs Subtraction)
@@ -412,14 +483,27 @@ pub fn is_non_writer_opcode(op: &[u8; 2]) -> bool {
         | b"TI" | b"TD" | b"TW" | b"ZL" | b"DE" | b"PW" | b"DN" | b"DS" | b"bb" | b"BB"
         | b"RT" | b"FE" | b"PR" | b"CC" | b"DD" | b"EE" | b"11" | b"88" | b"99" | b"aa"
         | b"cc" | b"co" | b"dd" | b"ee" | b"ff" | b"00" | b"FF"
+        | b"TX" | b"SY"
     )
+}
+
+#[inline(always)]
+pub fn parse_hex4_bytes(slice: &[u8]) -> Option<u16> {
+    if slice.len() < 4 {
+        return None;
+    }
+    let d0 = hex_digit_val(slice[0])? as u16;
+    let d1 = hex_digit_val(slice[1])? as u16;
+    let d2 = hex_digit_val(slice[2])? as u16;
+    let d3 = hex_digit_val(slice[3])? as u16;
+    Some((d0 << 12) | (d1 << 8) | (d2 << 4) | d3)
 }
 
 pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
     let bytes = raw.as_bytes();
-    if bytes.len() != 10 {
+    if bytes.len() != 10 && bytes.len() != 16 {
         return Err(format!(
-            "Slot width violation: Each .cl slot must be exactly 10 characters, found {} ('{}')",
+            "Slot width violation: Each .cl slot must be 10 or 16 characters, found {} ('{}')",
             raw.len(),
             raw
         ));
@@ -443,38 +527,82 @@ pub fn parse_slot(raw: &str) -> Result<ClSlot, String> {
         }
     };
 
-    let term_b = bytes[9];
-    if !term_b.is_ascii_graphic() {
-        return Err(format!(
-            "Invalid slot terminator '{}' in '{}' (expected valid CL terminator)",
-            term_b as char, raw
-        ));
-    }
-    let terminator = term_b as char;
-
     let is_writer = !is_non_writer_opcode(&op_bytes);
-    let dest_reg = if is_writer {
-        parse_hex2_bytes(bytes[3], bytes[4])
+
+    if bytes.len() == 16 {
+        let term_b = bytes[15];
+        if !term_b.is_ascii_graphic() {
+            return Err(format!(
+                "Invalid slot terminator '{}' in '{}' (expected valid CL terminator)",
+                term_b as char, raw
+            ));
+        }
+        let terminator = term_b as char;
+
+        let dest_reg = if is_writer {
+            parse_hex2_bytes(bytes[3], bytes[4])
+        } else {
+            None
+        };
+
+        let mode = bytes[5] as char;
+        let src_reg = parse_hex2_bytes(bytes[6], bytes[7]);
+        let src2_reg = parse_hex2_bytes(bytes[8], bytes[9]);
+        let imm_u16 = parse_hex4_bytes(&bytes[10..14]).unwrap_or(0);
+        let imm_token = bytes[13] as char;
+        let parity_token = bytes[14] as char;
+
+        Ok(ClSlot {
+            raw: raw.to_string(),
+            prefix,
+            opcode,
+            dest_reg,
+            mode,
+            src_reg,
+            parity_token,
+            imm_token,
+            terminator,
+            src2_reg,
+            imm_u16,
+            is_16char: true,
+        })
     } else {
-        None
-    };
+        let term_b = bytes[9];
+        if !term_b.is_ascii_graphic() {
+            return Err(format!(
+                "Invalid slot terminator '{}' in '{}' (expected valid CL terminator)",
+                term_b as char, raw
+            ));
+        }
+        let terminator = term_b as char;
 
-    let mode = bytes[5] as char;
-    let src_reg = hex_digit_val(bytes[6]);
-    let parity_token = bytes[7] as char;
-    let imm_token = bytes[8] as char;
+        let dest_reg = if is_writer {
+            parse_hex2_bytes(bytes[3], bytes[4])
+        } else {
+            None
+        };
 
-    Ok(ClSlot {
-        raw: raw.to_string(),
-        prefix,
-        opcode,
-        dest_reg,
-        mode,
-        src_reg,
-        parity_token,
-        imm_token,
-        terminator,
-    })
+        let mode = bytes[5] as char;
+        let src_reg = hex_digit_val(bytes[6]);
+        let parity_token = bytes[7] as char;
+        let imm_token = bytes[8] as char;
+        let imm_u16 = hex_digit_val(bytes[8]).unwrap_or(0) as u16;
+
+        Ok(ClSlot {
+            raw: raw.to_string(),
+            prefix,
+            opcode,
+            dest_reg,
+            mode,
+            src_reg,
+            parity_token,
+            imm_token,
+            terminator,
+            src2_reg: None,
+            imm_u16,
+            is_16char: false,
+        })
+    }
 }
 
 /// Parse `.weights` directive lines:
@@ -841,6 +969,10 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
         return Ok(ClDirective::MemorySpace { space: space.to_string(), size_kb, bank });
     }
 
+    if trimmed.starts_with(".kernel") {
+        return parse_kernel_header(trimmed).map(ClDirective::Kernel);
+    }
+
     let name = trimmed.split_whitespace().next().unwrap_or(trimmed).to_string();
     Ok(ClDirective::Custom { name, content: trimmed.to_string() })
 }
@@ -848,11 +980,34 @@ pub fn parse_directive(line: &str) -> Result<ClDirective, String> {
 pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
     let mut report = ClReport::default();
     let mut line_num = 0;
+    let mut in_kernel: Option<ClKernelDef> = None;
 
     for line in content.lines() {
         line_num += 1;
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed == "{" || trimmed == "}" {
+        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Handle inside multi-line .kernel block
+        if let Some(ref mut k) = in_kernel {
+            if trimmed == "}" || trimmed.ends_with('}') {
+                let mut completed = in_kernel.take().unwrap();
+                if trimmed.len() > 1 && trimmed != "}" {
+                    let stmt = trimmed.trim_end_matches('}').trim();
+                    if !stmt.is_empty() {
+                        completed.body_statements.push(stmt.to_string());
+                    }
+                }
+                report.directives_found += 1;
+                report.directives_parsed.push(ClDirective::Kernel(completed));
+            } else if trimmed != "{" {
+                k.body_statements.push(trimmed.to_string());
+            }
+            continue;
+        }
+
+        if trimmed == "{" || trimmed == "}" {
             continue;
         }
 
@@ -861,6 +1016,19 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
             || (trimmed.starts_with('L') && trimmed.ends_with(':') && trimmed.len() <= 20)
         {
             report.labels_found += 1;
+            continue;
+        }
+
+        // Check for .kernel directives (which may start a block)
+        if trimmed.starts_with(".kernel") {
+            if let Ok(k) = parse_kernel_header(trimmed) {
+                if trimmed.contains('{') {
+                    in_kernel = Some(k);
+                } else {
+                    report.directives_found += 1;
+                    report.directives_parsed.push(ClDirective::Kernel(k));
+                }
+            }
             continue;
         }
 
@@ -955,6 +1123,16 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
                     report.hazards.push(msg);
                 }
             }
+            if let Some(src2) = slot.src2_reg {
+                let s2 = (src2 % 16) as usize;
+                if s2 > 0 && (dest_regs_mask & (1u16 << s2)) != 0 {
+                    let msg = format!(
+                        "Line {}: Read-After-Write (RAW) latency hazard: Register R{:X} (src2) read in same cycle before write commits in {}",
+                        line_num, s2, cycle_part
+                    );
+                    report.hazards.push(msg);
+                }
+            }
 
             // Parity token check & CRC-8 Token Integrity (Pages 70-80)
             if slot.parity_token.is_ascii_hexdigit() || slot.parity_token.is_ascii_alphanumeric() {
@@ -995,15 +1173,15 @@ pub fn verify_cl_program(content: &str) -> Result<ClReport, String> {
         report.total_bundles += 1;
     }
 
-    if report.total_bundles == 0 {
-        return Err("Empty .cl program: No valid VLIW instruction bundles found".to_string());
+    if report.total_bundles == 0 && report.directives_found == 0 {
+        return Err("Empty .cl program: No valid VLIW instruction bundles or directives found".to_string());
     }
 
     Ok(report)
 }
 
 /// CRC-8 ATM Polynomial: x^8 + x^2 + x + 1 (0x07) (Pages 70-80)
-/// Zero-cost instruction token integrity calculation for 128-bit VLIW instructions.
+/// Zero-cost instruction token integrity calculation for 128-bit / 512-bit VLIW instructions.
 pub fn compute_crc8_atm(data: &[u8]) -> u8 {
     let mut crc: u8 = 0x00;
     for &byte in data {
@@ -1039,19 +1217,48 @@ pub fn pack_slot_with_crc8(
     )
 }
 
-/// Verify CRC-8 integrity of a 10-character .cl instruction token
-pub fn verify_token_crc8(raw: &str) -> bool {
-    if raw.len() != 10 {
-        return false;
-    }
-    let chars: Vec<char> = raw.chars().collect();
+/// Pack a 16-character instruction slot with 1-character hex CRC-8 nibble at index 14.
+/// Layout: prefix(1) + op(2) + dest_hex(2) + mode(1) + src1_hex(2) + src2_hex(2) + imm_hex4(4) + crc_nibble(1) + term(1) = 16 chars.
+pub fn pack_slot_16_with_crc8(
+    prefix: char,
+    op: &str,
+    dest_hex: &str,
+    mode: char,
+    src1_hex: &str,
+    src2_hex: &str,
+    imm_hex4: &str,
+    term: char,
+) -> String {
     let payload = format!(
-        "{}{}{}{}{}{}{}{}",
-        chars[0], chars[1], chars[2], chars[3], chars[4], chars[5], chars[6], chars[8]
+        "{}{}{}{}{}{}{}",
+        prefix, op, dest_hex, mode, src1_hex, src2_hex, imm_hex4
     );
-    let actual_crc = compute_crc8_atm(payload.as_bytes()) & 0x0F;
-    let expected_nibble = chars[7].to_digit(16).unwrap_or(0xFF) as u8;
-    actual_crc == expected_nibble
+    let crc8 = compute_crc8_atm(payload.as_bytes());
+    const HEX_DIGITS: &[u8; 16] = b"0123456789ABCDEF";
+    let crc_nibble = HEX_DIGITS[(crc8 & 0x0F) as usize] as char;
+    format!("{}{}{}", payload, crc_nibble, term)
+}
+
+/// Verify CRC-8 integrity of a 10-character or 16-character .cl instruction token
+pub fn verify_token_crc8(raw: &str) -> bool {
+    if raw.len() == 10 {
+        let chars: Vec<char> = raw.chars().collect();
+        let payload = format!(
+            "{}{}{}{}{}{}{}{}",
+            chars[0], chars[1], chars[2], chars[3], chars[4], chars[5], chars[6], chars[8]
+        );
+        let actual_crc = compute_crc8_atm(payload.as_bytes()) & 0x0F;
+        let expected_nibble = chars[7].to_digit(16).unwrap_or(0xFF) as u8;
+        actual_crc == expected_nibble
+    } else if raw.len() == 16 {
+        let payload = &raw[..14];
+        let actual_crc = compute_crc8_atm(payload.as_bytes()) & 0x0F;
+        let expected_nibble = raw.as_bytes()[14] as char;
+        let expected = expected_nibble.to_digit(16).unwrap_or(0xFF) as u8;
+        actual_crc == expected
+    } else {
+        false
+    }
 }
 
 /// Unified canonical parser for immediate values and branch targets in CL instruction tokens.
@@ -1059,6 +1266,11 @@ pub fn verify_token_crc8(raw: &str) -> bool {
 /// Branch targets store full 16-bit cycle target in chars [6..10].
 pub fn parse_slot_immediate(slot: &str) -> Option<u32> {
     let bytes = slot.as_bytes();
+    if bytes.len() == 16 {
+        if let Some(val) = parse_hex4_bytes(&bytes[10..14]) {
+            return Some(val as u32);
+        }
+    }
     if bytes.len() == 10 {
         if let Some(hash_pos) = bytes.iter().position(|&b| b == b'#') {
             let is_branch = bytes[0] == b'!'
@@ -1137,4 +1349,1013 @@ pub fn parse_slot_immediate(slot: &str) -> Option<u32> {
         }
         if count > 0 { Some(val) } else { None }
     }
+}
+
+/// Convert IEEE 754 half-precision (16-bit) bit pattern to f32
+pub fn fp16_bits_to_f32(bits: u16) -> f32 {
+    let sign = ((bits >> 15) & 1) as u32;
+    let exp = ((bits >> 10) & 0x1F) as u32;
+    let mant = (bits & 0x3FF) as u32;
+
+    if exp == 0 {
+        if mant == 0 {
+            f32::from_bits(sign << 31)
+        } else {
+            let mut m = mant;
+            let mut e = 0;
+            while (m & 0x400) == 0 {
+                m <<= 1;
+                e += 1;
+            }
+            m &= 0x3FF;
+            let exp_f32 = (127 - 15 + 1 - e) as u32;
+            f32::from_bits((sign << 31) | (exp_f32 << 23) | (m << 13))
+        }
+    } else if exp == 31 {
+        f32::from_bits((sign << 31) | (0xFF << 23) | (mant << 13))
+    } else {
+        let exp_f32 = (exp + (127 - 15)) as u32;
+        f32::from_bits((sign << 31) | (exp_f32 << 23) | (mant << 13))
+    }
+}
+
+/// Convert f32 to IEEE 754 half-precision (16-bit) bit pattern
+pub fn f32_to_fp16_bits(val: f32) -> u16 {
+    let bits = val.to_bits();
+    let sign = ((bits >> 31) & 1) as u16;
+    let exp = ((bits >> 23) & 0xFF) as i32;
+    let mant = (bits & 0x7FFFFF) as u32;
+
+    if exp == 0xFF {
+        (sign << 15) | (0x1F << 10) | ((mant >> 13) as u16).max(if mant != 0 { 1 } else { 0 })
+    } else {
+        let new_exp = exp - 127 + 15;
+        if new_exp >= 31 {
+            (sign << 15) | (0x1F << 10)
+        } else if new_exp <= 0 {
+            0
+        } else {
+            (sign << 15) | ((new_exp as u16) << 10) | ((mant >> 13) as u16)
+        }
+    }
+}
+
+/// Pack 16 ternary values (-1, 0, +1) into a 32-bit word using BitNet b1.58 encoding (00=0, 01=+1, 10=-1)
+pub fn pack_trit16(trits: &[i8; 16]) -> u32 {
+    let mut val = 0u32;
+    for (i, &t) in trits.iter().enumerate() {
+        let code = match t {
+            1 => 1u32,
+            -1 => 2u32,
+            _ => 0u32,
+        };
+        val |= code << (i * 2);
+    }
+    val
+}
+
+/// Unpack 16 ternary values (-1, 0, +1) from a 32-bit word
+pub fn unpack_trit16(val: u32) -> [i8; 16] {
+    let mut trits = [0i8; 16];
+    for i in 0..16 {
+        let code = (val >> (i * 2)) & 0x3;
+        trits[i] = match code {
+            1 => 1,
+            2 => -1,
+            _ => 0,
+        };
+    }
+    trits
+}
+
+/// Pack 8 4-bit integers into a 32-bit word (QuaRot / W4A4)
+pub fn pack_int4x8(nibbles: &[i8; 8]) -> u32 {
+    let mut val = 0u32;
+    for (i, &n) in nibbles.iter().enumerate() {
+        val |= (((n as u8) & 0x0F) as u32) << (i * 4);
+    }
+    val
+}
+
+/// Unpack 8 4-bit integers from a 32-bit word
+pub fn unpack_int4x8(val: u32) -> [i8; 8] {
+    let mut nibbles = [0i8; 8];
+    for i in 0..8 {
+        let raw = ((val >> (i * 4)) & 0x0F) as u8;
+        nibbles[i] = if raw >= 8 { (raw as i8) - 16 } else { raw as i8 };
+    }
+    nibbles
+}
+
+/// Pack two f32 floats into a 32-bit word as two IEEE 754 half-precision FP16 floats
+pub fn pack_fp16x2(a: f32, b: f32) -> u32 {
+    let bits_a = f32_to_fp16_bits(a) as u32;
+    let bits_b = f32_to_fp16_bits(b) as u32;
+    (bits_b << 16) | bits_a
+}
+
+/// Unpack two IEEE 754 half-precision FP16 floats from a 32-bit word
+pub fn unpack_fp16x2(val: u32) -> (f32, f32) {
+    let bits_a = (val & 0xFFFF) as u16;
+    let bits_b = ((val >> 16) & 0xFFFF) as u16;
+    (fp16_bits_to_f32(bits_a), fp16_bits_to_f32(bits_b))
+}
+
+/// Parse a tensor argument, e.g. "%Q: trit16[32, 128]" or "%out: fp16x2[16]"
+pub fn parse_tensor_arg(s: &str) -> Option<ClTensorArg> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let (name, rest) = if let Some((n, r)) = trimmed.split_once(':') {
+        (n.trim().to_string(), r.trim())
+    } else {
+        (trimmed.to_string(), "f32")
+    };
+
+    let mut dtype = rest.to_string();
+    let mut dims = Vec::new();
+    if let Some(open) = rest.find('[') {
+        if let Some(close) = rest.rfind(']') {
+            dtype = rest[..open].trim().to_string();
+            let inside = &rest[open + 1..close];
+            for d in inside.split(',') {
+                if let Ok(v) = d.trim().parse::<usize>() {
+                    dims.push(v);
+                }
+            }
+        }
+    }
+    Some(ClTensorArg { name, dtype, dims })
+}
+
+/// Parse a .kernel directive header:
+/// Syntax: `.kernel <name>(%in1: type[dims], ...) -> (%out1: type[dims]) [attr=val, ...]`
+pub fn parse_kernel_header(line: &str) -> Result<ClKernelDef, String> {
+    let trimmed = line.trim();
+    let after_kernel = trimmed.strip_prefix(".kernel")
+        .ok_or_else(|| format!("Expected .kernel, got '{}'", line))?
+        .trim();
+
+    let clean = after_kernel.trim_end_matches('{').trim();
+
+    let (name_and_attrs, args_part) = if let Some(open_p) = clean.find('(') {
+        (&clean[..open_p], Some(&clean[open_p..]))
+    } else {
+        (clean, None)
+    };
+
+    let mut name = name_and_attrs.trim().to_string();
+    let mut attributes = std::collections::HashMap::new();
+
+    if name.contains('=') {
+        for token in split_directive_tokens(name_and_attrs) {
+            let tok = token.trim();
+            if let Some((k, v)) = tok.split_once('=') {
+                let key = k.trim().to_string();
+                let val = v.trim().trim_matches('"').to_string();
+                if key == "name" {
+                    name = val.clone();
+                }
+                attributes.insert(key, val);
+            }
+        }
+    }
+
+    let mut inputs = Vec::new();
+    let mut outputs = Vec::new();
+
+    if let Some(args_str) = args_part {
+        let (in_str, out_str) = if let Some((i_part, o_part)) = args_str.split_once("->") {
+            (i_part.trim(), Some(o_part.trim()))
+        } else {
+            (args_str.trim(), None)
+        };
+
+        let in_clean = in_str.trim_matches(|c| c == '(' || c == ')' || c == ' ');
+        for arg_tok in split_directive_tokens(in_clean) {
+            if let Some(arg) = parse_tensor_arg(&arg_tok) {
+                inputs.push(arg);
+            }
+        }
+
+        if let Some(out_part) = out_str {
+            let out_clean = out_part.trim_matches(|c| c == '(' || c == ')' || c == ' ' || c == '{');
+            for arg_tok in split_directive_tokens(out_clean) {
+                if let Some(arg) = parse_tensor_arg(&arg_tok) {
+                    outputs.push(arg);
+                }
+            }
+        }
+    }
+
+    Ok(ClKernelDef {
+        name,
+        inputs,
+        outputs,
+        attributes,
+        body_statements: Vec::new(),
+    })
+}
+
+/// Lower high-level tensor kernel AST into 16-character 3-address VLIW bundles
+pub fn lower_kernel_to_vliw16(kernel: &ClKernelDef, start_cycle: usize) -> Vec<String> {
+    let mut bundles = Vec::new();
+    let mut cycle = start_cycle;
+    let nop_slot = pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+
+    let is_empty = kernel.body_statements.is_empty();
+    let k_type = kernel.attributes.get("type").map(|s| s.as_str())
+        .or_else(|| if is_empty { Some(kernel.name.as_str()) } else { None });
+
+    if let Some(t) = k_type {
+        match t {
+            "flash-attn" | "flash_attn" => {
+                let s0 = pack_slot_16_with_crc8('_', "QK", "01", '$', "01", "00", "0000", '>');
+                let s1 = pack_slot_16_with_crc8('_', "QV", "02", '$', "02", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s0, s1, nop_slot, nop_slot));
+                cycle += 1;
+                let s2 = pack_slot_16_with_crc8('_', "QA", "04", '$', "01", "02", "0000", '>');
+                let s3 = pack_slot_16_with_crc8('_', "SM", "06", '$', "04", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s2, s3, nop_slot, nop_slot));
+                cycle += 1;
+                let h0 = pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, h0, nop_slot, nop_slot, nop_slot));
+                return bundles;
+            }
+            "bitnet-gemm" | "bitnet_linear" => {
+                let s0 = pack_slot_16_with_crc8('_', "SZ", "05", '$', "01", "02", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s0, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s1 = pack_slot_16_with_crc8('_', "MD", "08", '.', "05", "03", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s1, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s2 = pack_slot_16_with_crc8('_', "TM", "09", '*', "08", "04", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s2, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s3 = pack_slot_16_with_crc8('_', "PO", "0A", '+', "09", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s3, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let h0 = pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, h0, nop_slot, nop_slot, nop_slot));
+                return bundles;
+            }
+            "rmsnorm" | "rms_norm" => {
+                let s0 = pack_slot_16_with_crc8('_', "RM", "04", '@', "01", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s0, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s1 = pack_slot_16_with_crc8('_', "FM", "04", '+', "04", "02", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s1, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let h0 = pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, h0, nop_slot, nop_slot, nop_slot));
+                return bundles;
+            }
+            "swiglu" => {
+                let s0 = pack_slot_16_with_crc8('_', "SI", "07", '$', "05", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s0, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s1 = pack_slot_16_with_crc8('_', "PO", "08", '*', "07", "06", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s1, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s2 = pack_slot_16_with_crc8('_', "FM", "09", '+', "08", "02", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s2, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s3 = pack_slot_16_with_crc8('_', "MX", "0A", '>', "09", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s3, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let h0 = pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, h0, nop_slot, nop_slot, nop_slot));
+                return bundles;
+            }
+            "clifford-rotate4d" | "rotor4d_rotate" => {
+                let s0 = pack_slot_16_with_crc8('_', "TP", "01", '#', "01", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s0, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s1 = pack_slot_16_with_crc8('_', "CR", "02", '$', "01", "02", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s1, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let s2 = pack_slot_16_with_crc8('_', "WF", "03", '$', "02", "00", "0000", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, s2, nop_slot, nop_slot, nop_slot));
+                cycle += 1;
+                let h0 = pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
+                bundles.push(format!("B{:04}: {} {} {} {}", cycle, h0, nop_slot, nop_slot, nop_slot));
+                return bundles;
+            }
+            _ => {}
+        }
+    }
+
+    let mut env = KernelRegisterEnv::new();
+    for (idx, inp) in kernel.inputs.iter().enumerate() {
+        env.bind(&inp.name, (idx + 1).min(14));
+    }
+    for (idx, out) in kernel.outputs.iter().enumerate() {
+        env.bind(&out.name, (idx + 4).min(15));
+    }
+
+    let parsed_stmts = parse_kernel_stmts(&kernel.body_statements);
+    let mut label_map = std::collections::HashMap::new();
+    let mut has_halt = false;
+
+    lower_stmts_hierarchical(
+        &parsed_stmts,
+        &mut cycle,
+        &mut bundles,
+        &mut env,
+        &mut label_map,
+        &nop_slot,
+        &mut has_halt,
+    );
+
+    if !has_halt {
+        let h0 = pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
+        bundles.push(format!("B{:04}: {} {} {} {}", cycle, h0, nop_slot, nop_slot, nop_slot));
+    }
+
+    bundles
+}
+
+#[derive(Debug, Clone)]
+enum KernelStmt {
+    Simple(String),
+    Loop {
+        count: usize,
+        body: Vec<KernelStmt>,
+    },
+    IfElse {
+        cond_var: String,
+        then_body: Vec<KernelStmt>,
+        else_body: Vec<KernelStmt>,
+    },
+    Label(String),
+    Jump(String),
+    BranchZero { cond_var: String, target: String },
+    BranchNonZero { cond_var: String, target: String },
+}
+
+fn parse_kernel_stmts(raw_lines: &[String]) -> Vec<KernelStmt> {
+    let mut idx = 0;
+    let (stmts, _) = parse_stmt_block(raw_lines, &mut idx, false);
+    stmts
+}
+
+fn parse_stmt_block(raw_lines: &[String], idx: &mut usize, stop_on_closing_brace: bool) -> (Vec<KernelStmt>, bool) {
+    let mut stmts = Vec::new();
+    while *idx < raw_lines.len() {
+        let line = raw_lines[*idx].trim();
+        *idx += 1;
+        if line.is_empty() || line.starts_with("//") || line.starts_with(';') {
+            continue;
+        }
+        if stop_on_closing_brace && (line == "}" || line.starts_with('}')) {
+            let has_else = line.contains("else");
+            return (stmts, has_else);
+        }
+        if line.starts_with("repeat ") || line.starts_with("loop ") {
+            let count_part = line.split_whitespace().nth(1).unwrap_or("4").trim_end_matches('{').trim();
+            let count = count_part.parse::<usize>().unwrap_or(4);
+            let (body, _) = parse_stmt_block(raw_lines, idx, true);
+            stmts.push(KernelStmt::Loop { count, body });
+        } else if line.starts_with("if ") {
+            let cond_var = line.strip_prefix("if ").unwrap_or("").trim().trim_end_matches('{').trim().to_string();
+            let (then_body, trailing_else) = parse_stmt_block(raw_lines, idx, true);
+            let mut else_body = Vec::new();
+            if trailing_else || (*idx < raw_lines.len() && raw_lines[*idx].trim().starts_with("else")) {
+                if !trailing_else {
+                    *idx += 1;
+                }
+                let (eb, _) = parse_stmt_block(raw_lines, idx, true);
+                else_body = eb;
+            }
+            stmts.push(KernelStmt::IfElse { cond_var, then_body, else_body });
+        } else if line.starts_with('@') && line.ends_with(':') {
+            let label = line.trim_start_matches('@').trim_end_matches(':').trim().to_string();
+            stmts.push(KernelStmt::Label(label));
+        } else if line.starts_with("jump ->") || line.starts_with("jump ") {
+            let tgt = line.split("->").nth(1).unwrap_or(line).trim().trim_start_matches('@').trim().to_string();
+            stmts.push(KernelStmt::Jump(tgt));
+        } else if line.starts_with("branch_if_zero") || line.starts_with("branch_zero") {
+            let parts: Vec<&str> = line.split("->").collect();
+            let cond = parts[0].split_whitespace().nth(1).unwrap_or("%cond").to_string();
+            let tgt = parts.get(1).unwrap_or(&"end").trim().trim_start_matches('@').trim().to_string();
+            stmts.push(KernelStmt::BranchZero { cond_var: cond, target: tgt });
+        } else if line.starts_with("branch_if_nonzero") || line.starts_with("branch_nonzero") {
+            let parts: Vec<&str> = line.split("->").collect();
+            let cond = parts[0].split_whitespace().nth(1).unwrap_or("%cond").to_string();
+            let tgt = parts.get(1).unwrap_or(&"end").trim().trim_start_matches('@').trim().to_string();
+            stmts.push(KernelStmt::BranchNonZero { cond_var: cond, target: tgt });
+        } else {
+            stmts.push(KernelStmt::Simple(line.to_string()));
+        }
+    }
+    (stmts, false)
+}
+
+fn lower_stmts_hierarchical(
+    stmts: &[KernelStmt],
+    cycle: &mut usize,
+    bundles: &mut Vec<String>,
+    env: &mut KernelRegisterEnv,
+    label_map: &mut std::collections::HashMap<String, usize>,
+    nop_slot: &str,
+    has_halt: &mut bool,
+) {
+    for s in stmts {
+        match s {
+            KernelStmt::Simple(line) => {
+                lower_single_simple_stmt(line, cycle, bundles, env, nop_slot, has_halt);
+            }
+            KernelStmt::Label(name) => {
+                label_map.insert(name.clone(), *cycle);
+            }
+            KernelStmt::Loop { count, body } => {
+                let loop_reg = env.resolve_hex("%loop_cnt", 14);
+                let s_init = pack_slot_16_with_crc8('\'', "==", &loop_reg, '#', "00", "00", &format!("{:04X}", count), '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s_init, nop_slot, nop_slot, nop_slot));
+                *cycle += 1;
+                let loop_start_cycle = *cycle;
+                lower_stmts_hierarchical(body, cycle, bundles, env, label_map, nop_slot, has_halt);
+                let s_dec = pack_slot_16_with_crc8('_', "PO", &loop_reg, '-', &loop_reg, "00", "0001", '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s_dec, nop_slot, nop_slot, nop_slot));
+                *cycle += 1;
+                let s_bn = pack_slot_16_with_crc8('_', "BN", &loop_reg, '#', &loop_reg, "00", &format!("{:04X}", loop_start_cycle), '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s_bn, nop_slot, nop_slot, nop_slot));
+                *cycle += 1;
+            }
+            KernelStmt::IfElse { cond_var, then_body, else_body } => {
+                let cond_reg = env.resolve_hex(cond_var, 1);
+                let bz_idx = bundles.len();
+                let bz_cycle = *cycle;
+                bundles.push(String::new());
+                *cycle += 1;
+
+                lower_stmts_hierarchical(then_body, cycle, bundles, env, label_map, nop_slot, has_halt);
+
+                if else_body.is_empty() {
+                    let target_cycle = *cycle;
+                    let s_bz = pack_slot_16_with_crc8('_', "BZ", &cond_reg, '#', &cond_reg, "00", &format!("{:04X}", target_cycle), '>');
+                    bundles[bz_idx] = format!("B{:04}: {} {} {} {}", bz_cycle, s_bz, nop_slot, nop_slot, nop_slot);
+                } else {
+                    let jp_idx = bundles.len();
+                    let jp_cycle = *cycle;
+                    bundles.push(String::new());
+                    *cycle += 1;
+
+                    let else_start_cycle = *cycle;
+                    let s_bz = pack_slot_16_with_crc8('_', "BZ", &cond_reg, '#', &cond_reg, "00", &format!("{:04X}", else_start_cycle), '>');
+                    bundles[bz_idx] = format!("B{:04}: {} {} {} {}", bz_cycle, s_bz, nop_slot, nop_slot, nop_slot);
+
+                    lower_stmts_hierarchical(else_body, cycle, bundles, env, label_map, nop_slot, has_halt);
+                    let after_else_cycle = *cycle;
+                    let s_jp = pack_slot_16_with_crc8('_', "JP", "00", '#', "00", "00", &format!("{:04X}", after_else_cycle), '>');
+                    bundles[jp_idx] = format!("B{:04}: {} {} {} {}", jp_cycle, s_jp, nop_slot, nop_slot, nop_slot);
+                }
+            }
+            KernelStmt::Jump(target) => {
+                let tgt_cycle = label_map.get(target).copied().unwrap_or(0);
+                let s_jp = pack_slot_16_with_crc8('_', "JP", "00", '#', "00", "00", &format!("{:04X}", tgt_cycle), '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s_jp, nop_slot, nop_slot, nop_slot));
+                *cycle += 1;
+            }
+            KernelStmt::BranchZero { cond_var, target } => {
+                let cond_reg = env.resolve_hex(cond_var, 1);
+                let tgt_cycle = label_map.get(target).copied().unwrap_or(0);
+                let s_bz = pack_slot_16_with_crc8('_', "BZ", &cond_reg, '#', &cond_reg, "00", &format!("{:04X}", tgt_cycle), '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s_bz, nop_slot, nop_slot, nop_slot));
+                *cycle += 1;
+            }
+            KernelStmt::BranchNonZero { cond_var, target } => {
+                let cond_reg = env.resolve_hex(cond_var, 1);
+                let tgt_cycle = label_map.get(target).copied().unwrap_or(0);
+                let s_bn = pack_slot_16_with_crc8('_', "BN", &cond_reg, '#', &cond_reg, "00", &format!("{:04X}", tgt_cycle), '>');
+                bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s_bn, nop_slot, nop_slot, nop_slot));
+                *cycle += 1;
+            }
+        }
+    }
+}
+
+fn lower_single_simple_stmt(
+    trimmed: &str,
+    cycle: &mut usize,
+    bundles: &mut Vec<String>,
+    env: &mut KernelRegisterEnv,
+    nop_slot: &str,
+    has_halt: &mut bool,
+) {
+    // Direct bundle or slot passthrough
+    if trimmed.starts_with('B') && trimmed.contains(':') {
+        let (_, slots_part) = trimmed.split_once(':').unwrap();
+        bundles.push(format!("B{:04}: {}", *cycle, slots_part.trim()));
+        *cycle += 1;
+        return;
+    } else if trimmed.starts_with('_') || trimmed.starts_with('\'') {
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        let mut s = Vec::new();
+        for p in &parts {
+            if (p.starts_with('_') || p.starts_with('\'')) && p.len() >= 10 {
+                s.push(*p);
+            }
+        }
+        while s.len() < 4 {
+            s.push(nop_slot);
+        }
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s[0], s[1], s[2], s[3]));
+        *cycle += 1;
+        return;
+    }
+
+    let (lhs_dest, rhs_expr) = if let Some((lhs, rhs)) = trimmed.split_once('=') {
+        (Some(lhs.trim()), rhs.trim())
+    } else {
+        (None, trimmed)
+    };
+    let p_args = extract_percent_args(rhs_expr);
+
+    if rhs_expr.contains("rms_norm") || rhs_expr.contains("rmsnorm") {
+        let d_reg = if let Some(dest) = lhs_dest {
+            if dest.contains("norm") || dest == "%out" || dest.is_empty() {
+                env.bind(dest, 4);
+                "04".to_string()
+            } else {
+                env.resolve_hex(dest, 4)
+            }
+        } else {
+            "04".to_string()
+        };
+        let s_reg = if let Some(arg) = p_args.first() {
+            env.resolve_hex(arg, 1)
+        } else {
+            "01".to_string()
+        };
+        let s0 = pack_slot_16_with_crc8('_', "RM", &d_reg, '@', &s_reg, "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s1 = pack_slot_16_with_crc8('_', "FM", &d_reg, '+', &d_reg, "02", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s1, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("flash_attn") || rhs_expr.contains("attention") {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 4);
+        let s0 = pack_slot_16_with_crc8('_', "QK", "01", '$', "01", "00", "0000", '>');
+        let s1 = pack_slot_16_with_crc8('_', "QV", "02", '$', "02", "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, s1, nop_slot, nop_slot));
+        *cycle += 1;
+        let s2 = pack_slot_16_with_crc8('_', "QA", &d_reg, '$', "01", "02", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s2, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s3 = pack_slot_16_with_crc8('_', "SM", "06", '$', &d_reg, "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s3, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("swiglu") || rhs_expr.contains("mlp") {
+        if let Some(dest) = lhs_dest {
+            env.bind(dest, 5);
+        }
+        let s0 = pack_slot_16_with_crc8('_', "SI", "07", '$', "05", "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s1 = pack_slot_16_with_crc8('_', "PO", "08", '*', "07", "06", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s1, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s2 = pack_slot_16_with_crc8('_', "FM", "09", '+', "08", "02", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s2, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s3 = pack_slot_16_with_crc8('_', "MX", "0A", '>', "09", "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s3, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("bitnet") || rhs_expr.contains("ternary") {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 4);
+        let s0 = pack_slot_16_with_crc8('_', "SZ", "05", '$', "01", "02", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s1 = pack_slot_16_with_crc8('_', "MD", "08", '.', "05", "03", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s1, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s2 = pack_slot_16_with_crc8('_', "TM", "09", '*', "08", "04", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s2, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s3 = pack_slot_16_with_crc8('_', "PO", &d_reg, '+', "09", "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s3, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("rotor4d") || rhs_expr.contains("clifford") {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 3);
+        let s0 = pack_slot_16_with_crc8('_', "TP", "01", '#', "01", "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s1 = pack_slot_16_with_crc8('_', "CR", "02", '$', "01", "02", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s1, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s2 = pack_slot_16_with_crc8('_', "WF", &d_reg, '$', "02", "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s2, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.starts_with("emit") || rhs_expr.contains("-> Core") || rhs_expr.starts_with("tx") {
+        let s_reg = if let Some(arg) = p_args.first() {
+            env.resolve_hex(arg, 5)
+        } else {
+            "05".to_string()
+        };
+        let s0 = pack_slot_16_with_crc8('_', "TX", &s_reg, '$', &s_reg, "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.starts_with("receive") || rhs_expr.starts_with("rx") {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%in"), 1);
+        let s0 = pack_slot_16_with_crc8('_', "RX", &d_reg, '$', &d_reg, "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("embedding") || rhs_expr.contains("lookup") {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 4);
+        let tok_reg = if let Some(arg) = p_args.first() {
+            env.resolve_hex(arg, 1)
+        } else {
+            "01".to_string()
+        };
+        let s0 = pack_slot_16_with_crc8('_', "LD", &d_reg, '@', &tok_reg, "00", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        let s1 = pack_slot_16_with_crc8('_', "FM", &d_reg, '+', &d_reg, "02", "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s1, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("residual") || rhs_expr.contains("add") || rhs_expr.contains('+') {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 4);
+        let a_reg = if p_args.len() >= 1 { env.resolve_hex(&p_args[0], 1) } else { "01".to_string() };
+        let b_reg = if p_args.len() >= 2 { env.resolve_hex(&p_args[1], 2) } else { "02".to_string() };
+        let s0 = pack_slot_16_with_crc8('_', "PO", &d_reg, '+', &a_reg, &b_reg, "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("sub") || rhs_expr.contains('-') {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 4);
+        let a_reg = if p_args.len() >= 1 { env.resolve_hex(&p_args[0], 1) } else { "01".to_string() };
+        let b_reg = if p_args.len() >= 2 { env.resolve_hex(&p_args[1], 2) } else { "02".to_string() };
+        let s0 = pack_slot_16_with_crc8('_', "PO", &d_reg, '-', &a_reg, &b_reg, "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("mul") || rhs_expr.contains('*') {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 4);
+        let a_reg = if p_args.len() >= 1 { env.resolve_hex(&p_args[0], 1) } else { "01".to_string() };
+        let b_reg = if p_args.len() >= 2 { env.resolve_hex(&p_args[1], 2) } else { "02".to_string() };
+        let s0 = pack_slot_16_with_crc8('_', "PO", &d_reg, '*', &a_reg, &b_reg, "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if rhs_expr.contains("halt") {
+        let h0 = pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, h0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+        *has_halt = true;
+    } else if p_args.is_empty() && (rhs_expr.parse::<i64>().is_ok() || rhs_expr.starts_with("0x") || rhs_expr.starts_with("0X")) {
+        let imm_val = if rhs_expr.starts_with("0x") || rhs_expr.starts_with("0X") {
+            i64::from_str_radix(rhs_expr.trim_start_matches("0x").trim_start_matches("0X"), 16).unwrap_or(0)
+        } else {
+            rhs_expr.parse::<i64>().unwrap_or(0)
+        };
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 1);
+        let s0 = pack_slot_16_with_crc8('\'', "==", &d_reg, '#', "00", "00", &format!("{:04X}", imm_val as u16), '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    } else if p_args.is_empty() && (rhs_expr.contains('+') || rhs_expr.contains('-') || rhs_expr.contains('*')) {
+        let (val, found) = evaluate_const_expr(rhs_expr);
+        if found {
+            let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 1);
+            let s0 = pack_slot_16_with_crc8('\'', "==", &d_reg, '#', "00", "00", &format!("{:04X}", val as u16), '>');
+            bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+            *cycle += 1;
+        } else {
+            let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 1);
+            let s0 = pack_slot_16_with_crc8('_', "PO", &d_reg, '+', "01", "02", "0000", '>');
+            bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+            *cycle += 1;
+        }
+    } else {
+        let d_reg = env.resolve_hex(lhs_dest.unwrap_or("%out"), 1);
+        let a_reg = if p_args.len() >= 1 { env.resolve_hex(&p_args[0], 1) } else { "01".to_string() };
+        let b_reg = if p_args.len() >= 2 { env.resolve_hex(&p_args[1], 2) } else { "02".to_string() };
+        let s0 = pack_slot_16_with_crc8('_', "PO", &d_reg, '+', &a_reg, &b_reg, "0000", '>');
+        bundles.push(format!("B{:04}: {} {} {} {}", *cycle, s0, nop_slot, nop_slot, nop_slot));
+        *cycle += 1;
+    }
+}
+
+fn evaluate_const_expr(expr: &str) -> (i64, bool) {
+    let clean = expr.trim();
+    for op in ['+', '-', '*'] {
+        if let Some((lhs, rhs)) = clean.split_once(op) {
+            let l_trimmed = lhs.trim();
+            let r_trimmed = rhs.trim();
+            if let (Ok(l), Ok(r)) = (l_trimmed.parse::<i64>(), r_trimmed.parse::<i64>()) {
+                let res = match op {
+                    '+' => l + r,
+                    '-' => l - r,
+                    '*' => l * r,
+                    _ => 0,
+                };
+                return (res, true);
+            }
+        }
+    }
+    (0, false)
+}
+
+struct KernelRegisterEnv {
+    var_map: std::collections::HashMap<String, usize>,
+    next_alloc: usize,
+}
+
+impl KernelRegisterEnv {
+    fn new() -> Self {
+        Self {
+            var_map: std::collections::HashMap::new(),
+            next_alloc: 1,
+        }
+    }
+
+    fn bind(&mut self, var_name: &str, reg: usize) {
+        let clean = var_name.trim().trim_start_matches('%').to_lowercase();
+        self.var_map.insert(clean, reg);
+        if reg >= self.next_alloc {
+            self.next_alloc = (reg + 1).min(15);
+        }
+    }
+
+    fn resolve_reg(&mut self, var_name: &str, default_reg: usize) -> usize {
+        let clean = var_name.trim().trim_start_matches('%').to_lowercase();
+        if clean.is_empty() {
+            return default_reg;
+        }
+        if (clean.starts_with('r') || clean.starts_with('R')) && clean.len() >= 2 {
+            if let Ok(idx) = usize::from_str_radix(&clean[1..], 16) {
+                if idx < 16 {
+                    return idx;
+                }
+            }
+        }
+        if let Some(&reg) = self.var_map.get(&clean) {
+            return reg;
+        }
+        let reg = self.next_alloc;
+        self.var_map.insert(clean, reg);
+        if self.next_alloc < 15 {
+            self.next_alloc += 1;
+        }
+        reg
+    }
+
+    fn resolve_hex(&mut self, var_name: &str, default_reg: usize) -> String {
+        let reg = self.resolve_reg(var_name, default_reg);
+        format!("{:02X}", reg)
+    }
+}
+
+fn extract_percent_args(s: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    let mut start = None;
+    for (i, c) in s.char_indices() {
+        if c == '%' {
+            start = Some(i);
+        } else if let Some(st) = start {
+            if !c.is_alphanumeric() && c != '_' {
+                args.push(s[st..i].to_string());
+                start = None;
+            }
+        }
+    }
+    if let Some(st) = start {
+        args.push(s[st..].to_string());
+    }
+    args
+}
+
+/// Module metadata for .cl modular namespace system
+#[derive(Debug, Clone, Default)]
+pub struct ClModuleMeta {
+    pub name: String,
+    pub exports: std::collections::HashSet<String>,
+    pub has_explicit_exports: bool,
+}
+
+/// Resolve module file path across standard search paths
+pub fn resolve_cl_module_path(target: &str) -> Option<std::path::PathBuf> {
+    let clean = target.trim().trim_matches('"').trim_matches('\'');
+    let mut candidate_names = Vec::new();
+    if clean.ends_with(".cl") {
+        candidate_names.push(clean.to_string());
+    } else {
+        candidate_names.push(format!("{}.cl", clean));
+        candidate_names.push(clean.to_string());
+    }
+
+    // Support dot-separated or colon-separated module syntax: "sovereign.math" -> "sovereign/math.cl"
+    let slashes = clean.replace("::", "/").replace(".", "/");
+    if slashes != clean {
+        if !slashes.ends_with(".cl") {
+            candidate_names.push(format!("{}.cl", slashes));
+        }
+        candidate_names.push(slashes);
+    }
+
+    let search_roots = [
+        "",
+        "../..",
+        "libcl",
+        "../../libcl",
+        "models",
+        "../../models",
+        "models/sovereign_1b",
+        "../../models/sovereign_1b",
+        "models/sovereign_3b",
+        "../../models/sovereign_3b",
+        "examples/cl",
+        "../../examples/cl",
+    ];
+
+    for name in &candidate_names {
+        for root in &search_roots {
+            let path = if root.is_empty() {
+                std::path::PathBuf::from(name)
+            } else {
+                std::path::PathBuf::from(root).join(name)
+            };
+            if path.exists() && path.is_file() {
+                if let Ok(canonical) = path.canonicalize() {
+                    return Some(canonical);
+                }
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// Lower a full .cl file containing .kernel blocks into pure 16-character machine code
+pub fn lower_cl_with_kernels(content: &str) -> Result<String, String> {
+    let mut cycle_counter = 0usize;
+    let mut visited_paths = std::collections::HashSet::new();
+    lower_cl_with_kernels_recursive(content, &mut cycle_counter, &mut visited_paths, None)
+}
+
+fn lower_cl_with_kernels_recursive(
+    content: &str,
+    cycle_counter: &mut usize,
+    visited_paths: &mut std::collections::HashSet<std::path::PathBuf>,
+    alias_prefix: Option<&str>,
+) -> Result<String, String> {
+    let mut output = String::new();
+    let mut current_kernel: Option<ClKernelDef> = None;
+    let mut kernel_brace_depth: usize = 0;
+    let mut module_meta = ClModuleMeta::default();
+
+    // Scan for module declarations and export list
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(".module") {
+            let mod_name = trimmed.strip_prefix(".module")
+                .unwrap_or("")
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
+            module_meta.name = mod_name;
+        } else if trimmed.starts_with(".export") {
+            let exp_part = trimmed.strip_prefix(".export").unwrap_or("").trim();
+            module_meta.has_explicit_exports = true;
+            let stripped = exp_part.trim_start_matches('{').trim_end_matches('}').trim();
+            for sym in stripped.split(',') {
+                let s = sym.trim().trim_start_matches('@').trim();
+                if !s.is_empty() {
+                    module_meta.exports.insert(s.to_string());
+                }
+            }
+        }
+    }
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(ref mut k) = current_kernel {
+            let mut depth = kernel_brace_depth;
+            let mut closed_kernel = false;
+
+            for c in trimmed.chars() {
+                if c == '{' {
+                    depth += 1;
+                } else if c == '}' {
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                    if depth == 0 {
+                        closed_kernel = true;
+                        break;
+                    }
+                }
+            }
+            kernel_brace_depth = depth;
+
+            if closed_kernel {
+                let mut completed = current_kernel.take().unwrap();
+                if trimmed.len() > 1 && trimmed != "}" {
+                    let stmt = trimmed.trim_end_matches('}').trim();
+                    if !stmt.is_empty() {
+                        completed.body_statements.push(stmt.to_string());
+                    }
+                }
+
+                let is_exported = !module_meta.has_explicit_exports || module_meta.exports.contains(&completed.name);
+                let tag = if is_exported { "Public" } else { "Internal" };
+
+                output.push_str(&format!("; === Lowered AI Kernel ({tag}): {} ===\n", completed.name));
+                output.push_str(&format!("@{}:\n", completed.name));
+                if let Some(alias) = alias_prefix {
+                    output.push_str(&format!("@{}_{}:\n", alias, completed.name));
+                    output.push_str(&format!("@{}::{}:\n", alias, completed.name));
+                }
+
+                let bundles = lower_kernel_to_vliw16(&completed, *cycle_counter);
+                for b in bundles {
+                    output.push_str(&b);
+                    output.push('\n');
+                    *cycle_counter += 1;
+                }
+            } else if !trimmed.is_empty() && trimmed != "{" {
+                k.body_statements.push(trimmed.to_string());
+            }
+            continue;
+        }
+
+        if trimmed.starts_with(".module") || trimmed.starts_with(".export") {
+            output.push_str(&format!("; [Directive: {}]\n", trimmed));
+            continue;
+        }
+
+        if trimmed.starts_with(".use") || trimmed.starts_with(".include") {
+            let (target_raw, alias_opt) = if trimmed.starts_with(".use") {
+                let rest = trimmed.strip_prefix(".use").unwrap_or("").trim();
+                if let Some((target_part, alias_part)) = rest.split_once(" as ") {
+                    (target_part.trim(), Some(alias_part.trim()))
+                } else {
+                    (rest, None)
+                }
+            } else {
+                (trimmed.strip_prefix(".include").unwrap_or("").trim(), None)
+            };
+
+            let clean_target = target_raw.trim_matches('"').trim_matches('\'');
+            if let Some(resolved_path) = resolve_cl_module_path(clean_target) {
+                if visited_paths.contains(&resolved_path) {
+                    output.push_str(&format!("; --- Already included module '{}' (skipped duplicate) ---\n", clean_target));
+                    continue;
+                }
+                visited_paths.insert(resolved_path.clone());
+
+                if let Ok(c) = std::fs::read_to_string(&resolved_path) {
+                    let lowered_inc = lower_cl_with_kernels_recursive(&c, cycle_counter, visited_paths, alias_opt)?;
+                    output.push_str(&format!("; --- Module loaded from '{}' (alias: {:?}) ---\n", resolved_path.display(), alias_opt));
+                    output.push_str(&lowered_inc);
+                    output.push('\n');
+                    continue;
+                }
+            } else {
+                output.push_str(&format!("; [Warning: module '{}' could not be resolved from search paths]\n", clean_target));
+                continue;
+            }
+        }
+
+        if trimmed.starts_with(".kernel") {
+            let k = parse_kernel_header(trimmed)?;
+            if trimmed.contains('{') {
+                current_kernel = Some(k);
+                let opens = trimmed.chars().filter(|&c| c == '{').count();
+                let closes = trimmed.chars().filter(|&c| c == '}').count();
+                kernel_brace_depth = if opens > closes { opens - closes } else { 1 };
+            } else {
+                let is_exported = !module_meta.has_explicit_exports || module_meta.exports.contains(&k.name);
+                let tag = if is_exported { "Public" } else { "Internal" };
+                output.push_str(&format!("; === Lowered AI Kernel ({tag}): {} ===\n", k.name));
+                output.push_str(&format!("@{}:\n", k.name));
+                if let Some(alias) = alias_prefix {
+                    output.push_str(&format!("@{}_{}:\n", alias, k.name));
+                    output.push_str(&format!("@{}::{}:\n", alias, k.name));
+                }
+                let bundles = lower_kernel_to_vliw16(&k, *cycle_counter);
+                for b in bundles {
+                    output.push_str(&b);
+                    output.push('\n');
+                    *cycle_counter += 1;
+                }
+            }
+            continue;
+        }
+
+        output.push_str(line);
+        output.push('\n');
+
+        if trimmed.starts_with('B') || trimmed.starts_with('b') {
+            if let Some((c_str, _)) = trimmed.split_once(':') {
+                let num_str = c_str.trim().trim_start_matches(|c: char| c == 'B' || c == 'b');
+                if let Ok(c) = usize::from_str_radix(num_str, 16) {
+                    *cycle_counter = (*cycle_counter).max(c + 1);
+                } else if let Ok(c) = num_str.parse::<usize>() {
+                    *cycle_counter = (*cycle_counter).max(c + 1);
+                }
+            }
+        }
+    }
+
+    Ok(output)
 }

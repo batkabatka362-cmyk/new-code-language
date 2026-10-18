@@ -19,6 +19,12 @@ pub const EOS_TOKEN: &str = "<|end_of_text|>";
 pub const IM_START_TOKEN: &str = "<|im_start|>";
 pub const IM_END_TOKEN: &str = "<|im_end|>";
 pub const TOOL_CALL_TOKEN: &str = "<|tool_call|>";
+pub const SOVEREIGN_TOKEN: &str = "<|sovereign|>";
+pub const THINK_START_TOKEN: &str = "<|think|>";
+pub const THINK_END_TOKEN: &str = "</think>";
+pub const TORUS_TOKEN: &str = "<|torus|>";
+pub const SUBBYTE_TOKEN: &str = "<|subbyte|>";
+pub const CYCLIC_TOKEN: &str = "<|cyclic|>";
 
 /// Subword Byte-Pair Encoding (BPE) Tokenizer
 #[derive(Debug, Clone)]
@@ -66,6 +72,12 @@ impl BpeTokenizer {
         tok.register_special_token(IM_START_TOKEN, 258);
         tok.register_special_token(IM_END_TOKEN, 259);
         tok.register_special_token(TOOL_CALL_TOKEN, 260);
+        tok.register_special_token(SOVEREIGN_TOKEN, 261);
+        tok.register_special_token(THINK_START_TOKEN, 262);
+        tok.register_special_token(THINK_END_TOKEN, 263);
+        tok.register_special_token(TORUS_TOKEN, 264);
+        tok.register_special_token(SUBBYTE_TOKEN, 265);
+        tok.register_special_token(CYCLIC_TOKEN, 266);
 
         tok
     }
@@ -80,6 +92,45 @@ impl BpeTokenizer {
             self.id_to_token.resize((id as usize) + 1, Vec::new());
         }
         self.id_to_token[id as usize] = bytes;
+    }
+
+    /// Registers a subword into vocabulary with greedy BPE pair merges
+    pub fn add_subword(&mut self, subword: &str, rank: &mut u32) -> u32 {
+        let bytes = subword.as_bytes();
+        if bytes.is_empty() {
+            return 0;
+        }
+        if let Some(&id) = self.token_to_id.get(bytes) {
+            return id;
+        }
+
+        let tokens = self.encode(subword);
+        if tokens.len() <= 1 {
+            return tokens.first().copied().unwrap_or(0);
+        }
+
+        let mut curr_token = tokens[0];
+        let mut curr_slice = self.get_token_bytes(curr_token);
+
+        for &next_tok in &tokens[1..] {
+            let next_slice = self.get_token_bytes(next_tok);
+            curr_slice.extend_from_slice(&next_slice);
+
+            let new_id = if let Some(&existing) = self.token_to_id.get(&curr_slice) {
+                existing
+            } else {
+                let id = self.id_to_token.len() as u32;
+                self.token_to_id.insert(curr_slice.clone(), id);
+                self.id_to_token.push(curr_slice.clone());
+                id
+            };
+
+            self.merges.insert((curr_token, next_tok), (new_id, *rank));
+            *rank += 1;
+            curr_token = new_id;
+        }
+
+        curr_token
     }
 
     /// Ingests vocabulary and merges from GGUF metadata
@@ -129,9 +180,30 @@ impl BpeTokenizer {
         Ok(tokenizer)
     }
 
-    /// Builds a rich foundation vocabulary out of the box (English subwords, code syntax, numbers)
+    /// Builds a rich foundation vocabulary out of the box (English subwords, code syntax, numbers, Mongolian Cyrillic)
     pub fn from_default_vocab() -> Self {
         let mut tok = Self::new_empty();
+        let mut rank = 0u32;
+
+        // 1. Register UTF-8 Cyrillic base character merges (0xD0, 0xD1, 0xD2, 0xD3)
+        for trail in 0x80..=0xBFu8 {
+            for lead in [0xD0u8, 0xD1u8] {
+                let pair = vec![lead, trail];
+                let id = tok.id_to_token.len() as u32;
+                tok.token_to_id.insert(pair.clone(), id);
+                tok.id_to_token.push(pair);
+                tok.merges.insert((lead as u32, trail as u32), (id, rank));
+                rank += 1;
+            }
+        }
+        for (lead, trail) in [(0xD2u8, 0xAEu8), (0xD2u8, 0xAFu8), (0xD3u8, 0x98u8), (0xD3u8, 0x99u8)] {
+            let pair = vec![lead, trail];
+            let id = tok.id_to_token.len() as u32;
+            tok.token_to_id.insert(pair.clone(), id);
+            tok.id_to_token.push(pair);
+            tok.merges.insert((lead as u32, trail as u32), (id, rank));
+            rank += 1;
+        }
 
         let common_subwords = [
             "the", "The", " in", " to", " of", " and", " a", " is", " for", " that",
@@ -144,38 +216,30 @@ impl BpeTokenizer {
             " (", ")", " [", "]", " {", "}", ": ", ", ", ".\"", "\".",
             "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
             " cognitive", " neural", " hardware", " silicon", " paged", " streaming",
+            "transformer", "attention", "residual", "swiglu", "rmsnorm", "quantization",
+            "ternary", "bitnet", "subbyte", "4D-Torus", "pipeline", "inference",
+            "reasoning", "verification", "sovereign", "Sovereign", "weight", "weights",
+            // Mongolian Cyrillic Pronouns, Verbs, Morphemes
+            "Би", "би", "Та", "та", "Чи", "чи", "Бид", "бид", "Тэд", "тэд",
+            "Энэ", "энэ", "Тэр", "тэр", "Мөн", "мөн", "Байх", "байх", "байна", "байв",
+            "Болох", "болох", "болно", "болсон", "болж", "болов", "гэж", "гэх",
+            "бас", "бөгөөд", "тул", "учир", "гэвч", "харин", "хэрэв", "тийм", "үгүй",
+            "уу", "үү", "яагаад", "хэрхэн", "ямар", "хаана", "хэзээ", "хэн", "юу",
             // Mongolian Cyrillic Foundational Morphemes & Technical Terms
-            "Монгол", "монгол", " хэл", " тооцоолол", " загвар", " оюун", " ухаан", " сургалт",
-            " өгөгдөл", " цахиур", " сүлжээ", " систем", " баримт", " ажиллагаа", " тооцоо",
-            " хиймэл", " код", " хөгжүүлэлт", " санах", " ой", " хурд", " шахалт", " цөм",
+            "Монгол", "монгол", "хэл", "хэлний", "хэлээр", "тооцоолол", "загвар",
+            "оюун", "ухаан", "хиймэл", "сургалт", "өгөгдөл", "өгөгдлийн", "цахиур",
+            "сүлжээ", "сүлжээний", "систем", "системийн", "баримт", "ажиллагаа",
+            "ажиллах", "тооцоо", "код", "кодын", "хөгжүүлэлт", "санах", "ой",
+            "хурд", "хурдатгал", "шахалт", "цөм", "цөмийн", "боловсруулах",
+            "гүйцэтгэх", "гүйцэтгэл", "шинжилгээ", "дүгнэлт", "холболт", "шийдэл",
+            "алгоритм", "хувьсагч", "параметр", "илэрхийлэл", "гаралт", "оролт",
+            "тоног", "төхөөрөмж", "архитектур", "санах ойн", "шуурхай", "хэрэглэгч",
+            "хариулт", "асуулт", "зөвлөмж", "програм", "компилятор", "хөрвүүлэгч",
+            "жишиг", "үнэлгээ", "баталгаажуулалт", "үр дүн", "амжилт",
         ];
 
-        let mut current_id = 300u32;
-        let mut rank = 0u32;
-
         for subword in common_subwords {
-            let bytes = subword.as_bytes().to_vec();
-            if !tok.token_to_id.contains_key(&bytes) {
-                tok.token_to_id.insert(bytes.clone(), current_id);
-                if (current_id as usize) >= tok.id_to_token.len() {
-                    tok.id_to_token.resize((current_id as usize) + 1, Vec::new());
-                }
-                tok.id_to_token[current_id as usize] = bytes.clone();
-
-                // Add synthetic merge pairs for subword
-                if bytes.len() >= 2 {
-                    let id_a = bytes[0] as u32;
-                    let id_b = if bytes.len() == 2 {
-                        bytes[1] as u32
-                    } else {
-                        // Intermediate subword
-                        current_id
-                    };
-                    tok.merges.insert((id_a, id_b), (current_id, rank));
-                    rank += 1;
-                }
-                current_id += 1;
-            }
+            tok.add_subword(subword, &mut rank);
         }
 
         tok

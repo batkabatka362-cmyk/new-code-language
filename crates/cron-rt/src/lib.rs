@@ -8,10 +8,14 @@
 pub mod fiber;
 pub mod http_server;
 pub mod mmap_streamer;
+pub mod radix_cache;
+pub mod engine_core;
 
 pub use fiber::{FiberChannel, FiberConfig, FiberHandle, FiberScheduler, FiberState};
 pub use http_server::{HttpRequest, HttpServerConfig, LiveHttpServer, RegionScratchpad, generate_cron_chat_response};
 pub use mmap_streamer::{LayerMetadata, PagedWeightStreamer, StreamerTelemetry};
+pub use radix_cache::{RadixTreeCache, RadixTreeNode, RadixCacheTelemetry};
+pub use engine_core::{ZeroGilEngineCore, EngineRequest, EngineResponse, EngineCoreTelemetry};
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};

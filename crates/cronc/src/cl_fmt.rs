@@ -91,11 +91,17 @@ pub fn format_cl_program(source: &str, options: &ClFmtOptions) -> Result<String,
                     formatted_slots.push(healed);
                 } else {
                     let mut s = tok.to_string();
-                    while s.len() < 10 {
-                        s.push('0');
-                    }
                     if s.len() > 10 {
-                        s.truncate(10);
+                        while s.len() < 16 {
+                            s.push('0');
+                        }
+                        if s.len() > 16 {
+                            s.truncate(16);
+                        }
+                    } else {
+                        while s.len() < 10 {
+                            s.push('0');
+                        }
                     }
                     formatted_slots.push(s);
                 }

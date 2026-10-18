@@ -59,6 +59,39 @@ pub fn heal_slot_crc(raw: &str) -> (String, bool) {
         "NO".to_string()
     };
 
+    if trimmed.len() == 16 {
+        if verify_token_crc8(trimmed) || trimmed.contains('#') || prefix == '\'' || op.starts_with('=') {
+            return (trimmed.to_string(), false);
+        }
+        let dest_hex = if chars.len() >= 5 {
+            format!("{}{}", chars[3], chars[4])
+        } else {
+            "00".to_string()
+        };
+        let mode = if chars.len() >= 6 { chars[5] } else { '#' };
+        let src1_hex = if chars.len() >= 8 {
+            format!("{}{}", chars[6], chars[7])
+        } else {
+            "00".to_string()
+        };
+        let src2_hex = if chars.len() >= 10 {
+            format!("{}{}", chars[8], chars[9])
+        } else {
+            "00".to_string()
+        };
+        let imm_hex4 = if chars.len() >= 14 {
+            format!("{}{}{}{}", chars[10], chars[11], chars[12], chars[13])
+        } else {
+            "0000".to_string()
+        };
+
+        let payload = format!("{}{}{}{}{}{}{}", prefix, op, dest_hex, mode, src1_hex, src2_hex, imm_hex4);
+        let crc8 = compute_crc8_atm(payload.as_bytes()) & 0x0F;
+        let crc_char = format!("{:1X}", crc8).chars().next().unwrap();
+        let healed = format!("{}{}{}", payload, crc_char, term);
+        return (healed, true);
+    }
+
     if trimmed.len() == 10
         && (verify_token_crc8(trimmed) || trimmed.contains('#') || prefix == '\'' || op.starts_with('=')) {
             return (trimmed.to_string(), false);

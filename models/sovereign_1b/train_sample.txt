@@ -1,0 +1,3 @@
+CRON is a sovereign AI programming language running on 256-core 4D-torus silicon with 1.58-bit ternary weights and zero DRAM traffic.
+Sovereign AI models execute on-device using reversible computing and photonic tensor accelerators.
+Discrete CL-LoRA enables instant continuous learning in Scratchpad SRAM without GPU clusters.

@@ -304,6 +304,7 @@ pub struct PyToCronTranspiler {
     pub functions: Vec<PyMathFunction>,
     pub default_dim: usize,
     pub use_sphere: bool,
+    pub use_16char: bool,
 }
 
 impl PyToCronTranspiler {
@@ -312,6 +313,7 @@ impl PyToCronTranspiler {
             functions: Vec::new(),
             default_dim,
             use_sphere,
+            use_16char: true,
         }
     }
 
@@ -626,8 +628,23 @@ impl PyToCronTranspiler {
         }
     }
 
-    /// Emits Pure 40-character 4-slot VLIW CL Microcode (.cl)
+    /// Builder helper to set 16-char mode
+    pub fn with_16char(mut self, enabled: bool) -> Self {
+        self.use_16char = enabled;
+        self
+    }
+
+    /// Emits Pure VLIW CL Microcode (.cl), dispatching based on `self.use_16char`
     pub fn emit_cl_machine_code(&self) -> String {
+        if self.use_16char {
+            self.emit_cl_machine_code_16()
+        } else {
+            self.emit_cl_machine_code_10()
+        }
+    }
+
+    /// Emits Pure 40-character 4-slot VLIW CL Microcode (.cl)
+    pub fn emit_cl_machine_code_10(&self) -> String {
         let mut out = String::new();
         out.push_str("// ============================================================================\n");
         out.push_str("// CRON CL Machine Code: Lowered from Python Mathematical Graph\n");
@@ -699,6 +716,91 @@ impl PyToCronTranspiler {
                         let slot1 = crate::cl_lang::pack_slot_with_crc8('_', "SH", "00", '$', '0', '0', '>');
                         let slot2 = crate::cl_lang::pack_slot_with_crc8('_', "RS", "00", '#', '0', '0', '>');
                         let slot3 = crate::cl_lang::pack_slot_with_crc8('_', "HL", "00", '#', '0', '0', '!');
+                        out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+                        bundle_idx += 1;
+                    }
+                    _ => {}
+                }
+            }
+            out.push('\n');
+        }
+
+        out
+    }
+
+    /// Emits Pure 64-character 4-slot VLIW CL Microcode (16-16-16-16, 512-bit)
+    pub fn emit_cl_machine_code_16(&self) -> String {
+        let mut out = String::new();
+        out.push_str("// ============================================================================\n");
+        out.push_str("// CRON CL Machine Code: Lowered from Python Mathematical Graph\n");
+        out.push_str(&format!("// Functions: {}, Default Dim: {}, Sphere 4D Mode: {}\n", self.functions.len(), self.default_dim, self.use_sphere));
+        out.push_str("// Architecture: 512-bit VLIW Bundles (4 Slots x 16 Chars, 3-Address Form)\n");
+        out.push_str("// ============================================================================\n\n");
+
+        for func in &self.functions {
+            out.push_str(&format!("// Function: {} (Domain: {:?})\n", func.name, func.domain));
+            out.push_str(&format!("// Signature: {}({})\n", func.name, func.args.join(", ")));
+
+            let mut bundle_idx = 0;
+            for op in &func.ops {
+                match op {
+                    HirOp::MatMul { in_dim, out_dim, .. } => {
+                        let bundles_needed = (*in_dim * *out_dim / 16).max(2).min(8);
+                        for _ in 0..bundles_needed {
+                            let slot0 = crate::cl_lang::pack_slot_16_with_crc8('_', "MD", "01", '$', "01", "02", "0000", '>');
+                            let slot1 = crate::cl_lang::pack_slot_16_with_crc8('_', "PO", "02", '$', "02", "00", "0000", '>');
+                            let slot2 = crate::cl_lang::pack_slot_16_with_crc8('_', "PK", "00", '#', "00", "00", "0000", '>');
+                            let slot3 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                            out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+                            bundle_idx += 1;
+                        }
+                    }
+                    HirOp::SphereGeodesicRotor { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_16_with_crc8('_', "CD", "01", '$', "01", "02", "0100", '>');
+                        let slot1 = crate::cl_lang::pack_slot_16_with_crc8('_', "WF", "02", '$', "02", "00", "0000", '>');
+                        let slot2 = crate::cl_lang::pack_slot_16_with_crc8('_', "TP", "00", '#', "00", "00", "0000", '>');
+                        let slot3 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                        out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+                        bundle_idx += 1;
+                    }
+                    HirOp::TernaryLinear { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_16_with_crc8('_', "PO", "01", '$', "01", "02", "5555", '>');
+                        let slot1 = crate::cl_lang::pack_slot_16_with_crc8('_', "MD", "02", '.', "02", "00", "AAAA", '>');
+                        let slot2 = crate::cl_lang::pack_slot_16_with_crc8('_', "PK", "00", '#', "00", "00", "0000", '>');
+                        let slot3 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                        out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+                        bundle_idx += 1;
+                    }
+                    HirOp::HyperTreeStep { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_16_with_crc8('_', "TL", "01", '$', "01", "02", "000F", '>');
+                        let slot1 = crate::cl_lang::pack_slot_16_with_crc8('_', "DW", "02", '$', "02", "00", "0000", '>');
+                        let slot2 = crate::cl_lang::pack_slot_16_with_crc8('_', "PS", "00", '#', "00", "00", "0000", '>');
+                        let slot3 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                        out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+                        bundle_idx += 1;
+                    }
+                    HirOp::ReversibleTransition { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_16_with_crc8('_', "RF", "01", '$', "01", "02", "0001", '>');
+                        let slot1 = crate::cl_lang::pack_slot_16_with_crc8('_', "TO", "02", '$', "02", "00", "0000", '>');
+                        let slot2 = crate::cl_lang::pack_slot_16_with_crc8('_', "RS", "00", '#', "00", "00", "0000", '>');
+                        let slot3 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                        out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+                        bundle_idx += 1;
+                    }
+                    HirOp::Activation { kind, .. } => {
+                        let act_code = if kind.contains("relu") { "GE" } else { "SI" };
+                        let slot0 = crate::cl_lang::pack_slot_16_with_crc8('_', act_code, "01", '$', "01", "00", "0000", '>');
+                        let slot1 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                        let slot2 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                        let slot3 = crate::cl_lang::pack_slot_16_with_crc8('_', "NO", "00", '#', "00", "00", "0000", '>');
+                        out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
+                        bundle_idx += 1;
+                    }
+                    HirOp::Return { .. } => {
+                        let slot0 = crate::cl_lang::pack_slot_16_with_crc8('_', "PO", "00", '$', "00", "00", "0000", '>');
+                        let slot1 = crate::cl_lang::pack_slot_16_with_crc8('_', "SH", "00", '$', "00", "00", "0000", '>');
+                        let slot2 = crate::cl_lang::pack_slot_16_with_crc8('_', "RS", "00", '#', "00", "00", "0000", '>');
+                        let slot3 = crate::cl_lang::pack_slot_16_with_crc8('_', "HL", "00", '#', "00", "00", "0000", '!');
                         out.push_str(&format!("B{:04X}: {} {} {} {}\n", bundle_idx, slot0, slot1, slot2, slot3));
                         bundle_idx += 1;
                     }

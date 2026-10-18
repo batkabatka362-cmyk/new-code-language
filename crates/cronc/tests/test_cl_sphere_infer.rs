@@ -300,4 +300,108 @@ fn test_4d_hypersphere_riemannian_geodesic_and_hopf_fibration() {
     assert!((s2_norm - 1.0).abs() < 1e-5, "Hopf projection must lie on unit S^2, norm was {}", s2_norm);
 }
 
+#[test]
+fn test_riemannian_exp_log_parallel_transport() {
+    use cronc::cl_sphere_infer::HyperspherePoint4D;
+    use std::f32::consts::PI;
+
+    let p = HyperspherePoint4D::new(1.0, 0.0, 0.0, 0.0);
+    // Tangent vector along Y of length PI/3
+    let v_tan = [0.0, PI / 3.0, 0.0, 0.0];
+
+    // Exp_p(v) moves by PI/3
+    let q = p.exp_map(&v_tan);
+    let dist = p.geodesic_distance(&q);
+    assert!((dist - (PI / 3.0)).abs() < 1e-5, "Geodesic distance must equal ||v||, got {}", dist);
+
+    // Log_p(q) recovers original tangent vector v
+    let recovered_v = p.log_map(&q);
+    assert!((recovered_v[0] - v_tan[0]).abs() < 1e-5);
+    assert!((recovered_v[1] - v_tan[1]).abs() < 1e-5);
+    assert!((recovered_v[2] - v_tan[2]).abs() < 1e-5);
+    assert!((recovered_v[3] - v_tan[3]).abs() < 1e-5);
+
+    // Parallel transport of an orthogonal tangent vector along the geodesic
+    let w = [0.0, 0.0, 1.0, 0.0]; // Orthogonal to v
+    let w_transported = p.parallel_transport(&q, &w);
+    // Length must be preserved (isometry of Levi-Civita connection)
+    let w_len_sq = w_transported[0]*w_transported[0] + w_transported[1]*w_transported[1] + w_transported[2]*w_transported[2] + w_transported[3]*w_transported[3];
+    assert!((w_len_sq.sqrt() - 1.0).abs() < 1e-5, "Parallel transport must preserve norm, got {}", w_len_sq.sqrt());
+}
+
+#[test]
+fn test_continuous_sphere_dynamical_flow_rk4() {
+    use cronc::cl_sphere_infer::{ContinuousSphereDynamicalFlow, HyperspherePoint4D};
+
+    let flow = ContinuousSphereDynamicalFlow::default();
+    let initial_state = HyperspherePoint4D::new(1.0, 0.0, 0.0, 0.0);
+
+    // Dynamic field simulating harmonic oscillator / recurrent attractor on S^3
+    let mut current = initial_state;
+    let dt = 0.01f32;
+
+    for _ in 0..100 {
+        current = flow.rk4_geodesic_step(&current, dt, |x| {
+            // Skew-symmetric generator (SO(4) rotation) ensuring smooth flow
+            [-0.5 * x.y, 0.5 * x.x, -0.3 * x.w, 0.3 * x.z]
+        });
+
+        // Strict manifold constraint: every step must lie exactly on unit 3-sphere (norm == 1.0)
+        let norm_sq = current.x * current.x + current.y * current.y + current.z * current.z + current.w * current.w;
+        assert!((norm_sq.sqrt() - 1.0).abs() < 1e-5, "RK4 flow diverged from S^3 manifold: {}", norm_sq.sqrt());
+    }
+
+    // Must have smoothly evolved away from initial north pole without blowup
+    let dist = initial_state.geodesic_distance(&current);
+    assert!(dist > 0.1 && dist < std::f32::consts::PI);
+}
+
+#[test]
+fn test_universal_bitnet_arbitrary_gemv_zero_flop() {
+    use cronc::cl_sphere_infer::{SphereWeightMatrix, UniversalBitNetEngine};
+
+    // Arbitrary rectangular shape: 13 rows x 27 cols
+    let rows = 13;
+    let cols = 27;
+    let mut raw_weights = Vec::with_capacity(rows * cols);
+    for i in 0..(rows * cols) {
+        let val = ((i as f32 * 0.41).cos() * 2.5) - 0.2;
+        raw_weights.push(val);
+    }
+
+    let mat = SphereWeightMatrix::from_floats("arbitrary_mlp", rows, cols, &raw_weights);
+    let activations: Vec<i32> = (0..cols).map(|c| c as i32 * 3 - 7).collect();
+
+    let output = UniversalBitNetEngine::gemv(&mat, &activations);
+    assert_eq!(output.len(), rows);
+
+    // Verify mathematical exactness against direct ternary dot product
+    for r in 0..rows {
+        let mut expected = 0i32;
+        for c in 0..cols {
+            let w = mat.ternary_weights[r * cols + c];
+            expected += (w as i32) * activations[c];
+        }
+        assert_eq!(output[r], expected, "Row {} mismatch in Universal BitNet GEMV", r);
+    }
+}
+
+#[test]
+fn test_subbyte_popcount_adder_tree() {
+    use cronc::cl_sphere_infer::UniversalBitNetEngine;
+
+    // 32-bit test pattern:
+    // pos_mask has +1 at indices 0, 2, 4 (binary: 0b10101 = 21)
+    // neg_mask has -1 at indices 1, 3 (binary: 0b01010 = 10)
+    // act_mask has 1 at indices 0, 1, 2, 3, 4 (binary: 0b11111 = 31)
+    let pos_mask = 0b10101u64;
+    let neg_mask = 0b01010u64;
+    let act_mask = 0b11111u64;
+
+    // Expected: 3 positive matches - 2 negative matches = +1
+    let dot = UniversalBitNetEngine::zero_flop_bitcount_dot(pos_mask, neg_mask, act_mask);
+    assert_eq!(dot, 1);
+}
+
+
 

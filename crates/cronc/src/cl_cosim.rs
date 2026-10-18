@@ -280,7 +280,16 @@ impl VerilogRtlCoreSimulator {
                     self.rf[d] = tile_transpose(self.rf[s]);
                 }
                 "PO" | "P0" | "P1" => {
-                    let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                    let (val1, val2) = if slot.is_16char {
+                        let src2 = slot.src2_reg.unwrap_or(0);
+                        if src2 > 0 {
+                            (self.rf[s], self.rf[src2])
+                        } else if imm_val > 0 {
+                            (self.rf[s], imm_val)
+                        } else {
+                            (self.rf[d], self.rf[s])
+                        }
+                    } else if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
                         (self.rf[s], self.rf[imm_nibble])
                     } else {
                         (self.rf[d], self.rf[s])
@@ -522,6 +531,14 @@ fn tile_transpose(v: u32) -> u32 {
 
 /// Executes lockstep co-simulation between software Golden JIT and synthesizable RTL
 pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimReport, String> {
+    let lowered_code;
+    let cl_code = if cl_code.contains(".kernel") || cl_code.contains(".include") {
+        lowered_code = crate::cl_lang::lower_cl_with_kernels(cl_code)?;
+        &lowered_code
+    } else {
+        cl_code
+    };
+
     let start_time = Instant::now();
 
     let mut soft_core = ClJitCore::new();
@@ -656,7 +673,16 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                             soft_core.r[d] = tile_transpose(soft_core.r[s]);
                         }
                         "PO" | "P0" | "P1" => {
-                            let (val1, val2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                            let (val1, val2) = if slot.is_16char {
+                                let src2 = slot.src2_reg.unwrap_or(0);
+                                if src2 > 0 {
+                                    (soft_core.r[s], soft_core.r[src2])
+                                } else if imm_val > 0 {
+                                    (soft_core.r[s], imm_val)
+                                } else {
+                                    (soft_core.r[d], soft_core.r[s])
+                                }
+                            } else if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
                                 (soft_core.r[s], soft_core.r[imm_nibble])
                             } else {
                                 (soft_core.r[d], soft_core.r[s])

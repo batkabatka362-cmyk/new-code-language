@@ -1,7 +1,4 @@
-; ============================================================================
-; CRON Standard Microcode Kernel Library: libcl/math.cl
-; High-Precision CORDIC Fixed-Point Trigonometry, InvSqrt & Fast Exponential
-; ============================================================================
+; CRON Standard Microcode Kernel: libcl/math.cl
 @kernel cordic_sincos_invsqrt
 .target silicon.4d_torus
 .ipc_target 4.0

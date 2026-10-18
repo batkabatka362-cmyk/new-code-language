@@ -138,6 +138,9 @@ pub fn is_builtin_function(name: &str) -> bool {
         | "stdp_update" | "stdp_learn" | "ternary_mac" | "bitnet_mac" | "ternary_linear"
         | "clifford_rotor_sandwich" | "clifford_wedge" | "clifford_rotor"
         | "fma" | "fms" | "popcount" | "saturating_add" | "xnor" | "nand" | "nor"
+        | "sphere_geodesic" | "sphere_rk4" | "sphere_flow"
+        | "dpsta_transition" | "dpsta_pack" | "dpsta_unpack"
+        | "quarot_hadamard" | "sage_attention" | "rmsnorm" | "swiglu" | "bitnet_popcount"
     )
 }
 

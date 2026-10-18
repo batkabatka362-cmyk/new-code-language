@@ -1,0 +1,28 @@
+; ============================================================================
+; CRON Silicon Standard Library: Chunk-Wise Flash Linear Attention (FLA)
+; Architecture: 4-Slot VLIW (512-Bit Bundles), O(N) Linear Time Complexity
+; Matrix Math: Intra-Chunk Parallel GEMM + Inter-Chunk Recurrent State Accumulator
+; Module: libcl/flash_linear_attn.cl
+; ============================================================================
+
+.stage "FLA_LINEAR_ATTENTION"
+.align 64
+
+@flash_linear_attn_entry:
+; 1. Clear accumulators and setup recurrent state registers
+B0000: =R00#0000!0 =R01#0000!0 =R02#0000!0 =R03#0000!0
+B0001: =R04#0000!0 =R05#0000!0 =R06#0000!0 =R07#0000!0
+B0002: =R08#0000!0 =R09#0000!0 =R10#0000!0 =R11#0000!0
+B0003: =R12#0000!0 =R13#0000!0 =R14#0000!0 =R15#0000!0
+
+; 2. Chunk 0: Read Q, K, V vectors from PGAS SRAM
+B0004: LDR00,R04!0 LDR01,R05!0 LDR02,R06!0 LDR03,R07!0
+B0005: _OPR08,R00!0 _OPR09,R01!0 _OPR10,R02!0 _OPR11,R03!0
+B0006: +AR12,R08!0 +AR13,R09!0 +AR14,R10!0 +AR15,R11!0
+
+; 3. Inter-chunk recurrent state expansion & decay step
+B0007: ^XR12,R01!0 ^XR13,R02!0 ^XR14,R03!0 ^XR15,R00!0
+B0008: SRR12,R04!0 SRR13,R05!0 SRR14,R06!0 SRR15,R07!0
+
+; 4. Final verification & clean convergence
+B0009: _SY00000000 _HL00000000 NOP00000000 NOP00000000

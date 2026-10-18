@@ -1001,6 +1001,42 @@ impl Codegen {
                         let r_reg = (first_arg_reg % 14) + 1;
                         self.push_slot(make_slot('_', "PO", dest, 'O', r_reg, 0, '>'));
                     }
+                    "sphere_geodesic" => {
+                        let r_coord = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "MD", dest, '$', r_coord, 4, '>'));
+                    }
+                    "sphere_rk4" | "sphere_flow" => {
+                        let r_step = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "OD", dest, '$', r_step, 1, '>'));
+                    }
+                    "dpsta_transition" => {
+                        let r_symbol = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "DP", dest, '$', r_symbol, 0, '>'));
+                    }
+                    "dpsta_pack" => {
+                        self.push_slot(make_slot('_', "PK", dest, '$', first_arg_reg, 1, '>'));
+                    }
+                    "dpsta_unpack" => {
+                        self.push_slot(make_slot('_', "UP", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "quarot_hadamard" => {
+                        self.push_slot(make_slot('_', "TT", dest, 'W', first_arg_reg, 0, '>'));
+                    }
+                    "sage_attention" => {
+                        let k_reg = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "QA", dest, '$', k_reg, 0, '>'));
+                    }
+                    "rmsnorm" => {
+                        self.push_slot(make_slot('_', "RM", dest, '$', first_arg_reg, 0, '>'));
+                    }
+                    "swiglu" => {
+                        let r_up = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "SI", dest, '$', r_up, 0, '>'));
+                    }
+                    "bitnet_popcount" => {
+                        let r_act = (first_arg_reg % 14) + 1;
+                        self.push_slot(make_slot('_', "PO", dest, 'B', r_act, 0, '>'));
+                    }
                     "$trap" => {
                         self.push_slot(make_slot('_', "PO", dest, '$', 0, 0, '>'));
                     }

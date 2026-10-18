@@ -483,6 +483,9 @@ pub fn generate_vcd_trace(cl_source: &str, config: &VcdConfig) -> Result<VcdTrac
                     parity_token: '0',
                     imm_token: '0',
                     terminator: '>',
+                    src2_reg: None,
+                    imm_u16: 0,
+                    is_16char: false,
                 };
                 slot_words[slot_idx] = encode_slot_to_u32(&nop_slot);
                 parsed_slots.push(nop_slot);
@@ -500,6 +503,9 @@ pub fn generate_vcd_trace(cl_source: &str, config: &VcdConfig) -> Result<VcdTrac
                 parity_token: '0',
                 imm_token: '0',
                 terminator: '>',
+                src2_reg: None,
+                imm_u16: 0,
+                is_16char: false,
             };
             slot_words[parsed_slots.len()] = encode_slot_to_u32(&nop_slot);
             parsed_slots.push(nop_slot);

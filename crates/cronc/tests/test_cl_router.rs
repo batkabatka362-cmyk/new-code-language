@@ -134,3 +134,47 @@ fn test_ascii_router_hud_and_json() {
     assert!(json.contains("\"num_ports\": 9"));
     assert!(json.contains("\"virtual_channels\""));
 }
+
+#[test]
+fn test_adaptive_deflection_under_port_congestion() {
+    let cfg = NoCRouterConfig {
+        coord: Coord4D::new(0, 0, 0, 0).unwrap(),
+        ..Default::default()
+    };
+    let mut sim = NoCRouterSimulation::new(cfg);
+
+    let dst = Coord4D::new(1, 0, 0, 0).unwrap();
+    // Default DOR routes to EastX (VC0)
+    let (p1, vc1, def1) = sim.route_compute_adaptive(&dst);
+    assert_eq!(p1, RouterPort::EastX);
+    assert_eq!(vc1, 0);
+    assert!(!def1, "Uncongested path should not deflect");
+
+    // Artificially saturate downstream credits on EastX to 0 (simulate heavy link congestion)
+    for vc in &mut sim.input_vcs[RouterPort::EastX.index()] {
+        vc.downstream_credits = 0;
+    }
+
+    // Now routing must deflect to an orthogonal port (e.g. NorthY, UpZ, or InW) on VC2
+    let (p_def, vc_def, def2) = sim.route_compute_adaptive(&dst);
+    assert_ne!(p_def, RouterPort::EastX, "Must not route through congested EastX");
+    assert_ne!(p_def, RouterPort::WestX, "Must not bounce back opposite direction");
+    assert_eq!(vc_def, 2, "Adaptive deflection must utilize VC2");
+    assert!(def2, "Deflection flag must be true");
+}
+
+#[test]
+fn test_256_core_noc_mesh_allreduce() {
+    use cronc::cl_router::NoCMesh4D;
+
+    let mut mesh = NoCMesh4D::new();
+    assert_eq!(mesh.routers.len(), 256, "Mesh must instantiate all 256 cores in 4D-Torus");
+
+    let report = mesh.simulate_allreduce(8);
+    assert_eq!(report.total_cores, 256);
+    assert!(report.total_flits_injected > 0);
+    assert!(report.total_flits_delivered > 0);
+    assert!(report.zero_loss_verified);
+    assert!(report.aggregate_throughput_gbps > 0.0);
+}
+

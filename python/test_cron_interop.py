@@ -7,6 +7,9 @@ Tests:
 3. 4D Hypersphere geodesic curvature calculations in Python
 4. Pure Python execution of transpiled .cl microcode
 """
+import os
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
 import sys
 import json
 

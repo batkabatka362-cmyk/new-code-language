@@ -271,6 +271,16 @@ impl SovereignMind {
         }
     }
 
+    /// Online STDP & Hypervector Learning: crystallizes a new stimulus-response association into memory.
+    pub fn learn_association(&mut self, stimulus: &str, response: &str) {
+        let q_vec = self.compute_query_hypervector(stimulus);
+        let key = stimulus.trim().to_lowercase();
+        self.engram_cache.insert(key.clone(), response.to_string());
+        self.crystallized_engrams.push((key, response.to_string(), q_vec));
+        self.htgm.train_sequence(stimulus);
+        self.learned_concepts += 1;
+    }
+
     /// Hippocampal SWR (Sharp-Wave Ripple) Sleep Consolidation Cycle.
     /// Quenches cognitive fatigue, normalizes ternary metaplastic weights, and crystallizes active engrams.
     /// Autonomously synthesizes new hot reflex .cl routines during sleep consolidation.

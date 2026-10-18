@@ -104,13 +104,12 @@ fn test_tile_ascii_and_json_reports() {
 }
 
 #[test]
-fn test_tile_gemm_systolic_wavefront_and_cr_blueprint() {
+fn test_tile_gemm_systolic_wavefront_and_bare_metal_16x16_wgmma() {
     let opts = TileOptions {
         unroll_factor: 4,
         enable_swizzling: true,
         target_subbyte_mac: true, // BitNet ternary MACs
         systolic_wavefront: true, // Befunge 2D systolic flow
-        emit_cr_blueprint: true,  // High-level .cr output
     };
 
     let result = tile_gemm(32, 32, 32, &opts).expect("Systolic tiling should succeed");
@@ -128,18 +127,15 @@ fn test_tile_gemm_systolic_wavefront_and_cr_blueprint() {
     assert!(ascii.contains("Systolic Wavefront"));
     assert!(ascii.contains("Befunge 2D NoC Torus Dataflow"));
 
-    // Verify .cr blueprint was generated and parses as valid .cr
-    assert!(result.cr_blueprint.is_some());
-    let cr_code = result.cr_blueprint.as_ref().unwrap();
-    assert!(cr_code.contains("@systolic"));
-    assert!(cr_code.contains("flow A -> EAST;"));
-    assert!(cr_code.contains("flow B -> SOUTH;"));
+    // Verify ThunderKittens-style 16x16 Bare-Metal WGMMA Tile primitive
+    let wgmma_res = cronc::cl_tile::tile_16x16_wgmma(true).expect("16x16 WGMMA should succeed");
+    assert_eq!(wgmma_res.tile_dims, (16, 16, 16));
+    assert_eq!(wgmma_res.total_bundles, 16);
+    assert!(wgmma_res.canonical_cl_code.contains("_MD"));
+    assert!(wgmma_res.canonical_cl_code.contains("_LD"));
+    assert!(wgmma_res.canonical_cl_code.contains("_TT"));
 
-    // Verify .cr parses and checks cleanly through cronc SemanticChecker
-    let mut lexer = cronc::lexer::Lexer::new(cr_code);
-    let tokens = lexer.tokenize().expect("Lexing should succeed");
-    let mut parser = cronc::parser::Parser::new(tokens);
-    let program = parser.parse_program().expect("Parsing should succeed");
-    let mut checker = cronc::checker::SemanticChecker::new();
-    checker.check_program(&program).expect("Semantic check should pass");
+    // Verify pure .cl microcode parses cleanly through validator
+    let report = verify_cl_program(&wgmma_res.canonical_cl_code).expect("Validation should pass");
+    assert_eq!(report.hazards.len(), 0, "16x16 WGMMA must be hazard-free");
 }

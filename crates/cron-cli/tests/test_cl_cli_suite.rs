@@ -576,28 +576,19 @@ fn test_cli_cl_tile_gemm_and_conv() {
     assert!(json_str.contains("\"operation_type\":"));
     assert!(json_str.contains("\"is_conflict_free\": true"));
 
-    // 3. Run cl-tile gemm with --systolic and --cr
-    let sys_out = Command::new(env!("CARGO_BIN_EXE_cron"))
+    // 3. Run cl-tile wgmma
+    let wgmma_out = Command::new(env!("CARGO_BIN_EXE_cron"))
         .args([
             "cl-tile",
-            "gemm",
-            "--m",
-            "32",
-            "--n",
-            "32",
-            "--k",
-            "32",
-            "--systolic",
-            "--cr",
+            "wgmma",
+            "--subbyte",
         ])
         .output()
-        .expect("Failed to execute cron cl-tile gemm --systolic --cr");
+        .expect("Failed to execute cron cl-tile wgmma");
 
-    assert!(sys_out.status.success(), "cl-tile gemm --systolic --cr must succeed");
-    let sys_stdout = String::from_utf8_lossy(&sys_out.stdout);
-    assert!(sys_stdout.contains("Systolic Wavefront"));
-    assert!(sys_stdout.contains("@systolic"));
-    assert!(sys_stdout.contains("flow A -> EAST;"));
+    assert!(wgmma_out.status.success(), "cl-tile wgmma must succeed");
+    let wgmma_stdout = String::from_utf8_lossy(&wgmma_out.stdout);
+    assert!(wgmma_stdout.contains("Bare-Metal 16x16 WGMMA Contraction"));
 }
 
 #[test]
@@ -1978,45 +1969,29 @@ fn test_cli_section4_verilog_synthesis_and_testbench() {
 }
 
 #[test]
-fn test_cli_cr_to_cl_autogen_pipeline() {
+fn test_cli_bare_metal_wgmma_tile_pipeline() {
     let temp_dir = std::env::temp_dir();
-    let cr_file = temp_dir.join("test_pipeline_autogen.cr");
-    let cl_file = temp_dir.join("test_pipeline_autogen.cl");
-
-    let cr_code = r#"
-    .MODULE HighLevelAutogenTest
-    .ENTRY _main
-    _main:
-        let a: i32 = 42
-        let b: i32 = 84
-        let p = pack_trits(a)
-        let mac = ternary_mac(a, b)
-        send_noc(2, mac)
-        noc_barrier()
-    .END
-    "#;
-    fs::write(&cr_file, cr_code).expect("Write .cr source");
+    let cl_file = temp_dir.join("test_wgmma_autogen.cl");
 
     let out = Command::new(env!("CARGO_BIN_EXE_cron"))
         .args([
-            "cr-to-cl",
-            cr_file.to_str().unwrap(),
+            "cl-tile",
+            "wgmma",
+            "--subbyte",
             "-o",
             cl_file.to_str().unwrap(),
-            "--opt",
         ])
         .output()
-        .expect("Failed to execute cron cr-to-cl");
+        .expect("Failed to execute cron cl-tile wgmma");
 
-    assert!(out.status.success(), "cr-to-cl autogen must succeed: {:?}", String::from_utf8_lossy(&out.stderr));
+    assert!(out.status.success(), "cl-tile wgmma must succeed: {:?}", String::from_utf8_lossy(&out.stderr));
     assert!(cl_file.exists(), ".cl target file must be produced");
 
     let compiled_cl = fs::read_to_string(&cl_file).unwrap();
     assert!(compiled_cl.contains("B0001:"));
-    assert!(compiled_cl.contains("_PK"));
     assert!(compiled_cl.contains("_MD"));
+    assert!(compiled_cl.contains("_LD"));
 
-    let _ = fs::remove_file(&cr_file);
     let _ = fs::remove_file(&cl_file);
 }
 

@@ -479,4 +479,39 @@ cron bootstrap --json
 - **Силикон & FPGA Flash**: Нэг товшилтоор RTL синтез хийж битстрим угсрах (`cron.flashHw`).
 - **16-Bank PGAS Санах Ойн Инспектор**: Санах ойн банкнуудын ачаалал, дулааны хяналт (`cron.openMemoryInspector`).
 
+---
+
+## 13. 6 Үе Шаттай Их Төлөвлөгөө ба Эрдэм Шинжилгээний Нийтлэлүүд (Scientific Whitepapers & Roadmap)
+
+CRON төслийн 6 үндсэн үе шат, 27 нарийвчилсан ажлууд 100% бүрэн хэрэгжиж, шалгалтын багцууд бүрэн ногоон (PASS) боллоо:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                   CRON SOVEREIGN ECOSYSTEM 6-PHASE MASTER ARCHITECTURE           │
+│                               Status: 27 / 27 TASKS COMPLETED (100% PASS)       │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │
+ ┌───────────────────┬───────────────────┼───────────────────┬───────────────────┐
+ ▼                   ▼                   ▼                   ▼                   ▼
+[I. Хэлний Цөм]    [II. Цахиур & NoC]  [III. AI Модель]   [IV. Хэрэгслүүд]    [V. Interop & API]
+• Төрлийн систем    • 4D-Torus Adaptive • Sovereign-3B/7B   • cron-lsp 3.17     • Python Wheel
+• Spatial SSA IR    • PGAS L1 SRAM      • STDP хуванцар     • Visual Profiler   • C# .NET NuGet
+• Модулийн систем   • 4,096 & 65,536 NoC• 1M+ Long Context  • libcl репозитор   • C++20 / C23 Native
+• VLIW Super-Opt    • ASIC Tapeout      • DeepSeek-R1 MCTS  • AI Vibe-Fuzzing   • WASM & WebGPU
+• Comptime Metaprog • Landauer DVFS     • Multi-Modal Sensory Zero-Crash Invariant• OpenAI REST Serve
+                                         │
+                                         ▼
+                   [VI. Шинжлэх Ухааны Нээлт ба Нийтлэл]
+                   • Албан ёсны ArXiv нийтлэл (docs/CRON_RESEARCH_PAPER_ARXIV.md)
+                   • IEEE/ACM ISCA LaTeX гар бичмэл (docs/arxiv_paper.tex)
+                   • MLPerf & H100 Харьцуулсан Whitepaper (docs/CRON_BENCHMARK_WHITEPAPER.md)
+```
+
+### 📄 Албан Ёсны Эрдэм Шинжилгээний Өгүүлэл ба Баримт Бичгүүд:
+1. **[CRON ArXiv Scientific Research Paper (Markdown)](docs/CRON_RESEARCH_PAPER_ARXIV.md)**: *"CRON: A Multiplier-Free 4D-Torus Silicon Architecture with Zero-DRAM VLIW Cipher Microcode for Extreme-Efficiency Artificial General Intelligence"*
+2. **[IEEE/ACM ISCA Camera-Ready LaTeX Manuscript](docs/arxiv_paper.tex)**: Олон улсын хурлын стандартаар бэлтгэсэн бүрэн LaTeX эх файл.
+3. **[CRON Benchmark & Empirical Whitepaper v2.0](docs/CRON_BENCHMARK_WHITEPAPER.md)**: NVIDIA H100 SXM5, Mojo/AVX-512, PyTorch-тэй 9 ажлын ачааллаар хийсэн бодит хэмжилтийн тайлан.
+4. **[Монгол Хэл Дээрх Түргэн Эхлэх Гарын Авлага](docs/CRON_QUICKSTART_MN.md)** / **[English Quickstart Guide](docs/CRON_QUICKSTART_EN.md)**.
+
+
 

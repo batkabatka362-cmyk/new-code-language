@@ -30,6 +30,9 @@ pub struct ClOptConfig {
     pub enable_peephole: bool,
     pub enable_fusion: bool,
     pub target_ipc: f64,
+    pub enable_thermal_guard: bool,
+    pub max_consecutive_high_power: usize,
+    pub variable_width_power_gated: bool,
 }
 
 impl Default for ClOptConfig {
@@ -39,6 +42,9 @@ impl Default for ClOptConfig {
             enable_peephole: true,
             enable_fusion: true,
             target_ipc: 4.0,
+            enable_thermal_guard: false,
+            max_consecutive_high_power: 3,
+            variable_width_power_gated: false,
         }
     }
 }
@@ -55,6 +61,9 @@ pub struct ClOptReport {
     pub peephole_rewrites_count: usize,
     pub critical_path_depth: usize,
     pub max_register_pressure: usize,
+    pub thermal_guards_inserted: usize,
+    pub power_gated_slots: usize,
+    pub estimated_power_saved_watts: f32,
     pub optimized_code: String,
 }
 
@@ -121,7 +130,7 @@ pub fn optimize_cl_program_advanced(source: &str, config: &ClOptConfig) -> Resul
     };
 
     match config.level {
-        ClOptLevel::Level1 => optimize_level1_greedy(source, raw_slots, total_input_bundles, active_input_slots, original_ipc),
+        ClOptLevel::Level1 => optimize_level1_greedy(source, raw_slots, total_input_bundles, active_input_slots, original_ipc, config),
         ClOptLevel::Level2 => optimize_level2_dag(source, raw_slots, total_input_bundles, active_input_slots, original_ipc, config),
     }
 }
@@ -133,6 +142,7 @@ fn optimize_level1_greedy(
     total_input_bundles: usize,
     active_input_slots: usize,
     original_ipc: f64,
+    config: &ClOptConfig,
 ) -> Result<ClOptReport, String> {
     let mut optimized_bundles: Vec<Vec<String>> = Vec::new();
     let mut current_bundle: Vec<String> = Vec::with_capacity(4);
@@ -149,25 +159,25 @@ fn optimize_level1_greedy(
             }
 
             if let Some(src) = slot.src_reg {
-                if src > 0 && src < 16 && (current_dest_mask & (1 << src)) != 0 {
+                if src < 16 && (current_dest_mask & (1 << src)) != 0 {
                     can_pack = false;
                 }
             }
 
             if let Some(dest) = slot.dest_reg {
-                if dest > 0 && dest < 16 && ((current_dest_mask | current_src_mask) & (1 << dest)) != 0 {
+                if dest < 16 && ((current_dest_mask | current_src_mask) & (1 << dest)) != 0 {
                     can_pack = false;
                 }
             }
 
             if can_pack {
                 if let Some(d) = slot.dest_reg {
-                    if d > 0 && d < 16 {
+                    if d < 16 {
                         current_dest_mask |= 1 << d;
                     }
                 }
                 if let Some(s) = slot.src_reg {
-                    if s > 0 && s < 16 {
+                    if s < 16 {
                         current_src_mask |= 1 << s;
                     }
                 }
@@ -205,13 +215,21 @@ fn optimize_level1_greedy(
     }
 
     if !current_bundle.is_empty() {
-        while current_bundle.len() < 4 {
-            current_bundle.push(CANONICAL_NOP.to_string());
+        if !config.variable_width_power_gated {
+            while current_bundle.len() < 4 {
+                current_bundle.push(CANONICAL_NOP.to_string());
+            }
         }
         optimized_bundles.push(current_bundle);
     }
 
-    finalize_report(source, optimized_bundles, total_input_bundles, active_input_slots, original_ipc, 0, 1, 0)
+    let (final_bundles, thermal_count) = if config.enable_thermal_guard {
+        inject_thermal_guard_bundles(optimized_bundles, config.max_consecutive_high_power)
+    } else {
+        (optimized_bundles, 0)
+    };
+
+    finalize_report(source, final_bundles, total_input_bundles, active_input_slots, original_ipc, 0, 1, 0, thermal_count)
 }
 
 /// Level 2: Advanced DAG-Based Critical-Path List Scheduler with Peephole Rewrites
@@ -240,18 +258,26 @@ fn optimize_level2_dag(
     // 3. Critical-Path Analysis
     let max_depth = calculate_critical_paths(&mut dag_nodes);
 
-    // 4. Critical-Path List Scheduling with Register-Pressure Awareness
-    let (scheduled_bundles, peak_register_pressure) = schedule_dag_list(&dag_nodes);
+    // 4. Critical-Path List Scheduling with Register-Pressure Awareness & Power-Gating
+    let (scheduled_bundles, peak_register_pressure) = schedule_dag_list(&dag_nodes, config.variable_width_power_gated);
+
+    // 5. Thermal Guard Injection Pass
+    let (final_bundles, thermal_count) = if config.enable_thermal_guard {
+        inject_thermal_guard_bundles(scheduled_bundles, config.max_consecutive_high_power)
+    } else {
+        (scheduled_bundles, 0)
+    };
 
     finalize_report(
         source,
-        scheduled_bundles,
+        final_bundles,
         total_input_bundles,
         active_slots,
         original_ipc,
         peephole_count,
         max_depth,
         peak_register_pressure,
+        thermal_count,
     )
 }
 
@@ -348,58 +374,67 @@ fn build_dependency_dag(slots: &[String]) -> Result<Vec<ClDagNode>, String> {
         // Determine read and write registers per opcode semantics
         match slot.opcode.as_str() {
             "RF" => {
-                if d > 0 { read_regs.push(d); write_regs.push(d); }
-                if s > 0 { read_regs.push(s); write_regs.push(s); }
+                if d < 16 { read_regs.push(d); write_regs.push(d); }
+                if s < 16 { read_regs.push(s); write_regs.push(s); }
             }
             "TO" => {
                 read_regs.push(10);
                 read_regs.push(11);
-                if d > 0 { read_regs.push(d); write_regs.push(d); }
+                if d < 16 { read_regs.push(d); write_regs.push(d); }
             }
             "PO" | "P0" | "P1" => {
-                if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                if let Some(s2) = slot.src2_reg {
+                    if s < 16 { read_regs.push(s); }
+                    if s2 < 16 { read_regs.push(s2); }
+                } else if imm_nibble < 16 && s < 16 {
                     read_regs.push(s);
                     read_regs.push(imm_nibble);
                 } else {
-                    if d > 0 { read_regs.push(d); }
-                    if s > 0 { read_regs.push(s); }
+                    if d < 16 { read_regs.push(d); }
+                    if s < 16 { read_regs.push(s); }
                 }
-                if d > 0 { write_regs.push(d); }
+                if d < 16 { write_regs.push(d); }
             }
             "MD" => {
-                if d > 0 { read_regs.push(d); write_regs.push(d); }
-                if s > 0 { read_regs.push(s); }
+                if let Some(s2) = slot.src2_reg {
+                    if s < 16 { read_regs.push(s); }
+                    if s2 < 16 { read_regs.push(s2); }
+                } else {
+                    if d < 16 { read_regs.push(d); }
+                    if s < 16 { read_regs.push(s); }
+                }
+                if d < 16 { write_regs.push(d); }
             }
-            "FA" | "TT" | "PS" => {
-                if s > 0 { read_regs.push(s); }
-                if d > 0 { write_regs.push(d); }
+            "FA" | "TT" | "PS" | "OD" | "DP" | "RM" | "SI" | "QA" | "LI" | "LF" | "BK" | "ST" | "TL" | "LD" | "LB" | "VR" => {
+                if s < 16 && slot.src_reg.is_some() { read_regs.push(s); }
+                if d < 16 && slot.dest_reg.is_some() { write_regs.push(d); }
             }
-            "LI" | "LF" => {
-                if s > 0 { read_regs.push(s); }
-                if d > 0 { write_regs.push(d); }
+            "SR" | "BY" => {
+                if d < 16 && slot.dest_reg.is_some() { read_regs.push(d); }
+                if s < 16 && slot.src_reg.is_some() { read_regs.push(s); }
             }
-            "BK" | "ST" | "RX" | "PK" | "TL" => {
-                if d > 0 { write_regs.push(d); }
+            "RX" | "PK" => {
+                if s < 16 && slot.src_reg.is_some() { read_regs.push(s); }
+                if d < 16 && slot.dest_reg.is_some() { write_regs.push(d); }
             }
-            "OP" | "WD" => {
-                if s > 0 { read_regs.push(s); }
-                if d > 0 { write_regs.push(d); }
-            }
-            "WH" => {
-                if s > 0 { read_regs.push(s); }
-                if d > 0 { write_regs.push(d); }
+            "OP" | "WD" | "WH" => {
+                if s < 16 && slot.src_reg.is_some() { read_regs.push(s); }
+                if d < 16 && slot.dest_reg.is_some() { write_regs.push(d); }
             }
             "TX" | "SB" | "aa" => {
-                if s > 0 { read_regs.push(s); }
+                if s < 16 && slot.src_reg.is_some() { read_regs.push(s); }
             }
             "RS" | "88" => {
                 write_regs.push(1);
             }
             op if op.starts_with('=') || slot.prefix == '\'' => {
-                if d > 0 { write_regs.push(d); }
+                if d < 16 && slot.dest_reg.is_some() { write_regs.push(d); }
             }
             _ => {
-                if d > 0 && slot.dest_reg.is_some() {
+                if s < 16 && slot.src_reg.is_some() {
+                    read_regs.push(s);
+                }
+                if d < 16 && slot.dest_reg.is_some() {
                     write_regs.push(d);
                 }
             }
@@ -490,7 +525,7 @@ fn build_dependency_dag(slots: &[String]) -> Result<Vec<ClDagNode>, String> {
     let mut last_use: [Option<usize>; 16] = [None; 16];
     for (node_id, node) in nodes.iter().enumerate() {
         for &r in &node.read_regs {
-            if r > 0 && r < 16 {
+            if r < 16 {
                 last_use[r] = Some(node_id);
             }
         }
@@ -498,7 +533,7 @@ fn build_dependency_dag(slots: &[String]) -> Result<Vec<ClDagNode>, String> {
     for (node_id, node) in nodes.iter_mut().enumerate() {
         let mut kills = 0u16;
         for &r in &node.read_regs {
-            if r > 0 && r < 16 && last_use[r] == Some(node_id) {
+            if r < 16 && last_use[r] == Some(node_id) {
                 kills |= 1 << r;
             }
         }
@@ -531,7 +566,7 @@ fn calculate_critical_paths(nodes: &mut [ClDagNode]) -> usize {
 }
 
 /// List Scheduler: Fills 4-slot VLIW bundles prioritizing critical-path depth, register pressure, and heterogeneous silicon ways
-fn schedule_dag_list(nodes: &[ClDagNode]) -> (Vec<Vec<String>>, usize) {
+fn schedule_dag_list(nodes: &[ClDagNode], variable_width: bool) -> (Vec<Vec<String>>, usize) {
     let n = nodes.len();
     if n == 0 {
         return (Vec::new(), 0);
@@ -682,12 +717,21 @@ fn schedule_dag_list(nodes: &[ClDagNode]) -> (Vec<Vec<String>>, usize) {
             }
         }
 
-        // Pad empty slots with CANONICAL_NOP
+        // Variable-Width Power-Gating: If enabled, omit empty slots to power-gate them in silicon
         let mut final_bundle_slots = Vec::with_capacity(4);
-        for slot in &current_bundle {
-            match slot {
-                Some(ref s) => final_bundle_slots.push(s.clone()),
-                None => final_bundle_slots.push(CANONICAL_NOP.to_string()),
+        if variable_width {
+            let active: Vec<String> = current_bundle.iter().filter_map(|s| s.clone()).collect();
+            if active.is_empty() {
+                final_bundle_slots.push(CANONICAL_NOP.to_string());
+            } else {
+                final_bundle_slots = active;
+            }
+        } else {
+            for slot in &current_bundle {
+                match slot {
+                    Some(ref s) => final_bundle_slots.push(s.clone()),
+                    None => final_bundle_slots.push(CANONICAL_NOP.to_string()),
+                }
             }
         }
         bundles.push(final_bundle_slots);
@@ -718,6 +762,7 @@ fn finalize_report(
     peephole_rewrites_count: usize,
     critical_path_depth: usize,
     max_register_pressure: usize,
+    thermal_guards_inserted: usize,
 ) -> Result<ClOptReport, String> {
     let final_bundles = bundles.len().max(1);
     let optimized_ipc = active_slots as f64 / final_bundles as f64;
@@ -727,6 +772,14 @@ fn finalize_report(
         0.0
     };
 
+    let mut power_gated_slots = 0;
+    for b in &bundles {
+        if b.len() < 4 {
+            power_gated_slots += 4 - b.len();
+        }
+    }
+    let estimated_power_saved_watts = power_gated_slots as f32 * 0.5;
+
     let mut optimized_code = String::with_capacity(source.len() + 1024);
     optimized_code.push_str("; ============================================================\n");
     optimized_code.push_str("; CRON Super-Optimized VLIW Machine Code (.cl)\n");
@@ -735,15 +788,15 @@ fn finalize_report(
         total_input_bundles, final_bundles, speedup, original_ipc, optimized_ipc
     ));
     optimized_code.push_str(&format!(
-        "; Critical Path Depth: {} cycles | Peephole Rewrites: {} | Active Ops: {} | Peak Reg Pressure: {}/16\n",
-        critical_path_depth, peephole_rewrites_count, active_slots, max_register_pressure
+        "; Critical Path Depth: {} cycles | Peephole Rewrites: {} | Active Ops: {} | Peak Reg Pressure: {}/16 | Thermal Guards: {} | Power-Gated Slots: {}\n",
+        critical_path_depth, peephole_rewrites_count, active_slots, max_register_pressure, thermal_guards_inserted, power_gated_slots
     ));
     optimized_code.push_str("; ============================================================\n\n");
 
     for (cycle, b) in bundles.iter().enumerate() {
         optimized_code.push_str(&format!(
-            "B{:04}: {} {} {} {}\n",
-            cycle, b[0], b[1], b[2], b[3]
+            "B{:04}: {}\n",
+            cycle, b.join(" ")
         ));
     }
 
@@ -757,6 +810,100 @@ fn finalize_report(
         peephole_rewrites_count,
         critical_path_depth,
         max_register_pressure,
+        thermal_guards_inserted,
+        power_gated_slots,
+        estimated_power_saved_watts,
         optimized_code,
     })
+}
+
+/// Estimates thermal power in Watts for a single VLIW bundle based on opcodes
+pub fn estimate_bundle_power(slots: &[String]) -> f32 {
+    let mut bundle_power = 15.0f32;
+    for slot_str in slots {
+        if let Ok(parsed) = parse_slot(slot_str) {
+            match parsed.opcode.as_str() {
+                "OP" | "MD" | "TT" => bundle_power += 25.0, // High-TDP matrix/optical
+                "WD" | "SM" | "CD" => bundle_power += 18.0,
+                "RM" | "SS" | "SI" | "GE" => bundle_power += 12.0,
+                "TM" | "TC" => bundle_power += 3.0,
+                "ST" | "LF" | "LI" => bundle_power += 8.0,
+                "TX" | "WH" | "bb" => bundle_power += 10.0,
+                "NO" => bundle_power += 0.5,
+                _ => bundle_power += 4.0,
+            }
+        }
+    }
+    bundle_power
+}
+
+/// Injects DVFS power governor / cooling bundles whenever consecutive high-power bundles exceed the limit
+pub fn inject_thermal_guard_bundles(
+    bundles: Vec<Vec<String>>,
+    max_consecutive: usize,
+) -> (Vec<Vec<String>>, usize) {
+    let mut output: Vec<Vec<String>> = Vec::with_capacity(bundles.len() + bundles.len() / max_consecutive.max(1));
+    let mut consecutive_high = 0;
+    let mut inserted = 0;
+
+    // Use healed canonical DVFS governor slot: _EE00#000>
+    let (cooling_slot, _) = crate::cl_heal::heal_slot_crc("_EE00#000>");
+
+    for bundle in bundles {
+        let power = estimate_bundle_power(&bundle);
+        if power > 60.0 {
+            consecutive_high += 1;
+            if consecutive_high >= max_consecutive {
+                let cooling_bundle = vec![
+                    cooling_slot.clone(),
+                    CANONICAL_NOP.to_string(),
+                    CANONICAL_NOP.to_string(),
+                    CANONICAL_NOP.to_string(),
+                ];
+                output.push(cooling_bundle);
+                inserted += 1;
+                consecutive_high = 0;
+            }
+        } else {
+            consecutive_high = 0;
+        }
+        output.push(bundle);
+    }
+
+    (output, inserted)
+}
+
+/// Optimizes a .cl program with thermal guard enabled to prevent silicon hotspots
+pub fn optimize_cl_program_thermal(source: &str, max_consecutive: usize) -> Result<ClOptReport, String> {
+    let config = ClOptConfig {
+        level: ClOptLevel::Level2,
+        enable_peephole: true,
+        enable_fusion: true,
+        target_ipc: 4.0,
+        enable_thermal_guard: true,
+        max_consecutive_high_power: max_consecutive,
+        variable_width_power_gated: false,
+    };
+    optimize_cl_program_advanced(source, &config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_thermal_guard_injection() {
+        // Construct 6 consecutive high-power bundles (each has 4 _OP optical matrix slots = 115W)
+        let high_power_bundle = vec![
+            "_OP01#000>".to_string(),
+            "_OP02#000>".to_string(),
+            "_OP03#000>".to_string(),
+            "_OP04#000>".to_string(),
+        ];
+        let bundles = vec![high_power_bundle.clone(); 6];
+
+        let (guarded, count) = inject_thermal_guard_bundles(bundles, 3);
+        assert!(count >= 1, "Should insert at least 1 thermal cooling bundle");
+        assert!(guarded.len() > 6);
+    }
 }

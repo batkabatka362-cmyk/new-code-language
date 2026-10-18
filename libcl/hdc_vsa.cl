@@ -1,7 +1,4 @@
-; ============================================================================
-; CRON Standard Microcode Kernel Library: libcl/hdc_vsa.cl
-; 10,000-D Hyperdimensional Vector Symbolic Architecture (HDC/VSA) Kernel
-; ============================================================================
+; CRON Standard Microcode Kernel: libcl/hdc_vsa.cl
 @kernel hdc_binding_and_similarity
 .target silicon.hdc_vsa
 .ipc_target 4.0

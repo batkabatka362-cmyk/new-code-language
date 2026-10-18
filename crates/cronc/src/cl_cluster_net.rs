@@ -841,3 +841,189 @@ pub fn generate_default_cluster_config(num_nodes: usize, start_port: u16) -> Str
 
     toml
 }
+
+// ============================================================================
+// Mooncake-Style 3-Tier Distributed KV Cache Store (MooncakeStore)
+// Inspired by Kimi / Mooncake Disaggregated KV Architecture:
+// Tier 1: Local Core SRAM (<1ns latency, ultra-hot)
+// Tier 2: Host CPU DRAM (~50ns latency, shared cluster buffer)
+// Tier 3: Distributed NVMe / RDMA Store (~5us latency, cold capacity pool)
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheTier {
+    Tier1Sram,
+    Tier2HostDram,
+    Tier3ClusterNvme,
+}
+
+#[derive(Debug, Clone)]
+pub struct MooncakeEntry {
+    pub key: String,
+    pub data: Vec<u8>,
+    pub tier: CacheTier,
+    pub access_count: usize,
+    pub last_access: Instant,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MooncakeTelemetry {
+    pub tier1_hits: usize,
+    pub tier2_hits: usize,
+    pub tier3_hits: usize,
+    pub total_misses: usize,
+    pub tier_promotions: usize,
+    pub tier_demotions: usize,
+    pub tier1_bytes: usize,
+    pub tier2_bytes: usize,
+    pub tier3_bytes: usize,
+}
+
+pub struct MooncakeStore {
+    pub max_tier1_bytes: usize, // e.g. 64 KB
+    pub max_tier2_bytes: usize, // e.g. 16 MB
+    pub tier1_entries: std::collections::HashMap<String, MooncakeEntry>,
+    pub tier2_entries: std::collections::HashMap<String, MooncakeEntry>,
+    pub tier3_entries: std::collections::HashMap<String, MooncakeEntry>,
+    pub telemetry: MooncakeTelemetry,
+}
+
+impl Default for MooncakeStore {
+    fn default() -> Self {
+        Self::new(64 * 1024, 16 * 1024 * 1024)
+    }
+}
+
+impl MooncakeStore {
+    pub fn new(max_tier1_bytes: usize, max_tier2_bytes: usize) -> Self {
+        Self {
+            max_tier1_bytes,
+            max_tier2_bytes,
+            tier1_entries: std::collections::HashMap::new(),
+            tier2_entries: std::collections::HashMap::new(),
+            tier3_entries: std::collections::HashMap::new(),
+            telemetry: MooncakeTelemetry::default(),
+        }
+    }
+
+    /// Stores a KV tensor block into Tier 1 with automatic cascade overflow
+    pub fn put(&mut self, key: &str, data: Vec<u8>) {
+        let size = data.len();
+
+        // Check if Tier 1 needs eviction to Tier 2
+        while self.telemetry.tier1_bytes + size > self.max_tier1_bytes && !self.tier1_entries.is_empty() {
+            let oldest_key = self.tier1_entries.keys().next().cloned().unwrap();
+            if let Some(mut entry) = self.tier1_entries.remove(&oldest_key) {
+                self.telemetry.tier1_bytes -= entry.data.len();
+                entry.tier = CacheTier::Tier2HostDram;
+                self.telemetry.tier2_bytes += entry.data.len();
+                self.telemetry.tier_demotions += 1;
+                self.tier2_entries.insert(oldest_key, entry);
+            }
+        }
+
+        let entry = MooncakeEntry {
+            key: key.to_string(),
+            data,
+            tier: CacheTier::Tier1Sram,
+            access_count: 1,
+            last_access: Instant::now(),
+        };
+        self.telemetry.tier1_bytes += size;
+        self.tier1_entries.insert(key.to_string(), entry);
+    }
+
+    /// Retrieves data with zero-overhead hierarchical lookup and promotion
+    pub fn get(&mut self, key: &str) -> Option<(Vec<u8>, CacheTier)> {
+        // 1. Check Tier 1 SRAM
+        if let Some(entry) = self.tier1_entries.get_mut(key) {
+            self.telemetry.tier1_hits += 1;
+            entry.access_count += 1;
+            entry.last_access = Instant::now();
+            return Some((entry.data.clone(), CacheTier::Tier1Sram));
+        }
+
+        // 2. Check Tier 2 Host DRAM -> Promote to Tier 1
+        if let Some(mut entry) = self.tier2_entries.remove(key) {
+            self.telemetry.tier2_hits += 1;
+            self.telemetry.tier2_bytes -= entry.data.len();
+            self.telemetry.tier_promotions += 1;
+            entry.tier = CacheTier::Tier1Sram;
+            entry.access_count += 1;
+            entry.last_access = Instant::now();
+            let data = entry.data.clone();
+            self.telemetry.tier1_bytes += data.len();
+            self.tier1_entries.insert(key.to_string(), entry);
+            return Some((data, CacheTier::Tier2HostDram));
+        }
+
+        // 3. Check Tier 3 Cluster Pool
+        if let Some(mut entry) = self.tier3_entries.remove(key) {
+            self.telemetry.tier3_hits += 1;
+            self.telemetry.tier3_bytes -= entry.data.len();
+            self.telemetry.tier_promotions += 1;
+            entry.tier = CacheTier::Tier1Sram;
+            entry.access_count += 1;
+            entry.last_access = Instant::now();
+            let data = entry.data.clone();
+            self.telemetry.tier1_bytes += data.len();
+            self.tier1_entries.insert(key.to_string(), entry);
+            return Some((data, CacheTier::Tier3ClusterNvme));
+        }
+
+        self.telemetry.total_misses += 1;
+        None
+    }
+
+    /// Demotes an idle block directly to Tier 3 Cluster Storage
+    pub fn demote_to_tier3(&mut self, key: &str) -> bool {
+        if let Some(mut entry) = self.tier1_entries.remove(key) {
+            self.telemetry.tier1_bytes -= entry.data.len();
+            entry.tier = CacheTier::Tier3ClusterNvme;
+            self.telemetry.tier3_bytes += entry.data.len();
+            self.telemetry.tier_demotions += 1;
+            self.tier3_entries.insert(key.to_string(), entry);
+            return true;
+        }
+        if let Some(mut entry) = self.tier2_entries.remove(key) {
+            self.telemetry.tier2_bytes -= entry.data.len();
+            entry.tier = CacheTier::Tier3ClusterNvme;
+            self.telemetry.tier3_bytes += entry.data.len();
+            self.telemetry.tier_demotions += 1;
+            self.tier3_entries.insert(key.to_string(), entry);
+            return true;
+        }
+        false
+    }
+}
+
+#[cfg(test)]
+mod mooncake_tests {
+    use super::*;
+
+    #[test]
+    fn test_mooncake_3tier_migration_and_promotion() {
+        // Small SRAM limit: 100 bytes, DRAM limit: 500 bytes
+        let mut store = MooncakeStore::new(100, 500);
+
+        store.put("kv_block_0", vec![1u8; 60]);
+        let (data0, tier0) = store.get("kv_block_0").unwrap();
+        assert_eq!(data0.len(), 60);
+        assert_eq!(tier0, CacheTier::Tier1Sram);
+
+        // Put second block to cause overflow in Tier 1 -> Demotes kv_block_0 to Tier 2
+        store.put("kv_block_1", vec![2u8; 60]);
+
+        // Get kv_block_0: should be Tier 2 hit and promoted back to Tier 1
+        let (res_data, res_tier) = store.get("kv_block_0").unwrap();
+        assert_eq!(res_data.len(), 60);
+        assert_eq!(res_tier, CacheTier::Tier2HostDram);
+        assert_eq!(store.telemetry.tier_promotions, 1);
+
+        // Demote to Tier 3
+        assert!(store.demote_to_tier3("kv_block_0"));
+        let (res_data3, res_tier3) = store.get("kv_block_0").unwrap();
+        assert_eq!(res_data3.len(), 60);
+        assert_eq!(res_tier3, CacheTier::Tier3ClusterNvme);
+    }
+}

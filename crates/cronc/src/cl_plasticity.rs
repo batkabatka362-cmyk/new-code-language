@@ -83,6 +83,7 @@ impl SelfAdaptingJitEngine {
                 enable_peephole: true,
                 target_ipc: 8.0,
                 enable_fusion: self.config.enable_auto_fma_fusion,
+                ..Default::default()
             };
 
             if let Ok(report) = optimize_cl_program_advanced(bundle_line, &opt_config) {

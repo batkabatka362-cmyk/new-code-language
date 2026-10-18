@@ -33,6 +33,7 @@ pub struct HardwareStats {
     pub zero_collision_verified: bool,
     pub sphere_curvature_ops: usize,
     pub flop_count: usize,
+    pub power_gated_slots: usize,
 }
 
 // === FDO (Feedback-Directed Optimization) Execution Profile (Pages 746–749) ===
@@ -147,6 +148,10 @@ pub struct Simulator {
     // === Multi-Core Spatial Instruction Streams ===
     pub core_instructions: Vec<Vec<VliwInstruction>>,
 
+    // === Multi-Core Spatial Flow & Dataflow State ===
+    pub flow_routes: HashMap<usize, usize>,
+    pub core_pcs: [usize; 256],
+
     // === Resilient Thermal Dynamics & Throttling State ===
     pub thermal_throttled_cores: [bool; 256],
 }
@@ -185,6 +190,9 @@ impl Simulator {
             axon_myelin_registry: HashMap::new(),
             // Multi-Core Spatial Streams
             core_instructions,
+            // Multi-Core Spatial Flow
+            flow_routes: HashMap::new(),
+            core_pcs: [0; 256],
             // Resilient Thermal Dynamics
             thermal_throttled_cores: [false; 256],
         }
@@ -288,12 +296,90 @@ impl Simulator {
         for stream in &mut self.core_instructions {
             stream.clear();
         }
+        self.flow_routes.clear();
+        self.core_pcs = [0; 256];
         self.step_index = 0;
         let mut current_core_id: Option<usize> = None;
 
         for line in cl_content.lines() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") || trimmed == "{" || trimmed == "}" {
+                continue;
+            }
+
+            // Handle .flow directive e.g. .flow (Core[0,0,0,0] -> Core[1,0,0,0] -> ...)
+            if trimmed.starts_with(".flow") {
+                let rest = trimmed.strip_prefix(".flow").unwrap_or(trimmed).trim();
+                let flow_str = if let Some(open) = rest.find('(') {
+                    if let Some(close) = rest.find(')') {
+                        &rest[open + 1..close]
+                    } else {
+                        rest
+                    }
+                } else {
+                    rest
+                };
+
+                let mut core_ids = Vec::new();
+                for hop in flow_str.split("->") {
+                    let hop = hop.trim();
+                    if let Some(open) = hop.find('[') {
+                        if let Some(close) = hop.find(']') {
+                            let coords: Vec<usize> = hop[open + 1..close]
+                                .split(',')
+                                .map(|s| s.trim().parse::<usize>().unwrap_or(0))
+                                .collect();
+                            if coords.len() == 4 {
+                                let cid = (coords[0] % 4) + (coords[1] % 4) * 4 + (coords[2] % 4) * 16 + (coords[3] % 4) * 64;
+                                core_ids.push(cid);
+                            }
+                        }
+                    } else if let Some(digits) = hop.strip_prefix("Core") {
+                        if let Ok(cid) = digits.trim().parse::<usize>() {
+                            core_ids.push(cid.min(255));
+                        }
+                    }
+                }
+
+                for i in 0..core_ids.len().saturating_sub(1) {
+                    self.flow_routes.insert(core_ids[i], core_ids[i + 1]);
+                }
+                continue;
+            }
+
+            // Handle .weights directive e.g. .weights bank=1, offset=0: [val, val, ...]
+            if trimmed.starts_with(".weights") {
+                let mut bank = 0usize;
+                if let Some(bank_pos) = trimmed.find("bank=") {
+                    let after = &trimmed[bank_pos + 5..];
+                    let num_str: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+                    if let Ok(b) = num_str.parse::<usize>() {
+                        bank = b.min(15);
+                    }
+                }
+                if let Some(open) = trimmed.find('[') {
+                    if let Some(close) = trimmed.rfind(']') {
+                        let inner = &trimmed[open + 1..close];
+                        let mut reg_idx = 0;
+                        for token in inner.split(',') {
+                            let tok = token.trim();
+                            if tok.is_empty() || reg_idx >= 16 {
+                                continue;
+                            }
+                            let val = if let Ok(f) = tok.parse::<f32>() {
+                                f.to_bits()
+                            } else if let Ok(u) = tok.parse::<u32>() {
+                                u
+                            } else {
+                                0
+                            };
+                            for core in &mut self.cores {
+                                core.bank_registers[bank][reg_idx] = val;
+                            }
+                            reg_idx += 1;
+                        }
+                    }
+                }
                 continue;
             }
 
@@ -422,107 +508,137 @@ impl Simulator {
         let is_multicore = self.core_instructions.iter().any(|s| !s.is_empty());
 
         if is_multicore {
-            let step_idx = self.step_index;
-            self.step_index += 1;
             let mut any_executed = false;
+            let mut pending_transfers: Vec<(usize, u32)> = Vec::new();
 
             for i in 0..256 {
-                if step_idx < self.core_instructions[i].len() {
-                    let inst = self.core_instructions[i][step_idx].clone();
-                    if !self.cores[i].is_halted {
-                        any_executed = true;
-                        self.cores[i].cycle_count += 1;
+                let pc = self.core_pcs[i];
+                if pc < self.core_instructions[i].len() && !self.cores[i].is_halted {
+                    let inst = self.core_instructions[i][pc].clone();
 
-                        let is_vector_burst = inst.slots.len() == 4
-                            && inst.slots.iter().all(|s| !s.starts_with("_NO") && !s.starts_with("'........."));
-                        let stall_count = inst.slots.iter().filter(|s| s.starts_with("_NO") || s.starts_with("'.........")).count() as u32;
-                        let nop_count = inst.slots.iter().filter(|s| s.starts_with("_NO")).count() as u32;
+                    // Check if core needs to stall on RX because its mailbox FIFO is empty
+                    let needs_rx = inst.slots.iter().any(|s| {
+                        s.len() >= 3 && (&s[1..3] == "RX" || (s.len() >= 5 && &s[3..5] == "RX"))
+                    });
 
-                        if is_vector_burst {
-                            self.cores[i].csr_vec_burst_cnt += 1;
+                    if needs_rx && self.cores[i].noc_rx_fifo.is_empty() {
+                        self.cores[i].csr_stall_cnt += 1;
+                        continue;
+                    }
+
+                    any_executed = true;
+                    self.core_pcs[i] += 1;
+                    self.cores[i].cycle_count += 1;
+
+                    let is_vector_burst = inst.slots.len() == 4
+                        && inst.slots.iter().all(|s| !s.starts_with("_NO") && !s.starts_with("'........."));
+                    let stall_count = inst.slots.iter().filter(|s| s.starts_with("_NO") || s.starts_with("'.........")).count() as u32;
+                    let nop_count = inst.slots.iter().filter(|s| s.starts_with("_NO")).count() as u32;
+
+                    if inst.slots.len() < 4 {
+                        let gated = 4 - inst.slots.len();
+                        self.stats.power_gated_slots += gated;
+                        self.stats.total_energy_saved_uw += (gated as u64) * 120;
+                    }
+
+                    if is_vector_burst {
+                        self.cores[i].csr_vec_burst_cnt += 1;
+                    }
+                    self.cores[i].csr_stall_cnt += stall_count;
+
+                    // Biological Axon Myelination
+                    let act = self.axon_myelin_registry.entry(inst.cycle).or_insert(0);
+                    *act += 1;
+                    if *act == 10 {
+                        self.stats.axon_myelinated_bundles += 1;
+                    }
+                    if *act >= 10 {
+                        self.stats.epigenetic_morph_cycles_saved += 3;
+                    } else if *act >= 5 {
+                        self.stats.epigenetic_morph_cycles_saved += 1;
+                    }
+
+                    // FDO Profiling
+                    if self.profiling_enabled {
+                        let mut bp = BundleProfile {
+                            cycle: inst.cycle,
+                            exec_count: 1,
+                            nop_count,
+                            had_optical_stall: false,
+                            had_raw_stall: false,
+                        };
+                        let optical_count = inst.slots.iter().filter(|s| {
+                            s.len() >= 3 && (s[1..3].starts_with("OP") || s[1..3].starts_with("WD"))
+                        }).count();
+                        if optical_count > 1 {
+                            bp.had_optical_stall = true;
                         }
-                        self.cores[i].csr_stall_cnt += stall_count;
-
-                        // Biological Axon Myelination
-                        let act = self.axon_myelin_registry.entry(inst.cycle).or_insert(0);
-                        *act += 1;
-                        if *act == 10 {
-                            self.stats.axon_myelinated_bundles += 1;
-                        }
-                        if *act >= 10 {
-                            self.stats.epigenetic_morph_cycles_saved += 3;
-                        } else if *act >= 5 {
-                            self.stats.epigenetic_morph_cycles_saved += 1;
-                        }
-
-                        // FDO Profiling
-                        if self.profiling_enabled {
-                            let mut bp = BundleProfile {
-                                cycle: inst.cycle,
-                                exec_count: 1,
-                                nop_count,
-                                had_optical_stall: false,
-                                had_raw_stall: false,
-                            };
-                            let optical_count = inst.slots.iter().filter(|s| {
-                                s.len() >= 3 && (s[1..3].starts_with("OP") || s[1..3].starts_with("WD"))
-                            }).count();
-                            if optical_count > 1 {
-                                bp.had_optical_stall = true;
-                            }
-                            for slot in &inst.slots {
-                                if slot.len() >= 3 {
-                                    let op = &slot[1..3];
-                                    *self.profile.opcode_frequency.entry(op.to_string()).or_insert(0) += 1;
-                                }
-                            }
-                            self.profile.bundle_profiles.push(bp);
-                        }
-
-                        // Execute slots for core i
-                        for slot in &inst.slots {
-                            if let Some(broadcast_payload) = self.cores[i].execute_slot(slot) {
-                                self.mesh.broadcast(self.cores[i].id, broadcast_payload);
-                                self.stats.mesh_packets_routed += 8;
-                            }
-                        }
-
-                        // Special multi-core slot handling
                         for slot in &inst.slots {
                             if slot.len() >= 3 {
                                 let op = &slot[1..3];
-                                if op == "SP" {
-                                    self.spawn_fiber(i, step_idx);
-                                } else if op == "FJ" {
-                                    let pending: Vec<usize> = self.fiber_queue.iter()
-                                        .filter(|f| !f.completed)
-                                        .map(|f| f.fiber_id)
-                                        .collect();
-                                    for fid in pending {
-                                        self.join_fiber(fid);
-                                    }
-                                } else if op == "bb" || (slot.len() >= 5 && &slot[3..5] == "bb") {
-                                    self.cores[i].in_barrier = false;
-                                } else if op == "CC" || (slot.len() >= 5 && &slot[3..5] == "CC") {
-                                    self.cores[i].cache_invalidations += 1;
-                                    self.cores[i].csr_stall_cnt = 0;
-                                } else if op == "DD" || (slot.len() >= 5 && &slot[3..5] == "DD") {
-                                    self.stats.mesh_packets_routed += 32;
-                                    self.cores[i].dma_transfers += 1;
-                                } else if op == "EE" || (slot.len() >= 5 && &slot[3..5] == "EE") {
-                                    self.cores[i].thermal_level = 25;
-                                    self.cores[i].dvfs_energy_state = 1;
-                                    self.cores[i].energy_saved_uw += 450;
-                                } else if op == "FU" || op == "FE" {
-                                    self.stats.fused_kernel_ops += 16;
-                                    self.stats.memory_wall_saved_bytes += 1024;
-                                } else if op == "88" || (slot.len() >= 5 && &slot[3..5] == "88") {
-                                    self.cores[i].reversible_stack.clear();
-                                    self.cores[i].arena_resets += 1;
-                                }
+                                *self.profile.opcode_frequency.entry(op.to_string()).or_insert(0) += 1;
+                            }
+                        }
+                        self.profile.bundle_profiles.push(bp);
+                    }
+
+                    // Execute slots for core i
+                    for slot in &inst.slots {
+                        if let Some(payload) = self.cores[i].execute_slot(slot) {
+                            if slot.len() >= 3 && &slot[1..3] == "TX" {
+                                let next_cid = self.flow_routes.get(&i).copied()
+                                    .unwrap_or_else(|| (i + 1) % 256);
+                                pending_transfers.push((next_cid, payload));
+                                self.stats.mesh_packets_routed += 1;
+                            } else {
+                                self.mesh.broadcast(self.cores[i].id, payload);
+                                self.stats.mesh_packets_routed += 8;
                             }
                         }
                     }
+
+                    // Special multi-core slot handling
+                    for slot in &inst.slots {
+                        if slot.len() >= 3 {
+                            let op = &slot[1..3];
+                            if op == "SP" {
+                                self.spawn_fiber(i, pc);
+                            } else if op == "FJ" {
+                                let pending: Vec<usize> = self.fiber_queue.iter()
+                                    .filter(|f| !f.completed)
+                                    .map(|f| f.fiber_id)
+                                    .collect();
+                                for fid in pending {
+                                    self.join_fiber(fid);
+                                }
+                            } else if op == "bb" || (slot.len() >= 5 && &slot[3..5] == "bb") {
+                                self.cores[i].in_barrier = false;
+                            } else if op == "CC" || (slot.len() >= 5 && &slot[3..5] == "CC") {
+                                self.cores[i].cache_invalidations += 1;
+                                self.cores[i].csr_stall_cnt = 0;
+                            } else if op == "DD" || (slot.len() >= 5 && &slot[3..5] == "DD") {
+                                self.stats.mesh_packets_routed += 32;
+                                self.cores[i].dma_transfers += 1;
+                            } else if op == "EE" || (slot.len() >= 5 && &slot[3..5] == "EE") {
+                                self.cores[i].thermal_level = 25;
+                                self.cores[i].dvfs_energy_state = 1;
+                                self.cores[i].energy_saved_uw += 450;
+                            } else if op == "FU" || op == "FE" {
+                                self.stats.fused_kernel_ops += 16;
+                                self.stats.memory_wall_saved_bytes += 1024;
+                            } else if op == "88" || (slot.len() >= 5 && &slot[3..5] == "88") {
+                                self.cores[i].reversible_stack.clear();
+                                self.cores[i].arena_resets += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Deliver pending inter-core wormhole NoC packets
+            for (dst, packet) in pending_transfers {
+                if dst < self.cores.len() {
+                    self.cores[dst].noc_push(packet);
                 }
             }
 
@@ -558,6 +674,12 @@ impl Simulator {
                 && inst.slots.iter().all(|s| !s.starts_with("_NO") && !s.starts_with("'........."));
             let stall_count = inst.slots.iter().filter(|s| s.starts_with("_NO") || s.starts_with("'.........")).count() as u32;
             let nop_count = inst.slots.iter().filter(|s| s.starts_with("_NO")).count() as u32;
+
+            if inst.slots.len() < 4 {
+                let gated = 4 - inst.slots.len();
+                self.stats.power_gated_slots += gated;
+                self.stats.total_energy_saved_uw += (gated as u64) * 120;
+            }
 
             // === FDO Profiling: Record bundle execution profile ===
             if self.profiling_enabled {

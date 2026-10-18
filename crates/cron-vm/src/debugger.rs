@@ -67,10 +67,154 @@ pub struct DisassembledBundle {
     pub slots: Vec<DisassembledSlot>,
 }
 
-/// Disassembles a 10-character VLIW slot into human-readable micro-operations
+/// Disassembles a 10-character or 16-character VLIW slot into human-readable micro-operations
 pub fn disassemble_slot(slot: &str) -> DisassembledSlot {
     let chars: Vec<char> = slot.chars().collect();
     let prefix = chars.first().copied().unwrap_or('_');
+
+    // 16-character 3-address VLIW slot
+    if chars.len() == 16 {
+        let op = slot[1..3].to_string();
+        let dest_bank = chars[3].to_digit(16).unwrap_or(0) as usize;
+        let dest_reg = chars[4].to_digit(16).unwrap_or(0) as usize;
+        let full_dest = (dest_bank << 4) | dest_reg;
+        let mode = chars[5];
+        let hi1 = chars[6].to_digit(16).unwrap_or(0) as usize;
+        let lo1 = chars[7].to_digit(16).unwrap_or(0) as usize;
+        let src1 = (hi1 << 4) | lo1;
+        let hi2 = chars[8].to_digit(16).unwrap_or(0) as usize;
+        let lo2 = chars[9].to_digit(16).unwrap_or(0) as usize;
+        let src2 = (hi2 << 4) | lo2;
+        let imm_val = u32::from_str_radix(&slot[10..14], 16).ok();
+        let val = imm_val.unwrap_or(0);
+        let parity = chars[14];
+
+        if slot.starts_with("'=") || slot.starts_with("==") {
+            return DisassembledSlot {
+                raw: slot.to_string(),
+                prefix,
+                opcode: "LOAD_IMM".to_string(),
+                dest_bank,
+                dest_reg: full_dest,
+                mode,
+                src_reg: 0,
+                parity,
+                imm: val as usize,
+                imm_val,
+                mnemonic: format!("LI R[0x{:02X}], #0x{:04X} ({})", full_dest, val, val),
+                description: format!("Load 16-bit immediate constant 0x{:04X} into R[0x{:02X}]", val, full_dest),
+            };
+        }
+
+        let (mnemonic, description) = match op.as_str() {
+            "NO" => ("NOP".to_string(), "Pipeline issue bubble (no operation)".to_string()),
+            "PO" => {
+                let op_sym = match mode {
+                    '+' => "ADD",
+                    '-' => "SUB",
+                    '*' => "MUL",
+                    '/' => "DIV",
+                    '%' => "MOD",
+                    '&' => "AND",
+                    '|' => "OR",
+                    '^' => "XOR",
+                    '<' => "SLT",
+                    '>' => "SGT",
+                    '=' => "SEQ",
+                    'G' => "SGE",
+                    _ => "ADD",
+                };
+                let rhs_str = if src2 > 0 { format!("R[0x{:02X}]", src2) } else if val > 0 { format!("#0x{:04X}", val) } else { format!("R[0x{:02X}]", src2) };
+                (
+                    format!("{} R[0x{:02X}], R[0x{:02X}], {}", op_sym, full_dest, src1, rhs_str),
+                    format!("3-Address ALU {} on R[0x{:02X}], {} -> R[0x{:02X}]", op_sym, src1, rhs_str, full_dest),
+                )
+            }
+            "FM" => {
+                let fma_sym = match mode {
+                    '+' => "FMA",
+                    '-' => "FMS",
+                    '*' => "FMAC",
+                    _ => "FMA",
+                };
+                (
+                    format!("{} R[0x{:02X}], R[0x{:02X}], R[0x{:02X}], #0x{:04X}", fma_sym, full_dest, src1, src2, val),
+                    format!("Fused Multiply-Add: R[0x{:02X}] = R[0x{:02X}] * R[0x{:02X}] + #0x{:04X}", full_dest, src1, src2, val),
+                )
+            }
+            "MX" => {
+                let mx_sym = match mode {
+                    '>' => "MAX",
+                    '<' => "MIN",
+                    '+' => "RELU",
+                    'C' | '#' => "CLAMP",
+                    _ => "MAX",
+                };
+                (
+                    format!("{} R[0x{:02X}], R[0x{:02X}], R[0x{:02X}]", mx_sym, full_dest, src1, src2),
+                    format!("3-Address {} on R[0x{:02X}], R[0x{:02X}] -> R[0x{:02X}]", mx_sym, src1, src2, full_dest),
+                )
+            }
+            "SW" => {
+                let sw_sym = match mode {
+                    'R' => "ROR",
+                    'L' => "ROL",
+                    'B' => "BSWAP",
+                    'P' => "POPCNT_XOR",
+                    _ => "SWIZZLE",
+                };
+                (
+                    format!("{} R[0x{:02X}], R[0x{:02X}], R[0x{:02X}]", sw_sym, full_dest, src1, src2),
+                    format!("3-Address {} on R[0x{:02X}] by R[0x{:02X}] -> R[0x{:02X}]", sw_sym, src1, src2, full_dest),
+                )
+            }
+            "FP" => {
+                let fp_sym = match mode {
+                    '+' => "FADD.16",
+                    '-' => "FSUB.16",
+                    '*' => "FMUL.16",
+                    '/' => "FDIV.16",
+                    _ => "FADD.16",
+                };
+                let rhs_str = if src2 > 0 { format!("R[0x{:02X}]", src2) } else { format!("#0x{:04X}", val) };
+                (
+                    format!("{} R[0x{:02X}], R[0x{:02X}], {}", fp_sym, full_dest, src1, rhs_str),
+                    format!("In-Slot 16-bit Float {} operation on R[0x{:02X}], {} -> R[0x{:02X}]", fp_sym, src1, rhs_str, full_dest),
+                )
+            }
+            "LD" => (
+                format!("LD R[0x{:02X}], [R[0x{:02X}] + 0x{:04X}]", full_dest, src1, val),
+                format!("Load word from SRAM [R[0x{:02X}] + 0x{:04X}] into R[0x{:02X}]", src1, val, full_dest),
+            ),
+            "SR" => (
+                format!("SR [R[0x{:02X}] + 0x{:04X}], R[0x{:02X}]", src1, val, full_dest),
+                format!("Store word R[0x{:02X}] into SRAM [R[0x{:02X}] + 0x{:04X}]", full_dest, src1, val),
+            ),
+            "MD" => (
+                format!("BITNET_MAC R[0x{:02X}], R[0x{:02X}], R[0x{:02X}]", full_dest, src1, src2),
+                format!("16-element Ternary BitNet Dot Product on R[0x{:02X}], R[0x{:02X}] -> R[0x{:02X}]", src1, src2, full_dest),
+            ),
+            _ => (
+                format!("{}{} R[0x{:02X}], R[0x{:02X}], R[0x{:02X}]", op, mode, full_dest, src1, src2),
+                format!("16-char microcode {} on R[0x{:02X}], R[0x{:02X}], R[0x{:02X}]", op, full_dest, src1, src2),
+            ),
+        };
+
+        return DisassembledSlot {
+            raw: slot.to_string(),
+            prefix,
+            opcode: op,
+            dest_bank,
+            dest_reg: full_dest,
+            mode,
+            src_reg: src1,
+            parity,
+            imm: val as usize,
+            imm_val,
+            mnemonic,
+            description,
+        };
+    }
 
     // Immediate constant load slot: '= <bank> <reg> # <hex16> >
     if slot.starts_with("'=") || slot.starts_with("==") {

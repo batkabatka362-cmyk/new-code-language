@@ -49,6 +49,7 @@ pub mod cl_fuzz;
 pub mod cl_bench;
 pub mod cl_kernel;
 pub mod cl_tile;
+pub mod cl_quarot;
 pub mod cl_cluster;
 pub mod cl_sparse;
 pub mod cl_power;
@@ -86,6 +87,8 @@ pub mod cl_swarm_wafer;
 pub mod clifford;
 pub mod cl_debug;
 pub mod cl_fmt;
+pub mod cl_simd_parser;
+pub mod cl_fla;
 pub mod cl_metaplasticity;
 pub mod cl_chat;
 pub mod cl_aot;
@@ -332,6 +335,8 @@ pub use cl_finetune::{run_lora_finetune, prepare_dataset_pairs, FineTuneConfig, 
 pub use cl_hardware_profile::{run_hardware_suite_benchmark, profile_single_kernel, profile_file_or_code, HardwareSuiteReport, KernelProfileRecord};
 
 pub use cl_metaplasticity::{BcmConfig, MetaplasticEngine, MetaplasticSynapse};
+pub use cl_fla::{FlashLinearAttentionEngine, FlaConfig, FlaRunReport};
+pub use cl_cluster_net::{MooncakeStore, CacheTier, MooncakeEntry, MooncakeTelemetry};
 pub use cl_thermodynamics::{ThermodynamicOptimizer, TileThermodynamicState};
 pub use cl_clifford_optics::{Multivector16, MziPhaseRotor};
 pub use cl_sagi_bridge::{NeuromodulatorState, SagiBrainBridge, SagiBrainKind, SagiBridgeMailbox};
@@ -563,7 +568,7 @@ pub use autotune::{SiliconAutotuner, AutotuneDecision};
 pub use cl_c23::{compile_cl_to_c23, compile_cl_to_native_binary, compile_c23_to_native_binary, compile_c23_source_to_native_binary_with_target};
 pub use model_importer::{
     import_model_file, lower_onnx_graph, lower_safetensors_model,
-    safetensors_to_cl_lora, safetensors_to_cl_machine_code, parse_safetensors,
+    safetensors_to_cl_lora, safetensors_to_cl_machine_code, safetensors_to_cl_weights_binding, parse_safetensors,
     ImportOptions, ImportedModel, LoweredCode, LoweringOptions,
     QuantizationMode, QuantizationReport, QuantizedTensor,
     SafeTensorDType, SafeTensorData, SafeTensorsModel,

@@ -110,6 +110,12 @@ pub struct CoreEngine {
     pub tropical_arbiter_count: usize,
     pub dpsta_current_state: u8,
     pub htgm_ring_memory: [u32; 16],
+
+    // === PRM Verifier & 16-Bank PGAS Swizzling State ===
+    pub verifier_register: u32,
+    pub vr_threshold: u32,
+    pub prm_pruned_steps: usize,
+    pub sram_swizzling_enabled: bool,
 }
 
 impl CoreEngine {
@@ -189,17 +195,127 @@ impl CoreEngine {
             tropical_arbiter_count: 0,
             dpsta_current_state: 0,
             htgm_ring_memory: [0u32; 16],
+            // PRM Verifier & 16-Bank PGAS Swizzling state
+            verifier_register: 0,
+            vr_threshold: 500, // 50.0% confidence cutoff default
+            prm_pruned_steps: 0,
+            sram_swizzling_enabled: true,
+        }
+    }
+
+    /// Read value from 256 physical registers (16 banks x 16 registers).
+    /// Bank 0 is mirrored with self.registers[0..15].
+    #[inline(always)]
+    pub fn read_reg_256(&self, full_reg: usize) -> u32 {
+        let bank = (full_reg >> 4) & 0x0F;
+        let idx = full_reg & 0x0F;
+        if bank == 0 {
+            self.registers[idx]
+        } else {
+            self.bank_registers[bank][idx]
+        }
+    }
+
+    /// Write value to 256 physical registers (16 banks x 16 registers).
+    /// Bank 0 is mirrored with self.registers[0..15].
+    #[inline(always)]
+    pub fn write_reg_256(&mut self, full_reg: usize, val: u32) {
+        let bank = (full_reg >> 4) & 0x0F;
+        let idx = full_reg & 0x0F;
+        if bank == 0 {
+            self.registers[idx] = val;
+            self.bank_registers[0][idx] = val;
+        } else {
+            self.bank_registers[bank][idx] = val;
+        }
+    }
+
+    /// Convert IEEE 754 half-precision (16-bit) bit pattern to f32
+    #[inline(always)]
+    pub fn fp16_bits_to_f32(bits: u16) -> f32 {
+        let sign = ((bits >> 15) & 1) as u32;
+        let exp = ((bits >> 10) & 0x1F) as u32;
+        let mant = (bits & 0x3FF) as u32;
+
+        if exp == 0 {
+            if mant == 0 {
+                f32::from_bits(sign << 31)
+            } else {
+                let mut m = mant;
+                let mut e = 0;
+                while (m & 0x400) == 0 {
+                    m <<= 1;
+                    e += 1;
+                }
+                m &= 0x3FF;
+                let exp_f32 = (127 - 15 + 1 - e) as u32;
+                f32::from_bits((sign << 31) | (exp_f32 << 23) | (m << 13))
+            }
+        } else if exp == 31 {
+            f32::from_bits((sign << 31) | (0xFF << 23) | (mant << 13))
+        } else {
+            let exp_f32 = (exp + (127 - 15)) as u32;
+            f32::from_bits((sign << 31) | (exp_f32 << 23) | (mant << 13))
+        }
+    }
+
+    /// Convert f32 to IEEE 754 half-precision (16-bit) bit pattern
+    #[inline(always)]
+    pub fn f32_to_fp16_bits(val: f32) -> u16 {
+        let bits = val.to_bits();
+        let sign = ((bits >> 31) & 1) as u16;
+        let exp = ((bits >> 23) & 0xFF) as i32;
+        let mant = (bits & 0x7FFFFF) as u32;
+
+        if exp == 0xFF {
+            (sign << 15) | (0x1F << 10) | ((mant >> 13) as u16).max(if mant != 0 { 1 } else { 0 })
+        } else {
+            let new_exp = exp - 127 + 15;
+            if new_exp >= 31 {
+                (sign << 15) | (0x1F << 10)
+            } else if new_exp <= 0 {
+                0
+            } else {
+                (sign << 15) | ((new_exp as u16) << 10) | ((mant >> 13) as u16)
+            }
+        }
+    }
+
+    /// Computes physical bank-swizzled SRAM word index using Galois Field GF(2^4) permutation
+    /// Eliminates all bank conflicts for 16-bank parallel and strided access
+    #[inline(always)]
+    pub fn sram_swizzle_word_index(&self, linear_word: usize) -> usize {
+        if self.sram_swizzling_enabled {
+            let bank = (linear_word ^ (linear_word >> 4)) & 0x0F;
+            let row = linear_word >> 4;
+            ((row << 4) | bank) % self.dmem.len()
+        } else {
+            linear_word % self.dmem.len()
         }
     }
 
     #[inline(always)]
-    fn parse_slot_metadata<'a>(&self, slot: &'a str) -> (&'a str, usize, usize, usize, usize, char) {
+    fn parse_slot_metadata<'a>(&self, slot: &'a str) -> (&'a str, usize, usize, usize, usize, usize, char) {
         let bytes = slot.as_bytes();
         if bytes.len() < 3 {
-            return ("", 0, 0, 0, 0, '$');
+            return ("", 0, 0, 0, 0, 0, '$');
         }
 
         let op = &slot[1..3];
+
+        if bytes.len() == 16 {
+            let dest_bank = (bytes[3] as char).to_digit(16).unwrap_or(0) as usize;
+            let dest_reg = (bytes[4] as char).to_digit(16).unwrap_or(0) as usize;
+            let mode = bytes[5] as char;
+            let hi1 = (bytes[6] as char).to_digit(16).unwrap_or(0) as usize;
+            let lo1 = (bytes[7] as char).to_digit(16).unwrap_or(0) as usize;
+            let src1 = (hi1 << 4) | lo1;
+            let hi2 = (bytes[8] as char).to_digit(16).unwrap_or(0) as usize;
+            let lo2 = (bytes[9] as char).to_digit(16).unwrap_or(0) as usize;
+            let src2 = (hi2 << 4) | lo2;
+            let imm = usize::from_str_radix(&slot[10..14], 16).unwrap_or(0);
+            return (op, dest_bank, dest_reg, src1, src2, imm, mode);
+        }
 
         // Parse destination bank (high nibble) and register (low nibble)
         // If immediate load with 1-char opcode (e.g. '=00#0A04>, '=06#0064>, index 4 is '#'):
@@ -235,12 +351,17 @@ impl CoreEngine {
             0
         };
 
-        (op, dest_bank, dest_reg, src, imm, mode)
+        (op, dest_bank, dest_reg, src, 0, imm, mode)
     }
 }
 
 #[inline(always)]
 fn parse_target_or_offset(slot: &str, fallback: usize) -> usize {
+    if slot.len() == 16 {
+        if let Ok(val) = usize::from_str_radix(&slot[10..14], 16) {
+            return val;
+        }
+    }
     if let Some(hash_pos) = slot.find('#') {
         let remainder = slot[hash_pos + 1..].as_bytes();
         let mut val: usize = 0;
@@ -340,7 +461,7 @@ impl CoreEngine {
             }
         }
 
-        let (op, dest_bank, dest_reg, src, imm, mode) = self.parse_slot_metadata(slot);
+        let (op, dest_bank, dest_reg, src, src2, imm, mode) = self.parse_slot_metadata(slot);
 
         // Check for Halt
         if op == "HL" || slot.starts_with("_HL") || slot.starts_with("_HLT") {
@@ -367,7 +488,9 @@ impl CoreEngine {
                 // Immediate load: e.g. '=00#0A04>, '=06#0064>, or '==04#000A>
                 let reg_idx = dest;
                 if reg_idx < 16 {
-                    if let Some(hash_pos) = slot.find('#') {
+                    if slot.len() == 16 {
+                        self.registers[reg_idx] = imm as u32;
+                    } else if let Some(hash_pos) = slot.find('#') {
                         let remainder = slot[hash_pos + 1..].as_bytes();
                         let mut val: u32 = 0;
                         let mut found = false;
@@ -428,9 +551,20 @@ impl CoreEngine {
             "ST" => {
                 // STDP synapse update or prefetch stage (Brain 4)
                 self.stdp_updates_count += 1;
+                let s = if src > 0 { src } else { 0 };
+                let delta_t = (self.registers[s] as i16) as i32;
+                let syn_idx = dest % 16;
+                let dw: i32 = if delta_t > 0 && delta_t < 40 {
+                    (16 - (delta_t >> 2)).max(1)
+                } else if delta_t < 0 && delta_t > -40 {
+                    (-16 - (delta_t >> 2)).min(-1)
+                } else {
+                    2
+                };
                 let mut syn_acc: u32 = 0;
                 for (idx, w) in self.stdp_weights.iter_mut().enumerate() {
-                    *w = w.saturating_add(2);
+                    let step = if idx == syn_idx { dw as i8 } else { 2 };
+                    *w = w.saturating_add(step);
                     syn_acc = syn_acc.wrapping_add((*w as u32) << ((idx % 4) * 8));
                 }
                 let d = if dest > 0 { dest } else { 12 };
@@ -467,16 +601,27 @@ impl CoreEngine {
                 // Predicated SIMD ALU (Pages 88-95: Polymorphic Mode Delimiters)
                 let d = if dest > 0 { dest } else { 6 };
                 let s = if src > 0 { src } else { 4 };
-                let val_d = self.registers[d];
-                let val_s = self.registers[s];
+                let (val_lhs, val_rhs) = if slot.len() == 16 {
+                    let lhs = self.read_reg_256(src);
+                    let rhs = if src2 > 0 {
+                        self.read_reg_256(src2)
+                    } else if imm > 0 {
+                        imm as u32
+                    } else {
+                        self.read_reg_256(src2)
+                    };
+                    (lhs, rhs)
+                } else {
+                    (self.registers[d], self.registers[s])
+                };
 
                 self.registers[d] = match mode {
-                    '+' => val_d.wrapping_add(val_s),
-                    '-' => val_d.wrapping_sub(val_s),
-                    '*' => val_d.wrapping_mul(val_s),
+                    '+' => val_lhs.wrapping_add(val_rhs),
+                    '-' => val_lhs.wrapping_sub(val_rhs),
+                    '*' => val_lhs.wrapping_mul(val_rhs),
                     '/' => {
-                        if val_s != 0 {
-                            val_d / val_s
+                        if val_rhs != 0 {
+                            val_lhs / val_rhs
                         } else {
                             // Hardware Trap: Division by Zero (Milestone #181)
                             self.trigger_trap(0x0001);
@@ -484,52 +629,52 @@ impl CoreEngine {
                         }
                     }
                     '%' => {
-                        if val_s != 0 {
-                            val_d % val_s
+                        if val_rhs != 0 {
+                            val_lhs % val_rhs
                         } else {
                             self.trigger_trap(0x0001);
                             0
                         }
                     }
-                    '&' => val_d & val_s,
-                    '|' => val_d | val_s,
-                    '^' => val_d ^ val_s,
-                    '~' => !val_s,
-                    '=' => if val_d == val_s { 1 } else { 0 },
-                    '<' => if val_d < val_s { 1 } else { 0 },
-                    '>' => if val_d > val_s { 1 } else { 0 },
-                    '?' => if val_s != 0 { val_d } else { 0 },
+                    '&' => val_lhs & val_rhs,
+                    '|' => val_lhs | val_rhs,
+                    '^' => val_lhs ^ val_rhs,
+                    '~' => !val_rhs,
+                    '=' => if val_lhs == val_rhs { 1 } else { 0 },
+                    '<' => if val_lhs < val_rhs { 1 } else { 0 },
+                    '>' => if val_lhs > val_rhs { 1 } else { 0 },
+                    '?' => if val_rhs != 0 { val_lhs } else { 0 },
                     '!' => {
-                        if val_s != 0 {
+                        if val_rhs != 0 {
                             self.trigger_trap(0x0002);
                         }
-                        val_d
+                        val_lhs
                     }
-                    'G' => if val_d >= val_s { 1 } else { 0 },
+                    'G' => if val_lhs >= val_rhs { 1 } else { 0 },
                     'M' => {
                         // Fused Multiply-Add (FMA): R_d = R_d + (R_s * R_imm)
-                        let mult_factor = if imm > 0 && imm < 16 { self.registers[imm] } else { 1 };
-                        val_d.wrapping_add(val_s.wrapping_mul(mult_factor))
+                        let mult_factor = if imm > 0 && imm < 16 { self.registers[imm] } else if imm > 0 { imm as u32 } else { 1 };
+                        val_lhs.wrapping_add(val_rhs.wrapping_mul(mult_factor))
                     }
                     'S' => {
                         // Fused Multiply-Subtract (FMS): R_d = R_d - (R_s * R_imm)
-                        let mult_factor = if imm > 0 && imm < 16 { self.registers[imm] } else { 1 };
-                        val_d.wrapping_sub(val_s.wrapping_mul(mult_factor))
+                        let mult_factor = if imm > 0 && imm < 16 { self.registers[imm] } else if imm > 0 { imm as u32 } else { 1 };
+                        val_lhs.wrapping_sub(val_rhs.wrapping_mul(mult_factor))
                     }
-                    'L' => val_d << (val_s & 31),
-                    'R' => val_d >> (val_s & 31),
-                    'A' => val_d.saturating_add(val_s),
-                    'X' => !(val_d ^ val_s),
-                    'N' => !(val_d & val_s),
-                    'O' => !(val_d | val_s),
-                    'B' => val_s.count_ones(),
+                    'L' => val_lhs << (val_rhs & 31),
+                    'R' => val_lhs >> (val_rhs & 31),
+                    'A' => val_lhs.saturating_add(val_rhs),
+                    'X' => !(val_lhs ^ val_rhs),
+                    'N' => !(val_lhs & val_rhs),
+                    'O' => !(val_lhs | val_rhs),
+                    'B' => val_rhs.count_ones(),
                     _ => match imm {
-                        1 => val_d.wrapping_add(val_s),
-                        2 => val_d.wrapping_sub(val_s),
-                        3 => val_d.wrapping_mul(val_s),
+                        1 => val_lhs.wrapping_add(val_rhs),
+                        2 => val_lhs.wrapping_sub(val_rhs),
+                        3 => val_lhs.wrapping_mul(val_rhs),
                         4 => {
-                            if val_s != 0 {
-                                val_d / val_s
+                            if val_rhs != 0 {
+                                val_lhs / val_rhs
                             } else {
                                 // Hardware Trap: Division by Zero (Milestone #181)
                                 self.trigger_trap(0x0001);
@@ -537,25 +682,25 @@ impl CoreEngine {
                             }
                         }
                         5 => {
-                            if val_s != 0 {
-                                val_d % val_s
+                            if val_rhs != 0 {
+                                val_lhs % val_rhs
                             } else {
                                 self.trigger_trap(0x0001);
                                 0
                             }
                         }
-                        6 => val_d & val_s,
-                        7 => val_d | val_s,
-                        8 => val_d ^ val_s,
-                        9 => val_d << (val_s & 31),
-                        0xA => val_d >> (val_s & 31),
-                        0xB => if val_d == val_s { 1 } else { 0 },
-                        0xC => if val_d != val_s { 1 } else { 0 },
-                        0xD => if val_d < val_s { 1 } else { 0 },
-                        0xE => if val_d <= val_s { 1 } else { 0 },
-                        0xF => if val_d > val_s { 1 } else { 0 },
-                        0 => if val_s > 0 && d != s { val_s } else { val_d & 0x0000_0003 },
-                        _ => val_d & 0x0000_0003,
+                        6 => val_lhs & val_rhs,
+                        7 => val_lhs | val_rhs,
+                        8 => val_lhs ^ val_rhs,
+                        9 => val_lhs << (val_rhs & 31),
+                        0xA => val_lhs >> (val_rhs & 31),
+                        0xB => if val_lhs == val_rhs { 1 } else { 0 },
+                        0xC => if val_lhs != val_rhs { 1 } else { 0 },
+                        0xD => if val_lhs < val_rhs { 1 } else { 0 },
+                        0xE => if val_lhs <= val_rhs { 1 } else { 0 },
+                        0xF => if val_lhs > val_rhs { 1 } else { 0 },
+                        0 => if val_rhs > 0 && d != s { val_rhs } else { val_lhs & 0x0000_0003 },
+                        _ => val_lhs & 0x0000_0003,
                     },
                 };
                 self.csr_pred_exec_cnt += 1;
@@ -563,20 +708,43 @@ impl CoreEngine {
             "MD" => {
                 // 16x 2-bit ternary Dot Product MAC / Multiply (Pages 88-95)
                 let d = if dest > 0 { dest } else { 8 };
-                let s = if src > 0 { src } else { 0 };
-                if mode == '*' || imm == 3 {
-                    self.registers[d] = self.registers[d].wrapping_mul(self.registers[s]);
-                } else if mode == '/' || imm == 4 {
-                    if self.registers[s] != 0 {
-                        self.registers[d] /= self.registers[s];
+                let is_16 = slot.len() == 16;
+                let (reg_a, reg_b) = if is_16 {
+                    let lhs = self.read_reg_256(src);
+                    let rhs = if src2 > 0 {
+                        self.read_reg_256(src2)
+                    } else if imm > 0 {
+                        // In-Slot 16-Bit Ternary BitNet MAC: 8 trits replicated across 32 bits or direct immediate
+                        let imm_val = if mode == '.' || mode == '#' {
+                            (imm as u32) | ((imm as u32) << 16)
+                        } else {
+                            imm as u32
+                        };
+                        imm_val
+                    } else {
+                        self.read_reg_256(src2)
+                    };
+                    (lhs, rhs)
+                } else {
+                    let s = if src > 0 { src } else { 0 };
+                    (self.registers[d], self.registers[s])
+                };
+
+                let do_mul = mode == '*' || (!is_16 && imm == 3);
+                let do_div = mode == '/' || (!is_16 && imm == 4);
+                let do_dot = mode == '.' || (!is_16 && (imm == 5 || imm == 6));
+
+                if do_mul {
+                    self.registers[d] = reg_a.wrapping_mul(reg_b);
+                } else if do_div {
+                    if reg_b != 0 {
+                        self.registers[d] = reg_a / reg_b;
                     } else {
                         // Hardware Trap: Division by Zero (Milestone #181)
                         self.trigger_trap(0x0001);
                     }
-                } else if imm == 5 || imm == 6 || mode == '.' {
+                } else if do_dot {
                     // Bit-exact 16-element ternary Dot Product (BitNet 1.58b) via hardware POPCNT
-                    let reg_a = self.registers[d];
-                    let reg_b = self.registers[s];
                     const MASK_ODD: u32 = 0x55555555;
                     let p_a = reg_a & MASK_ODD;
                     let n_a = (reg_a >> 1) & MASK_ODD;
@@ -588,8 +756,6 @@ impl CoreEngine {
                     self.registers[d] = sum as u32;
                 } else {
                     // Default Ternary Dot Product MAC calculation via hardware POPCNT
-                    let reg_a = self.registers[d];
-                    let reg_b = self.registers[s];
                     const MASK_ODD: u32 = 0x55555555;
                     let p_a = reg_a & MASK_ODD;
                     let n_a = (reg_a >> 1) & MASK_ODD;
@@ -598,7 +764,7 @@ impl CoreEngine {
                     let pos_matches = (p_a & p_b) | (n_a & n_b);
                     let neg_matches = (p_a & n_b) | (n_a & p_b);
                     let sum = (pos_matches.count_ones() as i32) - (neg_matches.count_ones() as i32);
-                    self.registers[d] = if sum != 0 { sum as u32 } else { self.registers[d] ^ self.registers[s] };
+                    self.registers[d] = if sum != 0 { sum as u32 } else { reg_a ^ reg_b };
                 }
             }
             "SZ" => {
@@ -664,9 +830,77 @@ impl CoreEngine {
                 let old_w = self.stdp_weights[syn_idx] as i32;
                 let dw = ((pre_act * post_act) - ((post_act * post_act * old_w) >> 7)) >> 4;
                 let new_w = (old_w + dw).clamp(-127, 127);
-                self.stdp_weights[syn_idx] = new_w as i8;
                 self.registers[d] = (new_w as u32) & 0xFF;
                 self.stdp_updates_count += 1;
+            }
+            "FM" => {
+                // Fused Multiply-Add (FMA) 3-Address Code:
+                // R_dest = R_src1 * R_src2 + Imm16 (or R_dest += R_src1 * R_src2)
+                let d = if dest > 0 { dest } else { 0 };
+                let (val_a, val_b) = if slot.len() == 16 {
+                    (self.read_reg_256(src), self.read_reg_256(src2))
+                } else {
+                    (self.registers[d], self.registers[src])
+                };
+                let prod = val_a.wrapping_mul(val_b);
+                let res = match mode {
+                    '+' => prod.wrapping_add(imm as u32),
+                    '-' => prod.wrapping_sub(imm as u32),
+                    '*' => self.registers[d].wrapping_add(prod), // True accumulator FMA
+                    '/' => self.registers[d].wrapping_sub(prod), // FMS
+                    _ => prod.wrapping_add(imm as u32),
+                };
+                self.registers[d] = res;
+            }
+            "MX" => {
+                // Max / Min / ReLU / Clamp 3-Address Operation:
+                let d = if dest > 0 { dest } else { 0 };
+                let (val_a, val_b) = if slot.len() == 16 {
+                    (self.read_reg_256(src), self.read_reg_256(src2))
+                } else {
+                    (self.registers[d], self.registers[src])
+                };
+                let res = match mode {
+                    '>' => val_a.max(val_b),
+                    '<' => val_a.min(val_b),
+                    '+' => {
+                        let signed_a = val_a as i32;
+                        if signed_a > 0 { signed_a as u32 } else { 0 }
+                    }
+                    'C' | '#' => {
+                        let lower = val_b;
+                        let upper = imm as u32;
+                        val_a.clamp(lower, upper)
+                    }
+                    _ => val_a.max(val_b),
+                };
+                self.registers[d] = res;
+            }
+            "FP" => {
+                // In-Slot 16-bit Float Arithmetic (FP16 IEEE 754 half-precision)
+                let d = if dest > 0 { dest } else { 0 };
+                let (bits_a, bits_b) = if slot.len() == 16 {
+                    let a = (self.read_reg_256(src) & 0xFFFF) as u16;
+                    let b = if src2 > 0 {
+                        (self.read_reg_256(src2) & 0xFFFF) as u16
+                    } else {
+                        imm as u16
+                    };
+                    (a, b)
+                } else {
+                    ((self.registers[d] & 0xFFFF) as u16, (self.registers[src] & 0xFFFF) as u16)
+                };
+                let fa = Self::fp16_bits_to_f32(bits_a);
+                let fb = Self::fp16_bits_to_f32(bits_b);
+                let fres = match mode {
+                    '+' => fa + fb,
+                    '-' => fa - fb,
+                    '*' => fa * fb,
+                    '/' => if fb != 0.0 { fa / fb } else { 0.0 },
+                    _ => fa + fb,
+                };
+                let res_bits = Self::f32_to_fp16_bits(fres) as u32;
+                self.registers[d] = res_bits;
             }
             "BK" => {
                 // Reversible Backward Invert (Brain 3)
@@ -740,11 +974,30 @@ impl CoreEngine {
                 self.registers[1] = 0;
             }
             "SW" => {
-                // Superposition Wave Predication
-                let s = if src > 0 { src } else { 14 };
-                let cond = self.registers[s] != 0;
-                if !cond {
-                    return None;
+                if slot.len() == 16 || mode == 'R' || mode == 'L' || mode == 'B' || mode == 'P' {
+                    // Vector Swizzle, Bit Manipulation & Rotation 3-Address Opcode
+                    let d = if dest > 0 { dest } else { 0 };
+                    let (val_a, val_b) = if slot.len() == 16 {
+                        (self.read_reg_256(src), self.read_reg_256(src2))
+                    } else {
+                        (self.registers[d], self.registers[src])
+                    };
+                    let shift = (val_b & 31) as u32;
+                    let res = match mode {
+                        'R' => val_a.rotate_right(shift),
+                        'L' => val_a.rotate_left(shift),
+                        'B' => val_a.swap_bytes(),
+                        'P' => (val_a ^ val_b).count_ones(),
+                        _ => val_a.rotate_right(shift),
+                    };
+                    self.registers[d] = res;
+                } else {
+                    // Superposition Wave Predication
+                    let s = if src > 0 { src } else { 14 };
+                    let cond = self.registers[s] != 0;
+                    if !cond {
+                        return None;
+                    }
                 }
             }
             "RC" => {
@@ -981,14 +1234,30 @@ impl CoreEngine {
             }
             "TX" => {
                 // NoC Channel Send Wormhole Packet Injection (Opcode 6'd78)
-                let s = if src > 0 { src } else { dest };
-                let _val = self.registers[s];
+                let s = if slot.len() == 16 {
+                    if src > 0 { src } else { dest }
+                } else if src > 0 {
+                    src
+                } else {
+                    dest
+                };
+                let val = if slot.len() == 16 {
+                    self.read_reg_256(s)
+                } else {
+                    self.registers[s.min(15)]
+                };
                 self.spatial_broadcast_count += 1;
+                return Some(val);
             }
             "RX" => {
                 // Core Mailbox Channel Recv FIFO Pop (Opcode 6'd79)
                 let d = if dest > 0 { dest } else { 0 };
-                self.registers[d] = self.noc_rx_fifo.pop().unwrap_or(0);
+                let val = self.noc_pop().unwrap_or(0);
+                if slot.len() == 16 {
+                    self.write_reg_256(d, val);
+                } else {
+                    self.registers[d] = val;
+                }
             }
             "RM" => {
                 // Dedicated AI Silicon ISA: RMSNorm Normalizer Step
@@ -1169,43 +1438,94 @@ impl CoreEngine {
                 self.registers[d] = cnt as u32;
             }
             "LD" => {
-                // Load 32-bit Word from 64KB Scratchpad SRAM
+                // Load 32-bit Word from 64KB Scratchpad SRAM (with GF(2^4) 16-Bank Swizzling)
                 let d = if dest > 0 { dest } else { 0 };
-                let base = if src > 0 { self.registers[src] as usize } else { 0 };
+                let base = if slot.len() == 16 {
+                    self.read_reg_256(src) as usize
+                } else if src > 0 {
+                    self.registers[src] as usize
+                } else {
+                    0
+                };
                 let offset = parse_target_or_offset(slot, imm);
-                let addr = (base.wrapping_add(offset)) % 16384;
-                self.registers[d] = self.dmem[addr];
+                let linear_addr = (base.wrapping_add(offset)) % 16384;
+                let phys_addr = self.sram_swizzle_word_index(linear_addr);
+                self.registers[d] = self.dmem[phys_addr];
             }
             "SR" => {
-                // Store 32-bit Word from Register to 64KB Scratchpad SRAM
-                let s = if dest > 0 { dest } else { src };
-                let base = if src > 0 && dest > 0 { self.registers[src] as usize } else { 0 };
+                // Store 32-bit Word from Register to 64KB Scratchpad SRAM (with GF(2^4) 16-Bank Swizzling)
+                let s_val = if slot.len() == 16 {
+                    if dest > 0 || dest_bank > 0 {
+                        self.read_reg_256((dest_bank << 4) | dest)
+                    } else if src2 > 0 {
+                        self.read_reg_256(src2)
+                    } else {
+                        self.read_reg_256(src)
+                    }
+                } else if dest > 0 {
+                    self.registers[dest]
+                } else {
+                    self.registers[src]
+                };
+                let base = if slot.len() == 16 {
+                    self.read_reg_256(src) as usize
+                } else if src > 0 && dest > 0 {
+                    self.registers[src] as usize
+                } else {
+                    0
+                };
                 let offset = parse_target_or_offset(slot, imm);
-                let addr = (base.wrapping_add(offset)) % 16384;
-                self.dmem[addr] = self.registers[s];
+                let linear_addr = (base.wrapping_add(offset)) % 16384;
+                let phys_addr = self.sram_swizzle_word_index(linear_addr);
+                self.dmem[phys_addr] = s_val;
             }
             "LB" => {
-                // Load 8-bit Byte from 64KB Scratchpad SRAM into Register
+                // Load 8-bit Byte from 64KB Scratchpad SRAM into Register (with GF(2^4) 16-Bank Swizzling)
                 let d = if dest > 0 { dest } else { 0 };
                 let base = if src > 0 { self.registers[src] as usize } else { 0 };
                 let offset = parse_target_or_offset(slot, imm);
                 let byte_addr = (base.wrapping_add(offset)) % 65536;
-                let word_idx = byte_addr / 4;
+                let linear_word = byte_addr / 4;
                 let byte_shift = (byte_addr % 4) * 8;
-                let word = self.dmem[word_idx];
+                let phys_word = self.sram_swizzle_word_index(linear_word);
+                let word = self.dmem[phys_word];
                 self.registers[d] = (word >> byte_shift) & 0xFF;
             }
             "BY" => {
-                // Store 8-bit Byte from Register to 64KB Scratchpad SRAM
+                // Store 8-bit Byte from Register to 64KB Scratchpad SRAM (with GF(2^4) 16-Bank Swizzling)
                 let s = if dest > 0 { dest } else { src };
                 let base = if src > 0 && dest > 0 { self.registers[src] as usize } else { 0 };
                 let offset = parse_target_or_offset(slot, imm);
                 let byte_addr = (base.wrapping_add(offset)) % 65536;
-                let word_idx = byte_addr / 4;
+                let linear_word = byte_addr / 4;
                 let byte_shift = (byte_addr % 4) * 8;
                 let byte_val = self.registers[s] & 0xFF;
                 let mask = !(0xFF << byte_shift);
-                self.dmem[word_idx] = (self.dmem[word_idx] & mask) | (byte_val << byte_shift);
+                let phys_word = self.sram_swizzle_word_index(linear_word);
+                self.dmem[phys_word] = (self.dmem[phys_word] & mask) | (byte_val << byte_shift);
+            }
+            "VR" => {
+                // Step-Level Process Reward Model (PRM) Verifier & Early Pruning (Math-Shepherd style)
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { d };
+                let step_val = self.registers[s];
+                let score = if step_val == 0 {
+                    0u32
+                } else {
+                    let ones = step_val.count_ones();
+                    let entropy = 16 - ((ones as i32 - 16).unsigned_abs());
+                    (entropy * 62).min(1000)
+                };
+                self.verifier_register = score;
+                self.registers[d] = score;
+                if mode == '?' || mode == '!' {
+                    if score < self.vr_threshold {
+                        self.prm_pruned_steps += 1;
+                        if let Some(target) = self.branch_target {
+                            self.branch_target = Some(target);
+                        }
+                    }
+                }
             }
             "CC" => {
                 // Chip-Wide 256-Core I/D Cache & Pipeline Invalidation (Homopolymer CC)

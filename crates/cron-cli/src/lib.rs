@@ -17,3 +17,4 @@ pub mod hf_commands;
 pub mod audio_commands;
 pub mod voice_commands;
 pub mod pkg_commands;
+pub mod commands;

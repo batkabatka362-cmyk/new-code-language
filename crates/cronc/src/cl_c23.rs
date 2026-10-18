@@ -59,6 +59,13 @@ fn parse_imm_val(slot: &str) -> Option<u32> {
 /// Transpiles .cl VLIW microcode to standalone, ISO C23 compliant source code with
 /// optional AVX-512 and AVX2 hardware SIMD intrinsics.
 pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, String> {
+    let lowered_code;
+    let cl_code = if cl_code.contains(".kernel") || cl_code.contains(".include") {
+        lowered_code = crate::cl_lang::lower_cl_with_kernels(cl_code)?;
+        &lowered_code
+    } else {
+        cl_code
+    };
     let mut out = String::with_capacity(32768);
 
     out.push_str("// ============================================================================\n");
@@ -443,7 +450,14 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
 
         if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
             bundle_count += 1;
-            let cycle_num = usize::from_str_radix(cycle_part.trim().trim_start_matches('B'), 16).unwrap_or(bundle_count);
+            let clean_part = cycle_part.trim().trim_start_matches('B');
+            let cycle_num = if clean_part.chars().any(|c| matches!(c, 'a'..='f' | 'A'..='F')) {
+                usize::from_str_radix(clean_part, 16).unwrap_or(bundle_count)
+            } else {
+                clean_part.parse::<usize>().unwrap_or_else(|_| {
+                    usize::from_str_radix(clean_part, 16).unwrap_or(bundle_count)
+                })
+            };
             out.push_str(&format!("  bundle_{:04X}:\n", cycle_num));
             out.push_str(&format!("    // Cycle {}\n", cycle_part.trim()));
             out.push_str("    core->cycle_count++;\n");
@@ -512,7 +526,16 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                                 continue;
                             }
 
-                            let (op1, op2) = if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
+                            let (op1, op2) = if slot.is_16char {
+                                let src2 = slot.src2_reg.unwrap_or(0);
+                                if src2 > 0 {
+                                    (format!("core->r[{}]", s), format!("core->r[{}]", src2))
+                                } else if imm_val > 0 {
+                                    (format!("core->r[{}]", s), format!("{}u", imm_val))
+                                } else {
+                                    (format!("core->r[{}]", d), format!("core->r[{}]", s))
+                                }
+                            } else if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
                                 (format!("core->r[{}]", s), format!("core->r[{}]", imm_nibble))
                             } else {
                                 (format!("core->r[{}]", d), format!("core->r[{}]", s))
@@ -924,19 +947,6 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                             out.push_str(&format!("    core->r[{}] = 180u;\n", d));
                         }
                         "DW" | "DD" | "EE" | "CC" | "PW" => {}
-                        // Macro Opcodes (M0..MF, A0..AF, B0..BF, S0..SF)
-                        op if op.starts_with('M') && op.len() == 2 => {
-                            out.push_str(&format!("    core->r[{}] = cron_subbyte_ternary_dot(core->r[{}], core->r[{}]);\n", d, d, s));
-                        }
-                        op if op.starts_with('A') && op.len() == 2 => {
-                            out.push_str(&format!("    core->r[{}] += core->r[{}];\n", d, s));
-                        }
-                        op if op.starts_with('B') && op.len() == 2 => {
-                            out.push_str("    core->barrier_count++;\n");
-                        }
-                        op if op.starts_with('S') && op.len() == 2 => {
-                            out.push_str(&format!("    core->r[{}] = core->r[{}];\n", d, s));
-                        }
                         // Control Flow
                         "JP" => {
                             out.push_str(&format!("    goto bundle_{:04X};\n", imm_val));
@@ -960,6 +970,19 @@ pub fn compile_cl_to_c23(cl_code: &str, module_name: &str) -> Result<String, Str
                         "JS" => {
                             out.push_str(&format!("    if (core->ras_sp < 64) core->ras[core->ras_sp++] = {};\n", cycle_num + 1));
                             out.push_str(&format!("    goto bundle_{:04X};\n", imm_val));
+                        }
+                        // Macro Opcodes (M0..MF, A0..AF, B0..BF, S0..SF)
+                        op if op.starts_with('M') && op.len() == 2 && op.chars().nth(1).unwrap().is_ascii_hexdigit() => {
+                            out.push_str(&format!("    core->r[{}] = cron_subbyte_ternary_dot(core->r[{}], core->r[{}]);\n", d, d, s));
+                        }
+                        op if op.starts_with('A') && op.len() == 2 && op.chars().nth(1).unwrap().is_ascii_hexdigit() => {
+                            out.push_str(&format!("    core->r[{}] += core->r[{}];\n", d, s));
+                        }
+                        op if op.starts_with('B') && op.len() == 2 && op.chars().nth(1).unwrap().is_ascii_hexdigit() => {
+                            out.push_str("    core->barrier_count++;\n");
+                        }
+                        op if op.starts_with('S') && op.len() == 2 && op.chars().nth(1).unwrap().is_ascii_hexdigit() => {
+                            out.push_str(&format!("    core->r[{}] = core->r[{}];\n", d, s));
                         }
                         // Memory Operations
                         "LD" => {

@@ -1,7 +1,4 @@
-; ============================================================================
-; CRON Standard Microcode Kernel Library: libcl/optical_gemm.cl
-; Photonic Mach-Zehnder Interferometer (MZI) 16x16 Tensor Dot & WDM Broadcast
-; ============================================================================
+; CRON Standard Microcode Kernel: libcl/optical_gemm.cl
 @kernel photonic_mzi_gemm
 .target silicon.photonic_mzi
 .ipc_target 4.0

@@ -121,6 +121,192 @@ impl HyperspherePoint4D {
             (self.x * self.x + self.y * self.y) - (self.z * self.z + self.w * self.w),
         ]
     }
+
+    /// Project an arbitrary 4D vector onto the tangent space T_p S^3
+    /// v_tan = v - <v, p> * p
+    #[inline]
+    pub fn project_to_tangent(&self, v: &[f32; 4]) -> [f32; 4] {
+        let dot = self.x * v[0] + self.y * v[1] + self.z * v[2] + self.w * v[3];
+        [
+            v[0] - dot * self.x,
+            v[1] - dot * self.y,
+            v[2] - dot * self.z,
+            v[3] - dot * self.w,
+        ]
+    }
+
+    /// Riemannian Exponential Map Exp_p(v): T_p S^3 -> S^3
+    /// Moves distance ||v|| along the unique great-circle geodesic starting at p with initial velocity v.
+    /// Formula: Exp_p(v) = cos(||v||) * p + sin(||v||) * (v / ||v||)
+    pub fn exp_map(&self, v: &[f32; 4]) -> Self {
+        let v_tan = self.project_to_tangent(v);
+        let v_norm_sq = v_tan[0] * v_tan[0] + v_tan[1] * v_tan[1] + v_tan[2] * v_tan[2] + v_tan[3] * v_tan[3];
+        let v_norm = v_norm_sq.sqrt();
+        if v_norm < 1e-9 {
+            *self
+        } else {
+            let cos_t = v_norm.cos();
+            let sin_t = v_norm.sin();
+            let scale = sin_t / v_norm;
+            Self {
+                x: cos_t * self.x + scale * v_tan[0],
+                y: cos_t * self.y + scale * v_tan[1],
+                z: cos_t * self.z + scale * v_tan[2],
+                w: cos_t * self.w + scale * v_tan[3],
+            }.normalize()
+        }
+    }
+
+    /// Riemannian Logarithmic Map Log_p(q): S^3 -> T_p S^3
+    /// Returns the tangent vector at p pointing towards q with length equal to geodesic distance.
+    /// Formula: Log_p(q) = (theta / sin(theta)) * (q - cos(theta) * p), where theta = arccos(<p, q>)
+    pub fn log_map(&self, other: &Self) -> [f32; 4] {
+        let dot = (self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w).clamp(-1.0, 1.0);
+        let theta = dot.acos();
+        if theta < 1e-7 {
+            [0.0, 0.0, 0.0, 0.0]
+        } else {
+            let sin_t = theta.sin();
+            let factor = theta / sin_t;
+            [
+                factor * (other.x - dot * self.x),
+                factor * (other.y - dot * self.y),
+                factor * (other.z - dot * self.z),
+                factor * (other.w - dot * self.w),
+            ]
+        }
+    }
+
+    /// Parallel transport of tangent vector w from T_p S^3 to T_q S^3 along the connecting geodesic
+    pub fn parallel_transport(&self, other: &Self, w: &[f32; 4]) -> [f32; 4] {
+        let v = self.log_map(other);
+        let theta = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]).sqrt();
+        if theta < 1e-7 {
+            return *w;
+        }
+        let u = [v[0] / theta, v[1] / theta, v[2] / theta, v[3] / theta];
+        let w_dot_u = w[0] * u[0] + w[1] * u[1] + w[2] * u[2] + w[3] * u[3];
+        let w_tan = other.project_to_tangent(w);
+        let sin_t = theta.sin();
+        let cos_t = theta.cos();
+        [
+            w_tan[0] - (sin_t * self.x + (1.0 - cos_t) * u[0]) * w_dot_u,
+            w_tan[1] - (sin_t * self.y + (1.0 - cos_t) * u[1]) * w_dot_u,
+            w_tan[2] - (sin_t * self.z + (1.0 - cos_t) * u[2]) * w_dot_u,
+            w_tan[3] - (sin_t * self.w + (1.0 - cos_t) * u[3]) * w_dot_u,
+        ]
+    }
+}
+
+/// Continuous-Time Dynamical Geodesic Flow Integrator on S^3 (dx/dt = f(x, theta))
+#[derive(Debug, Clone)]
+pub struct ContinuousSphereDynamicalFlow {
+    pub tau: f32,                // Homeostatic time constant
+    pub friction: f32,           // Damping factor
+    pub discrete_coupling: f32,  // Coupling coefficient to discrete Z100 lattice
+}
+
+impl Default for ContinuousSphereDynamicalFlow {
+    fn default() -> Self {
+        Self {
+            tau: 20.0,
+            friction: 0.05,
+            discrete_coupling: 0.1,
+        }
+    }
+}
+
+impl ContinuousSphereDynamicalFlow {
+    /// 4th-Order Riemannian Manifold Runge-Kutta (RK4) Step on S^3
+    /// Solves dx/dt = Proj_{T_x S^3}( f(x) ) with strictly zero norm drift
+    pub fn rk4_geodesic_step<F>(&self, x: &HyperspherePoint4D, dt: f32, field_fn: F) -> HyperspherePoint4D
+    where
+        F: Fn(&HyperspherePoint4D) -> [f32; 4],
+    {
+        let f1 = field_fn(x);
+        let k1 = x.project_to_tangent(&f1);
+
+        let half_dt_k1 = [0.5 * dt * k1[0], 0.5 * dt * k1[1], 0.5 * dt * k1[2], 0.5 * dt * k1[3]];
+        let x2 = x.exp_map(&half_dt_k1);
+
+        let f2 = field_fn(&x2);
+        let k2 = x2.project_to_tangent(&f2);
+
+        let k2_at_x = x2.parallel_transport(x, &k2);
+        let half_dt_k2 = [0.5 * dt * k2_at_x[0], 0.5 * dt * k2_at_x[1], 0.5 * dt * k2_at_x[2], 0.5 * dt * k2_at_x[3]];
+        let x3 = x.exp_map(&half_dt_k2);
+
+        let f3 = field_fn(&x3);
+        let k3 = x3.project_to_tangent(&f3);
+
+        let k3_at_x = x3.parallel_transport(x, &k3);
+        let dt_k3 = [dt * k3_at_x[0], dt * k3_at_x[1], dt * k3_at_x[2], dt * k3_at_x[3]];
+        let x4 = x.exp_map(&dt_k3);
+
+        let f4 = field_fn(&x4);
+        let k4 = x4.project_to_tangent(&f4);
+        let k4_at_x = x4.parallel_transport(x, &k4);
+
+        let v_avg = [
+            (k1[0] + 2.0 * k2_at_x[0] + 2.0 * k3_at_x[0] + k4_at_x[0]) * (dt / 6.0),
+            (k1[1] + 2.0 * k2_at_x[1] + 2.0 * k3_at_x[1] + k4_at_x[1]) * (dt / 6.0),
+            (k1[2] + 2.0 * k2_at_x[2] + 2.0 * k3_at_x[2] + k4_at_x[2]) * (dt / 6.0),
+            (k1[3] + 2.0 * k2_at_x[3] + 2.0 * k3_at_x[3] + k4_at_x[3]) * (dt / 6.0),
+        ];
+
+        x.exp_map(&v_avg)
+    }
+}
+
+/// Universal Arbitrary-Dimension BitNet b1.58 Multiplier-Free Matrix Acceleration
+#[derive(Debug, Clone)]
+pub struct UniversalBitNetEngine;
+
+impl UniversalBitNetEngine {
+    /// Zero-multiplication GEMV for arbitrary (Rows x Cols) matrix with integer activations
+    /// Pure signed addition / subtraction / zero-skipping (0 FLOPs, 0 Multipliers)
+    pub fn gemv(matrix: &SphereWeightMatrix, activations: &[i32]) -> Vec<i32> {
+        let rows = matrix.rows;
+        let cols = matrix.cols;
+        let mut out = vec![0i32; rows];
+
+        for r in 0..rows {
+            let row_offset = r * cols;
+            let mut sum = 0i32;
+            for c in 0..cols {
+                let w = if row_offset + c < matrix.ternary_weights.len() {
+                    matrix.ternary_weights[row_offset + c]
+                } else {
+                    0
+                };
+                if w == 0 {
+                    continue;
+                }
+                let act = if c < activations.len() { activations[c] } else { 0 };
+                if w > 0 {
+                    sum += act;
+                } else {
+                    sum -= act;
+                }
+            }
+            out[r] = sum;
+        }
+        out
+    }
+
+    /// Sub-byte 2-bit packed GEMV using 64-bit integer bitwise popcount adder tree
+    /// 32 ternary weights packed per u64 word:
+    /// pos_mask: bits where weight == +1
+    /// neg_mask: bits where weight == -1
+    /// When activations are binary {0, 1}:
+    /// dot = popcount(act_mask & pos_mask) - popcount(act_mask & neg_mask)
+    /// 100% Zero Multipliers, O(1) cycles on modern silicon!
+    #[inline]
+    pub fn zero_flop_bitcount_dot(pos_mask: u64, neg_mask: u64, act_mask: u64) -> i32 {
+        let pos_matches = (pos_mask & act_mask).count_ones() as i32;
+        let neg_matches = (neg_mask & act_mask).count_ones() as i32;
+        pos_matches - neg_matches
+    }
 }
 
 /// Compilation options for lowering neural weights to 4D Sphere machine code (.cl)

@@ -267,6 +267,8 @@ pub struct PredecodedSlot {
     pub imm_val: u32,
     pub print_char: char,
     pub sphere: PredecodedSphere,
+    pub is_16char: bool,
+    pub src2: usize,
 }
 
 #[inline(always)]
@@ -428,6 +430,8 @@ fn predecode_slot(slot: &crate::cl_lang::ClSlot, _slot_str: &str, imm_nibble: us
         imm_val,
         print_char,
         sphere,
+        is_16char: slot.is_16char,
+        src2: slot.src2_reg.unwrap_or(0),
     }
 }
 
@@ -562,7 +566,15 @@ fn h_poly_alu(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
         return;
     }
 
-    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+    let (val1, val2) = if slot.is_16char {
+        if slot.src2 > 0 {
+            (core.r[slot.s], core.r[slot.src2])
+        } else if slot.imm_val > 0 {
+            (core.r[slot.s], slot.imm_val)
+        } else {
+            (core.r[slot.d], core.r[slot.s])
+        }
+    } else if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
         (core.r[slot.s], core.r[slot.imm_nibble])
     } else {
         (core.r[slot.d], core.r[slot.s])
@@ -1141,10 +1153,18 @@ struct JitBundle {
 }
 
 pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), String> {
+    let lowered_code;
+    let code_to_run = if cl_code.contains(".kernel") || cl_code.contains(".include") {
+        lowered_code = crate::cl_lang::lower_cl_with_kernels(cl_code)?;
+        &lowered_code
+    } else {
+        cl_code
+    };
+
     let mut bundles: Vec<JitBundle> = Vec::new();
     let mut cycle_to_idx: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
 
-    for line in cl_code.lines() {
+    for line in code_to_run.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with(".weights") {
             if let Ok(binding) = crate::cl_lang::parse_weights_directive(trimmed) {
@@ -1164,7 +1184,14 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
         }
 
         if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
-            let cycle_num = cycle_part.trim().trim_start_matches('B').parse::<usize>().unwrap_or(bundles.len() + 1);
+            let num_str = cycle_part.trim().trim_start_matches(|c: char| c == 'B' || c == 'b');
+            let cycle_num = if num_str.chars().any(|c| matches!(c, 'a'..='f' | 'A'..='F')) {
+                usize::from_str_radix(num_str, 16).unwrap_or(bundles.len() + 1)
+            } else {
+                num_str.parse::<usize>().unwrap_or_else(|_| {
+                    usize::from_str_radix(num_str, 16).unwrap_or(bundles.len() + 1)
+                })
+            };
             let mut parsed_slots = Vec::new();
             for slot_str in slots_part.split_whitespace() {
                 if let Ok(slot) = parse_slot(slot_str) {

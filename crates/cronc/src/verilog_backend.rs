@@ -116,16 +116,26 @@ pub fn encode_slot_to_u32(slot: &ClSlot) -> u32 {
 
     let rd = (slot.dest_reg.unwrap_or(0) as u32) & 0x0F;
     let rs1 = (slot.src_reg.unwrap_or(0) as u32) & 0x0F;
-    let imm = slot.imm_token.to_digit(16).unwrap_or(0) & 0x0F;
+    let rs2 = slot.src2_reg.map(|r| (r as u32) & 0x0F).unwrap_or(0);
+    let imm = if slot.is_16char {
+        (slot.imm_u16 as u32) & 0x03FF
+    } else {
+        slot.imm_token.to_digit(16).unwrap_or(0) & 0x0F
+    };
     let parity = slot.parity_token.to_digit(16).unwrap_or(0) & 0x0F;
+    let imm_field = if slot.is_16char {
+        (rs2 << 10) | imm
+    } else {
+        imm
+    };
 
     // 32-bit Packed Format:
     // [31:26] Opcode (6 bits)
     // [25:22] Dest Reg Rd (4 bits)
     // [21:18] Src Reg Rs1 (4 bits)
     // [17:14] Parity Nibble (4 bits)
-    // [13:0]  Immediate & Flags (14 bits)
-    (op_code << 26) | (rd << 22) | (rs1 << 18) | (parity << 14) | imm
+    // [13:0]  Immediate & Flags (14 bits: [13:10] Rs2, [9:0] Imm)
+    (op_code << 26) | (rd << 22) | (rs1 << 18) | (parity << 14) | imm_field
 }
 
 /// Generates synthesis-ready IEEE 1364-2001 Verilog HDL source from .cl machine text

@@ -28,10 +28,27 @@ pub struct ClDiagnostic {
 /// Analyzes a `.cl` source string and produces comprehensive diagnostics
 pub fn analyze_cl_source(source: &str) -> Vec<ClDiagnostic> {
     let mut diagnostics = Vec::new();
+    let mut kernel_brace_depth: usize = 0;
 
     for (line_idx, line) in source.lines().enumerate() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with(';') || trimmed.starts_with('.') || trimmed.starts_with('@') {
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with(';') {
+            continue;
+        }
+
+        if kernel_brace_depth > 0 {
+            let opens = trimmed.chars().filter(|&c| c == '{').count();
+            let closes = trimmed.chars().filter(|&c| c == '}').count();
+            kernel_brace_depth = (kernel_brace_depth + opens).saturating_sub(closes);
+            continue;
+        }
+
+        if trimmed.starts_with('.') || trimmed.starts_with('@') {
+            if trimmed.starts_with(".kernel") && trimmed.contains('{') {
+                let opens = trimmed.chars().filter(|&c| c == '{').count();
+                let closes = trimmed.chars().filter(|&c| c == '}').count();
+                kernel_brace_depth = opens.saturating_sub(closes);
+            }
             continue;
         }
 
