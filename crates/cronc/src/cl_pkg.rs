@@ -1114,6 +1114,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("custom_silicon_dataflow.cl", "Section 31: Tenstorrent Tensix, Groq TSP Determinism & Cerebras Fabric", "silicon.custom_silicon", 4.0),
         ("formal_theorem_prover.cl", "Section 32: Lean 4 Calculus, DeepSeek-Prover RLPAF & AlphaProof", "silicon.formal_prover", 4.0),
         ("generative_audio_speech.cl", "Section 33: SWivid F5-TTS Flow, CosyVoice 2 Prosody & ChatTTS Fillers", "silicon.generative_audio", 4.0),
+        ("autonomous_driving_vla.cl", "Section 34: UniAD Planning Queries, BEVFormer v2 & OccNet Voxels", "silicon.autonomous_driving", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
