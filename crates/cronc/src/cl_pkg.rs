@@ -1110,6 +1110,7 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         ("embodied_physics.cl", "Section 26: ACT Action Chunking, Diffusion Policy & Genesis SPH/MPM", "silicon.embodied_physics", 4.0),
         ("diffusion_llm.cl", "Section 27: SEDD Discrete Ratios, MDLM Unmasking & LLaDA In-Filling", "silicon.discrete_diffusion", 4.0),
         ("equivariant_sciml.cl", "Section 28: NequIP Clebsch-Gordan, Allegro Local Potential & EGNN Updates", "silicon.equivariant_sciml", 4.0),
+        ("agent_sandbox.cl", "Section 29: CodeAct Terminal Pipe, Firecracker MicroVM & SWE-bench Guard", "silicon.agent_sandbox", 4.0),
     ];
 
     for (file_name, desc, target, ipc) in standard_defs {
