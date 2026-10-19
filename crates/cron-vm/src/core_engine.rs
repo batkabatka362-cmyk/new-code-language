@@ -820,6 +820,14 @@ impl CoreEngine {
                 }
                 self.dma_transfers += 1;
             }
+            "TG" => {
+                // Tensor Core Tile Matrix Multiply (WGMMA 16x16 / 32x32)
+                let d = if dest > 0 { dest } else { 0 };
+                let s = if src > 0 { src } else { d };
+                self.optical_gemm_count += 1;
+                let mul_val = if src2 > 0 { self.read_reg_256(src2) } else { 0x30303CCD };
+                self.registers[d] = self.registers[s].wrapping_mul(mul_val) ^ 0x30303CCD;
+            }
             "HB" => {
                 // On-Silicon Neuromorphic Synaptic Plasticity Step (Online Hebbian / Oja's rule in SRAM)
                 let d = if dest > 0 { dest } else { 0 };

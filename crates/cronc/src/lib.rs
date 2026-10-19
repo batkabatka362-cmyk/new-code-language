@@ -192,12 +192,18 @@ pub mod cl_high_parser;
 pub mod cl_high_lowering;
 pub mod cl_high_heal;
 pub mod cl_tensor_engine;
+pub mod cl_v2_ast;
+pub mod cl_v2_parser;
+pub mod cl_v2_lowering;
 
 pub use cl_high_ast::*;
 pub use cl_high_parser::{parse_high_cl, HighLexer, HighParser, HighToken};
 pub use cl_high_lowering::{compile_high_cl_to_cl, HighLoweringEngine, LoweringConfig, RegisterAllocator};
 pub use cl_high_heal::{auto_apply_high_cl_heal, verify_and_heal_high_cl, FormalDiagnosticReport, MathematicalConflict, SelfHealPatch};
 pub use cl_tensor_engine::*;
+pub use cl_v2_ast::*;
+pub use cl_v2_parser::parse_cl_v2;
+pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport};
 
 pub use cl_lora::{
     pack_trits_5, parse_jsonl_training_pairs, train_cl_lora_from_pairs, unpack_trits_5,

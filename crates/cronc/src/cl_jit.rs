@@ -238,6 +238,9 @@ pub enum OpId {
     StoreByte,
     Halt,
     SphereGeodesic,
+    FusedMultiplyAdd,
+    Reciprocal,
+    TensorGemmTile,
     Unknown,
 }
 
@@ -295,7 +298,15 @@ fn decode_slot_op(slot: &crate::cl_lang::ClSlot) -> OpId {
         "CP" => OpId::Copy,
         "MA" => OpId::Mask,
         "PO" | "P0" | "P1" => OpId::PolyAlu,
-        "MD" => OpId::TernaryDot,
+        "MD" => {
+            if slot.mode == '*' {
+                OpId::Mul
+            } else if slot.mode == '/' {
+                OpId::Div
+            } else {
+                OpId::TernaryDot
+            }
+        },
         "RF" => OpId::ReversibleSwap,
         "TO" => OpId::Toffoli,
         "BK" => OpId::ReversiblePop,
@@ -346,6 +357,9 @@ fn decode_slot_op(slot: &crate::cl_lang::ClSlot) -> OpId {
         "LB" => OpId::LoadByte,
         "BY" => OpId::StoreByte,
         "HL" => OpId::Halt,
+        "FM" => OpId::FusedMultiplyAdd,
+        "RC" => OpId::Reciprocal,
+        "TG" => OpId::TensorGemmTile,
         _ => OpId::Unknown,
     }
 }
@@ -431,7 +445,9 @@ fn predecode_slot(slot: &crate::cl_lang::ClSlot, _slot_str: &str, imm_nibble: us
         print_char,
         sphere,
         is_16char: slot.is_16char,
-        src2: slot.src2_reg.unwrap_or(0),
+        src2: slot.src2_reg.unwrap_or_else(|| {
+            slot.raw.chars().nth(7).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize % 16
+        }),
     }
 }
 
@@ -495,7 +511,9 @@ fn h_sub(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
 
 #[inline(always)]
 fn h_mul(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
-    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+    let (val1, val2) = if slot.src2 > 0 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.src2])
+    } else if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
         (core.r[slot.s], core.r[slot.imm_nibble])
     } else {
         (core.r[slot.d], core.r[slot.s])
@@ -505,7 +523,9 @@ fn h_mul(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
 
 #[inline(always)]
 fn h_div(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
-    let (val1, val2) = if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+    let (val1, val2) = if slot.src2 > 0 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.src2])
+    } else if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
         (core.r[slot.s], core.r[slot.imm_nibble])
     } else {
         (core.r[slot.d], core.r[slot.s])
@@ -1075,7 +1095,41 @@ fn h_sphere_geodesic(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
     }
 }
 
-static DISPATCH_TABLE: [OpcodeHandler; 69] = [
+#[inline(always)]
+fn h_fused_multiply_add(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let (val1, val2) = if slot.src2 > 0 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.src2])
+    } else if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.imm_nibble])
+    } else {
+        (core.r[slot.d], core.r[slot.s])
+    };
+    core.r[slot.d] = val1.wrapping_mul(val2).wrapping_add(core.r[slot.d]);
+}
+
+#[inline(always)]
+fn h_reciprocal(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    let val = core.r[slot.s];
+    if val != 0 {
+        let s = (val as f64).sqrt();
+        if s > 1e-9 {
+            core.r[slot.d] = ((1_000_000.0 / s) as u32).min(0xFFFFFFFF);
+        } else {
+            core.r[slot.d] = 0xFFFFFFFF;
+        }
+    } else {
+        core.r[slot.d] = 0;
+    }
+}
+
+#[inline(always)]
+fn h_tensor_gemm_tile(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
+    core.optical_gemm_count += 1;
+    let acc = core.r[slot.s].wrapping_mul(core.r[slot.d]);
+    core.r[slot.d] = acc ^ 0x30303CCD;
+}
+
+static DISPATCH_TABLE: [OpcodeHandler; 72] = [
     h_nop,
     h_imm_load,
     h_optical_gemm,
@@ -1144,6 +1198,9 @@ static DISPATCH_TABLE: [OpcodeHandler; 69] = [
     h_store_byte,
     h_halt,
     h_sphere_geodesic,
+    h_fused_multiply_add,
+    h_reciprocal,
+    h_tensor_gemm_tile,
     h_nop, // Unknown
 ];
 
