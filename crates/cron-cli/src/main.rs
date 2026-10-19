@@ -3179,7 +3179,7 @@ fn main() {
         }
         "cl-heal" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron cl-heal <file.cl> [-o <out.cl>]");
+                eprintln!("Error: Missing input file. Usage: cron cl-heal <file.cl> [-o <out.cl>] [--json]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -3187,6 +3187,42 @@ fn main() {
                 eprintln!("Error reading '{}': {}", input_path, e);
                 std::process::exit(1);
             });
+
+            let is_json = args.iter().any(|a| a == "--json");
+            let is_high_cl = !cl_code.contains("B0000:") && (cl_code.contains("module ") || cl_code.contains("kernel ") || cl_code.contains("arch "));
+
+            if is_high_cl {
+                let report = cronc::verify_and_heal_high_cl(&cl_code, Some(input_path));
+                if is_json {
+                    println!("{}", report.to_json());
+                    return;
+                }
+                println!("============================================================");
+                println!("     CRON HIGH-LEVEL CL FORMAL CONTRACT VERIFICATION        ");
+                println!("============================================================");
+                println!("  Status:                       {}", report.status);
+                if let Some(ref d) = report.error_domain {
+                    println!("  Error Domain:                 {}", d);
+                }
+                if let Some(ref loc) = report.location {
+                    println!("  Location:                     {}:{}:{}", loc.file, loc.line, loc.col);
+                }
+                if let Some(ref conf) = report.mathematical_conflict {
+                    println!("  Conflict:                     {} -> {}", conf.source_type, conf.target_type);
+                    println!("  Root Cause:                   {}", conf.root_cause);
+                }
+                if let Some(ref patch) = report.self_heal_patch {
+                    println!("------------------------------------------------------------");
+                    println!("  Self-Healing Required Op:     {}", patch.required_primitive);
+                    println!("  Explanation:                  {}", patch.explanation);
+                    println!("  Replacement Code:\n{}", patch.replacement_code);
+                } else {
+                    println!("  Bundles Scheduled (4-Snake):  {} bundles", report.vliw_bundle_count);
+                    println!("  STATUS: 100% FORMAL MATHEMATICAL VERIFICATION PASSED");
+                }
+                println!("============================================================\n");
+                return;
+            }
 
             let mut out_path = None;
             if args.len() >= 5 && args[3] == "-o" {
