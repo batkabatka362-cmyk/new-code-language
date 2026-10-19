@@ -2599,7 +2599,16 @@ fn main() {
                     }
                 }
             } else {
-                let cl_code = if is_cl {
+                let is_high_cl = !source.contains("B0000:") && (source.contains("module ") || source.contains("kernel ") || source.contains("arch "));
+                let cl_code = if is_high_cl {
+                    match cronc::compile_high_cl_to_cl(&source) {
+                        Ok(lowered) => lowered,
+                        Err(e) => {
+                            eprintln!("[HIGH CL LOWERING ERROR] {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                } else if is_cl {
                     source
                 } else {
                     match cronc::compile_source(&source) {
@@ -2682,6 +2691,35 @@ fn main() {
                         }
                         std::process::exit(1);
                     }
+                }
+            }
+        }
+        "cl-high" | "cl-lower" => {
+            if args.len() < 3 {
+                eprintln!("Error: Missing input file. Usage: cron cl-high <file.cl> [-o out.cl]");
+                std::process::exit(1);
+            }
+            let input_path = &args[2];
+            let source = fs::read_to_string(input_path).unwrap_or_else(|e| {
+                eprintln!("Error reading '{}': {}", input_path, e);
+                std::process::exit(1);
+            });
+            match cronc::compile_high_cl_to_cl(&source) {
+                Ok(cl_text) => {
+                    let out_path = args.windows(2).find(|w| w[0] == "-o").map(|w| w[1].as_str());
+                    if let Some(out_p) = out_path {
+                        fs::write(out_p, &cl_text).unwrap_or_else(|e| {
+                            eprintln!("Error writing output '{}': {}", out_p, e);
+                            std::process::exit(1);
+                        });
+                        println!("Successfully lowered High-Level CL to 128-bit VLIW: {}", out_p);
+                    } else {
+                        println!("{}", cl_text);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[HIGH CL LOWERING ERROR] {}", e);
+                    std::process::exit(1);
                 }
             }
         }

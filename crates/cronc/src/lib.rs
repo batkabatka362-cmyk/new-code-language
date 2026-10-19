@@ -187,6 +187,13 @@ pub mod cl_agent;
 pub mod cl_accelerator;
 pub mod cl_lora;
 pub mod cl_py_transpile;
+pub mod cl_high_ast;
+pub mod cl_high_parser;
+pub mod cl_high_lowering;
+
+pub use cl_high_ast::*;
+pub use cl_high_parser::{parse_high_cl, HighLexer, HighParser, HighToken};
+pub use cl_high_lowering::{compile_high_cl_to_cl, HighLoweringEngine, LoweringConfig, RegisterAllocator};
 
 pub use cl_lora::{
     pack_trits_5, parse_jsonl_training_pairs, train_cl_lora_from_pairs, unpack_trits_5,

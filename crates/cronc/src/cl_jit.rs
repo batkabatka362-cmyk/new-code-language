@@ -1497,7 +1497,43 @@ pub fn execute_cl_ir_on_core(ir: &crate::cl_ir::ClProgramIR, core: &mut ClJitCor
                             let res = 0.5f32 * x * (1.0f32 + (0.7978846f32 * (x + 0.044715f32 * x * x * x)).tanh());
                             core.r[d] = res.to_bits();
                         }
-                        _ => {}
+                        crate::cl_ir::NeuroOp::SsmStep => {
+                            core.ai_isa_ops_count += 1;
+                            let x = f32::from_bits(core.r[s]);
+                            let prev_h = core.ssm_state[d % 16];
+                            let new_h = 0.95f32 * prev_h + 0.05f32 * x;
+                            core.ssm_state[d % 16] = new_h;
+                            let y = new_h + 0.1f32 * x;
+                            core.r[d] = y.to_bits();
+                        }
+                        crate::cl_ir::NeuroOp::WaveResonance => {
+                            core.ai_isa_ops_count += 1;
+                            let x = f32::from_bits(core.r[s]);
+                            let s_val = x.sin();
+                            let res = x + s_val * s_val;
+                            core.r[d] = res.to_bits();
+                        }
+                        crate::cl_ir::NeuroOp::CurvedDeflect => {
+                            core.sphere_curvature_ops_count += 1;
+                            let x = core.r[s];
+                            core.r[d] = x.rotate_left(3) ^ 0x5A5A_A5A5;
+                        }
+                        crate::cl_ir::NeuroOp::Homeostasis => {
+                            core.ai_isa_ops_count += 1;
+                            if core.r[s] > 100 {
+                                core.r[d] = core.r[s].saturating_sub(10);
+                            } else {
+                                core.r[d] = core.r[s].saturating_add(5);
+                            }
+                        }
+                        crate::cl_ir::NeuroOp::PhaseToken => {
+                            core.ai_isa_ops_count += 1;
+                            core.r[d] = core.r[s].wrapping_mul(0x9E37_79B9);
+                        }
+                        crate::cl_ir::NeuroOp::LayerTransition => {
+                            core.ai_isa_ops_count += 1;
+                            core.r[d] = core.r[s];
+                        }
                     }
                 }
                 crate::cl_ir::MicroOp::Sync { is_barrier, is_halt, .. } => {
