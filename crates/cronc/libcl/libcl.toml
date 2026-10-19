@@ -1,7 +1,7 @@
 [package]
 name = "libcl"
-version = "1.8.0"
-description = "CRON Standard Microcode Kernel Library for 256-Core Neuromorphic/Photonic Silicon"
+version = "2.0.0"
+description = "CRON Standard Microcode & Sovereign Mathematical Kernel Library for 256-Core Neuromorphic/Photonic Silicon"
 authors = ["CRON Language Architecture Team"]
 license = "MIT OR Apache-2.0"
 
@@ -58,3 +58,19 @@ time_reversible_rewind = "libcl/time_reversible_rewind.cl"
 cognitive_transformer_snn = "libcl/cognitive_transformer_snn.cl"
 torus_csp_pipeline = "libcl/torus_csp_pipeline.cl"
 sagi_superintelligence_e2e = "libcl/sagi_superintelligence_e2e.cl"
+
+# Sovereign CRON CL v2.0 Subsystems
+tensor = "libcl/tensor.cl"
+recurrent = "libcl/recurrent.cl"
+diffusion = "libcl/diffusion.cl"
+geometric = "libcl/geometric.cl"
+causal_graph = "libcl/causal_graph.cl"
+robotics_vla = "libcl/robotics_vla.cl"
+formal_logic = "libcl/formal_logic.cl"
+hardware_noc = "libcl/hardware_noc.cl"
+data_processing = "libcl/data_processing.cl"
+classical_ml = "libcl/classical_ml.cl"
+vector_ann = "libcl/vector_ann.cl"
+graph_ai = "libcl/graph_ai.cl"
+breakthroughs = "libcl/breakthroughs.cl"
+frontier_models = "libcl/frontier_models.cl"
