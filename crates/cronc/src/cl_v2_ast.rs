@@ -11,22 +11,41 @@
 // ============================================================================
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum ProgramItem {
+    TargetContract(SiliconTargetContract),
+    IoBinding(IoMemoryBinding),
+    Function(FunctionBlock),
+    ControlFlow(CipherControlFlow),
+    Statement(CipherStmt),
+    VliwBundle(VliwBundle),
+    Watchdog(WatchdogInvariant),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClV2Document {
+    pub items: Vec<ProgramItem>,
     pub target_contract: Option<SiliconTargetContract>,
     pub io_binding: Option<IoMemoryBinding>,
     pub math_morphism: Option<MathMorphismBlock>,
+    pub functions: Vec<FunctionBlock>,
     pub control_flow: Option<CipherControlFlow>,
+    pub top_level_statements: Vec<CipherStmt>,
     pub vliw_stream: Vec<VliwBundle>,
+    pub watchdog: Option<WatchdogInvariant>,
 }
 
 impl ClV2Document {
     pub fn new() -> Self {
         Self {
+            items: Vec::new(),
             target_contract: None,
             io_binding: None,
             math_morphism: None,
+            functions: Vec::new(),
             control_flow: None,
+            top_level_statements: Vec::new(),
             vliw_stream: Vec::new(),
+            watchdog: None,
         }
     }
 }
@@ -118,6 +137,20 @@ pub struct MathStep {
     pub expr: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionBlock {
+    pub name: String,
+    pub tile_dims: Vec<usize>,
+    pub dtype: String,
+    pub params: Vec<String>,
+    pub states: Vec<MathStateDecl>,
+    pub input_symbol: String,
+    pub output_symbol: Option<String>,
+    pub equation_expr: String,
+    pub steps: Vec<MathStep>,
+    pub body: Vec<CipherStmt>,
+}
+
 // ----------------------------------------------------------------------------
 // [4] CIPHERED CONTROL-FLOW & SAFETY SLA
 // ----------------------------------------------------------------------------
@@ -140,7 +173,7 @@ pub enum CipherStmt {
         then_branch: Vec<CipherStmt>,
         else_branch: Vec<CipherStmt>,
     },
-    /// #Dest := Expression
+    /// #Dest := Expression or variable := expression
     Assign {
         dest: String,
         expr: String,
@@ -152,10 +185,19 @@ pub enum CipherStmt {
     },
     /// ⮌ (Exit / Break)
     Exit,
+    /// ⮌ expression (Return)
+    Return(Option<String>),
     /// ⮍ (Continue / Next)
     Next,
     /// ⮑ target (Jump)
     Jump(String),
+    /// Function Call
+    Call {
+        target: String,
+        args: Vec<String>,
+    },
+    /// Standalone expression
+    Expr(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]

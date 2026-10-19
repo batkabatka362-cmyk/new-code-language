@@ -133,13 +133,22 @@ impl V2LoweringEngine {
             }
         }
 
-        // 2. Lower Mathematical Tensor Morphism
-        if let Some(ref math) = doc.math_morphism {
-            self.lower_math_morphism(math, &mut instrs)?;
+        // 2. Lower Functions / Mathematical Morphisms
+        for func in &doc.functions {
+            self.lower_function_block(func, &mut instrs)?;
+        }
+        if doc.functions.is_empty() {
+            if let Some(ref math) = doc.math_morphism {
+                self.lower_math_morphism(math, &mut instrs)?;
+            }
         }
 
-        // 3. Lower Ciphered Control-Flow
-        if let Some(ref cf) = doc.control_flow {
+        // 3. Lower Top-Level Statements or Ciphered Control-Flow
+        if !doc.top_level_statements.is_empty() {
+            for stmt in &doc.top_level_statements {
+                self.lower_cipher_stmt(stmt, &mut instrs)?;
+            }
+        } else if let Some(ref cf) = doc.control_flow {
             self.lower_control_flow(cf, &mut instrs)?;
         }
 
@@ -160,6 +169,43 @@ impl V2LoweringEngine {
 
         // 5. Schedule into 4-Slot Zero-Bubble VLIW Bundles
         self.schedule_into_vliw(instrs)
+    }
+
+    fn lower_function_block(&mut self, func: &FunctionBlock, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
+        let x_reg = self.get_or_alloc_var(&func.input_symbol);
+
+        // Lower states if present
+        for state in &func.states {
+            let s_reg = self.get_or_alloc_var(&state.name);
+            instrs.push(IntermediateInstr {
+                prefix: '\'',
+                opcode: "==".to_string(),
+                dest: s_reg,
+                mode: '#',
+                src1: 0,
+                src2: None,
+                imm: 0x0100,
+                is_16char: false,
+            });
+        }
+
+        // Sequential steps: N := rmsnorm(X) ...
+        if !func.steps.is_empty() {
+            for step in &func.steps {
+                let dest_r = self.get_or_alloc_var(&step.target_var);
+                self.lower_math_expr(&step.expr, dest_r, x_reg, instrs)?;
+            }
+        } else if !func.equation_expr.is_empty() {
+            let dest_r = self.get_or_alloc_var("Y");
+            self.lower_math_expr(&func.equation_expr, dest_r, x_reg, instrs)?;
+        }
+
+        // General function body statements
+        for stmt in &func.body {
+            self.lower_cipher_stmt(stmt, instrs)?;
+        }
+
+        Ok(())
     }
 
     fn lower_math_morphism(&mut self, math: &MathMorphismBlock, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
@@ -384,6 +430,46 @@ impl V2LoweringEngine {
             return Ok(());
         }
 
+        // 9b. Subtraction: -
+        if e.contains('-') && !e.starts_with('-') {
+            let parts: Vec<&str> = e.split('-').collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "SU".to_string(),
+                dest: dest_r,
+                mode: '-',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 9c. Modulo / Remainder: %
+        if e.contains('%') {
+            let parts: Vec<&str> = e.split('%').collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "PO".to_string(),
+                dest: dest_r,
+                mode: '%',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
         // 10. Universal Primitives: .op.*
         if e.starts_with(".op.") {
             let op_name = e.trim_start_matches(".op.").split('(').next().unwrap_or("generic");
@@ -448,6 +534,9 @@ impl V2LoweringEngine {
                     is_16char: false,
                 });
 
+                let body_start_idx = instrs.len();
+                let body_start_bundle = (body_start_idx / 4) as u16;
+
                 // Lower inner body
                 for b in body {
                     self.lower_cipher_stmt(b, instrs)?;
@@ -465,15 +554,15 @@ impl V2LoweringEngine {
                     is_16char: false,
                 });
 
-                // Backward branch if non-zero: _BN14#target
+                // Backward branch if non-zero: !BN14#target
                 instrs.push(IntermediateInstr {
-                    prefix: '_',
+                    prefix: '!',
                     opcode: "BN".to_string(),
                     dest: loop_reg,
                     mode: '#',
                     src1: loop_reg,
                     src2: None,
-                    imm: 0,
+                    imm: body_start_bundle,
                     is_16char: false,
                 });
             }
@@ -558,10 +647,45 @@ impl V2LoweringEngine {
                     is_16char: false,
                 });
             }
+            CipherStmt::Return(maybe_expr) => {
+                if let Some(ref expr) = maybe_expr {
+                    let r0 = 0u8;
+                    let x_dummy = self.alloc_reg();
+                    self.lower_math_expr(expr, r0, x_dummy, instrs)?;
+                }
+                instrs.push(IntermediateInstr {
+                    prefix: '!',
+                    opcode: "RT".to_string(),
+                    dest: 0,
+                    mode: '#',
+                    src1: 0,
+                    src2: None,
+                    imm: 0,
+                    is_16char: false,
+                });
+            }
             CipherStmt::Next => {
                 // Continue
             }
             CipherStmt::Jump(_) => {}
+            CipherStmt::Call { target, args: _ } => {
+                let r_tgt = self.get_or_alloc_var(target);
+                instrs.push(IntermediateInstr {
+                    prefix: '!',
+                    opcode: "JS".to_string(),
+                    dest: r_tgt,
+                    mode: '#',
+                    src1: 0,
+                    src2: None,
+                    imm: 0,
+                    is_16char: false,
+                });
+            }
+            CipherStmt::Expr(expr) => {
+                let tmp = self.alloc_reg();
+                let x_dummy = self.alloc_reg();
+                self.lower_math_expr(expr, tmp, x_dummy, instrs)?;
+            }
         }
         Ok(())
     }

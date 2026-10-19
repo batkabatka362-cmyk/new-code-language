@@ -201,4 +201,73 @@ fn test_v2_tensor_runtime_real_execution() {
     assert!(non_zero_count > 200, "Calculated tensor values must be real non-zero numbers: found {}", non_zero_count);
 }
 
+#[test]
+fn test_lower_arbitrary_freeform_algorithm_without_templates() {
+    // Pure free-form code: No @kernel, No @io, No B0000: template!
+    // A Fibonacci sequence and dynamic scalar arithmetic written purely in high-level symbolic code:
+    let freeform_source = r#"
+§Fibonacci(n) {
+    a := 0
+    b := 1
+    i := 0
+    ⟳ (10) {
+        c := a + b
+        a := b
+        b := c
+    }
+    ⮌ b
+}
+    "#;
+
+    let doc = parse_cl_v2(freeform_source).expect("Universal parser must parse freeform algorithm");
+    assert_eq!(doc.functions.len(), 1);
+    assert_eq!(doc.functions[0].name, "Fibonacci");
+    assert_eq!(doc.functions[0].params, vec!["n".to_string()]);
+    assert!(!doc.functions[0].body.is_empty());
+
+    let mut engine = V2LoweringEngine::new();
+    let bundles = engine.lower_document(&doc).expect("Lowering freeform code must synthesize valid microcode");
+    assert!(!bundles.is_empty());
+
+    let mut doc_with_vliw = doc.clone();
+    doc_with_vliw.vliw_stream = bundles;
+    let canonical = engine.emit_canonical(&doc_with_vliw);
+    assert!(canonical.contains("B0000:"));
+    assert!(canonical.contains("!HL00#000"));
+
+    // Run on real JIT silicon core
+    let mut core = ClJitCore::new();
+    execute_cl_on_core(&canonical, &mut core).expect("Lowered freeform code must execute cleanly on JIT silicon");
+    assert!(core.is_halted);
+}
+
+#[test]
+fn test_lower_top_level_freeform_statements() {
+    let toplevel_source = r#"
+x := 10
+y := 20
+z := (x * y) + 5
+#R1 ← z
+⟳ (5) {
+    z := z - 1
+}
+    "#;
+
+    let doc = parse_cl_v2(toplevel_source).expect("Universal parser must parse top-level statements");
+    assert!(!doc.top_level_statements.is_empty());
+
+    let mut engine = V2LoweringEngine::new();
+    let bundles = engine.lower_document(&doc).expect("Lowering top-level statements must succeed");
+    assert!(!bundles.is_empty());
+
+    let mut doc_with_vliw = doc.clone();
+    doc_with_vliw.vliw_stream = bundles;
+    let canonical = engine.emit_canonical(&doc_with_vliw);
+
+    let mut core = ClJitCore::new();
+    execute_cl_on_core(&canonical, &mut core).expect("Must execute on JIT core");
+    assert!(core.is_halted);
+}
+
+
 

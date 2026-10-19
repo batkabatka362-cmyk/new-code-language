@@ -1033,6 +1033,8 @@ fn h_call(core: &mut ClJitCore, slot: &PredecodedSlot, current_cycle: usize) {
 fn h_return(core: &mut ClJitCore, _: &PredecodedSlot, _: usize) {
     if let Some(ret) = core.ras.pop() {
         core.branch_target = Some(ret);
+    } else {
+        core.is_halted = true;
     }
 }
 

@@ -26,41 +26,59 @@ pub fn parse_cl_v2(input: &str) -> Result<ClV2Document, String> {
             continue;
         }
 
-        // [1] Target Contract
+        // [1] Target Contract: @kernel ...
         if line.starts_with("@kernel") {
             let (target, next_i) = parse_target_contract(&lines, i)?;
+            doc.items.push(ProgramItem::TargetContract(target.clone()));
             doc.target_contract = Some(target);
             i = next_i;
             continue;
         }
 
-        // [2] I/O Memory Binding
+        // [2] I/O Memory Binding: @io { ... }
         if line.starts_with("@io") {
             let (io, next_i) = parse_io_binding(&lines, i)?;
+            doc.items.push(ProgramItem::IoBinding(io.clone()));
             doc.io_binding = Some(io);
             i = next_i;
             continue;
         }
 
-        // [3] Mathematical Tensor Morphism
-        if line.starts_with('§') && !line.contains("ControlFlow") {
-            let (math, next_i) = parse_math_morphism(&lines, i)?;
-            doc.math_morphism = Some(math);
+        // [3] Function / Mathematical Tensor Morphism Block: §Name...
+        if line.starts_with('§') && !line.contains("§ControlFlow") {
+            let (func, next_i) = parse_function_block(&lines, i)?;
+            doc.items.push(ProgramItem::Function(func.clone()));
+            if doc.math_morphism.is_none() {
+                doc.math_morphism = Some(MathMorphismBlock {
+                    name: func.name.clone(),
+                    tile_dims: if func.tile_dims.is_empty() { vec![16, 16] } else { func.tile_dims.clone() },
+                    dtype: func.dtype.clone(),
+                    states: func.states.clone(),
+                    input_symbol: func.input_symbol.clone(),
+                    output_symbol: func.output_symbol.clone(),
+                    equation_expr: func.equation_expr.clone(),
+                    steps: func.steps.clone(),
+                });
+            }
+            doc.functions.push(func);
             i = next_i;
             continue;
         }
 
-        // [4] Ciphered Control-Flow
+        // [4] Explicit Control-Flow Block: §ControlFlow
         if line.contains("§ControlFlow") {
             let (control, next_i) = parse_control_flow(&lines, i)?;
+            doc.items.push(ProgramItem::ControlFlow(control.clone()));
             doc.control_flow = Some(control);
             i = next_i;
             continue;
         }
 
-        // [4b] Standalone Watchdog
+        // [4b] Standalone Watchdog: !Δ or !delta
         if line.starts_with("!Δ") || line.starts_with("!delta") {
             let watchdog = parse_watchdog_line(line)?;
+            doc.items.push(ProgramItem::Watchdog(watchdog.clone()));
+            doc.watchdog = Some(watchdog.clone());
             if let Some(ref mut cf) = doc.control_flow {
                 cf.watchdog = Some(watchdog);
             } else {
@@ -73,16 +91,92 @@ pub fn parse_cl_v2(input: &str) -> Result<ClV2Document, String> {
             continue;
         }
 
-        // [5] VLIW Microcode Bundle
+        // [5] VLIW Microcode Bundle: B0000: ...
         if line.starts_with('B') && line.len() >= 5 && line.chars().nth(5) == Some(':') {
             let bundle = parse_vliw_bundle(line)?;
+            doc.items.push(ProgramItem::VliwBundle(bundle.clone()));
             doc.vliw_stream.push(bundle);
+            i += 1;
+            continue;
+        }
+
+        // [6] Free-form Top-Level Statements:
+        // Top-level Loop: ⟳ (cond) { ... }
+        if line.starts_with('⟳') || line.starts_with("@loop") {
+            let (loop_stmt, next_i) = parse_loop_stmt(&lines, i)?;
+            doc.items.push(ProgramItem::Statement(loop_stmt.clone()));
+            doc.top_level_statements.push(loop_stmt);
+            i = next_i;
+            continue;
+        }
+
+        // Top-level Conditional: ? (cond) ⮞ { ... } : { ... }
+        if line.starts_with('?') {
+            let (if_stmt, next_i) = parse_if_stmt(&lines, i)?;
+            doc.items.push(ProgramItem::Statement(if_stmt.clone()));
+            doc.top_level_statements.push(if_stmt);
+            i = next_i;
+            continue;
+        }
+
+        // Top-level Memory transfer: #R1 ← @dmem[0x1000]
+        if line.contains('←') || line.contains("<-") {
+            let delim = if line.contains('←') { "←" } else { "<-" };
+            let parts: Vec<&str> = line.split(delim).collect();
+            if parts.len() == 2 {
+                let stmt = CipherStmt::MemoryTransfer {
+                    dest: parts[0].trim().to_string(),
+                    src: parts[1].trim().to_string(),
+                };
+                doc.items.push(ProgramItem::Statement(stmt.clone()));
+                doc.top_level_statements.push(stmt);
+            }
+            i += 1;
+            continue;
+        }
+
+        // Top-level Assignment: x := expr or #R1 := expr
+        if line.contains(":=") {
+            let parts: Vec<&str> = line.split(":=").collect();
+            if parts.len() == 2 {
+                let stmt = CipherStmt::Assign {
+                    dest: parts[0].trim().to_string(),
+                    expr: parts[1].trim().to_string(),
+                };
+                doc.items.push(ProgramItem::Statement(stmt.clone()));
+                doc.top_level_statements.push(stmt);
+            }
+            i += 1;
+            continue;
+        }
+
+        // Top-level Return: ⮌ expr
+        if line.starts_with('⮌') || line.starts_with("return") {
+            let ret_str = if line.starts_with('⮌') {
+                line.trim_start_matches('⮌').trim()
+            } else {
+                line.trim_start_matches("return").trim()
+            };
+            let stmt = if ret_str.is_empty() {
+                CipherStmt::Exit
+            } else {
+                CipherStmt::Return(Some(ret_str.to_string()))
+            };
+            doc.items.push(ProgramItem::Statement(stmt.clone()));
+            doc.top_level_statements.push(stmt);
             i += 1;
             continue;
         }
 
         // Unrecognized or metadata line, advance
         i += 1;
+    }
+
+    if doc.control_flow.is_none() && !doc.top_level_statements.is_empty() {
+        doc.control_flow = Some(CipherControlFlow {
+            statements: doc.top_level_statements.clone(),
+            watchdog: doc.watchdog.clone(),
+        });
     }
 
     Ok(doc)
@@ -266,17 +360,18 @@ fn parse_mem_address(s: &str) -> Result<(MemoryTier, u64), String> {
 }
 
 // ----------------------------------------------------------------------------
-// [3] Math Morphism Parser
+// [3] Universal Function & Math Morphism Parser
 // ----------------------------------------------------------------------------
-fn parse_math_morphism(lines: &[&str], mut i: usize) -> Result<(MathMorphismBlock, usize), String> {
+fn parse_function_block(lines: &[&str], mut i: usize) -> Result<(FunctionBlock, usize), String> {
     let header = lines[i].trim();
-    // Header format: §Mamba2Block[16x16:NVFP4] {
+    // Header format: §Name[Dims:DType](params) {  or  §Name(params) {  or  §Name {
     let after_section = header.trim_start_matches('§').trim_start();
-    let bracket_open = after_section.find('[').unwrap_or(after_section.len());
-    let name = after_section[..bracket_open].trim().to_string();
+    let name_end = after_section.find(|c| c == '[' || c == '(' || c == '{' || c == ' ' || c == '\t').unwrap_or(after_section.len());
+    let name = after_section[..name_end].trim().to_string();
 
-    let mut tile_dims = vec![16, 16];
+    let mut tile_dims = Vec::new();
     let mut dtype = "FP32".to_string();
+    let mut params = Vec::new();
 
     if let (Some(b_open), Some(b_close)) = (after_section.find('['), after_section.find(']')) {
         let inside = &after_section[b_open + 1..b_close];
@@ -294,11 +389,17 @@ fn parse_math_morphism(lines: &[&str], mut i: usize) -> Result<(MathMorphismBloc
         }
     }
 
+    if let (Some(p_open), Some(p_close)) = (after_section.find('('), after_section.find(')')) {
+        let inside = &after_section[p_open + 1..p_close];
+        params = inside.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    }
+
     let mut states = Vec::new();
-    let mut input_symbol = "X".to_string();
+    let mut input_symbol = if !params.is_empty() { params[0].clone() } else { "X".to_string() };
     let mut output_symbol = None;
     let mut equation_expr = String::new();
     let mut steps = Vec::new();
+    let mut body = Vec::new();
 
     i += 1;
     while i < lines.len() {
@@ -313,8 +414,38 @@ fn parse_math_morphism(lines: &[&str], mut i: usize) -> Result<(MathMorphismBloc
             continue;
         }
 
+        // Loop inside function: ⟳ (cond) { ... }
+        if line.starts_with('⟳') || line.starts_with("@loop") {
+            let (loop_stmt, next_i) = parse_loop_stmt(lines, i)?;
+            body.push(loop_stmt);
+            i = next_i;
+            continue;
+        }
+
+        // Conditional inside function: ? (cond) ⮞ { ... } : { ... }
+        if line.starts_with('?') {
+            let (if_stmt, next_i) = parse_if_stmt(lines, i)?;
+            body.push(if_stmt);
+            i = next_i;
+            continue;
+        }
+
+        // Memory transfer: #R1 ← @dmem[0x1000]
+        if line.contains('←') || line.contains("<-") {
+            let delim = if line.contains('←') { "←" } else { "<-" };
+            let parts: Vec<&str> = line.split(delim).collect();
+            if parts.len() == 2 {
+                body.push(CipherStmt::MemoryTransfer {
+                    dest: parts[0].trim().to_string(),
+                    src: parts[1].trim().to_string(),
+                });
+            }
+            i += 1;
+            continue;
+        }
+
         // State declarations: H: SS[64x256], W: T[16x16:NVFP4]
-        if line.contains(':') && !line.contains(":=") && !line.contains('↦') && !line.contains("->") {
+        if line.contains(':') && !line.contains(":=") && !line.contains('↦') && !line.contains("->") && !line.contains('?') {
             let decls = line.split(',');
             for d in decls {
                 if let Some((s_name, s_tag)) = d.split_once(':') {
@@ -338,7 +469,6 @@ fn parse_math_morphism(lines: &[&str], mut i: usize) -> Result<(MathMorphismBloc
                 input_symbol = parts[0].trim().to_string();
                 let rhs = parts[1].trim();
                 if rhs.ends_with(':') {
-                    // Sequential step block follows: X ↦ Y :
                     output_symbol = Some(rhs.trim_end_matches(':').trim().to_string());
                 } else {
                     equation_expr = rhs.to_string();
@@ -348,32 +478,55 @@ fn parse_math_morphism(lines: &[&str], mut i: usize) -> Result<(MathMorphismBloc
             continue;
         }
 
-        // Sequential step: N := rmsnorm(X)
+        // Assignment: N := rmsnorm(X) or dest := expr
         if line.contains(":=") {
             let parts: Vec<&str> = line.split(":=").collect();
             if parts.len() == 2 {
+                let dest = parts[0].trim().to_string();
+                let expr = parts[1].trim().to_string();
                 steps.push(MathStep {
-                    target_var: parts[0].trim().to_string(),
-                    expr: parts[1].trim().to_string(),
+                    target_var: dest.clone(),
+                    expr: expr.clone(),
                 });
+                body.push(CipherStmt::Assign { dest, expr });
             }
             i += 1;
             continue;
         }
 
+        // Return / Exit: ⮌ expr
+        if line.starts_with('⮌') || line.starts_with("return") {
+            let ret_str = if line.starts_with('⮌') {
+                line.trim_start_matches('⮌').trim()
+            } else {
+                line.trim_start_matches("return").trim()
+            };
+            if ret_str.is_empty() {
+                body.push(CipherStmt::Exit);
+            } else {
+                body.push(CipherStmt::Return(Some(ret_str.to_string())));
+            }
+            i += 1;
+            continue;
+        }
+
+        // Standalone expression or call
+        body.push(CipherStmt::Expr(line.to_string()));
         i += 1;
     }
 
     Ok((
-        MathMorphismBlock {
+        FunctionBlock {
             name,
             tile_dims,
             dtype,
+            params,
             states,
             input_symbol,
             output_symbol,
             equation_expr,
             steps,
+            body,
         },
         i,
     ))
