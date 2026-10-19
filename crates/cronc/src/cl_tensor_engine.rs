@@ -512,6 +512,18 @@ pub fn tensor_softmax_f32(x: &TensorData, out: &mut TensorData) -> Result<(), St
     Ok(())
 }
 
+/// SiLU (Swish) Activation Function: y = x / (1.0 + exp(-x))
+pub fn tensor_silu_f32(x: &TensorData, out: &mut TensorData) -> Result<(), String> {
+    let x_vec = x.to_f32_vec();
+    let mut out_vec = Vec::with_capacity(x_vec.len());
+    for &v in &x_vec {
+        let sig = 1.0 / (1.0 + (-v).exp());
+        out_vec.push(v * sig);
+    }
+    *out = TensorData::from_f32_slice(x.shape.clone(), &out_vec);
+    Ok(())
+}
+
 /// Mamba-2 Structured State Space Duality (SSD) Associative Scan:
 /// Computes continuous recurrence: h_t = a_t * h_{t-1} + b_t * x_t in parallel
 pub fn tensor_mamba2_ssd_scan(

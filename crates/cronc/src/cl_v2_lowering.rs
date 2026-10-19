@@ -2,15 +2,20 @@
 // CRON CL v2.0 BI-DIRECTIONAL LOWERING & FORMAL CO-VERIFICATION ENGINE
 // Module: cronc::cl_v2_lowering (crates/cronc/src/cl_v2_lowering.rs)
 //
-// 1. Synthesizes optimal 10/16-slot VLIW microcode from Math & Cipher Control Flow.
-// 2. Formally co-verifies existing VLIW microcode against Mathematical Contract.
-// 3. Formats canonical 5-Pillar .cl documents.
+// 1. Dynamic Register Allocation & Liveness Tracking
+// 2. Full AST Lowering of Mathematical Morphisms & Beyond-Addition Operators
+// 3. Symbolic Control-Flow Lowering (Loops ⟳, Conditionals ? ⮞ :, Memory Transfers ←)
+// 4. 4-Snake Zero-Bubble VLIW Bundle Scheduling & CRC-8 ATM Sealing
+// 5. Formal Co-Verification & Proof-Carrying Code Auditing
 // ============================================================================
 
+use std::collections::HashMap;
 use crate::cl_v2_ast::*;
+use crate::cl_lang::compute_crc8_atm;
 
+#[inline]
 fn compute_crc8_token(raw9: &str) -> char {
-    let crc = crate::cl_lang::compute_crc8_atm(raw9.as_bytes());
+    let crc = compute_crc8_atm(raw9.as_bytes());
     const ASCII_MAP: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[\\]^_`{|}~";
     ASCII_MAP[(crc as usize) % ASCII_MAP.len()] as char
 }
@@ -23,117 +28,562 @@ pub struct V2FormalVerificationReport {
     pub diagnostics: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+struct IntermediateInstr {
+    prefix: char,
+    opcode: String,
+    dest: u8,
+    mode: char,
+    src1: u8,
+    src2: Option<u8>,
+    imm: u16,
+    is_16char: bool,
+}
+
+impl IntermediateInstr {
+    fn to_slot_string(&self) -> String {
+        if self.is_16char {
+            let s2 = self.src2.unwrap_or(0);
+            let payload = format!(
+                "{}{:02X}{:02X}{}{:02X}{:02X}{:04X}",
+                self.prefix, self.dest, 0, self.mode, self.src1, s2, self.imm
+            );
+            let crc = compute_crc8_atm(payload.as_bytes());
+            const HEX_DIGITS: &[u8; 16] = b"0123456789ABCDEF";
+            let crc_char = HEX_DIGITS[(crc & 0x0F) as usize] as char;
+            format!("{}{}>", payload, crc_char)
+        } else {
+            let s2_char = if let Some(s2) = self.src2 {
+                format!("{:X}", s2 & 0xF)
+            } else {
+                format!("{:X}", (self.imm >> 4) & 0xF)
+            };
+            let imm_nibble = format!("{:X}", self.imm & 0xF);
+            let raw9 = format!(
+                "{}{}{:02X}{}{:X}{}{}",
+                self.prefix, self.opcode, self.dest, self.mode, self.src1 & 0xF, s2_char, imm_nibble
+            );
+            let crc = compute_crc8_token(&raw9);
+            format!("{}{}", raw9, crc)
+        }
+    }
+}
+
 pub struct V2LoweringEngine {
-    current_reg: u8,
+    next_reg: u8,
+    var_map: HashMap<String, u8>,
 }
 
 impl V2LoweringEngine {
     pub fn new() -> Self {
-        Self { current_reg: 1 }
+        Self {
+            next_reg: 1,
+            var_map: HashMap::new(),
+        }
     }
 
     fn alloc_reg(&mut self) -> u8 {
-        let r = self.current_reg;
-        self.current_reg = (self.current_reg % 14) + 1;
+        let r = self.next_reg;
+        self.next_reg = if self.next_reg >= 13 { 1 } else { self.next_reg + 1 };
+        r
+    }
+
+    fn get_or_alloc_var(&mut self, var_name: &str) -> u8 {
+        let clean = var_name.trim().trim_start_matches('#');
+        if let Some(&r) = self.var_map.get(clean) {
+            return r;
+        }
+        // If it starts with R and a number: #R1 -> 1, #R2 -> 2
+        if (clean.starts_with('R') || clean.starts_with('r')) && clean.len() >= 2 {
+            if let Ok(num) = clean[1..].parse::<u8>() {
+                if num > 0 && num <= 15 {
+                    self.var_map.insert(clean.to_string(), num);
+                    return num;
+                }
+            }
+        }
+        let r = self.alloc_reg();
+        self.var_map.insert(clean.to_string(), r);
         r
     }
 
     /// Automatically synthesizes VLIW bundles from Math Morphisms and Control Flow
     pub fn lower_document(&mut self, doc: &ClV2Document) -> Result<Vec<VliwBundle>, String> {
+        self.var_map.clear();
+        self.next_reg = 1;
+
+        let mut instrs: Vec<IntermediateInstr> = Vec::new();
+
+        // 1. Lower I/O Bindings into Register Initializations
+        if let Some(ref io) = doc.io_binding {
+            for item in &io.items {
+                let r = self.get_or_alloc_var(&item.name);
+                let addr_imm = (item.address & 0xFFFF) as u16;
+                // ImmLoad: '==[reg]#[imm]
+                instrs.push(IntermediateInstr {
+                    prefix: '\'',
+                    opcode: "==".to_string(),
+                    dest: r,
+                    mode: '#',
+                    src1: 0,
+                    src2: None,
+                    imm: addr_imm,
+                    is_16char: false,
+                });
+            }
+        }
+
+        // 2. Lower Mathematical Tensor Morphism
+        if let Some(ref math) = doc.math_morphism {
+            self.lower_math_morphism(math, &mut instrs)?;
+        }
+
+        // 3. Lower Ciphered Control-Flow
+        if let Some(ref cf) = doc.control_flow {
+            self.lower_control_flow(cf, &mut instrs)?;
+        }
+
+        // 4. Ensure Terminal Halt
+        let has_halt = instrs.iter().any(|i| i.opcode == "HL");
+        if !has_halt {
+            instrs.push(IntermediateInstr {
+                prefix: '!',
+                opcode: "HL".to_string(),
+                dest: 0,
+                mode: '#',
+                src1: 0,
+                src2: None,
+                imm: 0,
+                is_16char: false,
+            });
+        }
+
+        // 5. Schedule into 4-Slot Zero-Bubble VLIW Bundles
+        self.schedule_into_vliw(instrs)
+    }
+
+    fn lower_math_morphism(&mut self, math: &MathMorphismBlock, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
+        let x_reg = self.get_or_alloc_var(&math.input_symbol);
+
+        // Lower states if present
+        for state in &math.states {
+            let s_reg = self.get_or_alloc_var(&state.name);
+            // Default initial state tag load
+            instrs.push(IntermediateInstr {
+                prefix: '\'',
+                opcode: "==".to_string(),
+                dest: s_reg,
+                mode: '#',
+                src1: 0,
+                src2: None,
+                imm: 0x0100,
+                is_16char: false,
+            });
+        }
+
+        // If sequential steps exist: X ↦ Y : N := rmsnorm(X) ...
+        if !math.steps.is_empty() {
+            for step in &math.steps {
+                let dest_r = self.get_or_alloc_var(&step.target_var);
+                self.lower_math_expr(&step.expr, dest_r, x_reg, instrs)?;
+            }
+        } else if !math.equation_expr.is_empty() {
+            // Direct expression: X ↦ silu(...)
+            let dest_r = self.get_or_alloc_var("Y");
+            self.lower_math_expr(&math.equation_expr, dest_r, x_reg, instrs)?;
+        }
+
+        Ok(())
+    }
+
+    fn lower_math_expr(&mut self, expr: &str, dest_r: u8, x_reg: u8, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
+        let e = expr.trim();
+
+        // 1. RMSNorm
+        if e.contains("rmsnorm") {
+            instrs.push(IntermediateInstr {
+                prefix: '~',
+                opcode: "RM".to_string(),
+                dest: dest_r,
+                mode: 'M',
+                src1: x_reg,
+                src2: None,
+                imm: 0x100,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 2. Mamba-2 SSD
+        if e.contains("mamba2_ssd") || e.contains("ssd") {
+            let h_reg = self.get_or_alloc_var("H");
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "SS".to_string(),
+                dest: dest_r,
+                mode: 'M',
+                src1: x_reg,
+                src2: Some(h_reg),
+                imm: 0x200,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 3. Non-linear activation: SiLU or GeLU
+        if e.starts_with("silu") || e.starts_with(".op.silu") {
+            // Extract inner expression if any
+            let inner_r = self.alloc_reg();
+            if let Some(open) = e.find('(') {
+                if let Some(close) = e.rfind(')') {
+                    let inner = &e[open + 1..close];
+                    self.lower_math_expr(inner, inner_r, x_reg, instrs)?;
+                }
+            } else {
+                instrs.push(IntermediateInstr {
+                    prefix: '_',
+                    opcode: "SI".to_string(),
+                    dest: inner_r,
+                    mode: 'M',
+                    src1: x_reg,
+                    src2: None,
+                    imm: 0,
+                    is_16char: false,
+                });
+            }
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "SI".to_string(),
+                dest: dest_r,
+                mode: 'M',
+                src1: inner_r,
+                src2: None,
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 4. Photonic MZI Coupling: <~>
+        if e.contains("<~>") {
+            let parts: Vec<&str> = e.split("<~>").collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "MZ".to_string(),
+                dest: dest_r,
+                mode: '~',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 5. Wave Periodic Resonance: ~*~
+        if e.contains("~*~") {
+            let parts: Vec<&str> = e.split("~*~").collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "PO".to_string(),
+                dest: dest_r,
+                mode: '$',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 6. Associative Scan: >>=
+        if e.contains(">>=") {
+            let parts: Vec<&str> = e.split(">>=").collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "SS".to_string(),
+                dest: dest_r,
+                mode: '>',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 7. Multiplication / Tensor MatMul: *
+        if e.contains('*') {
+            let parts: Vec<&str> = e.split('*').collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "MD".to_string(),
+                dest: dest_r,
+                mode: '*',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 8. Division: /
+        if e.contains('/') {
+            let parts: Vec<&str> = e.split('/').collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "DV".to_string(),
+                dest: dest_r,
+                mode: '/',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 9. Addition: +
+        if e.contains('+') {
+            let parts: Vec<&str> = e.split('+').collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "AD".to_string(),
+                dest: dest_r,
+                mode: '+',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 10. Universal Primitives: .op.*
+        if e.starts_with(".op.") {
+            let op_name = e.trim_start_matches(".op.").split('(').next().unwrap_or("generic");
+            let (opcode, mode) = match op_name {
+                "mzi_ring_shift" => ("TX", 'M'),
+                "optical_barrier" => ("bb", 'M'),
+                "topk_softmax" => ("SM", 'M'),
+                "sparse_moe_dispatch" => ("XR", 'M'),
+                _ => ("PO", '#'),
+            };
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: opcode.to_string(),
+                dest: dest_r,
+                mode,
+                src1: x_reg,
+                src2: None,
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // Variable lookup or constant
+        let src_r = self.get_or_alloc_var(e);
+        instrs.push(IntermediateInstr {
+            prefix: '_',
+            opcode: "CP".to_string(),
+            dest: dest_r,
+            mode: '=',
+            src1: src_r,
+            src2: None,
+            imm: 0,
+            is_16char: false,
+        });
+
+        Ok(())
+    }
+
+    fn lower_control_flow(&mut self, cf: &CipherControlFlow, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
+        for stmt in &cf.statements {
+            self.lower_cipher_stmt(stmt, instrs)?;
+        }
+        Ok(())
+    }
+
+    fn lower_cipher_stmt(&mut self, stmt: &CipherStmt, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
+        match stmt {
+            CipherStmt::Loop { condition, body } => {
+                let loop_reg = 14u8; // Dedicated R14 loop counter
+                let count: u16 = condition.parse().unwrap_or(16);
+                
+                // Initialize loop counter: '==14#count
+                instrs.push(IntermediateInstr {
+                    prefix: '\'',
+                    opcode: "==".to_string(),
+                    dest: loop_reg,
+                    mode: '#',
+                    src1: 0,
+                    src2: None,
+                    imm: count,
+                    is_16char: false,
+                });
+
+                // Lower inner body
+                for b in body {
+                    self.lower_cipher_stmt(b, instrs)?;
+                }
+
+                // Decrement loop counter: _PO14-141 (R14 = R14 - 1)
+                instrs.push(IntermediateInstr {
+                    prefix: '_',
+                    opcode: "PO".to_string(),
+                    dest: loop_reg,
+                    mode: '-',
+                    src1: loop_reg,
+                    src2: None,
+                    imm: 1,
+                    is_16char: false,
+                });
+
+                // Backward branch if non-zero: _BN14#target
+                instrs.push(IntermediateInstr {
+                    prefix: '_',
+                    opcode: "BN".to_string(),
+                    dest: loop_reg,
+                    mode: '#',
+                    src1: loop_reg,
+                    src2: None,
+                    imm: 0,
+                    is_16char: false,
+                });
+            }
+            CipherStmt::IfElse { condition, then_branch, else_branch } => {
+                let r_cmp = self.alloc_reg();
+                // Parse condition: e.g. #R1 > 0x3C00
+                if condition.contains('>') {
+                    let parts: Vec<&str> = condition.split('>').collect();
+                    let lhs = self.get_or_alloc_var(parts[0]);
+                    let rhs_clean = parts[1].trim();
+                    let rhs_imm = if rhs_clean.starts_with("0x") || rhs_clean.starts_with("0X") {
+                        u16::from_str_radix(&rhs_clean[2..], 16).unwrap_or(0)
+                    } else {
+                        rhs_clean.parse().unwrap_or(0)
+                    };
+                    // Compare instruction: _BG
+                    instrs.push(IntermediateInstr {
+                        prefix: '_',
+                        opcode: "BG".to_string(),
+                        dest: r_cmp,
+                        mode: '>',
+                        src1: lhs,
+                        src2: None,
+                        imm: rhs_imm,
+                        is_16char: false,
+                    });
+                }
+
+                for t in then_branch {
+                    self.lower_cipher_stmt(t, instrs)?;
+                }
+                for e in else_branch {
+                    self.lower_cipher_stmt(e, instrs)?;
+                }
+            }
+            CipherStmt::MemoryTransfer { dest, src } => {
+                if dest.starts_with('#') && src.starts_with('@') {
+                    // Load: #Reg ← @addr
+                    let r = self.get_or_alloc_var(dest);
+                    let addr = parse_address_str(src);
+                    instrs.push(IntermediateInstr {
+                        prefix: '_',
+                        opcode: "LD".to_string(),
+                        dest: r,
+                        mode: '@',
+                        src1: 0,
+                        src2: None,
+                        imm: addr,
+                        is_16char: false,
+                    });
+                } else if dest.starts_with('@') && src.starts_with('#') {
+                    // Store: @addr ← #Reg
+                    let r = self.get_or_alloc_var(src);
+                    let addr = parse_address_str(dest);
+                    instrs.push(IntermediateInstr {
+                        prefix: '_',
+                        opcode: "SR".to_string(),
+                        dest: r,
+                        mode: '#',
+                        src1: r,
+                        src2: None,
+                        imm: addr,
+                        is_16char: false,
+                    });
+                }
+            }
+            CipherStmt::Assign { dest, expr } => {
+                let d_r = self.get_or_alloc_var(dest);
+                let x_dummy = self.alloc_reg();
+                self.lower_math_expr(expr, d_r, x_dummy, instrs)?;
+            }
+            CipherStmt::Exit => {
+                // Break / Exit
+                instrs.push(IntermediateInstr {
+                    prefix: '_',
+                    opcode: "JP".to_string(),
+                    dest: 0,
+                    mode: '#',
+                    src1: 0,
+                    src2: None,
+                    imm: 0,
+                    is_16char: false,
+                });
+            }
+            CipherStmt::Next => {
+                // Continue
+            }
+            CipherStmt::Jump(_) => {}
+        }
+        Ok(())
+    }
+
+    fn schedule_into_vliw(&self, instrs: Vec<IntermediateInstr>) -> Result<Vec<VliwBundle>, String> {
         let mut bundles = Vec::new();
         let mut cycle = 0;
 
-        // Cycle 0: Initialize inputs and load weights if I/O binding exists
-        let mut c0_slots = Vec::new();
-        if let Some(ref io) = doc.io_binding {
-            for (idx, item) in io.items.iter().enumerate().take(2) {
-                let r = (idx + 1) as u8;
-                let addr_hex = format!("{:03X}", item.address & 0xFFF);
-                let raw = format!("'=={:02X}#{}", r, addr_hex);
-                let crc = compute_crc8_token(&raw);
-                c0_slots.push(format!("{}{}", raw, crc));
+        let chunks = instrs.chunks(4);
+        for chunk in chunks {
+            let mut slots = Vec::new();
+            for instr in chunk {
+                slots.push(instr.to_slot_string());
             }
-        }
-        while c0_slots.len() < 2 {
-            let r = c0_slots.len() + 1;
-            let raw = format!("'=={:02X}#100", r);
-            let crc = compute_crc8_token(&raw);
-            c0_slots.push(format!("{}{}", raw, crc));
-        }
-
-        // Add initial Tensor Tile or Multiplication
-        let r_mul = self.alloc_reg();
-        let raw_mul = format!("_MD{:02X}*120", r_mul);
-        let crc_mul = compute_crc8_token(&raw_mul);
-        c0_slots.push(format!("{}{}", raw_mul, crc_mul));
-
-        let r_fma = self.alloc_reg();
-        let raw_fma = format!("_FM{:02X}+320", r_fma);
-        let crc_fma = compute_crc8_token(&raw_fma);
-        c0_slots.push(format!("{}{}", raw_fma, crc_fma));
-
-        bundles.push(self.build_bundle(cycle, c0_slots)?);
-        cycle += 1;
-
-        // Cycle 1: Mathematical steps (RMSNorm, SSD, Photonic Coupling)
-        let mut c1_slots = Vec::new();
-        if let Some(ref _math) = doc.math_morphism {
-            // Norm
-            let r_norm = self.alloc_reg();
-            let raw_norm = format!("~RM{:02X}M100", r_norm);
-            let crc_norm = compute_crc8_token(&raw_norm);
-            c1_slots.push(format!("{}{}", raw_norm, crc_norm));
-
-            // State Space SSD
-            let r_ssd = self.alloc_reg();
-            let raw_ssd = format!("_SS{:02X}M200", r_ssd);
-            let crc_ssd = compute_crc8_token(&raw_ssd);
-            c1_slots.push(format!("{}{}", raw_ssd, crc_ssd));
-
-            // Photonic Coupling <~>
-            let r_coup = self.alloc_reg();
-            let raw_coup = format!("_MZ{:02X}~340", r_coup);
-            let crc_coup = compute_crc8_token(&raw_coup);
-            c1_slots.push(format!("{}{}", raw_coup, crc_coup));
-
-            // Wave resonance ~*~
-            let r_wave = self.alloc_reg();
-            let raw_wave = format!("_PO{:02X}$560", r_wave);
-            let crc_wave = compute_crc8_token(&raw_wave);
-            c1_slots.push(format!("{}{}", raw_wave, crc_wave));
-        } else {
-            // Default compute
-            for _ in 0..4 {
-                let r = self.alloc_reg();
-                let raw = format!("_PO{:02X}+110", r);
-                let crc = compute_crc8_token(&raw);
-                c1_slots.push(format!("{}{}", raw, crc));
+            while slots.len() < 4 {
+                let raw_nop = "_NO00#000";
+                let crc_nop = compute_crc8_token(raw_nop);
+                slots.push(format!("{}{}", raw_nop, crc_nop));
             }
+            bundles.push(self.build_bundle(cycle, slots)?);
+            cycle += 1;
         }
-        bundles.push(self.build_bundle(cycle, c1_slots)?);
-        cycle += 1;
-
-        // Cycle 2: Non-linear activation (SiLU) and Halt
-        let mut c2_slots = Vec::new();
-        let r_silu = self.alloc_reg();
-        let raw_silu = format!("_SI{:02X}M600", r_silu);
-        let crc_silu = compute_crc8_token(&raw_silu);
-        c2_slots.push(format!("{}{}", raw_silu, crc_silu));
-
-        let r_store = self.alloc_reg();
-        let raw_store = format!("_ST{:02X}#040", r_store);
-        let crc_store = compute_crc8_token(&raw_store);
-        c2_slots.push(format!("{}{}", raw_store, crc_store));
-
-        let raw_nop = "_NO00#000".to_string();
-        let crc_nop = compute_crc8_token(&raw_nop);
-        c2_slots.push(format!("{}{}", raw_nop, crc_nop));
-
-        let raw_halt = "!HL00#000".to_string();
-        let crc_halt = compute_crc8_token(&raw_halt);
-        c2_slots.push(format!("{}{}", raw_halt, crc_halt));
-
-        bundles.push(self.build_bundle(cycle, c2_slots)?);
 
         Ok(bundles)
     }
@@ -187,7 +637,7 @@ impl V2LoweringEngine {
             matched += 1;
         }
 
-        // If Math Morphism specifies operations, check microcode coverage
+        // Check Mathematical Operations Coverage
         if let Some(ref math) = doc.math_morphism {
             let all_opcodes: Vec<String> = doc.vliw_stream.iter().flat_map(|b| b.slots.iter().map(|s| s.opcode.clone())).collect();
             
@@ -356,3 +806,142 @@ impl V2LoweringEngine {
         out
     }
 }
+
+fn parse_address_str(s: &str) -> u16 {
+    if let (Some(open), Some(close)) = (s.find('['), s.find(']')) {
+        let inside = &s[open + 1..close];
+        if inside.starts_with("0x") || inside.starts_with("0X") {
+            u16::from_str_radix(&inside[2..], 16).unwrap_or(0)
+        } else {
+            inside.parse().unwrap_or(0)
+        }
+    } else {
+        0
+    }
+}
+
+pub fn parse_dtype_str(s: &str) -> crate::cl_tensor_engine::TensorDtype {
+    let clean = s.trim().to_uppercase();
+    if clean.contains("FP16") {
+        crate::cl_tensor_engine::TensorDtype::FP16
+    } else if clean.contains("BF16") {
+        crate::cl_tensor_engine::TensorDtype::BF16
+    } else if clean.contains("INT8") {
+        crate::cl_tensor_engine::TensorDtype::INT8
+    } else if clean.contains("INT32") {
+        crate::cl_tensor_engine::TensorDtype::INT32
+    } else if clean.contains("NVFP4") || clean.contains("FP4") {
+        crate::cl_tensor_engine::TensorDtype::NVFP4
+    } else if clean.contains("BITNET") || clean.contains("1.58") || clean.contains("TERNARY") {
+        crate::cl_tensor_engine::TensorDtype::BitNet158
+    } else {
+        crate::cl_tensor_engine::TensorDtype::FP32
+    }
+}
+
+/// Host-Buffer Dynamic Tensor Execution Runtime for CL v2.0
+pub struct V2TensorRuntime {
+    pub buffers: HashMap<String, crate::cl_tensor_engine::TensorData>,
+}
+
+impl Default for V2TensorRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl V2TensorRuntime {
+    pub fn new() -> Self {
+        Self {
+            buffers: HashMap::new(),
+        }
+    }
+
+    pub fn init_from_doc(&mut self, doc: &ClV2Document, seed: u64) {
+        if let Some(ref io) = doc.io_binding {
+            for item in &io.items {
+                let dtype = parse_dtype_str(&item.dtype);
+                let shape = if item.shape.is_empty() { vec![16, 16] } else { item.shape.clone() };
+                let tensor = match item.kind {
+                    IoKind::Input | IoKind::Weight => crate::cl_tensor_engine::TensorData::random_uniform(shape, seed),
+                    IoKind::Output | IoKind::State => crate::cl_tensor_engine::TensorData::zeros(shape, dtype),
+                };
+                self.buffers.insert(item.name.clone(), tensor);
+            }
+        }
+
+        if let Some(ref math) = doc.math_morphism {
+            for state in &math.states {
+                let shape = if state.dims.is_empty() { vec![64, 256] } else { state.dims.clone() };
+                let dtype = parse_dtype_str(state.subtype.as_deref().unwrap_or(&state.type_tag));
+                let tensor = crate::cl_tensor_engine::TensorData::zeros(shape, dtype);
+                self.buffers.insert(state.name.clone(), tensor);
+            }
+        }
+    }
+
+    pub fn execute_morphism(&mut self, doc: &ClV2Document) -> Result<(), String> {
+        let math = match doc.math_morphism {
+            Some(ref m) => m,
+            None => return Ok(()),
+        };
+
+        let in_name = &math.input_symbol;
+        let mut current = match self.buffers.get(in_name) {
+            Some(t) => t.clone(),
+            None => {
+                let shape = if math.tile_dims.is_empty() { vec![16, 16] } else { math.tile_dims.clone() };
+                crate::cl_tensor_engine::TensorData::random_uniform(shape, 12345)
+            }
+        };
+
+        if !math.steps.is_empty() {
+            for step in &math.steps {
+                let res = self.eval_expr(&step.expr, &current)?;
+                self.buffers.insert(step.target_var.clone(), res.clone());
+                current = res;
+            }
+        } else if !math.equation_expr.is_empty() {
+            let res = self.eval_expr(&math.equation_expr, &current)?;
+            self.buffers.insert("Y".to_string(), res);
+        }
+
+        Ok(())
+    }
+
+    fn eval_expr(&mut self, expr: &str, input: &crate::cl_tensor_engine::TensorData) -> Result<crate::cl_tensor_engine::TensorData, String> {
+        let e = expr.trim();
+        if e.contains("rmsnorm") {
+            let mut out = crate::cl_tensor_engine::TensorData::zeros(input.shape.clone(), crate::cl_tensor_engine::TensorDtype::FP32);
+            crate::cl_tensor_engine::tensor_rmsnorm_f32(input, None, 1e-5, &mut out)?;
+            return Ok(out);
+        }
+        if e.contains("ssd") || e.contains("mamba2") {
+            let decay = crate::cl_tensor_engine::TensorData::random_uniform(vec![input.num_elements()], 999);
+            let mut out = crate::cl_tensor_engine::TensorData::zeros(input.shape.clone(), crate::cl_tensor_engine::TensorDtype::FP32);
+            crate::cl_tensor_engine::tensor_mamba2_ssd_scan(input, &decay, &mut out)?;
+            return Ok(out);
+        }
+        if e.contains("silu") {
+            let mut out = crate::cl_tensor_engine::TensorData::zeros(input.shape.clone(), crate::cl_tensor_engine::TensorDtype::FP32);
+            crate::cl_tensor_engine::tensor_silu_f32(input, &mut out)?;
+            return Ok(out);
+        }
+        if e.contains("fwht") || e.contains("hadamard") {
+            let mut out = input.clone();
+            crate::cl_tensor_engine::tensor_quarot_fwht_f32(&mut out)?;
+            return Ok(out);
+        }
+        if e.contains("softmax") {
+            let mut out = crate::cl_tensor_engine::TensorData::zeros(input.shape.clone(), crate::cl_tensor_engine::TensorDtype::FP32);
+            crate::cl_tensor_engine::tensor_softmax_f32(input, &mut out)?;
+            return Ok(out);
+        }
+        Ok(input.clone())
+    }
+
+    pub fn get_buffer(&self, name: &str) -> Option<&crate::cl_tensor_engine::TensorData> {
+        self.buffers.get(name)
+    }
+}
+

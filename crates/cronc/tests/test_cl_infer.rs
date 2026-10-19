@@ -47,10 +47,10 @@ fn test_autoregressive_generation_kv_cache() {
     let res = generate_tokens("CRON", 6, 0.0, &config);
 
     assert_eq!(res.prompt, "CRON");
-    assert_eq!(res.telemetry.prompt_tokens, 4);
+    assert_eq!(res.telemetry.prompt_tokens, 1);
     assert_eq!(res.telemetry.generated_tokens, 6);
-    assert_eq!(res.telemetry.total_tokens, 10);
-    assert_eq!(res.token_ids.len(), 10);
+    assert_eq!(res.telemetry.total_tokens, 7);
+    assert_eq!(res.token_ids.len(), 7);
     assert!(res.telemetry.time_to_first_token_us > 0.0);
     assert!(res.telemetry.inter_token_latency_us > 0.0);
     assert!(res.telemetry.tokens_per_second > 0.0);

@@ -203,7 +203,7 @@ pub use cl_high_heal::{auto_apply_high_cl_heal, verify_and_heal_high_cl, FormalD
 pub use cl_tensor_engine::*;
 pub use cl_v2_ast::*;
 pub use cl_v2_parser::parse_cl_v2;
-pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport};
+pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport, V2TensorRuntime};
 
 pub use cl_lora::{
     pack_trits_5, parse_jsonl_training_pairs, train_cl_lora_from_pairs, unpack_trits_5,
