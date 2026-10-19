@@ -1,39 +1,50 @@
 // ============================================================================
-// CRON & CL HIGH-LEVEL FRONTIER MODEL: SORA-Style Video Diffusion DiT Block
-// 150 Verticals - Section 11 (Video Diffusion) & Section 27 (Diffusion LLM)
-// Specification: Zero Python, Zero CUDA, Native 4-Snake VLIW Microcode
+// CRON CL HIGH-LEVEL SPECIFICATION: SORA-Style Video Diffusion DiT Block
+// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
 // ============================================================================
 
-module sora_video_dit_flow;
+// [1] SILICON TARGET CONTRACT
+@kernel sora_video_dit_flow
+.target silicon.video_diffusion
+.ipc_target 4.0
+.cores 256
+@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-import libcl.tensor;
-import libcl.diffusion;
+// [2] I/O MEMORY BINDING
+@io {
+    in:   Z[16×16:NVFP4]           @sram[0x0000]
+    time: Timestep[16×16:FP32]     @sram[0x0200]
+    out:  Znext[16×16:NVFP4]       @sram[0x0400]
+    dit:  DiTWeights[16×16:NVFP4]  @dram[0x8000]
+}
 
-.stage "SoraVideoDiffusionStage", solver = "flow_matching_ot", frames = 16, height = 720, width = 1280, memory = "sram";
+// [3] MATHEMATICAL TENSOR MORPHISM
+§SoraVideoDiTBlock[16×16:NVFP4] {
+    KV: T[32×32:FP16], W: T[16×16:NVFP4]
 
-arch SoraVideoDiTBlock {
-    state spatio_temporal_kv: RegTile[32, 32, FP16];
-    state velocity_weights: RegTile[16, 16, NVFP4];
-    state adaln_scale: Tensor[FP32, 16];
+    Z ↦ Znext :
+        Mod := rmsnorm(Z <|> Timestep)
+        Attn := .op.flash_attention(Mod, KV)
+        Vel := .op.nvfp4_gemm(Attn, W)
+        Step := .op.ode_dormand_prince(Vel, dt=0.05)
+        Znext := Z + Step
+}
 
-    /// Spatio-Temporal Video DiT Block with Continuous Flow Matching Step
-    fn forward(latent_video: Tensor[NVFP4, 16, 16], timestep_embed: Tensor[FP32, 16], text_context: Tensor[FP32, 16]) -> Tensor[NVFP4, 16, 16] {
-        // 1. Adaptive LayerNorm Modulation (adaLN)
-        let modulated_latent = latent_video <|> timestep_embed;
-        let normed = .op.rmsnorm(modulated_latent);
-
-        // 2. 3D Spatio-Temporal Attention across space-time tubelets
-        let attn_out = .op.flash_attention(normed, spatio_temporal_kv);
-
-        // 3. Multimodal Text Cross-Attention Guidance via Photonic MZI Phase Coupling
-        let guided_features = attn_out <~> text_context;
-
-        // 4. Flow Matching Velocity Field ODE Integration
-        let velocity_vector = .op.nvfp4_gemm(guided_features, velocity_weights);
-        let integrated_step = .op.ode_dormand_prince(velocity_vector, dt = 0.05);
-
-        // 5. Residual Video Trajectory Update
-        let next_latent = latent_video + integrated_step;
-        return next_latent;
+// [4] CIPHERED CONTROL-FLOW & SAFETY SLA
+§ControlFlow {
+    ⟳ (50) {
+        #R1 ← @sram[0x0400]
+        ? (#R1 > 0x3000) ⮞ {
+            #R2 ← #R1 * 0.95
+            @sram[0x0400] ← #R2
+        } : {
+            ⮌
+        }
     }
 }
+!Δ { |Znext| < 1e4, trajectory_variance < 0.05 }
+
+// [5] 10/16-CHAR VLIW MACHINE CIPHER
+B0000: '==01#0A0K '==02#080V _MD03*120F _FM04+320A
+B0001: _SM05M120. ~RM06M500# _TG07$620k _FX08$700,
+B0002: _AD09+180Z _ST0A#040. _NO00#000L !HL00#000(

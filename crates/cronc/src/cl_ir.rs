@@ -232,17 +232,18 @@ impl MicroOp {
             "SU" | "SB" if slot.mode == '-' || slot.mode == 'S' || slot.mode == 'M' => {
                 MicroOp::Alu { op: AluOp::Sub, dest: d, src: s, mode: slot.mode, imm: imm_val }
             }
-            "ML" => MicroOp::Alu { op: AluOp::Mul, dest: d, src: s, mode: slot.mode, imm: imm_val },
+            "ML" | "MD" => MicroOp::Alu { op: AluOp::Mul, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "DV" => MicroOp::Alu { op: AluOp::Div, dest: d, src: s, mode: slot.mode, imm: imm_val },
+            "FM" => MicroOp::Alu { op: AluOp::Add, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "EX" => MicroOp::Alu { op: AluOp::Exp, dest: d, src: s, mode: slot.mode, imm: imm_val },
-            "SQ" => MicroOp::Alu { op: AluOp::Sqrt, dest: d, src: s, mode: slot.mode, imm: imm_val },
+            "SQ" | "RC" => MicroOp::Alu { op: AluOp::Sqrt, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "FX" => MicroOp::Alu { op: AluOp::FixedPoint, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "CP" => MicroOp::Alu { op: AluOp::Copy, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "XO" => MicroOp::Alu { op: AluOp::Xor, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "MA" => MicroOp::Alu { op: AluOp::Bitmask, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "CO" => MicroOp::Alu { op: AluOp::Compare, dest: d, src: s, mode: slot.mode, imm: imm_val },
-            "MD" => MicroOp::Alu { op: AluOp::SubbyteTernaryDot, dest: d, src: s, mode: slot.mode, imm: imm_val },
-            "TT" => MicroOp::Alu { op: AluOp::TileTranspose, dest: d, src: s, mode: slot.mode, imm: imm_val },
+            "DT" | "TD" => MicroOp::Alu { op: AluOp::SubbyteTernaryDot, dest: d, src: s, mode: slot.mode, imm: imm_val },
+            "TT" | "TG" => MicroOp::Alu { op: AluOp::TileTranspose, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "CD" => MicroOp::Alu { op: AluOp::CordicRotate, dest: d, src: s, mode: slot.mode, imm: imm_val },
             "RN" | "GF" => MicroOp::Alu { op: AluOp::PrngStep, dest: d, src: s, mode: slot.mode, imm: imm_val },
 
@@ -307,14 +308,14 @@ impl MicroOp {
     }
 
     pub fn to_slot_string(&self) -> String {
-        match self {
-            MicroOp::Nop => "_NO00$000>".to_string(),
-            MicroOp::ImmediateLoad { dest, val } => format!("'=={:02X}#{:03X}>", dest, val & 0xFFF),
+        let (raw9, is_10char) = match self {
+            MicroOp::Nop => ("_NO00$000".to_string(), true),
+            MicroOp::ImmediateLoad { dest, val } => (format!("'=={:02X}#{:03X}", dest, val & 0xFFF), true),
             MicroOp::Alu { op, dest, src, mode, imm } => {
                 let op_str = match op {
                     AluOp::Add => "AD",
                     AluOp::Sub => "SU",
-                    AluOp::Mul => "ML",
+                    AluOp::Mul => "MD",
                     AluOp::Div => "DV",
                     AluOp::Mod => "PO",
                     AluOp::And => "PO",
@@ -330,11 +331,11 @@ impl MicroOp {
                     AluOp::Compare => "CO",
                     AluOp::Copy => "CP",
                     AluOp::SubbyteTernaryDot => "MD",
-                    AluOp::TileTranspose => "TT",
+                    AluOp::TileTranspose => "TG",
                     AluOp::CordicRotate => "CD",
                     AluOp::PrngStep => "RN",
                 };
-                format!("_{}{:02X}{}{:1X}0{:1X}>", op_str, dest, mode, src, imm & 0xF)
+                (format!("_{}{:02X}{}{:1X}0{:1X}", op_str, dest, mode, src, imm & 0xF), true)
             }
             MicroOp::Branch { cond, reg, target_bundle } => {
                 let op_str = match cond {
@@ -346,7 +347,7 @@ impl MicroOp {
                     BranchCond::Call => "JS",
                     BranchCond::Return => "RT",
                 };
-                format!("!{}{:02X}#{:04X}", op_str, reg, target_bundle)
+                (format!("!{}{:02X}#{:04X}", op_str, reg, target_bundle), false)
             }
             MicroOp::Memory { op, dest, src, offset, mode } => {
                 let op_str = match op {
@@ -356,7 +357,7 @@ impl MicroOp {
                     MemOp::StoreByte => "BY",
                     MemOp::BankLoad | MemOp::BankStore => "LD",
                 };
-                format!("_{}{:02X}{}{:1X}0{:1X}>", op_str, dest, mode, src, offset & 0xF)
+                (format!("_{}{:02X}{}{:1X}0{:1X}", op_str, dest, mode, src, offset & 0xF), true)
             }
             MicroOp::Neuromorphic { op, dest, src } => {
                 let op_str = match op {
@@ -378,30 +379,39 @@ impl MicroOp {
                     NeuroOp::Homeostasis => "HP",
                     NeuroOp::LayerTransition => "LY",
                 };
-                format!("_{}{:02X}${:1X}00>", op_str, dest, src)
+                (format!("_{}{:02X}${:1X}00", op_str, dest, src), true)
             }
             MicroOp::Sync { is_barrier, is_halt, is_yield } => {
                 if *is_halt {
-                    "!HL00#0000".to_string()
+                    ("!HL00#0000".to_string(), false)
                 } else if *is_barrier {
-                    "_bb00#0000".to_string()
+                    ("_bb00#0000".to_string(), false)
                 } else if *is_yield {
-                    "_YD00#0000".to_string()
+                    ("_YD00#0000".to_string(), false)
                 } else {
-                    "_NO00$000>".to_string()
+                    ("_NO00$000".to_string(), true)
                 }
             }
             MicroOp::Print { reg, imm_char } => {
                 if let Some(c) = imm_char {
-                    format!("_PR00#{:02X}0>", *c as u8)
+                    (format!("_PR00#{:02X}0", *c as u8), true)
                 } else {
-                    format!("_PR00${:1X}00>", reg)
+                    (format!("_PR00${:1X}00", reg), true)
                 }
             }
             MicroOp::SphereGeodesic { head, alu_op, reg, val, .. } => {
-                format!("`{:1X}0000{}{:1X}{:1X}>", head, alu_op, reg, val)
+                (format!("`{:1X}0000{}{:1X}{:1X}", head, alu_op, reg, val), true)
             }
-            MicroOp::Raw { raw } => raw.clone(),
+            MicroOp::Raw { raw } => return raw.clone(),
+        };
+
+        if is_10char {
+            let crc = crate::cl_lang::compute_crc8_atm(raw9.as_bytes());
+            const ASCII_MAP: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[\\]^_`{|}~";
+            let token = ASCII_MAP[(crc as usize) % ASCII_MAP.len()] as char;
+            format!("{}{}", raw9, token)
+        } else {
+            raw9
         }
     }
 }
