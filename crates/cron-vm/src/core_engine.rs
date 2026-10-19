@@ -344,6 +344,13 @@ impl CoreEngine {
             0
         };
 
+        // Parse second source register (index 7)
+        let src2 = if bytes.len() >= 8 {
+            (bytes[7] as char).to_digit(16).unwrap_or(0) as usize
+        } else {
+            0
+        };
+
         // Parse immediate parameter (index 8)
         let imm = if bytes.len() >= 9 {
             (bytes[8] as char).to_digit(16).unwrap_or(0) as usize
@@ -351,7 +358,7 @@ impl CoreEngine {
             0
         };
 
-        (op, dest_bank, dest_reg, src, 0, imm, mode)
+        (op, dest_bank, dest_reg, src, src2, imm, mode)
     }
 }
 
@@ -611,6 +618,8 @@ impl CoreEngine {
                         self.read_reg_256(src2)
                     };
                     (lhs, rhs)
+                } else if src2 > 0 && src > 0 {
+                    (self.registers[src % 16], self.registers[src2 % 16])
                 } else {
                     (self.registers[d], self.registers[s])
                 };
@@ -725,6 +734,8 @@ impl CoreEngine {
                         self.read_reg_256(src2)
                     };
                     (lhs, rhs)
+                } else if src2 > 0 && src > 0 {
+                    (self.registers[src % 16], self.registers[src2 % 16])
                 } else {
                     let s = if src > 0 { src } else { 0 };
                     (self.registers[d], self.registers[s])
@@ -847,6 +858,8 @@ impl CoreEngine {
                 let d = if dest > 0 { dest } else { 0 };
                 let (val_a, val_b) = if slot.len() == 16 {
                     (self.read_reg_256(src), self.read_reg_256(src2))
+                } else if src2 > 0 && src > 0 {
+                    (self.registers[src % 16], self.registers[src2 % 16])
                 } else {
                     (self.registers[d], self.registers[src])
                 };
@@ -865,6 +878,8 @@ impl CoreEngine {
                 let d = if dest > 0 { dest } else { 0 };
                 let (val_a, val_b) = if slot.len() == 16 {
                     (self.read_reg_256(src), self.read_reg_256(src2))
+                } else if src2 > 0 && src > 0 {
+                    (self.registers[src % 16], self.registers[src2 % 16])
                 } else {
                     (self.registers[d], self.registers[src])
                 };
@@ -1008,8 +1023,25 @@ impl CoreEngine {
                     }
                 }
             }
+            "DV" => {
+                // High-precision Integer / Fixed-point Division: Rd = Rs1 / Rs2
+                let d = if dest > 0 { dest } else { 0 };
+                let (lhs, rhs) = if slot.len() == 16 {
+                    (self.read_reg_256(src), self.read_reg_256(src2))
+                } else if src2 > 0 && src > 0 {
+                    (self.registers[src % 16], self.registers[src2 % 16])
+                } else {
+                    (self.registers[d], self.registers[src])
+                };
+                if rhs != 0 {
+                    self.registers[d] = lhs / rhs;
+                } else {
+                    self.trigger_trap(0x0001);
+                    self.registers[d] = 0;
+                }
+            }
             "RC" => {
-                // Resilient Compute Fallback / CSR Read / Trap Return
+                // Resilient Compute Fallback / CSR Read / Fast Reciprocal
                 if imm == 0 && mode == '!' {
                     // Shadow checkpoint bank SAVE: _RC00#000.!>
                     self.shadow_bank.push(self.registers);
@@ -1029,6 +1061,13 @@ impl CoreEngine {
                         3 => self.csr_vec_burst_cnt,
                         _ => 0,
                     };
+                } else {
+                    // Fast Reciprocal Square Root (1/sqrt(x)) for RMSNorm
+                    let d = if dest > 0 { dest } else { 0 };
+                    let s = if src > 0 { src } else { d };
+                    let val = f32::from_bits(self.registers[s]);
+                    let res = if val > 0.0 { 1.0f32 / val.sqrt() } else { 0.0f32 };
+                    self.registers[d] = res.to_bits();
                 }
             }
             "RT" => {
@@ -1039,6 +1078,9 @@ impl CoreEngine {
                     self.in_trap = false;
                     self.mcause = 0;
                     self.branch_target = Some(self.mepc + 1);
+                } else {
+                    // Empty RAS return from main -> Halt core gracefully
+                    self.is_halted = true;
                 }
             }
             "RN" => {

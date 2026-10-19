@@ -1,39 +1,40 @@
 // ============================================================================
-// CRON & CL STANDARD LIBRARY: libcl/causal_graph.cl
+// CRON CL v2.0 STANDARD KERNEL: libcl/causal_graph.cl
 // Subsystem 5: Structural Causal Models, Do-Calculus & Graph Neural Networks
-// High-Level Declarative Architecture with 4-Snake VLIW Lowering
+// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
 // ============================================================================
 
-module cl_causal_graph;
+@kernel causal_graph_engine
+.target silicon.causal_graph
+.ipc_target 4.0
+.cores 256
+@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-import cl.silicon.primitives as silicon;
+@io {
+    in:   Nodes[16×16:FP32]  @sram[0x0000]
+    mask: DoMask[16×16:FP32] @sram[0x0200]
+    out:  Effect[16×16:FP32] @sram[0x0400]
+}
 
-.stage "CausalInferenceStage", max_nodes = 64, memory = "sram";
+§CausalDoBlock[16×16:FP32] {
+    Adj: T[16×16:FP32], W: T[16×16:FP32]
 
-arch CausalGraphEngine {
-    state adjacency_matrix: RegTile[16, 16, Bool];
-    state causal_weights: RegTile[16, 16, FP16];
-    state intervention_mask: Tensor[Bool, 16];
+    Nodes ↦ Effect :
+        Intervened := (Nodes * DoMask) + W
+        Mess := Intervened <~> Adj
+        Norm := rmsnorm(Mess)
+        Effect := silu(Norm)
+}
 
-    /// Pearl's Do-Calculus Structural Intervention: P(Y | do(X = x))
-    fn pearl_do_intervention(node_features: Tensor[FP32, 16], do_mask: Tensor[Bool, 16], forced_value: Tensor[FP32, 16]) -> Tensor[FP32, 16] {
-        let masked_input = node_features * do_mask;
-        let intervened = masked_input + forced_value;
-        let causal_effect = .op.rmsnorm(intervened);
-        return causal_effect;
-    }
-
-    /// Graph Neural Network (GNN) Message Passing & Aggregation
-    fn gnn_message_pass(node_embeddings: Tensor[BF16, 16], neighbor_matrix: Tensor[BF16, 16]) -> Tensor[BF16, 16] {
-        let aggregated_messages = node_embeddings <~> neighbor_matrix;
-        let updated_nodes = .op.silu(aggregated_messages);
-        return updated_nodes;
-    }
-
-    /// Radix-Tree Zero-Copy Causal Branching & Counterfactual Sampling
-    fn counterfactual_branch(factual_state: Tensor[FP32, 16], counterfactual_delta: Tensor[FP32, 16]) -> Tensor[FP32, 16] {
-        let grafted_tree = factual_state /@ counterfactual_delta;
-        let evaluated = .op.rmsnorm(grafted_tree);
-        return evaluated;
+§ControlFlow {
+    ⟳ (128) {
+        #R1 ← @sram[0x0000]
+        ? (#R1 > 0x1000) ⮞ {
+            #R2 := #R1 * 0.95
+            @sram[0x0400] ← #R2
+        } : {
+            @sram[0x0400] ← #R1
+        }
     }
 }
+!Δ { |Effect| < 1e4, latency < 12ns }
