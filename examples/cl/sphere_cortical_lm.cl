@@ -1,13 +1,5 @@
-; ============================================================================
-; CRON 4D LIVING CORTICAL LANGUAGE MIND SILICON MICROCODE (.cl)
-; Target: 256-Core 4D-Torus Neuromorphic Hardware (Zero-FLOP Lie-STDP)
-; Features: 6-Layer Architecture, Theta-Gamma PAC, Backprop-Free Plasticity
-; ============================================================================
-@kernel cortical_language_mind_kernel
-.target silicon.neuromorphic_core
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; Cycle 0001: Reset Arena & Arm Neuromorphic Watchdog
 B0001: _RS00$000> _SH00$000> _HP00$000> _NO00$000>
 
 ; Cycle 2: Col 0 Layer IV Thalamic Sensory & Lie-STDP

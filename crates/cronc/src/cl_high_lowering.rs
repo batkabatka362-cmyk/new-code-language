@@ -82,6 +82,9 @@ impl HighLoweringEngine {
 
     /// Lower a high-level source string directly to textual CRON Machine Code (.cl).
     pub fn compile_high_source_to_cl(&self, source: &str) -> Result<String, String> {
+        if source.contains('§') || source.contains("@kernel") || source.contains("@⌖") || source.contains('↦') {
+            return crate::compile_unified_cl_to_vliw(source);
+        }
         let module = parse_high_cl(source)?;
         self.lower_module_to_cl(&module)
     }

@@ -268,6 +268,180 @@ z := (x * y) + 5
     execute_cl_on_core(&canonical, &mut core).expect("Must execute on JIT core");
     assert!(core.is_halted);
 }
+#[test]
+fn test_all_sovereign_v2_libcl_kernels_lower_and_verify() {
+    let libcl_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../libcl");
+    let mut checked = 0;
 
+    for entry in std::fs::read_dir(&libcl_dir).expect("libcl dir must exist") {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("cl") {
+            continue;
+        }
+        let src = std::fs::read_to_string(&path).unwrap();
+        // Only sovereign v2 documents carry a math morphism block
+        if !src.contains('§') {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+
+        let mut doc = parse_cl_v2(&src).unwrap_or_else(|e| panic!("{} must parse: {:?}", name, e));
+        let mut engine = V2LoweringEngine::new();
+        let bundles = engine.lower_document(&doc).unwrap_or_else(|e| panic!("{} must lower: {:?}", name, e));
+        assert!(!bundles.is_empty(), "{} must synthesize bundles", name);
+        doc.vliw_stream = bundles;
+        let report = engine.co_verify(&doc);
+        assert!(report.passed, "{} co-verification failed: {:?}", name, report.diagnostics);
+
+        let canonical = engine.emit_canonical(&doc);
+        let mut core = ClJitCore::new();
+        execute_cl_on_core(&canonical, &mut core).unwrap_or_else(|e| panic!("{} must execute: {:?}", name, e));
+        assert!(core.is_halted, "{} must halt", name);
+        checked += 1;
+    }
+
+    println!("Successfully verified and co-simulated {} sovereign v2 kernels in libcl!", checked);
+    assert!(checked >= 24, "Expected at least 24 sovereign v2 kernels, found {}", checked);
+}
+
+#[test]
+fn test_lower_nested_hardware_loops_execution() {
+    let src = r#"
+@kernel test_nested_loops
+.target silicon.neural_core
+.ipc_target 4.0
+.cores 256
+
+@io {
+    in: A[16×16:FP32] @sram[0x0000]
+    out: B[16×16:FP32] @sram[0x0200]
+}
+
+§ControlFlow {
+    #R1 ← @sram[0x0000]
+    ⟳ (4) {
+        ⟳ (8) {
+            #R1 := #R1 + #R1
+        }
+    }
+    @sram[0x0200] ← #R1
+}
+
+!Δ { |B| < 1e6 }
+"#;
+
+    let mut doc = parse_cl_v2(src).expect("Nested loops must parse");
+    let mut engine = V2LoweringEngine::new();
+    let bundles = engine.lower_document(&doc).expect("Nested loops must lower");
+    assert!(!bundles.is_empty());
+    doc.vliw_stream = bundles;
+
+    let canonical = engine.emit_canonical(&doc);
+    let mut core = ClJitCore::new();
+    execute_cl_on_core(&canonical, &mut core).expect("Nested loop canonical code must execute");
+    assert!(core.is_halted, "Core must halt after nested loops complete");
+}
+
+#[test]
+fn test_pure_non_verbal_mathematical_morphism_compilation() {
+    let src = r#"
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+@io {
+    Q[16×16:FP32] @0x0000
+    K[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
+}
+
+§[16×16:FP32] {
+    α: T[16×16:FP32]
+
+    Q ↦ Y :
+        Z := Q ⊗ K
+        S := Z * α
+        Y := σ(∥S∥)
+}
+
+⟳ (16) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
+}
+
+!Δ { ∥Y∥ < 1e5 }
+"#;
+
+    let mut doc = parse_cl_v2(src).expect("Pure non-verbal code must parse");
+    let mut engine = V2LoweringEngine::new();
+    let bundles = engine.lower_document(&doc).expect("Pure non-verbal code must lower to VLIW");
+    assert!(!bundles.is_empty());
+    doc.vliw_stream = bundles;
+
+    let report = engine.co_verify(&doc);
+    assert!(report.passed, "Co-verification must pass: {:?}", report.diagnostics);
+
+    let canonical = engine.emit_canonical(&doc);
+    let mut core = ClJitCore::new();
+    execute_cl_on_core(&canonical, &mut core).expect("Pure non-verbal code must execute on JIT core");
+    assert!(core.is_halted, "Core must halt after executing pure non-verbal code");
+}
+
+#[test]
+fn test_compile_time_tensor_shape_mismatch_detection() {
+    let src = r#"
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+@io {
+    A[16×32:FP32] @0x0000
+    B[16×64:FP32] @0x0200
+}
+
+§[16×64:FP32] {
+    A ↦ C :
+        C := A ⊗ B
+}
+"#;
+
+    let doc = parse_cl_v2(src).expect("Document should parse");
+    let mut engine = V2LoweringEngine::new();
+    let res = engine.lower_document(&doc);
+    assert!(res.is_err(), "Lowering must fail on contraction dimension mismatch");
+    let err = res.err().unwrap();
+    assert!(
+        err.contains("Compile-time Dimension Mismatch in Tensor Contraction (⊗)"),
+        "Error message must specify tensor contraction dimension mismatch, got: {}",
+        err
+    );
+}
+
+#[test]
+fn test_hnsw_and_muon_kernels_synthesis_and_execution() {
+    let libcl_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../libcl");
+    let hnsw_src = std::fs::read_to_string(libcl_dir.join("hnsw_graph_nav.cl"))
+        .expect("Must read libcl/hnsw_graph_nav.cl");
+    let mut hnsw_doc = parse_cl_v2(&hnsw_src).expect("HNSW kernel should parse cleanly");
+    let mut engine = V2LoweringEngine::new();
+    let hnsw_bundles = engine.lower_document(&hnsw_doc).expect("HNSW lowering must succeed");
+    hnsw_doc.vliw_stream = hnsw_bundles;
+    let hnsw_report = engine.co_verify(&hnsw_doc);
+    assert!(hnsw_report.passed, "HNSW co-verify passed: {:?}", hnsw_report.diagnostics);
+    let hnsw_canon = engine.emit_canonical(&hnsw_doc);
+    let mut core = ClJitCore::new();
+    execute_cl_on_core(&hnsw_canon, &mut core).expect("HNSW microcode must execute cleanly");
+    assert!(core.is_halted);
+
+    let muon_src = std::fs::read_to_string(libcl_dir.join("muon_polar_opt.cl"))
+        .expect("Must read libcl/muon_polar_opt.cl");
+    let mut muon_doc = parse_cl_v2(&muon_src).expect("Muon kernel should parse cleanly");
+    let muon_bundles = engine.lower_document(&muon_doc).expect("Muon lowering must succeed");
+    muon_doc.vliw_stream = muon_bundles;
+    let muon_report = engine.co_verify(&muon_doc);
+    assert!(muon_report.passed, "Muon co-verify passed: {:?}", muon_report.diagnostics);
+    let muon_canon = engine.emit_canonical(&muon_doc);
+    let mut core2 = ClJitCore::new();
+    execute_cl_on_core(&muon_canon, &mut core2).expect("Muon microcode must execute cleanly");
+    assert!(core2.is_halted);
+}
 
 

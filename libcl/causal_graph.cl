@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/causal_graph.cl
-// Subsystem 5: Structural Causal Models, Do-Calculus & Graph Neural Networks
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel causal_graph_engine
-.target silicon.causal_graph
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:   Nodes[16×16:FP32]  @sram[0x0000]

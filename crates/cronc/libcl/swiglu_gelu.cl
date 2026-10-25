@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/swiglu_gelu.cl
-@kernel fused_swiglu_gelu
-.target silicon.ai_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#100p '==02#080K _SI03M100l _GE04M200\
 B0001: _ML05M304h _AD06M500} _CP07M600$ _ST08M700;

@@ -1157,6 +1157,89 @@ fn test_ffi_voice_interact() {
     let _ = std::fs::remove_file(out_file);
 }
 
+#[test]
+fn test_ffi_cl_v2_and_unified_compilation_and_vm() {
+    use cron_rt::{cron_vm_create, cron_vm_destroy, cron_vm_run_cl, cron_cl_compile_unified, cron_cl_jit_execute, cron_string_free, CronTelemetry};
+
+    let v2_source = r#"
+@kernel test_ffi_morphism
+.target silicon.ffi
+.ipc_target 4.0
+.cores 256
+
+§VectorBlock[16x16:FP32] {
+    X ↦ Y :
+        Norm := rmsnorm(X)
+        Y := silu(Norm)
+}
+
+§ControlFlow {
+    ⟳ (64) {
+        #R1 ← @sram[0x0000]
+        #R2 := #R1 + #R1
+        @sram[0x0400] ← #R2
+    }
+}
+!Δ { |Y| < 1e4, latency < 10ns }
+"#;
+
+    let c_source = CString::new(v2_source).unwrap();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    // 1. Test unified C-ABI compilation (Sovereign CL v2 -> 4-Slot VLIW)
+    let vliw_ptr = unsafe {
+        cron_cl_compile_unified(c_source.as_ptr(), &mut err_ptr)
+    };
+    assert!(!vliw_ptr.is_null());
+    assert!(err_ptr.is_null());
+    let vliw_str = unsafe { CStr::from_ptr(vliw_ptr).to_str().unwrap() };
+    assert!(vliw_str.contains("B0000:"));
+    unsafe { cron_string_free(vliw_ptr); }
+
+    // 2. Test VM Execution of Sovereign CL v2 via C-ABI
+    let vm = cron_vm_create();
+    assert!(!vm.is_null());
+    let mut telem = CronTelemetry::default();
+    let ok_vm = unsafe {
+        cron_vm_run_cl(vm, c_source.as_ptr(), &mut telem)
+    };
+    assert!(ok_vm);
+    assert!(telem.success);
+    assert!(telem.total_cycles > 0);
+    unsafe { cron_vm_destroy(vm); }
+
+    // 3. Test Direct JIT Execution of Sovereign CL v2 via C-ABI
+    let mut regs = [0u32; 16];
+    let ok_jit = unsafe {
+        cron_cl_jit_execute(c_source.as_ptr(), regs.as_mut_ptr(), &mut err_ptr)
+    };
+    assert!(ok_jit);
+    assert!(err_ptr.is_null());
+}
+
+#[test]
+fn test_ffi_cl_decompile_v2() {
+    use cron_rt::{cron_cl_decompile_v2, cron_string_free};
+
+    let microcode = "B0000: '==01#010R _OP04$10E> _PO06$432> _MD09M800J\nB0001: !HL00#000( _NO00#000> _NO00#000> _NO00#000>\n";
+    let c_code = CString::new(microcode).unwrap();
+    let c_kernel = CString::new("optical_kernel").unwrap();
+    let mut err_ptr: *mut c_char = std::ptr::null_mut();
+
+    let decompiled_ptr = unsafe {
+        cron_cl_decompile_v2(c_code.as_ptr(), c_kernel.as_ptr(), &mut err_ptr)
+    };
+    assert!(!decompiled_ptr.is_null());
+    assert!(err_ptr.is_null());
+
+    let decompiled_str = unsafe { CStr::from_ptr(decompiled_ptr).to_str().unwrap() };
+    assert!(decompiled_str.contains("@kernel optical_kernel"));
+    assert!(decompiled_str.contains("§OpticalKernelBlock"));
+    assert!(decompiled_str.contains("!Δ"));
+
+    unsafe { cron_string_free(decompiled_ptr); }
+}
+
 
 
 

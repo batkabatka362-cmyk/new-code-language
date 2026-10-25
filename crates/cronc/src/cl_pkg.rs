@@ -85,17 +85,11 @@ pub fn init_cl_package(dir: &Path, name: &str) -> Result<PathBuf, String> {
     fs::create_dir_all(&src_dir).map_err(|e| format!("Failed to create src dir: {}", e))?;
     
     let starter_cl = format!(
-        "; ============================================================================\n\
-         ; CRON Microcode Kernel: {}\n\
-         ; ============================================================================\n\
-         @kernel {}\n\
-         .target silicon.4d_torus\n\
-         .ipc_target 4.0\n\
-         \n\
-         B0000: {} {} {} {}\n\
-         B0001: {} {} {} {}\n",
-        name,
-        name,
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+B0000: {} {} {} {}
+B0001: {} {} {} {}
+",
         build_valid_slot("'", "==01#100"),
         build_valid_slot("'", "==02#200"),
         build_valid_slot("_", "AD03M102"),
@@ -112,6 +106,16 @@ pub fn init_cl_package(dir: &Path, name: &str) -> Result<PathBuf, String> {
     Ok(manifest_path)
 }
 
+/// Writes a file only when its content differs, so parallel readers never observe a truncated file
+fn write_if_changed<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> std::io::Result<()> {
+    if let Ok(existing) = fs::read(path.as_ref()) {
+        if existing == contents.as_ref() {
+            return Ok(());
+        }
+    }
+    fs::write(path, contents)
+}
+
 /// Generate or refresh all official libcl standard microcode kernel files
 pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
     fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create libcl dir: {}", e))?;
@@ -126,835 +130,731 @@ pub fn generate_standard_libcl_files(target_dir: &Path) -> Result<(), String> {
 
     // 1. math.cl
     let math_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/math.cl\n\
-         @kernel cordic_sincos_invsqrt\n\
-         .target silicon.4d_torus\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#020"), build_valid_slot("_", "AD03M102"), build_valid_slot("_", "SB04M102")]),
         format_bundle(1, &[build_valid_slot("_", "ML05M304"), build_valid_slot("_", "CD06M102"), build_valid_slot("_", "EX07M500"), build_valid_slot("_", "SQ08M700")]),
         format_bundle(2, &[build_valid_slot("_", "FX09M801"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "ST0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("math.cl"), math_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("math.cl"), math_code).map_err(|e| e.to_string())?;
 
     // 2. optical_gemm.cl
     let optical_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/optical_gemm.cl\n\
-         @kernel photonic_mzi_gemm\n\
-         .target silicon.photonic_mzi\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#FFF"), build_valid_slot("'", "==02#0AA"), build_valid_slot("_", "OP03M102"), build_valid_slot("_", "WD04M300")]),
         format_bundle(1, &[build_valid_slot("_", "PO05M304"), build_valid_slot("~", "RM06M500"), build_valid_slot("_", "TL07M102"), build_valid_slot("_", "FA08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("_", "WD0AM900"), build_valid_slot("~", "RV0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("optical_gemm.cl"), optical_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("optical_gemm.cl"), optical_code).map_err(|e| e.to_string())?;
 
     // 3. hdc_vsa.cl
     let hdc_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/hdc_vsa.cl\n\
-         @kernel hdc_binding_and_similarity\n\
-         .target silicon.hdc_vsa\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#A5A"), build_valid_slot("'", "==02#5A5"), build_valid_slot("_", "XO03M102"), build_valid_slot("_", "RO04M301")]),
         format_bundle(1, &[build_valid_slot("_", "MA05M304"), build_valid_slot("_", "CO06M501"), build_valid_slot("_", "PK07M600"), build_valid_slot("_", "UN08M700")]),
         format_bundle(2, &[build_valid_slot("~", "RM09M800"), build_valid_slot("_", "ST0AM102"), build_valid_slot("_", "OP0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("hdc_vsa.cl"), hdc_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("hdc_vsa.cl"), hdc_code).map_err(|e| e.to_string())?;
 
     // 4. attention.cl
     let attn_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/attention.cl\n\
-         @kernel flash_attention_ssm\n\
-         .target silicon.ai_isa\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#3F8"), build_valid_slot("'", "==02#3F0"), build_valid_slot("_", "SM03M102"), build_valid_slot("_", "SN04M300")]),
         format_bundle(1, &[build_valid_slot("_", "SS05M401"), build_valid_slot("_", "GE06M500"), build_valid_slot("_", "SI07M600"), build_valid_slot("_", "OP08M702")]),
         format_bundle(2, &[build_valid_slot("~", "RM09M800"), build_valid_slot("_", "FA0AM900"), build_valid_slot("_", "ST0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("attention.cl"), attn_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("attention.cl"), attn_code).map_err(|e| e.to_string())?;
 
     // 5. stdp_synapse.cl
     let stdp_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/stdp_synapse.cl\n\
-         @kernel neuromorphic_stdp\n\
-         .target silicon.neuromorphic_core\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("'", "==02#005"), build_valid_slot("_", "ST03M102"), build_valid_slot("_", "CA04M300")]),
         format_bundle(1, &[build_valid_slot("_", "DA05M400"), build_valid_slot("_", "SE06M500"), build_valid_slot("_", "AC07M600"), build_valid_slot("_", "NE08M700")]),
         format_bundle(2, &[build_valid_slot("~", "RM09M800"), build_valid_slot("_", "PO0AM900"), build_valid_slot("_", "OP0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("stdp_synapse.cl"), stdp_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("stdp_synapse.cl"), stdp_code).map_err(|e| e.to_string())?;
 
     // 6. crypto_rev.cl
     let crypto_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/crypto_rev.cl\n\
-         @kernel reversible_crypto_hash\n\
-         .target silicon.reversible_logic\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#DEAD"), build_valid_slot("'", "==02#BEEF"), build_valid_slot("~", "RM03M102"), build_valid_slot("~", "RV04M300")]),
         format_bundle(1, &[build_valid_slot("~", "RF05M400"), build_valid_slot("_", "LF06M500"), build_valid_slot("_", "XO07M602"), build_valid_slot("_", "PK08M700")]),
         format_bundle(2, &[build_valid_slot("~", "RM09M800"), build_valid_slot("_", "UN0AM900"), build_valid_slot("_", "ST0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("crypto_rev.cl"), crypto_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("crypto_rev.cl"), crypto_code).map_err(|e| e.to_string())?;
 
     // 7. quantum_mzi.cl
     let quantum_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/quantum_mzi.cl\n\
-         @kernel quantum_mzi_circuit\n\
-         .target silicon.quantum_photonic\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#001"), build_valid_slot("_", "CD03M102"), build_valid_slot("_", "OP04M300")]),
         format_bundle(1, &[build_valid_slot("~", "RM05M400"), build_valid_slot("_", "WD06M502"), build_valid_slot("_", "PO07M600"), build_valid_slot("_", "RV08M700")]),
         format_bundle(2, &[build_valid_slot("~", "RF09M800"), build_valid_slot("_", "ST0AM102"), build_valid_slot("_", "UN0BM900"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("quantum_mzi.cl"), quantum_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("quantum_mzi.cl"), quantum_code).map_err(|e| e.to_string())?;
 
     // 8. graph_rag.cl
     let graph_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/graph_rag.cl\n\
-         @kernel causal_graph_rag\n\
-         .target silicon.causal_graph\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#007"), build_valid_slot("'", "==02#00F"), build_valid_slot("_", "TL03M102"), build_valid_slot("_", "MA04M300")]),
         format_bundle(1, &[build_valid_slot("_", "CO05M400"), build_valid_slot("_", "PK06M502"), build_valid_slot("_", "UN07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("_", "XO0AM902"), build_valid_slot("_", "OP0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("graph_rag.cl"), graph_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("graph_rag.cl"), graph_code).map_err(|e| e.to_string())?;
 
     // 9. sparse_moe.cl
     let sparse_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/sparse_moe.cl\n\
-         @kernel sparse_moe_routing\n\
-         .target silicon.sparse_tensor\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#0A0"), build_valid_slot("'", "==02#050"), build_valid_slot("_", "SM03M102"), build_valid_slot("_", "SN04M300")]),
         format_bundle(1, &[build_valid_slot("_", "TL05M402"), build_valid_slot("_", "OP06M500"), build_valid_slot("_", "FA07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "PK09M800"), build_valid_slot("_", "SS0AM901"), build_valid_slot("_", "ST0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("sparse_moe.cl"), sparse_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("sparse_moe.cl"), sparse_code).map_err(|e| e.to_string())?;
 
     // 10. vision_patch.cl
     let vision_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/vision_patch.cl\n\
-         @kernel vision_patch_embed\n\
-         .target silicon.vision_spatial\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("'", "==02#010"), build_valid_slot("_", "TL03M102"), build_valid_slot("_", "OP04M300")]),
         format_bundle(1, &[build_valid_slot("_", "GE05M400"), build_valid_slot("_", "SI06M500"), build_valid_slot("_", "WD07M602"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "FA09M800"), build_valid_slot("_", "ST0AM902"), build_valid_slot("_", "SS0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("vision_patch.cl"), vision_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("vision_patch.cl"), vision_code).map_err(|e| e.to_string())?;
 
     // 11. audio_dsp.cl
     let audio_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/audio_dsp.cl\n\
-         @kernel audio_dsp_mel_fft\n\
-         .target silicon.audio_dsp\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#040"), build_valid_slot("_", "CD03M102"), build_valid_slot("_", "ML04M300")]),
         format_bundle(1, &[build_valid_slot("_", "AD05M402"), build_valid_slot("_", "SB06M500"), build_valid_slot("_", "FX07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "EX09M800"), build_valid_slot("_", "SQ0AM900"), build_valid_slot("_", "ST0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("audio_dsp.cl"), audio_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("audio_dsp.cl"), audio_code).map_err(|e| e.to_string())?;
 
     // 12. bio_homeostasis.cl
     let bio_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/bio_homeostasis.cl\n\
-         @kernel bio_homeostasis_astrocytes\n\
-         .target silicon.bio_homeostasis\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#070"), build_valid_slot("'", "==02#030"), build_valid_slot("_", "CA03M102"), build_valid_slot("_", "ST04M300")]),
         format_bundle(1, &[build_valid_slot("_", "DA05M400"), build_valid_slot("_", "SE06M500"), build_valid_slot("_", "AC07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "NE09M800"), build_valid_slot("_", "PO0AM900"), build_valid_slot("_", "ST0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("bio_homeostasis.cl"), bio_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("bio_homeostasis.cl"), bio_code).map_err(|e| e.to_string())?;
 
     // 13. neuro_symbolic.cl
     let logic_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/neuro_symbolic.cl\n\
-         @kernel neuro_symbolic_unify\n\
-         .target silicon.neuro_symbolic\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#00A"), build_valid_slot("'", "==02#00B"), build_valid_slot("_", "UN03M102"), build_valid_slot("_", "XO04M300")]),
         format_bundle(1, &[build_valid_slot("_", "MA05M400"), build_valid_slot("_", "CO06M500"), build_valid_slot("_", "PK07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TL09M800"), build_valid_slot("_", "ST0AM900"), build_valid_slot("_", "OP0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("neuro_symbolic.cl"), logic_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("neuro_symbolic.cl"), logic_code).map_err(|e| e.to_string())?;
 
     // 14. liquid_state.cl
     let ltc_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/liquid_state.cl\n\
-         @kernel liquid_state_ltc_ode\n\
-         .target silicon.liquid_state\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("'", "==02#005"), build_valid_slot("_", "SS03M102"), build_valid_slot("_", "SI04M300")]),
         format_bundle(1, &[build_valid_slot("_", "GE05M400"), build_valid_slot("_", "OP06M500"), build_valid_slot("_", "FA07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "CD09M800"), build_valid_slot("_", "ML0AM900"), build_valid_slot("_", "ST0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("liquid_state.cl"), ltc_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("liquid_state.cl"), ltc_code).map_err(|e| e.to_string())?;
 
     // 15. tree_of_thought.cl
     let tot_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/tree_of_thought.cl\n\
-         @kernel tree_of_thought_mcts\n\
-         .target silicon.tree_reasoning\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#020"), build_valid_slot("'", "==02#004"), build_valid_slot("_", "KG03M102"), build_valid_slot("_", "HE04M300")]),
         format_bundle(1, &[build_valid_slot("_", "SY05M400"), build_valid_slot("_", "PO06M500"), build_valid_slot("_", "SW07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TL09M800"), build_valid_slot("_", "ST0AM900"), build_valid_slot("_", "AW0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("tree_of_thought.cl"), tot_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("tree_of_thought.cl"), tot_code).map_err(|e| e.to_string())?;
 
     // 16. dendritic_morphology.cl
     let dend_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/dendritic_morphology.cl\n\
-         @kernel dendritic_active_spike\n\
-         .target silicon.dendritic_core\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#015"), build_valid_slot("'", "==02#008"), build_valid_slot("_", "LF03M102"), build_valid_slot("_", "LI04M300")]),
         format_bundle(1, &[build_valid_slot("_", "ST05M400"), build_valid_slot("_", "OD06M500"), build_valid_slot("_", "CA07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "CD09M800"), build_valid_slot("_", "SB0AM900"), build_valid_slot("_", "AW0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("dendritic_morphology.cl"), dend_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("dendritic_morphology.cl"), dend_code).map_err(|e| e.to_string())?;
 
     // 17. epigenetic_myelin.cl
     let myelin_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/epigenetic_myelin.cl\n\
-         @kernel epigenetic_axon_tuner\n\
-         .target silicon.epigenetic_myelin\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#004"), build_valid_slot("'", "==02#002"), build_valid_slot("_", "WH03M102"), build_valid_slot("_", "TL04M300")]),
         format_bundle(1, &[build_valid_slot("_", "DF05M400"), build_valid_slot("_", "SH06M500"), build_valid_slot("_", "RC07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "PT09M800"), build_valid_slot("_", "ST0AM900"), build_valid_slot("_", "AW0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("epigenetic_myelin.cl"), myelin_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("epigenetic_myelin.cl"), myelin_code).map_err(|e| e.to_string())?;
 
     // 18. sparse_attention_block.cl
     let sparse_attn_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/sparse_attention_block.cl\n\
-         @kernel block_sparse_sliding_attention\n\
-         .target silicon.sparse_attention\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#010"), build_valid_slot("_", "SM03M102"), build_valid_slot("_", "OP04M300")]),
         format_bundle(1, &[build_valid_slot("_", "MD05M400"), build_valid_slot("_", "TT06M500"), build_valid_slot("_", "PS07M600"), build_valid_slot("~", "RM08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TL09M800"), build_valid_slot("_", "ST0AM900"), build_valid_slot("_", "AW0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("sparse_attention_block.cl"), sparse_attn_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("sparse_attention_block.cl"), sparse_attn_code).map_err(|e| e.to_string())?;
 
     // 19. dense_associative_memory.cl
     let hopfield_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/dense_associative_memory.cl\n\
-         @kernel continuous_hopfield_attractor\n\
-         .target silicon.associative_hopfield\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#008"), build_valid_slot("_", "FA03M102"), build_valid_slot("_", "MD04M102")]),
         format_bundle(1, &[build_valid_slot("_", "LD05M400"), build_valid_slot("_", "EX06M500"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "ML08M700")]),
         format_bundle(2, &[build_valid_slot("_", "CO09M800"), build_valid_slot("_", "TX0AM900"), build_valid_slot("~", "RM0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("dense_associative_memory.cl"), hopfield_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("dense_associative_memory.cl"), hopfield_code).map_err(|e| e.to_string())?;
 
     // 20. active_inference_agent.cl
     let active_inf_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/active_inference_agent.cl\n\
-         @kernel active_inference_minimizer\n\
-         .target silicon.active_inference\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("'", "==02#020"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "FA04M200")]),
         format_bundle(1, &[build_valid_slot("_", "SB05M304"), build_valid_slot("_", "ML06M500"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "EX08M700")]),
         format_bundle(2, &[build_valid_slot("_", "MD09M800"), build_valid_slot("_", "CO0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("active_inference_agent.cl"), active_inf_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("active_inference_agent.cl"), active_inf_code).map_err(|e| e.to_string())?;
 
     // 21. elastic_ssm_stream.cl
     let elastic_ssm_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/elastic_ssm_stream.cl\n\
-         @kernel elastic_state_space_memory\n\
-         .target silicon.elastic_ssm\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#080"), build_valid_slot("'", "==02#020"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "ML04M300")]),
         format_bundle(1, &[build_valid_slot("_", "MD05M400"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "MA07M600"), build_valid_slot("_", "FA08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("elastic_ssm_stream.cl"), elastic_ssm_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("elastic_ssm_stream.cl"), elastic_ssm_code).map_err(|e| e.to_string())?;
 
     // 22. spiking_temporal_attention.cl
     let spiking_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/spiking_temporal_attention.cl\n\
-         @kernel event_spiking_temporal_coincidence\n\
-         .target silicon.spiking_temporal\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#032"), build_valid_slot("'", "==02#010"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
         format_bundle(1, &[build_valid_slot("_", "SB05M304"), build_valid_slot("_", "CP06M501"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "MA08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("spiking_temporal_attention.cl"), spiking_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("spiking_temporal_attention.cl"), spiking_code).map_err(|e| e.to_string())?;
 
     // 23. stigmergy_reasoning.cl
     let stigmergy_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/stigmergy_reasoning.cl\n\
-         @kernel collective_pheromone_swarm\n\
-         .target silicon.stigmergy_4d\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#008"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
         format_bundle(1, &[build_valid_slot("_", "ML05M300"), build_valid_slot("_", "CP06M405"), build_valid_slot("_", "AD07M600"), build_valid_slot("_", "TX08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("stigmergy_reasoning.cl"), stigmergy_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("stigmergy_reasoning.cl"), stigmergy_code).map_err(|e| e.to_string())?;
 
     // 24. living_homeostasis.cl
     let homeostasis_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/living_homeostasis.cl\n\
-         @kernel biological_homeostatic_drive\n\
-         .target silicon.living_homeostasis\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#080"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
         format_bundle(1, &[build_valid_slot("_", "SB05M104"), build_valid_slot("_", "ML06M302"), build_valid_slot("_", "CP07M501"), build_valid_slot("_", "AD08M600")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("living_homeostasis.cl"), homeostasis_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("living_homeostasis.cl"), homeostasis_code).map_err(|e| e.to_string())?;
 
     // 25. bitnet_b158_gemv.cl
     let bitnet_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/bitnet_b158_gemv.cl\n\
-         @kernel bitnet_b158_ternary_gemv\n\
-         .target silicon.ternary_core\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#055"), build_valid_slot("_", "PK03M200"), build_valid_slot("_", "LD04M100")]),
         format_bundle(1, &[build_valid_slot("_", "TM05M403"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "MA08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("bitnet_b158_gemv.cl"), bitnet_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("bitnet_b158_gemv.cl"), bitnet_code).map_err(|e| e.to_string())?;
 
     // 26. mamba2_ssd.cl
     let mamba2_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/mamba2_ssd.cl\n\
-         @kernel mamba2_state_space_duality\n\
-         .target silicon.elastic_ssm\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#080"), build_valid_slot("'", "==02#040"), build_valid_slot("_", "SS03M100"), build_valid_slot("_", "LD04M200")]),
         format_bundle(1, &[build_valid_slot("_", "ML05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "SI07M600"), build_valid_slot("_", "FA08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("mamba2_ssd.cl"), mamba2_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("mamba2_ssd.cl"), mamba2_code).map_err(|e| e.to_string())?;
 
     // 27. kv_cache_paged.cl
     let kv_cache_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/kv_cache_paged.cl\n\
-         @kernel kv_cache_paged_ring\n\
-         .target silicon.sparse_attention\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#200"), build_valid_slot("'", "==02#010"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "AD04M302")]),
         format_bundle(1, &[build_valid_slot("_", "MA05M400"), build_valid_slot("_", "CP06M500"), build_valid_slot("_", "LD07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("kv_cache_paged.cl"), kv_cache_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("kv_cache_paged.cl"), kv_cache_code).map_err(|e| e.to_string())?;
 
     // 28. rope_rotary.cl
     let rope_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/rope_rotary.cl\n\
-         @kernel rope_rotary_embedding\n\
-         .target silicon.4d_torus\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("'", "==02#020"), build_valid_slot("_", "CD03M102"), build_valid_slot("_", "ML04M300")]),
         format_bundle(1, &[build_valid_slot("_", "SB05M401"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("rope_rotary.cl"), rope_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("rope_rotary.cl"), rope_code).map_err(|e| e.to_string())?;
 
     // 29. rmsnorm_fast.cl
     let rmsnorm_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/rmsnorm_fast.cl\n\
-         @kernel rmsnorm_fast_simd\n\
-         .target silicon.ai_isa\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#3F8"), build_valid_slot("'", "==02#100"), build_valid_slot("_", "RM03M201"), build_valid_slot("_", "LD04M100")]),
         format_bundle(1, &[build_valid_slot("_", "ML05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("rmsnorm_fast.cl"), rmsnorm_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("rmsnorm_fast.cl"), rmsnorm_code).map_err(|e| e.to_string())?;
 
     // 30. swiglu_gelu.cl
     let swiglu_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/swiglu_gelu.cl\n\
-         @kernel fused_swiglu_gelu\n\
-         .target silicon.ai_isa\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#080"), build_valid_slot("_", "SI03M100"), build_valid_slot("_", "GE04M200")]),
         format_bundle(1, &[build_valid_slot("_", "ML05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("swiglu_gelu.cl"), swiglu_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("swiglu_gelu.cl"), swiglu_code).map_err(|e| e.to_string())?;
 
     // 31. speculative_verifier.cl
     let spec_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/speculative_verifier.cl\n\
-         @kernel speculative_draft_verifier\n\
-         .target silicon.tree_reasoning\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#004"), build_valid_slot("'", "==02#008"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
         format_bundle(1, &[build_valid_slot("_", "CO05M304"), build_valid_slot("_", "AD06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "ST09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("speculative_verifier.cl"), spec_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("speculative_verifier.cl"), spec_code).map_err(|e| e.to_string())?;
 
     // 32. torus_allreduce.cl
     let torus_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/torus_allreduce.cl\n\
-         @kernel torus_4d_allreduce\n\
-         .target silicon.4d_torus\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#0FF"), build_valid_slot("_", "TX03M100"), build_valid_slot("_", "RX04M200")]),
         format_bundle(1, &[build_valid_slot("_", "AD05M304"), build_valid_slot("_", "WH06M500"), build_valid_slot("_", "CP07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "bb09M800"), build_valid_slot("~", "RM0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("torus_allreduce.cl"), torus_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("torus_allreduce.cl"), torus_code).map_err(|e| e.to_string())?;
 
     // 33. backprop_gemm.cl
     let backprop_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/backprop_gemm.cl\n\
-         @kernel backprop_gradient_gemm\n\
-         .target silicon.ai_training\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("'", "==02#040"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
         format_bundle(1, &[build_valid_slot("_", "MD05M304"), build_valid_slot("_", "GU06M305"), build_valid_slot("_", "SR06M100"), build_valid_slot("_", "OP07M403")]),
         format_bundle(2, &[build_valid_slot("~", "RM08M700"), build_valid_slot("_", "ST09M800"), build_valid_slot("_", "TX0AM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("backprop_gemm.cl"), backprop_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("backprop_gemm.cl"), backprop_code).map_err(|e| e.to_string())?;
 
     // 34. stdp_online_learning.cl
     let stdp_online_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/stdp_online_learning.cl\n\
-         @kernel stdp_synaptic_plasticity_growth\n\
-         .target silicon.neuromorphic_core\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#00A"), build_valid_slot("'", "==02#014"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "SB04M201")]),
         format_bundle(1, &[build_valid_slot("_", "ST05M304"), build_valid_slot("_", "DA06M500"), build_valid_slot("_", "SR05M100"), build_valid_slot("_", "LI07M500")]),
         format_bundle(2, &[build_valid_slot("_", "LF08M700"), build_valid_slot("~", "RM09M800"), build_valid_slot("_", "TX0AM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("stdp_online_learning.cl"), stdp_online_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("stdp_online_learning.cl"), stdp_online_code).map_err(|e| e.to_string())?;
 
     // 35. adam_momentum_step.cl
     let adam_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/adam_momentum_step.cl\n\
-         @kernel in_silicon_adam_momentum\n\
-         .target silicon.ai_training\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#005"), build_valid_slot("'", "==02#100"), build_valid_slot("_", "LD03M100"), build_valid_slot("_", "LD04M200")]),
         format_bundle(1, &[build_valid_slot("_", "PO05M301"), build_valid_slot("_", "ML06M101"), build_valid_slot("_", "SR05M100"), build_valid_slot("_", "SR06M200")]),
         format_bundle(2, &[build_valid_slot("_", "SQ07M600"), build_valid_slot("_", "GU08M405"), build_valid_slot("_", "SR08M000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("adam_momentum_step.cl"), adam_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("adam_momentum_step.cl"), adam_code).map_err(|e| e.to_string())?;
 
     // 36. zero_dram_reversible_backprop.cl
     let zero_dram_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/zero_dram_reversible_backprop.cl\n\
-         @kernel zero_dram_reversible_autodiff\n\
-         .target silicon.reversible_logic\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#3F8"), build_valid_slot("'", "==02#100"), build_valid_slot("~", "RF03M102"), build_valid_slot("~", "TO04M300")]),
         format_bundle(1, &[build_valid_slot("~", "BK05M400"), build_valid_slot("_", "GU06M501"), build_valid_slot("~", "RV07M600"), build_valid_slot("_", "RS08M000")]),
         format_bundle(2, &[build_valid_slot("~", "RM09M700"), build_valid_slot("_", "ST0AM900"), build_valid_slot("_", "TX0BM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("zero_dram_reversible_backprop.cl"), zero_dram_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("zero_dram_reversible_backprop.cl"), zero_dram_code).map_err(|e| e.to_string())?;
 
     // 37. fast_packet_router.cl
     let packet_router_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/fast_packet_router.cl\n\
-         @kernel zero_copy_packet_router\n\
-         .target silicon.4d_torus\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#000"), build_valid_slot("'", "==02#0FF"), build_valid_slot("_", "LB03M100"), build_valid_slot("_", "LB04M101")]),
         format_bundle(1, &[build_valid_slot("_", "MA05M302"), build_valid_slot("_", "CO06M504"), build_valid_slot("_", "WH07M600"), build_valid_slot("_", "BY08M702")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("fast_packet_router.cl"), packet_router_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("fast_packet_router.cl"), packet_router_code).map_err(|e| e.to_string())?;
 
     // 38. dma_ring_buffer.cl
     let dma_ring_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/dma_ring_buffer.cl\n\
-         @kernel lockfree_pcie_dma_ring\n\
-         .target silicon.hard_backend\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#000"), build_valid_slot("'", "==02#040"), build_valid_slot("'", "==03#03F"), build_valid_slot("'", "==04#010")]),
         format_bundle(1, &[build_valid_slot("_", "CS05M204"), build_valid_slot("_", "SR05M100"), build_valid_slot("_", "LD06M500"), build_valid_slot("_", "SB07M600")]),
         format_bundle(2, &[build_valid_slot("_", "bb08M700"), build_valid_slot("~", "RM09M800"), build_valid_slot("_", "TX0AM102"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("dma_ring_buffer.cl"), dma_ring_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("dma_ring_buffer.cl"), dma_ring_code).map_err(|e| e.to_string())?;
 
     // 39. autonomous_agi_mind.cl
     let agi_mind_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/autonomous_agi_mind.cl\n\
-         @kernel autonomous_cognitive_mind_loop\n\
-         .target silicon.autonomous_mind\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("_", "RX02M100"), build_valid_slot("_", "XO03M200"), build_valid_slot("_", "UN04M300")]),
         format_bundle(1, &[build_valid_slot("_", "OP05M400"), build_valid_slot("_", "CA06M500"), build_valid_slot("_", "DA07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("autonomous_agi_mind.cl"), agi_mind_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("autonomous_agi_mind.cl"), agi_mind_code).map_err(|e| e.to_string())?;
 
     // 40. sagi_cognitive_cycle.cl
     let sagi_cycle_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/sagi_cognitive_cycle.cl\n\
-         @kernel sagi_neocortical_cycle\n\
-         .target silicon.sagi_cortex\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#080"), build_valid_slot("_", "RX02M100"), build_valid_slot("_", "XO03M200"), build_valid_slot("_", "UN04M300")]),
         format_bundle(1, &[build_valid_slot("_", "OP05M400"), build_valid_slot("_", "CA06M500"), build_valid_slot("_", "DA07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("sagi_cognitive_cycle.cl"), sagi_cycle_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("sagi_cognitive_cycle.cl"), sagi_cycle_code).map_err(|e| e.to_string())?;
 
     // 41. causal_graph_engine.cl
     let causal_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/causal_graph_engine.cl\n\
-         @kernel pearl_do_calculus_engine\n\
-         .target silicon.causal_graph\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#040"), build_valid_slot("_", "LB02M100"), build_valid_slot("_", "DO03M200"), build_valid_slot("_", "CF04M300")]),
         format_bundle(1, &[build_valid_slot("_", "MA05M400"), build_valid_slot("_", "CO06M500"), build_valid_slot("_", "WH07M600"), build_valid_slot("_", "BY08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("causal_graph_engine.cl"), causal_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("causal_graph_engine.cl"), causal_code).map_err(|e| e.to_string())?;
 
     // 42. agentic_tool_reasoning.cl
     let agentic_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/agentic_tool_reasoning.cl\n\
-         @kernel reflective_tool_dispatch\n\
-         .target silicon.agentic_core\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#020"), build_valid_slot("_", "TL02M100"), build_valid_slot("_", "AC03M200"), build_valid_slot("_", "EV04M300")]),
         format_bundle(1, &[build_valid_slot("_", "DS05M400"), build_valid_slot("_", "EX06M500"), build_valid_slot("_", "RF07M600"), build_valid_slot("_", "RT08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("agentic_tool_reasoning.cl"), agentic_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("agentic_tool_reasoning.cl"), agentic_code).map_err(|e| e.to_string())?;
 
     // 43. tensor_shape_verifier.cl
     let shape_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/tensor_shape_verifier.cl\n\
-         @kernel dynamic_shape_contract_verifier\n\
-         .target silicon.tensor_verifier\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("_", "SH02M100"), build_valid_slot("_", "DM03M200"), build_valid_slot("_", "RN04M300")]),
         format_bundle(1, &[build_valid_slot("_", "CK05M400"), build_valid_slot("_", "AS06M500"), build_valid_slot("_", "VL07M600"), build_valid_slot("_", "FL08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("tensor_shape_verifier.cl"), shape_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("tensor_shape_verifier.cl"), shape_code).map_err(|e| e.to_string())?;
 
     // 44. epigenetic_memory_sleep.cl
     let epi_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/epigenetic_memory_sleep.cl\n\
-         @kernel methylation_sleep_replay\n\
-         .target silicon.epigenetic_memory\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#008"), build_valid_slot("_", "ME02M100"), build_valid_slot("_", "TG03M200"), build_valid_slot("_", "SL04M300")]),
         format_bundle(1, &[build_valid_slot("_", "RP05M400"), build_valid_slot("_", "CN06M500"), build_valid_slot("_", "MY07M600"), build_valid_slot("_", "SY08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("epigenetic_memory_sleep.cl"), epi_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("epigenetic_memory_sleep.cl"), epi_code).map_err(|e| e.to_string())?;
 
     // 45. autodiff_grad_descent.cl
     let autodiff_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/autodiff_grad_descent.cl\n\
-         @kernel hardware_autodiff_step\n\
-         .target silicon.autodiff_gradient\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#005"), build_valid_slot("_", "GD02M100"), build_valid_slot("_", "PR03M200"), build_valid_slot("_", "LS04M300")]),
         format_bundle(1, &[build_valid_slot("_", "BK05M400"), build_valid_slot("_", "UP06M500"), build_valid_slot("_", "ST07M600"), build_valid_slot("_", "LR08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("autodiff_grad_descent.cl"), autodiff_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("autodiff_grad_descent.cl"), autodiff_code).map_err(|e| e.to_string())?;
 
     // 46. neural_packet_router.cl
     let router_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/neural_packet_router.cl\n\
-         @kernel torus_adt_packet_router\n\
-         .target silicon.4d_torus_router\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#064"), build_valid_slot("_", "RT02M100"), build_valid_slot("_", "PK03M200"), build_valid_slot("_", "PR04M300")]),
         format_bundle(1, &[build_valid_slot("_", "FL05M400"), build_valid_slot("_", "SW06M500"), build_valid_slot("_", "TX07M600"), build_valid_slot("_", "SP08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("neural_packet_router.cl"), router_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("neural_packet_router.cl"), router_code).map_err(|e| e.to_string())?;
 
     // 47. baremetal_pgas_boot.cl
     let pgas_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/baremetal_pgas_boot.cl\n\
-         @kernel baremetal_pgas_bootstrap\n\
-         .target silicon.baremetal_pgas\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#100"), build_valid_slot("_", "BT02M100"), build_valid_slot("_", "PG03M200"), build_valid_slot("_", "BK04M300")]),
         format_bundle(1, &[build_valid_slot("_", "PW05M400"), build_valid_slot("_", "BS06M500"), build_valid_slot("_", "EN07M600"), build_valid_slot("_", "ST08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("baremetal_pgas_boot.cl"), pgas_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("baremetal_pgas_boot.cl"), pgas_code).map_err(|e| e.to_string())?;
 
     // 48. metaplastic_bcm_adaptation.cl
     let meta_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/metaplastic_bcm_adaptation.cl\n\
-         @kernel bcm_metaplastic_onsager\n\
-         .target silicon.alife_metabolism\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#200"), build_valid_slot("_", "BC02M100"), build_valid_slot("_", "TH03M200"), build_valid_slot("_", "ON04M300")]),
         format_bundle(1, &[build_valid_slot("_", "QN05M400"), build_valid_slot("_", "DP06M500"), build_valid_slot("_", "ST07M600"), build_valid_slot("_", "AD08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("metaplastic_bcm_adaptation.cl"), meta_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("metaplastic_bcm_adaptation.cl"), meta_code).map_err(|e| e.to_string())?;
 
     // 49. time_reversible_rewind.cl
     let rewind_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/time_reversible_rewind.cl\n\
-         @kernel zero_entropy_physics_rewind\n\
-         .target silicon.reversible_physics\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#000"), build_valid_slot("_", "RW02M100"), build_valid_slot("_", "ET03M200"), build_valid_slot("_", "DS04M300")]),
         format_bundle(1, &[build_valid_slot("_", "IV05M400"), build_valid_slot("_", "ST06M500"), build_valid_slot("_", "RC07M600"), build_valid_slot("_", "ZR08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("time_reversible_rewind.cl"), rewind_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("time_reversible_rewind.cl"), rewind_code).map_err(|e| e.to_string())?;
 
     // 50. cognitive_transformer_snn.cl
     let trans_snn_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/cognitive_transformer_snn.cl\n\
-         @kernel hybrid_transformer_snn_autograd\n\
-         .target silicon.hybrid_transformer_snn\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#010"), build_valid_slot("_", "AT02M100"), build_valid_slot("_", "SN03M200"), build_valid_slot("_", "SG04M300")]),
         format_bundle(1, &[build_valid_slot("_", "RM05M400"), build_valid_slot("_", "LF06M500"), build_valid_slot("_", "SP07M600"), build_valid_slot("_", "GD08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("cognitive_transformer_snn.cl"), trans_snn_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("cognitive_transformer_snn.cl"), trans_snn_code).map_err(|e| e.to_string())?;
 
     // 51. torus_csp_pipeline.cl
     let torus_csp_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/torus_csp_pipeline.cl\n\
-         @kernel torus_csp_stream_pipeline\n\
-         .target silicon.torus_csp_pipeline\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#050"), build_valid_slot("_", "CS02M100"), build_valid_slot("_", "CH03M200"), build_valid_slot("_", "TR04M300")]),
         format_bundle(1, &[build_valid_slot("_", "PR05M400"), build_valid_slot("_", "CN06M500"), build_valid_slot("_", "AW07M600"), build_valid_slot("_", "MH08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M700"), build_valid_slot("_", "RS0AM000"), build_valid_slot("_", "PL0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("torus_csp_pipeline.cl"), torus_csp_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("torus_csp_pipeline.cl"), torus_csp_code).map_err(|e| e.to_string())?;
 
     // 52. sagi_superintelligence_e2e.cl
     let sagi_e2e_code = format!(
-        "; CRON Standard Microcode Kernel: libcl/sagi_superintelligence_e2e.cl\n\
-         @kernel sovereign_sagi_superintelligence\n\
-         .target silicon.sagi_superintelligence\n\
-         .ipc_target 4.0\n\
-         \n\
-         {}\n\
-         {}\n\
-         {}\n",
+        "@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+{}
+{}
+{}
+",
         format_bundle(0, &[build_valid_slot("'", "==01#999"), build_valid_slot("_", "SG02M100"), build_valid_slot("_", "BC03M200"), build_valid_slot("_", "TH04M300")]),
         format_bundle(1, &[build_valid_slot("_", "MZ05M400"), build_valid_slot("_", "DC06M500"), build_valid_slot("_", "OP07M600"), build_valid_slot("_", "UN08M700")]),
         format_bundle(2, &[build_valid_slot("_", "TX09M600"), build_valid_slot("_", "PR0AM000"), build_valid_slot("_", "SH0BM000"), build_valid_slot("!", "HL00#000")]),
     );
-    fs::write(target_dir.join("sagi_superintelligence_e2e.cl"), sagi_e2e_code).map_err(|e| e.to_string())?;
+    write_if_changed(target_dir.join("sagi_superintelligence_e2e.cl"), sagi_e2e_code).map_err(|e| e.to_string())?;
 
     // Update libcl.toml
     let manifest_toml = "[package]\n\

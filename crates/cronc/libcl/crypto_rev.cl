@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/crypto_rev.cl
-@kernel reversible_crypto_hash
-.target silicon.reversible_logic
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#DEA| '==02#BEE_ ~RM03M102x ~RV04M300^
 B0001: ~RF05M400! _LF06M500C _XO07M602" _PK08M700&

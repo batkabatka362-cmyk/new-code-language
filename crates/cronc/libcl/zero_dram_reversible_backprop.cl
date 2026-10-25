@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/zero_dram_reversible_backprop.cl
-@kernel zero_dram_reversible_autodiff
-.target silicon.reversible_logic
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#3F8@ '==02#100N ~RF03M102@ ~TO04M3008
 B0001: ~BK05M400J _GU06M501^ ~RV07M600b _RS08M000-

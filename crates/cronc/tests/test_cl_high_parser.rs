@@ -210,3 +210,42 @@ fn test_parse_architecture_and_attributes() {
     assert_eq!(method.attributes[0].args.get("clock_hz").unwrap(), "1000000000");
     assert_eq!(method.attributes[0].args.get("max_jitter_ns").unwrap(), "5");
 }
+
+#[test]
+fn test_parse_sovereign_cl_v2_via_high_parser() {
+    let sovereign_source = r#"
+        @kernel tensor_morphism_engine
+        .target silicon.neuro_vliw
+        .ipc_target 4.0
+        .cores 256
+        @mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+        @io {
+            in:  InputTensor[16×16:FP32]  @sram[0x0000]
+            out: OutputTensor[16×16:FP32] @sram[0x0400]
+        }
+
+        §MorphismBlock[16×16:FP32] {
+            InputTensor ↦ OutputTensor :
+                Normed := rmsnorm(InputTensor)
+                OutputTensor := silu(Normed)
+        }
+
+        §ControlFlow {
+            ⟳ (256) {
+                #R1 ← @sram[0x0000]
+                @sram[0x0400] ← #R1
+            }
+        }
+
+        !Δ { |OutputTensor| < 1e4, latency < 10ns }
+    "#;
+
+    let module = parse_high_cl(sovereign_source).expect("High-level parser must parse Sovereign CL v2.0 non-verbal code");
+    assert_eq!(module.name, "tensor_morphism_engine");
+    assert_eq!(module.stages.len(), 1);
+    assert_eq!(module.stages[0].name, "SiliconTarget");
+    assert_eq!(module.kernels.len(), 1);
+    assert_eq!(module.kernels[0].name, "MorphismBlock");
+    assert_eq!(module.kernels[0].body.len(), 2);
+}

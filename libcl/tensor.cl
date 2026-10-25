@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/tensor.cl
-// Subsystem 1: Bare-Metal Silicon Tensor Acceleration & Sub-Byte GEMM
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel silicon_tensor_engine
-.target silicon.wgmma_tensor
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:  X[16×16:NVFP4]  @sram[0x0000]

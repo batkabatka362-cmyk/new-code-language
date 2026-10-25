@@ -1,13 +1,5 @@
-; ============================================================================
-; CRON Standard Microcode Library: libcl/topological_rotor.cl
-; 4D Clifford Torus Kinematics & Wave-Interference Rotor (Zero Verbal Words)
-; Target: 256-Core 4D-Torus S^3 x Z100 Silicon Backend
-; ============================================================================
-@kernel topological_rotor_cortex
-.target silicon.4d_torus
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; Cycle 0: Arena reset, thermal sentry arm, load seed coordinate token
 B0000: _RS00$000> _SH00$000> '=01#0041> _NO00$000>
 
 ; Cycle 1: Encode S^3 phase token, clamp to Sensory Layer IV, parity rotate [34,33,33]

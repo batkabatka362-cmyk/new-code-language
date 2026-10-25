@@ -1,12 +1,5 @@
-; ==============================================================================
-; CRON Standard Microcode Kernel Library: libcl/sphere_matrix_4d.cl
-; 4D Spherical Geodesic Matrix Multiplier-Free Accelerator Kernel
-; ==============================================================================
-@kernel sphere_matrix_4d
-.target silicon.sphere_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; Bundle 1: Center Origin 0 Initialization across 4 Quadrants
 B0001: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
 
 ; Bundle 2: Step 1 & Head W Direct Penetration to Layer W=1

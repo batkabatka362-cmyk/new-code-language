@@ -1,16 +1,5 @@
-// ============================================================================
-// CRON CL HIGH-LEVEL SPECIFICATION: NequIP / Allegro E(3) Equivariant SciML
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-// [1] SILICON TARGET CONTRACT
-@kernel nequip_allegro_equivariant_sciml
-.target silicon.sciml_tensor
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
-
-// [2] I/O MEMORY BINDING
 @io {
     in:   R[16×16:FP32]            @sram[0x0000]
     dist: RadialDist[16×16:FP32]   @sram[0x0200]
@@ -43,5 +32,3 @@
     }
 }
 !Δ { |F| < 5e3, energy_drift < 1e-6 }
-
-

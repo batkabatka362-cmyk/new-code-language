@@ -1,16 +1,5 @@
-// ============================================================================
-// CRON CL HIGH-LEVEL SPECIFICATION: DeepSeek-V4 MoE & Mamba-2 Hybrid Layer
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-// [1] SILICON TARGET CONTRACT
-@kernel deepseek_v4_frontier_moe
-.target silicon.ai_isa
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
-
-// [2] I/O MEMORY BINDING
 @io {
     in:  X[16×16:NVFP4]             @sram[0x0000]
     dt:  DeltaT[16×16:NVFP4]        @sram[0x0200]
@@ -43,5 +32,3 @@
     }
 }
 !Δ { |Y| < 1e4, latency < 12ns }
-
-

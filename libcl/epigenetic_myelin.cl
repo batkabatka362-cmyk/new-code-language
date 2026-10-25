@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/epigenetic_myelin.cl
-@kernel epigenetic_axon_tuner
-.target silicon.epigenetic_myelin
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#004Y '==02#002O _WH03M102; _TL04M300*
 B0001: _DF05M400: _SH06M5007 _RC07M600U ~RM08M700^

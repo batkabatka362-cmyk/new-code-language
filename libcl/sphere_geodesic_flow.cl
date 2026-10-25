@@ -1,8 +1,4 @@
-; ============================================================
-; CRON Super-Optimized VLIW Machine Code (.cl)
-; Optimized: 6 bundles -> 7 bundles (Speedup: +0.0% | IPC: 2.83 -> 2.43)
-; Critical Path Depth: 8 cycles | Peephole Rewrites: 0 | Active Ops: 17 | Peak Reg Pressure: 4/16 | Thermal Guards: 0
-; ============================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: _TL03$0C4> _MD04$434> _SH00$144> '=002#081>
 B0001: _DP06$4C0> '=003#091> _SP00#098> _NO00#000>

@@ -53,15 +53,27 @@ impl IntermediateInstr {
             let crc_char = HEX_DIGITS[(crc & 0x0F) as usize] as char;
             format!("{}{}>", payload, crc_char)
         } else {
-            let s2_char = if let Some(s2) = self.src2 {
-                format!("{:X}", s2 & 0xF)
+            let (c6, c7, c8) = if self.mode == '#' && self.src2.is_none() {
+                (
+                    format!("{:X}", (self.imm >> 8) & 0xF),
+                    format!("{:X}", (self.imm >> 4) & 0xF),
+                    format!("{:X}", self.imm & 0xF),
+                )
             } else {
-                format!("{:X}", (self.imm >> 4) & 0xF)
+                let s2_char = if let Some(s2) = self.src2 {
+                    format!("{:X}", s2 & 0xF)
+                } else {
+                    format!("{:X}", (self.imm >> 4) & 0xF)
+                };
+                (
+                    format!("{:X}", self.src1 & 0xF),
+                    s2_char,
+                    format!("{:X}", self.imm & 0xF),
+                )
             };
-            let imm_nibble = format!("{:X}", self.imm & 0xF);
             let raw9 = format!(
-                "{}{}{:02X}{}{:X}{}{}",
-                self.prefix, self.opcode, self.dest, self.mode, self.src1 & 0xF, s2_char, imm_nibble
+                "{}{}{:02X}{}{}{}{}",
+                self.prefix, self.opcode, self.dest, self.mode, c6, c7, c8
             );
             let crc = compute_crc8_token(&raw9);
             format!("{}{}", raw9, crc)
@@ -72,6 +84,8 @@ impl IntermediateInstr {
 pub struct V2LoweringEngine {
     next_reg: u8,
     var_map: HashMap<String, u8>,
+    shape_map: HashMap<String, TensorShape>,
+    loop_depth: usize,
 }
 
 impl V2LoweringEngine {
@@ -79,12 +93,15 @@ impl V2LoweringEngine {
         Self {
             next_reg: 1,
             var_map: HashMap::new(),
+            shape_map: HashMap::new(),
+            loop_depth: 0,
         }
     }
 
     fn alloc_reg(&mut self) -> u8 {
         let r = self.next_reg;
-        self.next_reg = if self.next_reg >= 13 { 1 } else { self.next_reg + 1 };
+        // Keep registers 11, 12, 13, 14 reserved for nested loop counters
+        self.next_reg = if self.next_reg >= 10 { 1 } else { self.next_reg + 1 };
         r
     }
 
@@ -110,14 +127,20 @@ impl V2LoweringEngine {
     /// Automatically synthesizes VLIW bundles from Math Morphisms and Control Flow
     pub fn lower_document(&mut self, doc: &ClV2Document) -> Result<Vec<VliwBundle>, String> {
         self.var_map.clear();
+        self.shape_map.clear();
         self.next_reg = 1;
+        self.loop_depth = 0;
 
         let mut instrs: Vec<IntermediateInstr> = Vec::new();
 
-        // 1. Lower I/O Bindings into Register Initializations
+        // 1. Lower I/O Bindings into Register Initializations and Tensor Shapes
         if let Some(ref io) = doc.io_binding {
             for item in &io.items {
                 let r = self.get_or_alloc_var(&item.name);
+                self.shape_map.insert(
+                    item.name.clone(),
+                    TensorShape::new(item.shape.clone(), &item.dtype),
+                );
                 let addr_imm = (item.address & 0xFFFF) as u16;
                 // ImmLoad: '==[reg]#[imm]
                 instrs.push(IntermediateInstr {
@@ -173,10 +196,14 @@ impl V2LoweringEngine {
 
     fn lower_function_block(&mut self, func: &FunctionBlock, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
         let x_reg = self.get_or_alloc_var(&func.input_symbol);
+        let default_dims = if !func.tile_dims.is_empty() { func.tile_dims.clone() } else { vec![16, 16] };
+        self.shape_map.entry(func.input_symbol.clone()).or_insert_with(|| TensorShape::new(default_dims.clone(), &func.dtype));
 
         // Lower states if present
         for state in &func.states {
             let s_reg = self.get_or_alloc_var(&state.name);
+            let s_dims = if !state.dims.is_empty() { state.dims.clone() } else { vec![16, 16] };
+            self.shape_map.insert(state.name.clone(), TensorShape::new(s_dims, "FP32"));
             instrs.push(IntermediateInstr {
                 prefix: '\'',
                 opcode: "==".to_string(),
@@ -193,6 +220,10 @@ impl V2LoweringEngine {
         if !func.steps.is_empty() {
             for step in &func.steps {
                 let dest_r = self.get_or_alloc_var(&step.target_var);
+                if let Some(ref ast) = step.expr_ast {
+                    let inferred_shape = self.infer_expr_shape(ast, &default_dims, &func.dtype)?;
+                    self.shape_map.insert(step.target_var.clone(), inferred_shape);
+                }
                 self.lower_math_expr(&step.expr, dest_r, x_reg, instrs)?;
             }
         } else if !func.equation_expr.is_empty() {
@@ -210,10 +241,14 @@ impl V2LoweringEngine {
 
     fn lower_math_morphism(&mut self, math: &MathMorphismBlock, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
         let x_reg = self.get_or_alloc_var(&math.input_symbol);
+        let default_dims = if !math.tile_dims.is_empty() { math.tile_dims.clone() } else { vec![16, 16] };
+        self.shape_map.entry(math.input_symbol.clone()).or_insert_with(|| TensorShape::new(default_dims.clone(), &math.dtype));
 
         // Lower states if present
         for state in &math.states {
             let s_reg = self.get_or_alloc_var(&state.name);
+            let s_dims = if !state.dims.is_empty() { state.dims.clone() } else { vec![16, 16] };
+            self.shape_map.insert(state.name.clone(), TensorShape::new(s_dims, "FP32"));
             // Default initial state tag load
             instrs.push(IntermediateInstr {
                 prefix: '\'',
@@ -231,6 +266,10 @@ impl V2LoweringEngine {
         if !math.steps.is_empty() {
             for step in &math.steps {
                 let dest_r = self.get_or_alloc_var(&step.target_var);
+                if let Some(ref ast) = step.expr_ast {
+                    let inferred_shape = self.infer_expr_shape(ast, &default_dims, &math.dtype)?;
+                    self.shape_map.insert(step.target_var.clone(), inferred_shape);
+                }
                 self.lower_math_expr(&step.expr, dest_r, x_reg, instrs)?;
             }
         } else if !math.equation_expr.is_empty() {
@@ -242,53 +281,61 @@ impl V2LoweringEngine {
         Ok(())
     }
 
+    fn infer_expr_shape(&self, expr: &MathExpr, default_dims: &[usize], default_dtype: &str) -> Result<TensorShape, String> {
+        match expr {
+            MathExpr::Variable(name) => {
+                let clean = name.trim().trim_start_matches('#');
+                if let Some(shape) = self.shape_map.get(clean).or_else(|| self.shape_map.get(name)) {
+                    Ok(shape.clone())
+                } else {
+                    Ok(TensorShape::new(default_dims.to_vec(), default_dtype))
+                }
+            }
+            MathExpr::Immediate(_) => {
+                Ok(TensorShape::new(vec![1], default_dtype))
+            }
+            MathExpr::Binary { op, lhs, rhs } => {
+                let lhs_shape = self.infer_expr_shape(lhs, default_dims, default_dtype)?;
+                let rhs_shape = self.infer_expr_shape(rhs, default_dims, default_dtype)?;
+                if *op == MathBinaryOp::TensorMatMul {
+                    lhs_shape.matmul(&rhs_shape)
+                } else {
+                    lhs_shape.elementwise(&rhs_shape, *op)
+                }
+            }
+            MathExpr::Unary { operand, .. } => {
+                self.infer_expr_shape(operand, default_dims, default_dtype)
+            }
+            MathExpr::Norm(operand) => {
+                self.infer_expr_shape(operand, default_dims, default_dtype)
+            }
+            MathExpr::Activation { operand, .. } => {
+                self.infer_expr_shape(operand, default_dims, default_dtype)
+            }
+            MathExpr::Primitive { args, .. } => {
+                if let Some(first) = args.first() {
+                    self.infer_expr_shape(first, default_dims, default_dtype)
+                } else {
+                    Ok(TensorShape::new(default_dims.to_vec(), default_dtype))
+                }
+            }
+        }
+    }
+
     fn lower_math_expr(&mut self, expr: &str, dest_r: u8, x_reg: u8, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
         let e = expr.trim();
 
-        // 1. RMSNorm
-        if e.contains("rmsnorm") {
-            instrs.push(IntermediateInstr {
-                prefix: '~',
-                opcode: "RM".to_string(),
-                dest: dest_r,
-                mode: 'M',
-                src1: x_reg,
-                src2: None,
-                imm: 0x100,
-                is_16char: false,
-            });
-            return Ok(());
-        }
-
-        // 2. Mamba-2 SSD
-        if e.contains("mamba2_ssd") || e.contains("ssd") {
-            let h_reg = self.get_or_alloc_var("H");
-            instrs.push(IntermediateInstr {
-                prefix: '_',
-                opcode: "SS".to_string(),
-                dest: dest_r,
-                mode: 'M',
-                src1: x_reg,
-                src2: Some(h_reg),
-                imm: 0x200,
-                is_16char: false,
-            });
-            return Ok(());
-        }
-
-        // 3. Non-linear activation: SiLU or GeLU
-        if e.starts_with("silu") || e.starts_with(".op.silu") {
-            // Extract inner expression if any
+        // 1. Non-linear activation: σ(X), silu(X), gelu(X)
+        if e.starts_with('σ') || e.starts_with("silu") || e.starts_with("gelu") || e.starts_with(".op.silu") || e.starts_with(".op.gelu") {
+            let is_gelu = e.contains("gelu");
             let inner_r = self.alloc_reg();
-            if let Some(open) = e.find('(') {
-                if let Some(close) = e.rfind(')') {
-                    let inner = &e[open + 1..close];
-                    self.lower_math_expr(inner, inner_r, x_reg, instrs)?;
-                }
+            if let (Some(open), Some(close)) = (e.find('('), e.rfind(')')) {
+                let inner = &e[open + 1..close];
+                self.lower_math_expr(inner.trim(), inner_r, x_reg, instrs)?;
             } else {
                 instrs.push(IntermediateInstr {
                     prefix: '_',
-                    opcode: "SI".to_string(),
+                    opcode: if is_gelu { "GE".to_string() } else { "SI".to_string() },
                     dest: inner_r,
                     mode: 'M',
                     src1: x_reg,
@@ -299,12 +346,57 @@ impl V2LoweringEngine {
             }
             instrs.push(IntermediateInstr {
                 prefix: '_',
-                opcode: "SI".to_string(),
+                opcode: if is_gelu { "GE".to_string() } else { "SI".to_string() },
                 dest: dest_r,
                 mode: 'M',
                 src1: inner_r,
                 src2: None,
                 imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 2. RMSNorm / L2-Norm: ∥X∥ or rmsnorm(X)
+        if e.contains('∥') || e.contains("rmsnorm") {
+            let inner_arg = if let (Some(o), Some(c)) = (e.find('∥'), e.rfind('∥')) {
+                if o < c { &e[o + '∥'.len_utf8()..c] } else { e }
+            } else if let (Some(o), Some(c)) = (e.find('('), e.rfind(')')) {
+                &e[o + 1..c]
+            } else {
+                e
+            };
+            let src_r = if inner_arg.is_empty() || inner_arg == e {
+                x_reg
+            } else {
+                let temp_r = self.alloc_reg();
+                self.lower_math_expr(inner_arg.trim(), temp_r, x_reg, instrs)?;
+                temp_r
+            };
+            instrs.push(IntermediateInstr {
+                prefix: '~',
+                opcode: "RM".to_string(),
+                dest: dest_r,
+                mode: 'M',
+                src1: src_r,
+                src2: None,
+                imm: 0x100,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 3. Mamba-2 SSD
+        if e.contains("mamba2_ssd") || e.contains("ssd") {
+            let h_reg = self.get_or_alloc_var("H");
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "SS".to_string(),
+                dest: dest_r,
+                mode: 'M',
+                src1: x_reg,
+                src2: Some(h_reg),
+                imm: 0x200,
                 is_16char: false,
             });
             return Ok(());
@@ -519,10 +611,16 @@ impl V2LoweringEngine {
     fn lower_cipher_stmt(&mut self, stmt: &CipherStmt, instrs: &mut Vec<IntermediateInstr>) -> Result<(), String> {
         match stmt {
             CipherStmt::Loop { condition, body } => {
-                let loop_reg = 14u8; // Dedicated R14 loop counter
+                let loop_reg = match self.loop_depth {
+                    0 => 14u8,
+                    1 => 13u8,
+                    2 => 12u8,
+                    _ => 11u8,
+                };
+                self.loop_depth += 1;
                 let count: u16 = condition.parse().unwrap_or(16);
                 
-                // Initialize loop counter: '==14#count
+                // Initialize loop counter: '==[reg]#[count]
                 instrs.push(IntermediateInstr {
                     prefix: '\'',
                     opcode: "==".to_string(),
@@ -534,15 +632,29 @@ impl V2LoweringEngine {
                     is_16char: false,
                 });
 
-                let body_start_idx = instrs.len();
-                let body_start_bundle = (body_start_idx / 4) as u16;
+                // Pad so loop body starts cleanly at a new VLIW bundle boundary,
+                // preventing branch from re-executing loop counter initialization!
+                while instrs.len() % 4 != 0 {
+                    instrs.push(IntermediateInstr {
+                        prefix: '_',
+                        opcode: "NO".to_string(),
+                        dest: 0,
+                        mode: '#',
+                        src1: 0,
+                        src2: None,
+                        imm: 0,
+                        is_16char: false,
+                    });
+                }
+
+                let body_start_bundle = (instrs.len() / 4) as u16;
 
                 // Lower inner body
                 for b in body {
                     self.lower_cipher_stmt(b, instrs)?;
                 }
 
-                // Decrement loop counter: _PO14-141 (R14 = R14 - 1)
+                // Decrement loop counter: _PO[reg]-[reg]1
                 instrs.push(IntermediateInstr {
                     prefix: '_',
                     opcode: "PO".to_string(),
@@ -554,17 +666,19 @@ impl V2LoweringEngine {
                     is_16char: false,
                 });
 
-                // Backward branch if non-zero: !BN14#target
+                // Backward branch if non-zero: !BN[reg]#target
                 instrs.push(IntermediateInstr {
                     prefix: '!',
                     opcode: "BN".to_string(),
                     dest: loop_reg,
                     mode: '#',
-                    src1: loop_reg,
+                    src1: 0,
                     src2: None,
                     imm: body_start_bundle,
                     is_16char: false,
                 });
+
+                self.loop_depth -= 1;
             }
             CipherStmt::IfElse { condition, then_branch, else_branch } => {
                 let r_cmp = self.alloc_reg();
@@ -635,10 +749,10 @@ impl V2LoweringEngine {
                 self.lower_math_expr(expr, d_r, x_dummy, instrs)?;
             }
             CipherStmt::Exit => {
-                // Break / Exit
+                // Break / Exit: Terminal halt
                 instrs.push(IntermediateInstr {
-                    prefix: '_',
-                    opcode: "JP".to_string(),
+                    prefix: '!',
+                    opcode: "HL".to_string(),
                     dest: 0,
                     mode: '#',
                     src1: 0,
@@ -765,11 +879,14 @@ impl V2LoweringEngine {
         if let Some(ref math) = doc.math_morphism {
             let all_opcodes: Vec<String> = doc.vliw_stream.iter().flat_map(|b| b.slots.iter().map(|s| s.opcode.clone())).collect();
             
-            if math.equation_expr.contains("rmsnorm") || math.steps.iter().any(|s| s.expr.contains("rmsnorm")) {
+            let has_norm = math.equation_expr.contains("rmsnorm")
+                || math.equation_expr.contains('∥')
+                || math.steps.iter().any(|s| s.expr.contains("rmsnorm") || s.expr.contains('∥'));
+            if has_norm {
                 if all_opcodes.contains(&"RM".to_string()) || all_opcodes.contains(&"TG".to_string()) {
                     matched += 1;
                 } else {
-                    diagnostics.push("Mathematical contract requires 'rmsnorm' normalization, missing in VLIW".to_string());
+                    diagnostics.push("Mathematical contract requires 'rmsnorm'/∥·∥ normalization, missing in VLIW".to_string());
                 }
             }
 
@@ -781,11 +898,14 @@ impl V2LoweringEngine {
                 }
             }
 
-            if math.equation_expr.contains("silu") || math.steps.iter().any(|s| s.expr.contains("silu")) {
+            let has_act = math.equation_expr.contains("silu")
+                || math.equation_expr.contains('σ')
+                || math.steps.iter().any(|s| s.expr.contains("silu") || s.expr.contains('σ'));
+            if has_act {
                 if all_opcodes.contains(&"SI".to_string()) || all_opcodes.contains(&"GE".to_string()) {
                     matched += 1;
                 } else {
-                    diagnostics.push("Mathematical contract requires 'silu' activation, missing in VLIW".to_string());
+                    diagnostics.push("Mathematical contract requires 'silu'/σ activation, missing in VLIW".to_string());
                 }
             }
         }
@@ -799,58 +919,39 @@ impl V2LoweringEngine {
         }
     }
 
-    /// Emits canonical 5-Pillar formatted code
+    /// Emits canonical 5-Pillar formatted code (100% Pure Cipher Syntax)
     pub fn emit_canonical(&self, doc: &ClV2Document) -> String {
         let mut out = String::new();
 
-        // 1. Target Contract
+        // 1. Silicon Topology Header
         if let Some(ref t) = doc.target_contract {
-            out.push_str("// ============================================================================\n");
-            out.push_str("// [1] SILICON TARGET CONTRACT\n");
-            out.push_str("// ============================================================================\n");
-            out.push_str(&format!("@kernel {}\n", t.kernel_name));
-            out.push_str(&format!(".target {}\n", t.target));
-            out.push_str(&format!(".ipc_target {:.1}\n", t.ipc_target));
-            out.push_str(&format!(".cores {}\n", t.cores));
             if let Some(ref m) = t.mesh_routing {
                 let dims_str: Vec<String> = m.dimensions.iter().map(|d| d.to_string()).collect();
-                out.push_str(&format!("@mesh [{}] : ⮑ {}\n", dims_str.join("×"), m.vector_formula));
+                out.push_str(&format!("@⌖ [{}] : ⮑ {}\n\n", dims_str.join("×"), m.vector_formula));
+            } else {
+                out.push_str("@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)\n\n");
             }
-            out.push('\n');
         }
 
         // 2. I/O Memory Binding
         if let Some(ref io) = doc.io_binding {
-            out.push_str("// ============================================================================\n");
-            out.push_str("// [2] I/O MEMORY BINDING\n");
-            out.push_str("// ============================================================================\n");
             out.push_str("@io {\n");
             for item in &io.items {
-                let kind_str = match item.kind {
-                    IoKind::Input => "in",
-                    IoKind::Output => "out",
-                    IoKind::Weight => "wt",
-                    IoKind::State => "state",
-                };
                 let dims_str: Vec<String> = item.shape.iter().map(|d| d.to_string()).collect();
-                let tier_str = match item.tier {
-                    MemoryTier::Sram => "sram",
-                    MemoryTier::Dram => "dram",
-                    MemoryTier::Hbm => "hbm",
-                    MemoryTier::Dmem => "dmem",
+                let addr_str = if item.address > 0 {
+                    format!("@0x{:04X}", item.address)
+                } else {
+                    "@0x0000".to_string()
                 };
-                out.push_str(&format!("    {}: {}[{}:{}] @{}[0x{:04X}]\n", kind_str, item.name, dims_str.join("×"), item.dtype, tier_str, item.address));
+                out.push_str(&format!("    {}[{}:{}] {}\n", item.name, dims_str.join("×"), item.dtype, addr_str));
             }
             out.push_str("}\n\n");
         }
 
         // 3. Mathematical Tensor Morphism
         if let Some(ref m) = doc.math_morphism {
-            out.push_str("// ============================================================================\n");
-            out.push_str("// [3] MATHEMATICAL TENSOR MORPHISM\n");
-            out.push_str("// ============================================================================\n");
             let dims_str: Vec<String> = m.tile_dims.iter().map(|d| d.to_string()).collect();
-            out.push_str(&format!("§{}[{}:{}] {{\n", m.name, dims_str.join("×"), m.dtype));
+            out.push_str(&format!("§[{}:{}] {{\n", dims_str.join("×"), m.dtype));
             
             if !m.states.is_empty() {
                 let states_str: Vec<String> = m.states.iter().map(|s| format!("{}: {}", s.name, s.type_tag)).collect();
@@ -870,63 +971,64 @@ impl V2LoweringEngine {
 
         // 4. Ciphered Control-Flow
         if let Some(ref cf) = doc.control_flow {
-            out.push_str("// ============================================================================\n");
-            out.push_str("// [4] CIPHERED CONTROL-FLOW\n");
-            out.push_str("// ============================================================================\n");
-            out.push_str("§ControlFlow {\n");
             for stmt in &cf.statements {
                 match stmt {
                     CipherStmt::Loop { condition, body } => {
-                        out.push_str(&format!("    ⟳ ({}) {{\n", condition));
+                        out.push_str(&format!("⟳ ({}) {{\n", condition));
                         for b in body {
                             match b {
-                                CipherStmt::MemoryTransfer { dest, src } => out.push_str(&format!("        {} ← {}\n", dest, src)),
-                                CipherStmt::Assign { dest, expr } => out.push_str(&format!("        {} := {}\n", dest, expr)),
-                                CipherStmt::Exit => out.push_str("        ⮌\n"),
+                                CipherStmt::MemoryTransfer { dest, src } => out.push_str(&format!("    {} ← {}\n", dest, src)),
+                                CipherStmt::Assign { dest, expr } => out.push_str(&format!("    {} := {}\n", dest, expr)),
+                                CipherStmt::Exit => out.push_str("    ⮌\n"),
                                 _ => {}
                             }
                         }
-                        out.push_str("    }\n");
+                        out.push_str("}\n\n");
                     }
                     CipherStmt::IfElse { condition, then_branch, else_branch } => {
-                        out.push_str(&format!("    ? ({}) ⮞ {{\n", condition));
+                        out.push_str(&format!("? ({}) ⮞ {{\n", condition));
                         for t in then_branch {
                             if let CipherStmt::Assign { dest, expr } = t {
-                                out.push_str(&format!("        {} := {}\n", dest, expr));
+                                out.push_str(&format!("    {} := {}\n", dest, expr));
                             }
                         }
-                        out.push_str("    } : {\n");
+                        out.push_str("} : {\n");
                         for e in else_branch {
                             if let CipherStmt::Exit = e {
-                                out.push_str("        ⮌\n");
+                                out.push_str("    ⮌\n");
                             }
                         }
-                        out.push_str("    }\n");
+                        out.push_str("}\n\n");
                     }
                     _ => {}
                 }
             }
-            out.push_str("}\n");
 
             if let Some(ref w) = cf.watchdog {
                 if let Some(ref clause) = w.custom_clause {
-                    out.push_str(&format!("{}\n", clause));
+                    out.push_str(&format!("{}\n\n", clause));
                 }
             }
-            out.push('\n');
         }
 
         // 5. VLIW Silicon Cipher
         if !doc.vliw_stream.is_empty() {
-            out.push_str("// ============================================================================\n");
-            out.push_str("// [5] 10/16-CHAR VLIW SILICON CIPHER\n");
-            out.push_str("// ============================================================================\n");
             for bundle in &doc.vliw_stream {
                 let slots_str: Vec<String> = bundle.slots.iter().map(|s| s.raw.clone()).collect();
                 out.push_str(&format!("B{:04X}: {}\n", bundle.cycle, slots_str.join(" ")));
             }
         }
 
+        out
+    }
+
+    /// Emits pure VLIW bundle stream without post-human morphological headers (for raw VM execution)
+    pub fn emit_vliw_stream(&self, doc: &ClV2Document) -> String {
+        let mut out = String::new();
+        for bundle in &doc.vliw_stream {
+            let slots_str: Vec<String> = bundle.slots.iter().map(|s| s.raw.clone()).collect();
+            out.push_str(&format!("B{:04X}: {}\n", bundle.cycle, slots_str.join(" ")));
+        }
         out
     }
 }

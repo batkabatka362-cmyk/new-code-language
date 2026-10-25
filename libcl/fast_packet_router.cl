@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/fast_packet_router.cl
-@kernel zero_copy_packet_router
-.target silicon.4d_torus
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#000E '==02#0FF< _LB03M1002 _LB04M101`
 B0001: _MA05M302\ _CO06M504O _WH07M600b _BY08M7023

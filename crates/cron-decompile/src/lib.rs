@@ -960,6 +960,228 @@ pub fn decompile_cl_with_name(cl_code: &str, module_name: &str) -> Result<String
     Ok(out)
 }
 
+fn capitalize(s: &str) -> String {
+    let mut result = String::new();
+    let mut capitalize_next = true;
+    for c in s.chars() {
+        if c == '_' || c == '-' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.extend(c.to_uppercase());
+            capitalize_next = false;
+        } else {
+            result.push(c);
+        }
+    }
+    if result.is_empty() {
+        "Decompiled".to_string()
+    } else {
+        result
+    }
+}
+
+pub fn decompile_cl_to_v2(cl_code: &str, kernel_name: &str) -> Result<String, String> {
+    let bundles = parse_cl_bundles(cl_code)?;
+
+    let mut all_slots = Vec::new();
+    for b in &bundles {
+        for s in &b.slots {
+            all_slots.push(s.clone());
+        }
+    }
+
+    let has_optical = all_slots.iter().any(|s| s.op == "OP" || s.op == "WD" || s.op == "MZ");
+    let has_reversible = all_slots.iter().any(|s| s.op == "RF" || s.op == "RT");
+    let _has_fuse = all_slots.iter().any(|s| s.op == "FU" || s.op == "FE");
+    let has_rmsnorm = all_slots.iter().any(|s| s.op == "RM" || s.op == "TG");
+    let has_silu = all_slots.iter().any(|s| s.op == "SI" || s.op == "GE");
+
+    let clean_name = kernel_name
+        .trim_start_matches("Decompiled_")
+        .trim_start_matches('@')
+        .replace(['.', '-', ' '], "_");
+    let kernel_ident = if clean_name.is_empty() {
+        "decompiled_kernel"
+    } else {
+        &clean_name
+    };
+
+    let mut out = String::new();
+    out.push_str("// ============================================================================\n");
+    out.push_str("// CRON CL v2.0 SOVEREIGN 5-PILLAR BLUEPRINT (REVERSE DECOMPILED)\n");
+    out.push_str("// Universal Reverse Semantic Projection Engine (.cl -> Sovereign CL v2.0)\n");
+    out.push_str("// Target: 256-Core 4D-Torus Neuromorphic Photonic Silicon Architecture\n");
+    out.push_str("// ============================================================================\n\n");
+
+    // Pillar 1: Silicon Target Contract
+    out.push_str(&format!("@kernel {}\n", kernel_ident));
+    out.push_str(".target silicon.decompile\n");
+    out.push_str(".ipc_target 4.0\n");
+    out.push_str(".cores 256\n");
+    out.push_str("@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)\n\n");
+
+    // Pillar 2: IO Memory Binding
+    out.push_str("@io {\n");
+    out.push_str("    in:     Input[16×16:FP32]   @sram[0x0000]\n");
+    out.push_str("    wt:     Weights[16×16:FP32] @sram[0x0200]\n");
+    out.push_str("    out:    Output[16×16:FP32]  @sram[0x0400]\n");
+    out.push_str("}\n\n");
+
+    // Pillar 3: Mathematical Tensor Morphism
+    let block_name = format!("{}Block", capitalize(kernel_ident));
+    out.push_str(&format!("§{}[16×16:FP32] {{\n", block_name));
+    out.push_str("    Weights: T[16×16:FP32]\n\n");
+    out.push_str("    Input ↦ Output :\n");
+    if has_optical {
+        out.push_str("        OptState := Input <~> Weights\n");
+        if has_rmsnorm {
+            out.push_str("        Norm := rmsnorm(OptState)\n");
+            if has_silu {
+                out.push_str("        Output := silu(Norm)\n");
+            } else {
+                out.push_str("        Output := Norm * Weights\n");
+            }
+        } else if has_silu {
+            out.push_str("        Output := silu(OptState)\n");
+        } else {
+            out.push_str("        Output := OptState * Weights\n");
+        }
+    } else if has_silu {
+        out.push_str("        Fused := Input * Weights\n");
+        out.push_str("        Output := silu(Fused)\n");
+    } else if has_rmsnorm {
+        out.push_str("        Fused := Input * Weights\n");
+        out.push_str("        Output := rmsnorm(Fused)\n");
+    } else if has_reversible {
+        out.push_str("        State := Input <~> Weights\n");
+        out.push_str("        Output := State * Weights\n");
+    } else {
+        out.push_str("        Fused := Input * Weights\n");
+        out.push_str("        Output := Fused + Weights\n");
+    }
+    out.push_str("}\n\n");
+
+    // Pillar 4: Ciphered Control-Flow
+    out.push_str("§ControlFlow {\n");
+    let loop_count = bundles.len().max(16);
+    out.push_str(&format!("    ⟳ ({}) {{\n", loop_count));
+
+    let mut mem_writes = Vec::new();
+    for bundle in &bundles {
+        for slot in &bundle.slots {
+            match slot.op.as_str() {
+                op if op.starts_with('=') || slot.prefix == '\'' => {
+                    let val = slot.imm_val.unwrap_or(slot.imm as u32);
+                    let d = if slot.dest == 0 { 1 } else { slot.dest };
+                    out.push_str(&format!("        #R{} ← 0x{:04X}\n", d, val));
+                }
+                "LD" => {
+                    let addr = slot.imm_val.unwrap_or(slot.imm as u32);
+                    let d = if slot.dest == 0 { 1 } else { slot.dest };
+                    out.push_str(&format!("        #R{} ← @sram[0x{:04X}]\n", d, addr));
+                }
+                "ST" => {
+                    let addr = slot.imm_val.unwrap_or(slot.imm as u32);
+                    let d = if slot.dest == 0 { 1 } else { slot.dest };
+                    mem_writes.push(format!("        @sram[0x{:04X}] ← #R{}\n", addr, d));
+                }
+                "PO" | "P0" | "P1" => {
+                    let d = if slot.dest == 0 { 3 } else { slot.dest };
+                    let s1 = if slot.src > 0 { slot.src } else { 1 };
+                    let s2 = if slot.imm > 0 && slot.imm < 16 {
+                        slot.imm
+                    } else {
+                        2
+                    };
+                    let op_char = match slot.mode {
+                        '+' => "+",
+                        '-' => "-",
+                        '*' => "*",
+                        '/' => "/",
+                        '%' => "%",
+                        '$' => {
+                            if slot.imm == 3 {
+                                "*"
+                            } else if slot.imm == 4 {
+                                "/"
+                            } else {
+                                "+"
+                            }
+                        }
+                        _ => "+",
+                    };
+                    out.push_str(&format!(
+                        "        #R{} := #R{} {} #R{}\n",
+                        d, s1, op_char, s2
+                    ));
+                }
+                "MD" => {
+                    let d = if slot.dest == 0 { 3 } else { slot.dest };
+                    let s1 = if slot.src > 0 { slot.src } else { 1 };
+                    let s2 = if slot.imm > 0 && slot.imm < 16 {
+                        slot.imm
+                    } else {
+                        2
+                    };
+                    out.push_str(&format!("        #R{} := #R{} * #R{}\n", d, s1, s2));
+                }
+                "DV" => {
+                    let d = if slot.dest == 0 { 3 } else { slot.dest };
+                    let s1 = if slot.src > 0 { slot.src } else { 1 };
+                    let s2 = if slot.imm > 0 && slot.imm < 16 {
+                        slot.imm
+                    } else {
+                        2
+                    };
+                    out.push_str(&format!("        #R{} := #R{} / #R{}\n", d, s1, s2));
+                }
+                "OP" | "WD" | "MZ" => {
+                    let d = if slot.dest == 0 { 3 } else { slot.dest };
+                    let s1 = if slot.src > 0 { slot.src } else { 1 };
+                    let s2 = if slot.imm > 0 && slot.imm < 16 {
+                        slot.imm
+                    } else {
+                        2
+                    };
+                    out.push_str(&format!("        #R{} := #R{} <~> #R{}\n", d, s1, s2));
+                }
+                "HL" => {
+                    out.push_str("        ⮌\n");
+                }
+                _ => {}
+            }
+        }
+    }
+
+    for mw in mem_writes {
+        out.push_str(&mw);
+    }
+
+    out.push_str("    }\n");
+    out.push_str("}\n\n");
+
+    // Pillar 5: Safety SLA Watchdog Invariant
+    out.push_str("!Δ { |Output| < 1e4, latency < 10ns }\n\n");
+
+    // Pillar 6: VLIW Silicon Microcode Stream
+    out.push_str("// ============================================================================\n");
+    out.push_str("// [5] VLIW SILICON MACHINE INSTRUCTION STREAM\n");
+    out.push_str("// ============================================================================\n");
+    for bundle in &bundles {
+        out.push_str(&format!("B{:04}:", bundle.cycle));
+        for slot in &bundle.slots {
+            out.push_str(&format!(" {}", slot.raw));
+        }
+        let pad_count = 4usize.saturating_sub(bundle.slots.len());
+        for _ in 0..pad_count {
+            out.push_str(" _NO00$000>");
+        }
+        out.push('\n');
+    }
+
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1058,6 +1280,28 @@ B0001: `012+0G15> _NO00$000> _NO00$000> _HL00$000>
         assert!(decompiled.contains("use cron.sphere::{sphere_geodesic_step, SphereMatrix}"));
         assert!(decompiled.contains("sphere_geodesic_step("));
         assert!(decompiled.contains("val=0x5"));
+    }
+
+    #[test]
+    fn test_decompile_cl_to_v2_and_coverify() {
+        let cl_code = r#"
+B0000: '=01#000A> '=02#0014> _NO00$000> _NO00$000>
+B0001: _PO03+102> _MD04*102> _bb00$000> _HL00$000>
+"#;
+        let decompiled = decompile_cl_to_v2(cl_code, "neural_gemm").expect("Should decompile to Sovereign CL v2");
+        assert!(decompiled.contains("@kernel neural_gemm"));
+        assert!(decompiled.contains("@io {"));
+        assert!(decompiled.contains("§NeuralGemmBlock[16×16:FP32] {"));
+        assert!(decompiled.contains("Input ↦ Output :"));
+        assert!(decompiled.contains("§ControlFlow {"));
+        assert!(decompiled.contains("!Δ { |Output| < 1e4, latency < 10ns }"));
+
+        // Co-verify parsing and lowering via cronc
+        let doc = cronc::parse_cl_v2(&decompiled).expect("Decompiled CL v2 must parse cleanly");
+        let engine = cronc::V2LoweringEngine::new();
+        let report = engine.co_verify(&doc);
+        assert!(report.passed, "Co-verification report must pass: {:?}", report.diagnostics);
+        assert_eq!(report.hazards_detected, 0, "No hazards allowed in decompiled CL v2");
     }
 }
 

@@ -1,16 +1,5 @@
-// ============================================================================
-// CRON CL v2.0 SOVEREIGN 5-PILLAR ARCHITECTURE
-// Module: 4,096-Core Distributed Swarm Optical Ring AllReduce
-// ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-// [1] SILICON TARGET CONTRACT
-@kernel cluster_allreduce_4096
-.target silicon.distributed_swarm
-.ipc_target 4.0
-.cores 4096
-@mesh [16×16×16] : ⮑ (x+1, y, z, 0)
-
-// [2] I/O MEMORY BINDING
 @io {
     in:  LocalTensor[32×32:FP16]   @sram[0x0000]
     out: ReducedTensor[32×32:FP16] @sram[0x0800]

@@ -1,7 +1,17 @@
 {
-  "pythonPath": "C:/Users/local_ybjuj27/AppData/Local/Programs/Python/Python311/python.exe",
+  "typeCheckingMode": "off",
+  "reportMissingImports": "none",
+  "reportAttributeAccessIssue": false,
+  "reportIncompatibleMethodOverride": false,
+  "reportArgumentType": false,
+  "reportCallIssue": false,
   "pythonVersion": "3.11",
   "extraPaths": [
+    ".",
+    "python",
+    "python/tetra_train",
+    "python/tetra_hf",
+    "src/tetra_engine",
     "C:/Users/local_ybjuj27/AppData/Local/Programs/Python/Python311/Lib/site-packages"
   ]
 }

@@ -1,16 +1,5 @@
-// ============================================================================
-// CRON CL v2.0 SOVEREIGN 5-PILLAR ARCHITECTURE
-// Module: DeepSeek-V4 Mixture of Experts (MoE) 128-Expert Dynamic Router
-// ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-// [1] SILICON TARGET CONTRACT
-@kernel deepseek_moe_router
-.target silicon.ai_isa
-.ipc_target 4.0
-.cores 256
-@mesh [8×8×4] : ⮑ (x+expert, y, z, 0)
-
-// [2] I/O MEMORY BINDING
 @io {
     in:  Tokens[16×16:NVFP4]   @sram[0x0000]
     out: Dispatched[16×16:NVFP4] @sram[0x0400]

@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/neural_packet_router.cl
-@kernel torus_adt_packet_router
-.target silicon.4d_torus_router
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#064g _RT02M100l _PK03M200= _PR04M300C
 B0001: _FL05M400# _SW06M500] _TX07M600j _SP08M7002

@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/geometric.cl
-// Subsystem 4: Clifford Geometric Algebra, Equivariant SciML & 4D Hyperspheres
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel clifford_geometric_engine
-.target silicon.clifford_rotor
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:  V[16×16:FP32]    @sram[0x0000]

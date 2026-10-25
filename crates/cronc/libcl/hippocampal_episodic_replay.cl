@@ -1,7 +1,4 @@
-; Auto-Vectorized VLIW Microcode Kernel: hippocampal_episodic_replay
-@kernel hippocampal_episodic_replay
-.target silicon.4d_torus_simd
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#00F$ '==02#040; '==03#07F3 _NO00#000L
 B0001: _OP04M102, _NO00#000L _NO00#000L _NO00#000L

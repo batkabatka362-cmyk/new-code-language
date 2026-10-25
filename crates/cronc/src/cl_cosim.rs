@@ -289,8 +289,15 @@ impl VerilogRtlCoreSimulator {
                         } else {
                             (self.rf[d], self.rf[s])
                         }
-                    } else if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
-                        (self.rf[s], self.rf[imm_nibble])
+                    } else if s > 0 && slot.raw.chars().nth(7).and_then(|c| c.to_digit(16)).unwrap_or(0) > 0 {
+                        let src2 = slot.raw.chars().nth(7).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize % 16;
+                        (self.rf[s], self.rf[src2])
+                    } else if imm_nibble > 0 && s > 0 {
+                        let reg2_val = self.rf[imm_nibble % 16];
+                        match slot.mode {
+                            'L' | 'R' | 'N' | 'O' | 'X' => (self.rf[s], reg2_val),
+                            _ => (self.rf[s], imm_nibble as u32),
+                        }
                     } else {
                         (self.rf[d], self.rf[s])
                     };
@@ -682,8 +689,15 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
                                 } else {
                                     (soft_core.r[d], soft_core.r[s])
                                 }
-                            } else if imm_nibble > 0 && imm_nibble < 16 && s > 0 {
-                                (soft_core.r[s], soft_core.r[imm_nibble])
+                            } else if s > 0 && slot.raw.chars().nth(7).and_then(|c| c.to_digit(16)).unwrap_or(0) > 0 {
+                                let src2 = slot.raw.chars().nth(7).and_then(|c| c.to_digit(16)).unwrap_or(0) as usize % 16;
+                                (soft_core.r[s], soft_core.r[src2])
+                            } else if imm_nibble > 0 && s > 0 {
+                                let reg2_val = soft_core.r[imm_nibble % 16];
+                                match slot.mode {
+                                    'L' | 'R' | 'N' | 'O' | 'X' => (soft_core.r[s], reg2_val),
+                                    _ => (soft_core.r[s], imm_nibble as u32),
+                                }
                             } else {
                                 (soft_core.r[d], soft_core.r[s])
                             };

@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/vector_ann.cl
-// lists.md Section 3: Vector Math, ANN, Cosine, HNSW & Sub-Byte Distance
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel vector_ann_engine
-.target silicon.vector_ann
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:   Query[16×16:FP32]      @sram[0x0000]

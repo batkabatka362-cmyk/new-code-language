@@ -316,7 +316,12 @@ pub unsafe extern "C" fn cron_vm_run_cl(
         None => return false,
     };
 
-    h.simulator.load_machine_code(cl_str);
+    let lowered_code = match cronc::compile_unified_cl_to_vliw(cl_str) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    h.simulator.load_machine_code(&lowered_code);
     h.simulator.run();
 
     if !out_telemetry.is_null() {
@@ -738,7 +743,17 @@ pub unsafe extern "C" fn cron_cl_jit_execute(
         }
     };
 
-    match cronc::run_cl_jit(src) {
+    let lowered_src = match cronc::compile_unified_cl_to_vliw(src) {
+        Ok(code) => code,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            return false;
+        }
+    };
+
+    match cronc::run_cl_jit(&lowered_src) {
         Ok(core) => {
             if !out_registers.is_null() {
                 let slice = slice::from_raw_parts_mut(out_registers, 16);
@@ -754,6 +769,80 @@ pub unsafe extern "C" fn cron_cl_jit_execute(
                 *out_error = CString::new(e).unwrap().into_raw();
             }
             false
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cl_compile_unified(
+    cl_source: *const c_char,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    if cl_source.is_null() {
+        return std::ptr::null_mut();
+    }
+    let src = match CStr::from_ptr(cl_source).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return std::ptr::null_mut();
+        }
+    };
+
+    match cronc::compile_unified_cl_to_vliw(src) {
+        Ok(vliw) => {
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            CString::new(vliw).unwrap().into_raw()
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cron_cl_decompile_v2(
+    cl_microcode: *const c_char,
+    kernel_name: *const c_char,
+    out_error: *mut *mut c_char,
+) -> *mut c_char {
+    if cl_microcode.is_null() {
+        return std::ptr::null_mut();
+    }
+    let code_str = match CStr::from_ptr(cl_microcode).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(format!("UTF-8 decode error: {}", e)).unwrap().into_raw();
+            }
+            return std::ptr::null_mut();
+        }
+    };
+    let k_name = if !kernel_name.is_null() {
+        CStr::from_ptr(kernel_name).to_str().unwrap_or("sovereign_kernel")
+    } else {
+        "sovereign_kernel"
+    };
+
+    match cron_decompile::decompile_cl_to_v2(code_str, k_name) {
+        Ok(decompiled) => {
+            if !out_error.is_null() {
+                *out_error = std::ptr::null_mut();
+            }
+            CString::new(decompiled).unwrap().into_raw()
+        }
+        Err(e) => {
+            if !out_error.is_null() {
+                *out_error = CString::new(e).unwrap().into_raw();
+            }
+            std::ptr::null_mut()
         }
     }
 }

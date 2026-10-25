@@ -594,8 +594,14 @@ fn h_poly_alu(core: &mut ClJitCore, slot: &PredecodedSlot, _: usize) {
         } else {
             (core.r[slot.d], core.r[slot.s])
         }
-    } else if slot.imm_nibble > 0 && slot.imm_nibble < 16 && slot.s > 0 {
-        (core.r[slot.s], core.r[slot.imm_nibble])
+    } else if slot.src2 > 0 && slot.s > 0 {
+        (core.r[slot.s], core.r[slot.src2])
+    } else if slot.imm_nibble > 0 && slot.s > 0 {
+        let reg2_val = core.r[slot.imm_nibble % 16];
+        match slot.mode {
+            'L' | 'R' | 'N' | 'O' | 'X' => (core.r[slot.s], reg2_val),
+            _ => (core.r[slot.s], slot.imm_nibble as u32),
+        }
     } else {
         (core.r[slot.d], core.r[slot.s])
     };

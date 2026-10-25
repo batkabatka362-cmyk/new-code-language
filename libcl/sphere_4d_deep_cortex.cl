@@ -1,19 +1,5 @@
-; ==============================================================================
-; CRON 4D SPHERICAL GEODESIC DEEP CORTICAL KERNEL (.cl)
-; Target: 256-Core 4D-Torus Silicon Architecture / Zero-FLOP Geodesic Engine
-; 180 VLIW Machine Bundles | 720 Parallel 10-Character Microcode Slots
-; Mathematical Specification: 4 Heads (X, Z, Y, W) traversing concentric
-; Spherical Shells with Discrete Curvature Metric: R=W, ((X+Z)/32)+1
-; ==============================================================================
-@kernel sphere_deep_cortical_engine
-.target silicon.sphere_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; ------------------------------------------------------------------------------
-; PHASE 1: Center-0 Origin Initialization & Symmetry Seeding (Cycles 1..15)
-; All 4 Heads originate at Center Origin (W=0, X=0°, Z=0°)
-; Registers R0..RF loaded with seed projection vectors
-; ------------------------------------------------------------------------------
 B0001: `A00010=01 `Q00030=42 `g00020=83 `w00040=C4
 B0002: `A00011=14 `Q00031=57 `g00021=9A `w00041=DF
 B0003: `A00012=27 `Q00032=6C `g00022=A1 `w00042=EA

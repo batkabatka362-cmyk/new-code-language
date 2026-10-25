@@ -1,16 +1,5 @@
-; ============================================================================
-; CRON Multi-Chip Cluster VLIW Microcode (.cl): Distributed Ring AllReduce
-; Architecture: 16 Distributed Chips x 256 Cores = 4,096 Physical Cores
-; Interconnect: Optical DWDM Inter-Chip Ring (3.2 Tbps / Socket)
-; Target: silicon.distributed_swarm
-; IPC Target: 4.0 (Full 4-Slot VLIW Execution)
-; ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-@kernel cluster_allreduce_4096
-.target silicon.distributed_swarm
-.ipc_target 4.0
-
-; Cycle 0: Initialize Ring Pointer and Load Local Tensor Block into Register R1
 B0000: '==01#000E '==02#040; '==03#03F] '==04#010A
 
 ; Cycle 1: Optical Waveguide Direct Transmit to Next Adjacent Chip (Ring Stage 1)

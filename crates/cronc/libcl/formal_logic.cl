@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/formal_logic.cl
-// Subsystem 7: Automated Theorem Proving, DPLL/CDCL Solvers & Formal Certificates
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel formal_theorem_prover_engine
-.target silicon.formal_logic
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:  Hypothesis[16×16:FP32] @sram[0x0000]

@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/hardware_noc.cl
-// Subsystem 8: 4D/6D Torus NoC, Photonic Waveguides, Wafer-Scale & Mooncake RDMA
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel torus_noc_router_engine
-.target silicon.torus_noc
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:   Flit[16×16:FP32]   @sram[0x0000]

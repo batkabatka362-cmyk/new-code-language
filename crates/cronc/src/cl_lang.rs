@@ -231,6 +231,7 @@ pub const KNOWN_OPCODES: &[&str] = &[
     "RC", // Re-route Fallback Channel
     "TO", // Toffoli 3-Wire Reversible Gate (Brain 3)
     "WD", // Wavelength Division Multiplexing Photonic (Brain 2)
+    "MZ", // Mach-Zehnder Interferometer Photonic Coupling (Brain 2)
     "KG", // Knowledge Graph Triple Query (Brain 1)
     "SW", // Superposition Wave Branch (Brain 5)
     "PT", // Parity Telemetry & Health Sentry (Brain 6)
@@ -1240,9 +1241,13 @@ pub fn pack_slot_16_with_crc8(
 }
 
 /// Verify CRC-8 integrity of a 10-character or 16-character .cl instruction token
+/// Verify CRC-8 integrity of a 10-character or 16-character .cl instruction token
 pub fn verify_token_crc8(raw: &str) -> bool {
     if raw.len() == 10 {
         let chars: Vec<char> = raw.chars().collect();
+        if chars[9] == compute_crc8_token(&raw[..9]) {
+            return true;
+        }
         let payload = format!(
             "{}{}{}{}{}{}{}{}",
             chars[0], chars[1], chars[2], chars[3], chars[4], chars[5], chars[6], chars[8]
@@ -1261,6 +1266,13 @@ pub fn verify_token_crc8(raw: &str) -> bool {
     }
 }
 
+#[inline]
+pub fn compute_crc8_token(raw9: &str) -> char {
+    let crc = compute_crc8_atm(raw9.as_bytes());
+    const ASCII_MAP: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[\\]^_`{|}~";
+    ASCII_MAP[(crc as usize) % ASCII_MAP.len()] as char
+}
+
 /// Unified canonical parser for immediate values and branch targets in CL instruction tokens.
 /// Standard 10-character slots store 12-bit immediate in chars [6..9] and parity/term in [9].
 /// Branch targets store full 16-bit cycle target in chars [6..10].
@@ -1273,13 +1285,37 @@ pub fn parse_slot_immediate(slot: &str) -> Option<u32> {
     }
     if bytes.len() == 10 {
         if let Some(hash_pos) = bytes.iter().position(|&b| b == b'#') {
+            // Check if slot has valid canonical CRC-8 token at index 9
+            if let Ok(raw9) = std::str::from_utf8(&bytes[..9]) {
+                if compute_crc8_token(raw9) == bytes[9] as char {
+                    // Valid CRC-8 sealed instruction: immediate is strictly 3 hex digits in bytes[6..9]
+                    let mut val = 0u32;
+                    if hash_pos + 1 < 9 {
+                        for &b in &bytes[hash_pos + 1..9] {
+                            if let Some(d) = hex_digit_val(b) {
+                                val = (val << 4) | (d as u32);
+                            }
+                        }
+                        return Some(val);
+                    }
+                }
+            }
+
             let is_branch = bytes[0] == b'!'
                 || &bytes[1..3] == b"JP" || &bytes[1..3] == b"BZ"
                 || &bytes[1..3] == b"BN" || &bytes[1..3] == b"BL"
                 || &bytes[1..3] == b"BG" || &bytes[1..3] == b"JL"
                 || &bytes[1..3] == b"JS";
 
-            let rest = &bytes[hash_pos + 1..];
+            let rest = if bytes.len() == 10 && hash_pos + 1 < bytes.len() {
+                if is_branch {
+                    &bytes[hash_pos + 1..]
+                } else {
+                    &bytes[hash_pos + 1..bytes.len() - 1]
+                }
+            } else {
+                &bytes[hash_pos + 1..]
+            };
             if is_branch {
                 let mut val = 0u32;
                 let mut count = 0;

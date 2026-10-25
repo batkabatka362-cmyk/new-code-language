@@ -27,7 +27,8 @@ pub fn parse_cl_v2(input: &str) -> Result<ClV2Document, String> {
         }
 
         // [1] Target Contract: @kernel ...
-        if line.starts_with("@kernel") {
+        // [1] Target Contract: @kernel ... or @⌖ ...
+        if line.starts_with("@kernel") || line.starts_with("@⌖") {
             let (target, next_i) = parse_target_contract(&lines, i)?;
             doc.items.push(ProgramItem::TargetContract(target.clone()));
             doc.target_contract = Some(target);
@@ -91,11 +92,49 @@ pub fn parse_cl_v2(input: &str) -> Result<ClV2Document, String> {
             continue;
         }
 
-        // [5] VLIW Microcode Bundle: B0000: ...
-        if line.starts_with('B') && line.len() >= 5 && line.chars().nth(5) == Some(':') {
-            let bundle = parse_vliw_bundle(line)?;
+        // [5] VLIW Microcode Bundle: B0000: ... or W000: B0000: ... or ; B0000: ...
+        let line_bundle = if line.starts_with("; B") {
+            line[2..].trim()
+        } else if let Some(b_idx) = line.find('B') {
+            if b_idx > 0 && line[..b_idx].trim_end().ends_with(':') {
+                line[b_idx..].trim()
+            } else {
+                line
+            }
+        } else {
+            line
+        };
+
+        if line_bundle.starts_with('B') && line_bundle.find(':').map_or(false, |pos| pos >= 2 && pos <= 6) {
+            let bundle = parse_vliw_bundle(line_bundle)?;
             doc.items.push(ProgramItem::VliwBundle(bundle.clone()));
             doc.vliw_stream.push(bundle);
+            i += 1;
+            continue;
+        }
+
+        // Direct target contract directives outside explicit @kernel line
+        if line.starts_with(".target") || line.starts_with(".ipc_target") || line.starts_with(".cores") || line.starts_with("@mesh") {
+            if doc.target_contract.is_none() {
+                doc.target_contract = Some(SiliconTargetContract {
+                    kernel_name: "sovereign_kernel".to_string(),
+                    target: "silicon.generic".to_string(),
+                    ipc_target: 4.0,
+                    cores: 256,
+                    mesh_routing: None,
+                });
+            }
+            if let Some(ref mut contract) = doc.target_contract {
+                if line.starts_with(".target") {
+                    contract.target = line.trim_start_matches(".target").trim().to_string();
+                } else if line.starts_with(".ipc_target") {
+                    contract.ipc_target = line.trim_start_matches(".ipc_target").trim().parse().unwrap_or(4.0);
+                } else if line.starts_with(".cores") {
+                    contract.cores = line.trim_start_matches(".cores").trim().parse().unwrap_or(256);
+                } else if line.starts_with("@mesh") {
+                    contract.mesh_routing = Some(parse_mesh_line(line)?);
+                }
+            }
             i += 1;
             continue;
         }
@@ -187,11 +226,22 @@ pub fn parse_cl_v2(input: &str) -> Result<ClV2Document, String> {
 // ----------------------------------------------------------------------------
 fn parse_target_contract(lines: &[&str], mut i: usize) -> Result<(SiliconTargetContract, usize), String> {
     let first = lines[i].trim();
-    let kernel_name = first.trim_start_matches("@kernel").trim().to_string();
+    let mut kernel_name = if first.starts_with("@kernel") {
+        first.trim_start_matches("@kernel").trim().to_string()
+    } else {
+        "sovereign_kernel".to_string()
+    };
+    if kernel_name.is_empty() {
+        kernel_name = "sovereign_kernel".to_string();
+    }
     let mut target = "silicon.generic".to_string();
     let mut ipc_target = 4.0f32;
     let mut cores = 256usize;
     let mut mesh_routing = None;
+
+    if first.starts_with("@⌖") || first.starts_with("@mesh") {
+        mesh_routing = Some(parse_mesh_line(first)?);
+    }
 
     i += 1;
     while i < lines.len() {
@@ -202,7 +252,7 @@ fn parse_target_contract(lines: &[&str], mut i: usize) -> Result<(SiliconTargetC
             ipc_target = line.trim_start_matches(".ipc_target").trim().parse().unwrap_or(4.0);
         } else if line.starts_with(".cores") {
             cores = line.trim_start_matches(".cores").trim().parse().unwrap_or(256);
-        } else if line.starts_with("@mesh") {
+        } else if line.starts_with("@mesh") || line.starts_with("@⌖") {
             mesh_routing = Some(parse_mesh_line(line)?);
         } else if line.is_empty() || line.starts_with("//") || line.starts_with(';') {
             // Keep going if comment or blank
@@ -226,12 +276,15 @@ fn parse_target_contract(lines: &[&str], mut i: usize) -> Result<(SiliconTargetC
 }
 
 fn parse_mesh_line(line: &str) -> Result<MeshRouting, String> {
-    // Format: @mesh [4x4x4x4] : ⮑ (x+1, y, z, w)
+    // Format: @mesh [4x4x4x4] : ⮑ (x+1, y, z, w) or @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
     let parts: Vec<&str> = line.split(':').collect();
     if parts.is_empty() {
-        return Err("Invalid @mesh line".to_string());
+        return Err("Invalid @mesh or @⌖ line".to_string());
     }
-    let dims_part = parts[0].trim_start_matches("@mesh").trim();
+    let dims_part = parts[0]
+        .trim_start_matches("@mesh")
+        .trim_start_matches("@⌖")
+        .trim();
     let inner_dims = dims_part.trim_matches(|c| c == '[' || c == ']');
     let dims: Vec<usize> = inner_dims
         .split(|c| c == 'x' || c == '×' || c == ',')
@@ -284,17 +337,31 @@ fn parse_io_binding(lines: &[&str], mut i: usize) -> Result<(IoMemoryBinding, us
             continue;
         }
 
-        // Example: in: X[16x16:NVFP4] @sram[0x0000]
-        let colon_idx = item_line.find(':').ok_or_else(|| format!("Expected ':' in io item: {}", item_line))?;
-        let kind_str = item_line[..colon_idx].trim();
-        let rest = item_line[colon_idx + 1..].trim();
-
-        let kind = match kind_str {
-            "in" => IoKind::Input,
-            "out" => IoKind::Output,
-            "wt" | "weight" => IoKind::Weight,
-            "state" => IoKind::State,
-            _ => IoKind::Input,
+        // Support both:
+        // 1. in: X[16x16:NVFP4] @sram[0x0000]
+        // 2. Q[16×16:FP32] @0x0000 (Pure non-verbal)
+        let (kind, rest) = if let Some(colon_idx) = item_line.find(':') {
+            let b_open = item_line.find('[');
+            let b_close = item_line.find(']');
+            let is_inside_brackets = match (b_open, b_close) {
+                (Some(o), Some(c)) => colon_idx > o && colon_idx < c,
+                _ => false,
+            };
+            if !is_inside_brackets {
+                let kind_str = item_line[..colon_idx].trim();
+                let k = match kind_str {
+                    "in" => IoKind::Input,
+                    "out" => IoKind::Output,
+                    "wt" | "weight" => IoKind::Weight,
+                    "state" => IoKind::State,
+                    _ => IoKind::Input,
+                };
+                (k, item_line[colon_idx + 1..].trim())
+            } else {
+                (IoKind::Input, item_line)
+            }
+        } else {
+            (IoKind::Input, item_line)
         };
 
         // Split name/type from memory address (delimited by '@')
@@ -319,7 +386,7 @@ fn parse_io_binding(lines: &[&str], mut i: usize) -> Result<(IoMemoryBinding, us
             .filter_map(|s| s.trim().parse().ok())
             .collect();
 
-        // Parse mem_part: sram[0x0000]
+        // Parse mem_part: sram[0x0000] or 0x0000
         let (tier, addr) = parse_mem_address(mem_part)?;
 
         items.push(IoBindingItem {
@@ -336,6 +403,11 @@ fn parse_io_binding(lines: &[&str], mut i: usize) -> Result<(IoMemoryBinding, us
 }
 
 fn parse_mem_address(s: &str) -> Result<(MemoryTier, u64), String> {
+    let s_clean = s.trim();
+    if s_clean.starts_with("0x") || s_clean.starts_with("0X") {
+        let addr = u64::from_str_radix(&s_clean[2..], 16).unwrap_or(0);
+        return Ok((MemoryTier::Sram, addr));
+    }
     let bracket_open = s.find('[').unwrap_or(0);
     let tier_str = s[..bracket_open].trim().to_lowercase();
     let tier = match tier_str.as_str() {
@@ -367,7 +439,10 @@ fn parse_function_block(lines: &[&str], mut i: usize) -> Result<(FunctionBlock, 
     // Header format: §Name[Dims:DType](params) {  or  §Name(params) {  or  §Name {
     let after_section = header.trim_start_matches('§').trim_start();
     let name_end = after_section.find(|c| c == '[' || c == '(' || c == '{' || c == ' ' || c == '\t').unwrap_or(after_section.len());
-    let name = after_section[..name_end].trim().to_string();
+    let mut name = after_section[..name_end].trim().to_string();
+    if name.is_empty() {
+        name = "Block".to_string();
+    }
 
     let mut tile_dims = Vec::new();
     let mut dtype = "FP32".to_string();
@@ -484,9 +559,11 @@ fn parse_function_block(lines: &[&str], mut i: usize) -> Result<(FunctionBlock, 
             if parts.len() == 2 {
                 let dest = parts[0].trim().to_string();
                 let expr = parts[1].trim().to_string();
+                let expr_ast = parse_math_expr_str(&expr).ok();
                 steps.push(MathStep {
                     target_var: dest.clone(),
                     expr: expr.clone(),
+                    expr_ast,
                 });
                 body.push(CipherStmt::Assign { dest, expr });
             }
@@ -801,3 +878,348 @@ fn parse_vliw_bundle(line: &str) -> Result<VliwBundle, String> {
 
     Ok(VliwBundle { cycle, slots })
 }
+
+// ----------------------------------------------------------------------------
+// [6] Recursive Mathematical Expression Parser & Precedence Climber
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MathToken {
+    Ident(String),
+    Num(f64),
+    LParen,
+    RParen,
+    Comma,
+    NormBar, // ∥
+    Sigma,   // σ
+    TensorMatMul,         // ⊗
+    InterferenceCoupling, // <~>
+    AssociativeScan,      // >>=
+    LogSpaceGating,       // <|>
+    RingReduction,        // <%>
+    RadixGraft,           // /@
+    PeriodicResonance,    // ~*~
+    ExteriorWedge,        // ^
+    Dot,                  // .
+    Add,                  // +
+    Sub,                  // -
+    Mul,                  // *
+    Div,                  // /
+    Mod,                  // %
+    Tilde,                // ~
+}
+
+pub fn parse_math_expr_str(input: &str) -> Result<MathExpr, String> {
+    let tokens = tokenize_math_expr(input)?;
+    if tokens.is_empty() {
+        return Err("Empty mathematical expression".to_string());
+    }
+    let mut parser = MathExprParser::new(tokens);
+    let expr = parser.parse_expr()?;
+    if parser.pos < parser.tokens.len() {
+        return Err(format!("Unexpected trailing token at position {}: {:?}", parser.pos, parser.tokens[parser.pos]));
+    }
+    Ok(expr)
+}
+
+fn tokenize_math_expr(input: &str) -> Result<Vec<MathToken>, String> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_whitespace() {
+            i += 1;
+            continue;
+        }
+
+        // Multi-char operators
+        if i + 2 < chars.len() {
+            let s3: String = chars[i..i + 3].iter().collect();
+            if s3 == "<~>" {
+                tokens.push(MathToken::InterferenceCoupling);
+                i += 3;
+                continue;
+            } else if s3 == ">>=" {
+                tokens.push(MathToken::AssociativeScan);
+                i += 3;
+                continue;
+            } else if s3 == "<|>" {
+                tokens.push(MathToken::LogSpaceGating);
+                i += 3;
+                continue;
+            } else if s3 == "<%>" {
+                tokens.push(MathToken::RingReduction);
+                i += 3;
+                continue;
+            } else if s3 == "~*~" {
+                tokens.push(MathToken::PeriodicResonance);
+                i += 3;
+                continue;
+            }
+        }
+        if i + 1 < chars.len() {
+            let s2: String = chars[i..i + 2].iter().collect();
+            if s2 == "/@" {
+                tokens.push(MathToken::RadixGraft);
+                i += 2;
+                continue;
+            }
+        }
+
+        // Single-char symbols
+        match c {
+            '⊗' => { tokens.push(MathToken::TensorMatMul); i += 1; continue; }
+            '∥' => { tokens.push(MathToken::NormBar); i += 1; continue; }
+            'σ' => { tokens.push(MathToken::Sigma); i += 1; continue; }
+            '(' => { tokens.push(MathToken::LParen); i += 1; continue; }
+            ')' => { tokens.push(MathToken::RParen); i += 1; continue; }
+            ',' => { tokens.push(MathToken::Comma); i += 1; continue; }
+            '^' => { tokens.push(MathToken::ExteriorWedge); i += 1; continue; }
+            '+' => { tokens.push(MathToken::Add); i += 1; continue; }
+            '-' => { tokens.push(MathToken::Sub); i += 1; continue; }
+            '*' => { tokens.push(MathToken::Mul); i += 1; continue; }
+            '/' => { tokens.push(MathToken::Div); i += 1; continue; }
+            '%' => { tokens.push(MathToken::Mod); i += 1; continue; }
+            '~' => { tokens.push(MathToken::Tilde); i += 1; continue; }
+            _ => {}
+        }
+
+        // Numbers: digits
+        if c.is_ascii_digit() {
+            let start = i;
+            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == 'e' || chars[i] == 'E' || (chars[i] == '-' && (chars[i - 1] == 'e' || chars[i - 1] == 'E'))) {
+                i += 1;
+            }
+            let num_str: String = chars[start..i].iter().collect();
+            let val = num_str.parse::<f64>().map_err(|e| format!("Invalid number '{}': {}", num_str, e))?;
+            tokens.push(MathToken::Num(val));
+            continue;
+        }
+
+        // Identifiers: variables, function names, registers (#R1, alpha, etc.)
+        if c.is_alphabetic() || c == '_' || c == '#' || c == '.' || (!c.is_ascii() && c != '⊗' && c != '∥' && c != 'σ') {
+            let start = i;
+            while i < chars.len() {
+                let ch = chars[i];
+                if ch.is_whitespace() || ch == '(' || ch == ')' || ch == ',' || ch == '+' || ch == '-' 
+                    || ch == '*' || ch == '/' || ch == '%' || ch == '^' || ch == '⊗' || ch == '∥' 
+                    || ch == 'σ' || ch == '~' || ch == '<' || ch == '>' {
+                    break;
+                }
+                i += 1;
+            }
+            let ident: String = chars[start..i].iter().collect();
+            tokens.push(MathToken::Ident(ident));
+            continue;
+        }
+
+        return Err(format!("Unrecognized character in math expression: '{}'", c));
+    }
+
+    Ok(tokens)
+}
+
+struct MathExprParser {
+    tokens: Vec<MathToken>,
+    pos: usize,
+}
+
+impl MathExprParser {
+    fn new(tokens: Vec<MathToken>) -> Self {
+        Self { tokens, pos: 0 }
+    }
+
+    fn peek(&self) -> Option<&MathToken> {
+        self.tokens.get(self.pos)
+    }
+
+    fn advance(&mut self) -> Option<MathToken> {
+        if self.pos < self.tokens.len() {
+            let t = self.tokens[self.pos].clone();
+            self.pos += 1;
+            Some(t)
+        } else {
+            None
+        }
+    }
+
+    fn parse_expr(&mut self) -> Result<MathExpr, String> {
+        self.parse_binary(0)
+    }
+
+    fn get_binop_info(token: &MathToken) -> Option<(MathBinaryOp, u8)> {
+        match token {
+            // Level 1: Add, Sub (prec 10)
+            MathToken::Add => Some((MathBinaryOp::Add, 10)),
+            MathToken::Sub => Some((MathBinaryOp::Sub, 10)),
+            // Level 2: Mul, Div, Mod (prec 20)
+            MathToken::Mul => Some((MathBinaryOp::Mul, 20)),
+            MathToken::Div => Some((MathBinaryOp::Div, 20)),
+            MathToken::Mod => Some((MathBinaryOp::Mod, 20)),
+            // Level 3: Advanced Tensor / Morphism Ops (prec 30)
+            MathToken::TensorMatMul => Some((MathBinaryOp::TensorMatMul, 30)),
+            MathToken::InterferenceCoupling => Some((MathBinaryOp::InterferenceCoupling, 30)),
+            MathToken::AssociativeScan => Some((MathBinaryOp::AssociativeScan, 30)),
+            MathToken::LogSpaceGating => Some((MathBinaryOp::LogSpaceGating, 30)),
+            MathToken::RingReduction => Some((MathBinaryOp::RingReduction, 30)),
+            MathToken::RadixGraft => Some((MathBinaryOp::RadixGraft, 30)),
+            MathToken::PeriodicResonance => Some((MathBinaryOp::PeriodicResonance, 30)),
+            MathToken::ExteriorWedge => Some((MathBinaryOp::ExteriorWedge, 30)),
+            MathToken::Dot => Some((MathBinaryOp::InnerScalar, 30)),
+            _ => None,
+        }
+    }
+
+    fn parse_binary(&mut self, min_prec: u8) -> Result<MathExpr, String> {
+        let mut lhs = self.parse_prefix()?;
+
+        while let Some(tok) = self.peek() {
+            if let Some((op, prec)) = Self::get_binop_info(tok) {
+                if prec < min_prec {
+                    break;
+                }
+                self.advance();
+                let rhs = self.parse_binary(prec + 1)?;
+                lhs = MathExpr::Binary {
+                    op,
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                };
+            } else {
+                break;
+            }
+        }
+
+        Ok(lhs)
+    }
+
+    fn parse_prefix(&mut self) -> Result<MathExpr, String> {
+        match self.peek() {
+            Some(MathToken::Sub) => {
+                self.advance();
+                let operand = self.parse_prefix()?;
+                Ok(MathExpr::Unary {
+                    op: MathUnaryOp::Neg,
+                    operand: Box::new(operand),
+                })
+            }
+            Some(MathToken::Tilde) => {
+                self.advance();
+                let operand = self.parse_prefix()?;
+                Ok(MathExpr::Unary {
+                    op: MathUnaryOp::RotorReverse,
+                    operand: Box::new(operand),
+                })
+            }
+            Some(MathToken::NormBar) => {
+                self.advance(); // consume ∥
+                let inner = self.parse_expr()?;
+                match self.advance() {
+                    Some(MathToken::NormBar) => Ok(MathExpr::Norm(Box::new(inner))),
+                    other => Err(format!("Expected closing '∥', found {:?}", other)),
+                }
+            }
+            Some(MathToken::Sigma) => {
+                self.advance(); // consume σ
+                if let Some(MathToken::LParen) = self.peek() {
+                    self.advance();
+                    let inner = self.parse_expr()?;
+                    match self.advance() {
+                        Some(MathToken::RParen) => Ok(MathExpr::Activation {
+                            kind: ActivationKind::Silu,
+                            operand: Box::new(inner),
+                        }),
+                        other => Err(format!("Expected ')' after σ activation, found {:?}", other)),
+                    }
+                } else {
+                    let operand = self.parse_prefix()?;
+                    Ok(MathExpr::Activation {
+                        kind: ActivationKind::Silu,
+                        operand: Box::new(operand),
+                    })
+                }
+            }
+            Some(MathToken::LParen) => {
+                self.advance(); // consume (
+                let inner = self.parse_expr()?;
+                match self.advance() {
+                    Some(MathToken::RParen) => Ok(inner),
+                    other => Err(format!("Expected ')', found {:?}", other)),
+                }
+            }
+            Some(MathToken::Num(val)) => {
+                let v = *val;
+                self.advance();
+                Ok(MathExpr::Immediate(v))
+            }
+            Some(MathToken::Ident(name)) => {
+                let name = name.clone();
+                self.advance();
+                if let Some(MathToken::LParen) = self.peek() {
+                    self.advance(); // consume (
+                    let mut args = Vec::new();
+                    if let Some(MathToken::RParen) = self.peek() {
+                        self.advance();
+                    } else {
+                        loop {
+                            let arg = self.parse_expr()?;
+                            args.push(arg);
+                            match self.peek() {
+                                Some(MathToken::Comma) => {
+                                    self.advance();
+                                }
+                                Some(MathToken::RParen) => {
+                                    self.advance();
+                                    break;
+                                }
+                                other => return Err(format!("Expected ',' or ')' in argument list, found {:?}", other)),
+                            }
+                        }
+                    }
+
+                    match name.as_str() {
+                        "silu" | ".op.silu" => {
+                            let operand = args.into_iter().next().unwrap_or(MathExpr::Immediate(0.0));
+                            Ok(MathExpr::Activation {
+                                kind: ActivationKind::Silu,
+                                operand: Box::new(operand),
+                            })
+                        }
+                        "sigmoid" | ".op.sigmoid" => {
+                            let operand = args.into_iter().next().unwrap_or(MathExpr::Immediate(0.0));
+                            Ok(MathExpr::Activation {
+                                kind: ActivationKind::Sigmoid,
+                                operand: Box::new(operand),
+                            })
+                        }
+                        "gelu" | ".op.gelu" => {
+                            let operand = args.into_iter().next().unwrap_or(MathExpr::Immediate(0.0));
+                            Ok(MathExpr::Activation {
+                                kind: ActivationKind::Gelu,
+                                operand: Box::new(operand),
+                            })
+                        }
+                        "relu" | ".op.relu" => {
+                            let operand = args.into_iter().next().unwrap_or(MathExpr::Immediate(0.0));
+                            Ok(MathExpr::Activation {
+                                kind: ActivationKind::Relu,
+                                operand: Box::new(operand),
+                            })
+                        }
+                        "rmsnorm" | "norm" | ".op.rmsnorm" => {
+                            let operand = args.into_iter().next().unwrap_or(MathExpr::Immediate(0.0));
+                            Ok(MathExpr::Norm(Box::new(operand)))
+                        }
+                        _ => Ok(MathExpr::Primitive { name, args }),
+                    }
+                } else {
+                    Ok(MathExpr::Variable(name))
+                }
+            }
+            other => Err(format!("Unexpected token in prefix position: {:?}", other)),
+        }
+    }
+}
+

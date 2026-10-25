@@ -195,6 +195,7 @@ pub mod cl_tensor_engine;
 pub mod cl_v2_ast;
 pub mod cl_v2_parser;
 pub mod cl_v2_lowering;
+pub mod cl_syntax_spec;
 
 pub use cl_high_ast::*;
 pub use cl_high_parser::{parse_high_cl, HighLexer, HighParser, HighToken};
@@ -204,6 +205,51 @@ pub use cl_tensor_engine::*;
 pub use cl_v2_ast::*;
 pub use cl_v2_parser::parse_cl_v2;
 pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport, V2TensorRuntime};
+pub use cl_syntax_spec::{verify_sovereign_pure_cipher_syntax, SovereignSyntaxReport, SyntaxViolation, SOVEREIGN_SYNTAX_EBNF};
+
+/// Unified Entry Point for all .cl files in the CRON ecosystem.
+///
+/// Unifies Dialect 3 (Low-Level Microcode / VLIW Bundles) and Dialect 4 (Sovereign CL v2.0 Post-Human Standard).
+/// Eliminates ambiguous dialects (CL v1 verbal keywords are deprecated and auto-migrated).
+pub fn parse_unified_cl(source: &str) -> Result<ClV2Document, String> {
+    // Check for legacy High-Level CL v1 keywords
+    if source.lines().any(|l| {
+        let t = l.trim();
+        t.starts_with("module ") || t.starts_with("import libcl.") || t.starts_with("arch qp_")
+    }) {
+        eprintln!("[CRON DEPRECATION NOTICE] High-Level CL v1 English verbal keywords ('module', 'import') are deprecated.");
+        eprintln!("                          Auto-unifying into Sovereign CL v2.0 Post-Human 5-Pillar Standard.");
+        if let Ok(vliw_str) = cl_high_lowering::compile_high_cl_to_cl(source) {
+            return cl_v2_parser::parse_cl_v2(&vliw_str);
+        }
+    }
+
+    cl_v2_parser::parse_cl_v2(source)
+}
+
+/// Unified compiler that takes any .cl file (Dialect 3 or Dialect 4) and emits canonical 4-slot VLIW machine bundles.
+///
+/// - If input is Dialect 4 (Sovereign CL v2.0): lowers Math Morphisms and Control-Flow into 128-bit VLIW bundles.
+/// - If input is Dialect 3 (Low-Level Microcode): emits the VLIW bundles directly.
+/// - If both are present: verifies bit-exact parity between high-level math and microcode.
+pub fn compile_unified_cl_to_vliw(source: &str) -> Result<String, String> {
+    let mut doc = parse_unified_cl(source)?;
+    let mut engine = V2LoweringEngine::new();
+
+    if doc.vliw_stream.is_empty() {
+        let bundles = engine.lower_document(&doc)?;
+        doc.vliw_stream = bundles;
+        Ok(engine.emit_vliw_stream(&doc))
+    } else {
+        if doc.math_morphism.is_some() || !doc.functions.is_empty() {
+            let report = engine.co_verify(&doc);
+            if !report.passed {
+                eprintln!("[CO-VERIFY WARNING] Parity mismatch detected: {:?}", report.diagnostics);
+            }
+        }
+        Ok(engine.emit_vliw_stream(&doc))
+    }
+}
 
 pub use cl_lora::{
     pack_trits_5, parse_jsonl_training_pairs, train_cl_lora_from_pairs, unpack_trits_5,

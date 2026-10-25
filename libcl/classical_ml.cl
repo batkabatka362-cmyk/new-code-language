@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/classical_ml.cl
-// lists.md Section 2: Classical ML, Ridge/Lasso, GBDT Residuals & Optimization
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel classical_ml_engine
-.target silicon.classical_ml
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:  X[16×16:FP32]    @sram[0x0000]

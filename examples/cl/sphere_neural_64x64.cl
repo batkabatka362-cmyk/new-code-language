@@ -1,12 +1,4 @@
-; ==============================================================================
-; CRON 4D SPHERE MATRIX NEURAL SILICON MICROCODE (.cl)
-; Layer: 'synth_layer' (Shape: 64x64, Sparsity: 20.78%, Scale: 1.279308)
-; Architecture: 4-Head 4D Geodesic VLIW (0 FLOPs, 0 DSP Multipliers)
-; Formula: Curvature = ((X + Z) >> 5) + 1, GeoTerm = Q_sign * ((Val * Curvature) >> R_shift)
-; ==============================================================================
-@kernel sphere_neural_layer_synth_layer
-.target silicon.sphere_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: `A00010=01 `Q01011+11 `g02012+21 `w03013=31
 B0001: `A00111=04 `Q01112+14 `g02113+24 `w03124-34

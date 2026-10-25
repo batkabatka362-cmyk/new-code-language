@@ -1,7 +1,4 @@
-; Auto-Vectorized VLIW Microcode Kernel: flash_decoding_paged
-@kernel flash_decoding_paged
-.target silicon.4d_torus_simd
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#0403 '==02#080K '==03#000E _NO00#000L
 B0001: _LD04M200j _MD05M104\ _NO00#000L _NO00#000L

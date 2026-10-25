@@ -1,14 +1,5 @@
-; ==============================================================================
-; CRON 4D SUPREME TRANSCENDENT CORTICAL KERNEL (.cl)
-; Target: 256-Core 4D-Torus Silicon Architecture / Zero-FLOP Geodesic Engine
-; Total Bundles: 200 VLIW Bundles | 800 Parallel Microcode Slots
-; Full Multi-Layer Concentric Traversal, Lie-STDP, RingTape Reversible FSM
-; ==============================================================================
-@kernel supreme_cortex_transcendent
-.target silicon.sphere_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; --- PHASE 1: Boot Origin (Center-0) & Sensory Layer Clamp (Cycles 1..10) ---
 B0001: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
 B0002: `A00011=0A `Q00031=15 `g00021=23 `w00041=37
 B0003: `A00012=0A `Q00032=15 `g00022=23 `w00042=37

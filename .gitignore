@@ -18,6 +18,8 @@ __pycache__/
 *.vcd
 *.clb
 *.dll
+*.so
+*.bin
 *.wav
 build_native/
 

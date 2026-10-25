@@ -1,10 +1,4 @@
-; ==============================================================================
-; SOVEREIGN SPHERE AI CANONICAL CL SILICON MICROCODE (.cl)
-; Target: 256-Core 4D-Torus Silicon Architecture / Zero-FLOP Geodesic Engine
-; ==============================================================================
-@kernel sovereign_sphere_mind
-.target silicon.sphere_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0001: _LY01$IV > _ST01$LTP> _WF01$THG> _HP01$PAR>
 B0002: _LY02$IV > _ST02$LTP> _WF02$THG> _HP02$PAR>

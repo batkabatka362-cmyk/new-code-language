@@ -102,21 +102,14 @@ pub fn heal_slot_crc(raw: &str) -> (String, bool) {
         "00".to_string()
     };
     let mode = if chars.len() >= 6 { chars[5] } else { '#' };
-    let src_char = if chars.len() >= 7 { chars[6] } else { '0' };
-    let imm_char = if chars.len() >= 9 {
-        chars[chars.len() - 2]
-    } else {
-        '0'
-    };
+    let src1_char = if chars.len() >= 7 { chars[6] } else { '0' };
+    let src2_char = if chars.len() >= 8 { chars[7] } else { '0' };
+    let imm_char = if chars.len() >= 9 { chars[8] } else { '0' };
 
-    let payload = format!("{}{}{}{}{}{}", prefix, op, dest_hex, mode, src_char, imm_char);
-    let crc8 = compute_crc8_atm(payload.as_bytes()) & 0x0F;
-    let crc_char = format!("{:1X}", crc8).chars().next().unwrap();
+    let raw9 = format!("{}{}{}{}{}{}{}", prefix, op, dest_hex, mode, src1_char, src2_char, imm_char);
+    let crc_token = crate::cl_lang::compute_crc8_token(&raw9);
 
-    let healed = format!(
-        "{}{}{}{}{}{}{}{}",
-        prefix, op, dest_hex, mode, src_char, crc_char, imm_char, term
-    );
+    let healed = format!("{}{}", raw9, crc_token);
     (healed, true)
 }
 

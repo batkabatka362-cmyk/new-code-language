@@ -1,16 +1,5 @@
-// ============================================================================
-// CRON CL v2.0 SOVEREIGN 5-PILLAR ARCHITECTURE
-// Module: Mamba-2 Structured State-Space (SSD) Continuous Sequence Layer
-// ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-// [1] SILICON TARGET CONTRACT
-@kernel mamba2_ssd_layer
-.target silicon.4d_torus
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
-
-// [2] I/O MEMORY BINDING
 @io {
     in:  X[16×16:NVFP4]  @sram[0x0000]
     out: Y[16×16:NVFP4]  @sram[0x0400]

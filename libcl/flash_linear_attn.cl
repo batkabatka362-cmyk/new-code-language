@@ -1,15 +1,5 @@
-; ============================================================================
-; CRON Silicon Standard Library: Chunk-Wise Flash Linear Attention (FLA)
-; Architecture: 4-Slot VLIW (512-Bit Bundles), O(N) Linear Time Complexity
-; Matrix Math: Intra-Chunk Parallel GEMM + Inter-Chunk Recurrent State Accumulator
-; Module: libcl/flash_linear_attn.cl
-; ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-.stage "FLA_LINEAR_ATTENTION"
-.align 64
-
-@flash_linear_attn_entry:
-; 1. Clear accumulators and setup recurrent state registers
 B0000: =R00#0000!0 =R01#0000!0 =R02#0000!0 =R03#0000!0
 B0001: =R04#0000!0 =R05#0000!0 =R06#0000!0 =R07#0000!0
 B0002: =R08#0000!0 =R09#0000!0 =R10#0000!0 =R11#0000!0

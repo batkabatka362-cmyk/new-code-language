@@ -1,16 +1,5 @@
-// ============================================================================
-// CRON CL HIGH-LEVEL SPECIFICATION: Physical Intelligence pi_0 VLA Controller
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-// [1] SILICON TARGET CONTRACT
-@kernel pi0_vla_physical_intelligence
-.target silicon.robotics_vla
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
-
-// [2] I/O MEMORY BINDING
 @io {
     in:   V[16×16:NVFP4]           @sram[0x0000]
     goal: G[16×16:FP16]            @sram[0x0200]
@@ -42,5 +31,3 @@
     }
 }
 !Δ { |A| < 2e3, latency < 5ns }
-
-

@@ -4,6 +4,8 @@
       "name": "Win32-MinGW",
       "includePath": [
         "${workspaceFolder}/include",
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/src/tetra_engine",
         "${workspaceFolder}/src_native",
         "${workspaceFolder}/benchmarks",
         "${workspaceFolder}/synth",
@@ -21,7 +23,7 @@
         "_UNICODE",
         "_POSIX_C_SOURCE=200809L"
       ],
-      "compilerPath": "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin/gcc.exe",
+      "compilerPath": "C:/Users/local_ybjuj27/AppData/Local/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin/g++.exe",
       "compilerArgs": [
         "-fopenmp",
         "-O3"

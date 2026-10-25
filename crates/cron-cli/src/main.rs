@@ -2038,46 +2038,12 @@ fn main() {
 
             print_banner();
             let cl_code = if input_path.ends_with(".cl") {
-                let is_v2_cl = content.contains('§') || (content.contains("@kernel") && (content.contains(".target") || content.contains("@io") || content.contains("↦")));
-                let code_to_verify = if is_v2_cl {
-                    println!("[CL v2.0] Detected Sovereign 5-Pillar Post-Human source...");
-                    match cronc::parse_cl_v2(&content) {
-                        Ok(mut doc) => {
-                            let mut engine = cronc::V2LoweringEngine::new();
-                            if doc.vliw_stream.is_empty() {
-                                println!("      -> Dynamically lowering Math Morphisms to 4-Snake VLIW microcode...");
-                                match engine.lower_document(&doc) {
-                                    Ok(bundles) => {
-                                        doc.vliw_stream = bundles;
-                                        engine.emit_canonical(&doc)
-                                    }
-                                    Err(e) => {
-                                        eprintln!("[CL v2 LOWERING ERROR] {}", e);
-                                        std::process::exit(1);
-                                    }
-                                }
-                            } else {
-                                let report = engine.co_verify(&doc);
-                                if report.passed {
-                                    println!("      ✓ Formal Co-Verification passed (100% bit-exact parity)");
-                                } else {
-                                    println!("      ! Co-Verification note: {:?}", report.diagnostics);
-                                }
-                                engine.emit_canonical(&doc)
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("[CL v2 PARSE ERROR] {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                } else if content.contains(".kernel") || content.contains(".include") {
-                    cronc::cl_lang::lower_cl_with_kernels(&content).unwrap_or_else(|e| {
-                        eprintln!("[KERNEL LOWERING ERROR] {}", e);
+                let code_to_verify = match cronc::compile_unified_cl_to_vliw(&content) {
+                    Ok(vliw) => vliw,
+                    Err(e) => {
+                        eprintln!("[CL UNIFIED COMPILATION ERROR] {}", e);
                         std::process::exit(1);
-                    })
-                } else {
-                    content.clone()
+                    }
                 };
                 println!("[1/3] Loading native .cl machine code from '{}'...", input_path);
                 match cronc::cl_lang::verify_cl_program(&code_to_verify) {
@@ -2175,13 +2141,12 @@ fn main() {
                     eprintln!("Error reading '{}': {}", input_path, e);
                     std::process::exit(1);
                 });
-                if content.contains(".kernel") || content.contains(".include") {
-                    cronc::cl_lang::lower_cl_with_kernels(&content).unwrap_or_else(|e| {
-                        eprintln!("[KERNEL LOWERING ERROR] {}", e);
+                match cronc::compile_unified_cl_to_vliw(&content) {
+                    Ok(vliw) => vliw,
+                    Err(e) => {
+                        eprintln!("[CL UNIFIED COMPILATION ERROR] {}", e);
                         std::process::exit(1);
-                    })
-                } else {
-                    content
+                    }
                 }
             };
 
@@ -2606,7 +2571,7 @@ fn main() {
             let is_json = args.iter().any(|a| a == "--json");
             let do_lower = args.iter().any(|a| a == "--lower");
 
-            match cronc::parse_cl_v2(&source) {
+            match cronc::parse_unified_cl(&source) {
                 Ok(mut doc) => {
                     let mut engine = cronc::V2LoweringEngine::new();
                     let lowered_code = match engine.lower_document(&doc) {
@@ -2766,42 +2731,14 @@ fn main() {
                     }
                 }
             } else {
-                let is_v2_cl = source.contains('§') || (source.contains("@kernel") && (source.contains(".target") || source.contains("@io") || source.contains("↦")));
-                let is_high_cl = !is_v2_cl && !source.contains("B0000:") && (source.contains("module ") || source.contains("kernel ") || source.contains("arch "));
-                let cl_code = if is_v2_cl {
-                    match cronc::parse_cl_v2(&source) {
-                        Ok(mut doc) => {
-                            let mut engine = cronc::V2LoweringEngine::new();
-                            if doc.vliw_stream.is_empty() {
-                                match engine.lower_document(&doc) {
-                                    Ok(bundles) => {
-                                        doc.vliw_stream = bundles;
-                                        engine.emit_canonical(&doc)
-                                    }
-                                    Err(e) => {
-                                        eprintln!("[CL v2 LOWERING ERROR] {}", e);
-                                        std::process::exit(1);
-                                    }
-                                }
-                            } else {
-                                engine.emit_canonical(&doc)
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("[CL v2 PARSER ERROR] {}", e);
-                            std::process::exit(1);
-                        }
-                    }
-                } else if is_high_cl {
-                    match cronc::compile_high_cl_to_cl(&source) {
+                let cl_code = if is_cl {
+                    match cronc::compile_unified_cl_to_vliw(&source) {
                         Ok(lowered) => lowered,
                         Err(e) => {
-                            eprintln!("[HIGH CL LOWERING ERROR] {}", e);
+                            eprintln!("[CL UNIFIED COMPILATION ERROR] {}", e);
                             std::process::exit(1);
                         }
                     }
-                } else if is_cl {
-                    source
                 } else {
                     match cronc::compile_source(&source) {
                         Ok(cl) => cl,
@@ -6002,7 +5939,7 @@ fn main() {
         }
         "decompile" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron decompile <file.cl> [-o <out.cl>]");
+                eprintln!("Error: Missing input file. Usage: cron decompile <file.cl> [-o <out.cl>] [--v2]");
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -6011,26 +5948,47 @@ fn main() {
                 std::process::exit(1);
             });
 
+            let is_v2 = args.iter().any(|a| a == "--v2");
             let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let mut out_path = format!("{}_decompiled.cl", stem);
-            if args.len() >= 5 && args[3] == "-o" {
-                out_path = args[4].clone();
+            let mut out_path = if is_v2 {
+                format!("{}_v2.cl", stem)
+            } else {
+                format!("{}_decompiled.cl", stem)
+            };
+            if let Some(pos) = args.iter().position(|a| a == "-o") {
+                if pos + 1 < args.len() {
+                    out_path = args[pos + 1].clone();
+                }
             }
 
-            println!("[CRON DECOMPILER] Reverse decompiling Silicon Machine Language '{}'...", input_path);
-            match cron_decompile::decompile_cl_with_name(&cl_code, &format!("Decompiled_{}", stem)) {
+            println!(
+                "[CRON DECOMPILER] Reverse decompiling Silicon Machine Language '{}' (target: {})...",
+                input_path,
+                if is_v2 { "Sovereign CL v2.0" } else { "CRON Blueprint" }
+            );
+            let result = if is_v2 {
+                cron_decompile::decompile_cl_to_v2(&cl_code, &format!("Decompiled_{}", stem))
+            } else {
+                cron_decompile::decompile_cl_with_name(&cl_code, &format!("Decompiled_{}", stem))
+            };
+            match result {
                 Ok(decompiled) => {
                     if let Err(e) = fs::write(&out_path, &decompiled) {
                         eprintln!("Error writing output '{}': {}", out_path, e);
                         std::process::exit(1);
                     }
                     let line_count = decompiled.lines().count();
-                    println!("[SUCCESS] Decompiled machine-native VLIW to CRON Blueprint: '{}' ({} lines)", out_path, line_count);
+                    println!(
+                        "[SUCCESS] Decompiled machine-native VLIW to {}: '{}' ({} lines)",
+                        if is_v2 { "Sovereign CL v2.0" } else { "CRON Blueprint" },
+                        out_path,
+                        line_count
+                    );
                     println!("============================================================");
                     println!("      REVERSE SEMANTIC DECOMPILATION SUMMARY                ");
                     println!("============================================================");
                     println!("  Source Input:         {} (128-bit VLIW Machine Language)", input_path);
-                    println!("  Target Output:        {} (Human Cognitive Projection)", out_path);
+                    println!("  Target Output:        {} ({})", out_path, if is_v2 { "Sovereign CL v2.0" } else { "Human Cognitive Projection" });
                     println!("  Linear Types:         100% Affine Soundness Verified");
                     println!("  Silicon Brains Mapped:Photonic, Reversible, STDP, 4D Torus NoC");
                     println!("============================================================\n");

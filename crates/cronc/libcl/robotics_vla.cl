@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/robotics_vla.cl
-// Subsystem 6: Embodied Robotics, Vision-Language-Action (VLA) & Real-Time Control
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel robotics_vla_engine
-.target silicon.robotics_vla
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:   Proprio[16×16:FP32] @sram[0x0000]

@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/sagi_cognitive_cycle.cl
-@kernel sagi_neocortical_cycle
-.target silicon.sagi_cortex
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#080O _RX02M100W _XO03M200Z _UN04M3002
 B0001: _OP05M400* _CA06M5005 _DA07M6009 _ST08M700;

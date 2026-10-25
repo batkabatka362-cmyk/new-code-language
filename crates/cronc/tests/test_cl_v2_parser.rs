@@ -140,6 +140,78 @@ fn test_parse_sequential_math_steps() {
     assert_eq!(math.steps[0].target_var, "N");
     assert_eq!(math.steps[1].target_var, "S");
     assert_eq!(math.steps[2].target_var, "Y");
+
+    // Verify AST parsing
+    assert_eq!(
+        math.steps[0].expr_ast,
+        Some(MathExpr::Norm(Box::new(MathExpr::Variable("X".to_string()))))
+    );
+    assert_eq!(
+        math.steps[1].expr_ast,
+        Some(MathExpr::Primitive {
+            name: "ssd".to_string(),
+            args: vec![
+                MathExpr::Variable("N".to_string()),
+                MathExpr::Variable("H".to_string()),
+            ],
+        })
+    );
+    assert_eq!(
+        math.steps[2].expr_ast,
+        Some(MathExpr::Activation {
+            kind: ActivationKind::Silu,
+            operand: Box::new(MathExpr::Binary {
+                op: MathBinaryOp::PeriodicResonance,
+                lhs: Box::new(MathExpr::Binary {
+                    op: MathBinaryOp::InterferenceCoupling,
+                    lhs: Box::new(MathExpr::Variable("N".to_string())),
+                    rhs: Box::new(MathExpr::Variable("S".to_string())),
+                }),
+                rhs: Box::new(MathExpr::Variable("S".to_string())),
+            }),
+        })
+    );
+}
+
+#[test]
+fn test_recursive_math_expression_ast_parser() {
+    use cronc::cl_v2_parser::parse_math_expr_str;
+
+    // 1. Pure non-verbal tensor contraction & activation
+    let e1 = parse_math_expr_str("σ(∥S∥)").expect("Should parse σ(∥S∥)");
+    assert_eq!(
+        e1,
+        MathExpr::Activation {
+            kind: ActivationKind::Silu,
+            operand: Box::new(MathExpr::Norm(Box::new(MathExpr::Variable("S".to_string())))),
+        }
+    );
+
+    // 2. Binary tensor multiplication
+    let e2 = parse_math_expr_str("Q ⊗ K").expect("Should parse Q ⊗ K");
+    assert_eq!(
+        e2,
+        MathExpr::Binary {
+            op: MathBinaryOp::TensorMatMul,
+            lhs: Box::new(MathExpr::Variable("Q".to_string())),
+            rhs: Box::new(MathExpr::Variable("K".to_string())),
+        }
+    );
+
+    // 3. Precedence: (x * y) + 5
+    let e3 = parse_math_expr_str("(x * y) + 5").expect("Should parse (x * y) + 5");
+    assert_eq!(
+        e3,
+        MathExpr::Binary {
+            op: MathBinaryOp::Add,
+            lhs: Box::new(MathExpr::Binary {
+                op: MathBinaryOp::Mul,
+                lhs: Box::new(MathExpr::Variable("x".to_string())),
+                rhs: Box::new(MathExpr::Variable("y".to_string())),
+            }),
+            rhs: Box::new(MathExpr::Immediate(5.0)),
+        }
+    );
 }
 
 #[test]

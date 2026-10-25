@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/attention.cl
-@kernel flash_attention_ssm
-.target silicon.ai_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#3F8@ '==02#3F0H _SM03M102Q _SN04M300j
 B0001: _SS05M401h _GE06M500N _SI07M6007 _OP08M702E

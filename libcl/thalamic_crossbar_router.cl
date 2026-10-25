@@ -1,7 +1,4 @@
-; Auto-Vectorized VLIW Microcode Kernel: thalamic_crossbar_router
-@kernel thalamic_crossbar_router
-.target silicon.4d_torus_simd
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#0FF" '==02#0C0@ '==03#012` _NO00#000L
 B0001: _MA04M102d _NO00#000L _NO00#000L _NO00#000L

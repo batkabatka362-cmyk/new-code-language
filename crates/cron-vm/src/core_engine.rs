@@ -580,7 +580,7 @@ impl CoreEngine {
             "YD" => {
                 // Coroutine Fiber Yield / Spatial Gather
             }
-            "OP" | "WD" => {
+            "OP" | "WD" | "MZ" => {
                 // Photonic MZI Optical GEMM (Brain 2)
                 self.optical_gemm_count += 1;
                 let d = if dest > 0 { dest } else { 4 };
@@ -620,6 +620,8 @@ impl CoreEngine {
                     (lhs, rhs)
                 } else if src2 > 0 && src > 0 {
                     (self.registers[src % 16], self.registers[src2 % 16])
+                } else if src2 == 0 && imm > 0 && src > 0 && mode != '$' && mode != ' ' && mode != '_' {
+                    (self.registers[src % 16], imm as u32)
                 } else {
                     (self.registers[d], self.registers[s])
                 };
@@ -736,6 +738,8 @@ impl CoreEngine {
                     (lhs, rhs)
                 } else if src2 > 0 && src > 0 {
                     (self.registers[src % 16], self.registers[src2 % 16])
+                } else if src2 == 0 && imm > 0 && src > 0 {
+                    (self.registers[src % 16], imm as u32)
                 } else {
                     let s = if src > 0 { src } else { 0 };
                     (self.registers[d], self.registers[s])
@@ -851,6 +855,33 @@ impl CoreEngine {
                 let new_w = (old_w + dw).clamp(-127, 127);
                 self.registers[d] = (new_w as u32) & 0xFF;
                 self.stdp_updates_count += 1;
+            }
+            "TE" => {
+                // Milestone #400: Native 1.03125-Bit Tetra Simplex Resonate (Zero-FLOPs Hardware Gate)
+                let d = if dest > 0 { dest } else { 0 };
+                let (wave, ref_plane) = if src2 > 0 && src > 0 {
+                    (self.registers[src % 16], self.registers[src2 % 16])
+                } else if src > 0 {
+                    (self.registers[d], self.registers[src % 16])
+                } else {
+                    (self.registers[d], imm as u32)
+                };
+                let xor_diff = wave ^ ref_plane;
+                let rot_diff = xor_diff.rotate_left(5);
+                let resonated = wave ^ (rot_diff & 0x5555_5555);
+                self.registers[d] = resonated;
+                self.dpsta_transitions_count += 1;
+            }
+            "TB" => {
+                // Milestone #400: Native Tetra Black Box Step (Facet Selection + Energy Popcount)
+                let d = if dest > 0 { dest } else { 0 };
+                let wave = self.registers[d];
+                let weight = if src > 0 { self.registers[src % 16] } else { imm as u32 };
+                let match_bits = !(wave ^ weight);
+                let pop = match_bits.count_ones();
+                let facet = ((wave ^ (wave >> 1)) & 0x03) as u32;
+                self.registers[d] = (pop << 16) | facet;
+                self.htgm_resonances_count += 1;
             }
             "FM" => {
                 // Fused Multiply-Add (FMA) 3-Address Code:
@@ -1955,3 +1986,27 @@ impl CoreEngine {
             self.cycle_count, self.trap_count, self.shadow_bank.len());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_native_tetra_opcodes() {
+        let mut core = CoreEngine::new(0);
+        core.registers[1] = 0x12345678;
+        core.registers[2] = 0x55555555;
+
+        // Execute TE (Tetra Resonate) on R1 against R2
+        core.execute_slot("_TE01$1200>");
+        assert_ne!(core.registers[1], 0x12345678);
+        assert_eq!(core.dpsta_transitions_count, 1);
+
+        // Execute TB (Tetra Block Step) on R1
+        core.execute_slot("_TB01$1000>");
+        let facet = core.registers[1] & 0x03;
+        assert!(facet <= 3);
+        assert_eq!(core.htgm_resonances_count, 1);
+    }
+}
+

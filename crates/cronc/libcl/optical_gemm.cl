@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/optical_gemm.cl
-@kernel photonic_mzi_gemm
-.target silicon.photonic_mzi
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#FFFj '==02#0AA( _OP03M102a _WD04M300{
 B0001: _PO05M304T ~RM06M500@ _TL07M102: _FA08M700,

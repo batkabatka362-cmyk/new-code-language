@@ -1,14 +1,4 @@
-// ============================================================================
-// CRON CL v2.0 STANDARD KERNEL: libcl/frontier_models.cl
-// lists.md Section 6: Frontier Reasoning, DeepSeek-R1 GRPO, MoE & MLA Latent Attention
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
-
-@kernel frontier_models_engine
-.target silicon.frontier_models
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
     in:     Tokens[16×16:NVFP4]       @sram[0x0000]

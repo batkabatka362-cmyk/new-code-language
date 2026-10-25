@@ -1,13 +1,5 @@
-; ============================================================================
-; CRON Continuous 4D Clifford Topological Kernel: crates/cronc/libcl/topological_program.cl
-; Pure Silicon Machine Cipher Microcode (Zero Verbal English Words)
-; Target: 256-Core 4D-Torus S^3 x Z100 Silicon Backend
-; ============================================================================
-@kernel topological_program_flow
-.target silicon.4d_torus
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; Cycle 0: Silicon initialization & 0-Anchor vacuum state setup
 B0000: _RS00$000> _SH00$000> '=01#004D> _NO00$000>
 
 ; Cycle 1: 4D Phase Token injection onto S^3 and Layer IV Sensory clamping

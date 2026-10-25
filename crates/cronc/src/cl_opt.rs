@@ -386,7 +386,7 @@ fn build_dependency_dag(slots: &[String]) -> Result<Vec<ClDagNode>, String> {
                 if let Some(s2) = slot.src2_reg {
                     if s < 16 { read_regs.push(s); }
                     if s2 < 16 { read_regs.push(s2); }
-                } else if imm_nibble < 16 && s < 16 {
+                } else if imm_nibble > 0 && imm_nibble < 16 && s < 16 {
                     read_regs.push(s);
                     read_regs.push(imm_nibble);
                 } else {

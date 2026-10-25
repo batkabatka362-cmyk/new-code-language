@@ -8,7 +8,16 @@ use crate::cl_high_ast::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HighToken {
-    // Keywords
+    // Sovereign CL v2.0 5-Pillar Non-Verbal Tokens
+    Section,         // § (Pillar 3: Tensor Morphism Block)
+    Morphism,        // ↦ (Pillar 3: Morphism Mapping)
+    WalrusAssign,    // := (Functional Tensor Assignment)
+    Transfer,        // ← (Register Memory Transfer)
+    HardwareLoop,    // ⟳ (Pillar 4: Zero-Overhead Hardware Loop)
+    YieldReturn,     // ⮌ (Silicon Yield / Return)
+    Watchdog,        // !Δ (Pillar 4: Watchdog Invariant)
+
+    // Legacy Deprecated Verbal Keywords (migrated to Sovereign morphisms)
     Module,
     Import,
     Stage,
@@ -188,6 +197,21 @@ impl<'a> HighLexer<'a> {
             self.pos += 2;
             return Ok(HighToken::EqEq);
         }
+        // :=
+        if ch == ':' && self.peek_ahead(1) == Some('=') {
+            self.pos += 2;
+            return Ok(HighToken::WalrusAssign);
+        }
+        // <-
+        if ch == '<' && self.peek_ahead(1) == Some('-') {
+            self.pos += 2;
+            return Ok(HighToken::Transfer);
+        }
+        // !Δ or !delta
+        if ch == '!' && (self.peek_ahead(1) == Some('Δ') || self.peek_ahead(1) == Some('\u{0394}')) {
+            self.pos += 2;
+            return Ok(HighToken::Watchdog);
+        }
         // !=
         if ch == '!' && self.peek_ahead(1) == Some('=') {
             self.pos += 2;
@@ -206,6 +230,11 @@ impl<'a> HighLexer<'a> {
 
         // Single character symbols
         match ch {
+            '§' => { self.advance(); Ok(HighToken::Section) }
+            '↦' => { self.advance(); Ok(HighToken::Morphism) }
+            '←' => { self.advance(); Ok(HighToken::Transfer) }
+            '⟳' => { self.advance(); Ok(HighToken::HardwareLoop) }
+            '⮌' => { self.advance(); Ok(HighToken::YieldReturn) }
             '{' => { self.advance(); Ok(HighToken::LBrace) }
             '}' => { self.advance(); Ok(HighToken::RBrace) }
             '(' => { self.advance(); Ok(HighToken::LParen) }
@@ -753,7 +782,46 @@ impl<'a> HighParser<'a> {
 
     fn parse_stmt(&mut self) -> Result<Stmt, String> {
         match self.current {
+            HighToken::YieldReturn | HighToken::Return => {
+                self.advance()?;
+                let expr = if self.current != HighToken::Semicolon && self.current != HighToken::RBrace {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
+                if self.current == HighToken::Semicolon {
+                    self.advance()?;
+                }
+                Ok(Stmt::Return(expr))
+            }
+            HighToken::HardwareLoop => {
+                self.advance()?;
+                self.expect(HighToken::LParen)?;
+                let iters = self.parse_usize()?;
+                self.expect(HighToken::RParen)?;
+                self.expect(HighToken::LBrace)?;
+                let mut loop_body = Vec::new();
+                while self.current != HighToken::RBrace && self.current != HighToken::Eof {
+                    loop_body.push(self.parse_stmt()?);
+                }
+                self.expect(HighToken::RBrace)?;
+                Ok(Stmt::RealtimeBlock { clock_hz: iters as u64, max_jitter_ns: 0, body: loop_body })
+            }
+            HighToken::Watchdog => {
+                self.advance()?;
+                if self.current == HighToken::LBrace {
+                    self.advance()?;
+                    while self.current != HighToken::RBrace && self.current != HighToken::Eof {
+                        self.advance()?;
+                    }
+                    if self.current == HighToken::RBrace {
+                        self.advance()?;
+                    }
+                }
+                Ok(Stmt::RealtimeBlock { clock_hz: 1, max_jitter_ns: 0, body: Vec::new() })
+            }
             HighToken::Let => {
+                eprintln!("[DEPRECATED] 'let' keyword is deprecated in High-Level CL. Use ':=' for functional tensor morphisms.");
                 self.advance()?;
                 let name = if let HighToken::Ident(n) = self.advance()? {
                     n
@@ -776,21 +844,9 @@ impl<'a> HighParser<'a> {
 
                 Ok(Stmt::Let { name, ty, expr })
             }
-            HighToken::Return => {
-                self.advance()?;
-                let expr = if self.current != HighToken::Semicolon {
-                    Some(self.parse_expr()?)
-                } else {
-                    None
-                };
-                if self.current == HighToken::Semicolon {
-                    self.advance()?;
-                }
-                Ok(Stmt::Return(expr))
-            }
             _ => {
                 let expr = self.parse_expr()?;
-                if self.current == HighToken::Assign {
+                if self.current == HighToken::WalrusAssign || self.current == HighToken::Assign || self.current == HighToken::Transfer {
                     self.advance()?;
                     let val = self.parse_expr()?;
                     if self.current == HighToken::Semicolon {
@@ -1015,7 +1071,85 @@ impl<'a> HighParser<'a> {
 
 /// Convenience entry point to parse a High-Level CL source into a HighModule AST.
 pub fn parse_high_cl(source: &str) -> Result<HighModule, String> {
+    // If source is Sovereign CL v2.0 (Post-Human Standard: @kernel, @⌖, §Block, ↦):
+    if source.contains('§') || source.contains("@kernel") || source.contains("@⌖") || source.contains('↦') {
+        let doc = crate::cl_v2_parser::parse_cl_v2(source)?;
+        return Ok(cl_v2_to_high_module(&doc));
+    }
+
+    if source.contains("module ") || source.contains("import ") || source.contains("let ") {
+        eprintln!("[CRON NOTICE] Legacy verbal keywords ('module', 'import', 'let') are deprecated in High-Level CL.");
+        eprintln!("              Prefer Sovereign CL v2.0 5-Pillar Standard (@kernel, @mesh, @io, §Block, :=).");
+    }
+
     let lexer = HighLexer::new(source);
     let mut parser = HighParser::new(lexer)?;
     parser.parse_module()
+}
+
+/// Convert Sovereign CL v2.0 Document into HighModule representation.
+pub fn cl_v2_to_high_module(doc: &crate::cl_v2_ast::ClV2Document) -> HighModule {
+    let name = doc
+        .target_contract
+        .as_ref()
+        .map(|t| t.kernel_name.clone())
+        .unwrap_or_else(|| "sovereign_kernel".to_string());
+
+    let mut stages = Vec::new();
+    if let Some(target) = &doc.target_contract {
+        let mut params = std::collections::HashMap::new();
+        params.insert("target".to_string(), target.target.clone());
+        params.insert("cores".to_string(), target.cores.to_string());
+        params.insert("ipc".to_string(), target.ipc_target.to_string());
+        if let Some(mesh) = &target.mesh_routing {
+            params.insert("mesh".to_string(), mesh.vector_formula.clone());
+        }
+        stages.push(StageDecl {
+            name: "SiliconTarget".to_string(),
+            params,
+        });
+    }
+
+    let mut kernels = Vec::new();
+    if let Some(morphism) = &doc.math_morphism {
+        let mut body = Vec::new();
+        for step in &morphism.steps {
+            body.push(Stmt::Assign {
+                target: Expr::Ident(step.target_var.clone()),
+                expr: Expr::Ident(step.expr.clone()),
+            });
+        }
+        kernels.push(KernelDecl {
+            name: morphism.name.clone(),
+            params: vec![KernelParam {
+                name: morphism.input_symbol.clone(),
+                ty: HighType::Tensor {
+                    dtype: DType::FP32,
+                    dims: morphism
+                        .tile_dims
+                        .iter()
+                        .map(|&d| DimExpr::Static(d))
+                        .collect(),
+                },
+            }],
+            return_type: Some(HighType::Tensor {
+                dtype: DType::FP32,
+                dims: morphism
+                    .tile_dims
+                    .iter()
+                    .map(|&d| DimExpr::Static(d))
+                    .collect(),
+            }),
+            attributes: Vec::new(),
+            body,
+        });
+    }
+
+    HighModule {
+        name,
+        imports: Vec::new(),
+        stages,
+        architectures: Vec::new(),
+        kernels,
+    }
 }

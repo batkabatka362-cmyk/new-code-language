@@ -1,16 +1,5 @@
-// ============================================================================
-// CRON CL HIGH-LEVEL SPECIFICATION: SORA-Style Video Diffusion DiT Block
-// Sovereign Non-Verbal Architecture: Pure Morphisms, Cipher Flow, and Silicon VLIW
-// ============================================================================
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-// [1] SILICON TARGET CONTRACT
-@kernel sora_video_dit_flow
-.target silicon.video_diffusion
-.ipc_target 4.0
-.cores 256
-@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
-
-// [2] I/O MEMORY BINDING
 @io {
     in:   Z[16×16:NVFP4]           @sram[0x0000]
     time: Timestep[16×16:FP32]     @sram[0x0200]
@@ -43,5 +32,3 @@
     }
 }
 !Δ { |Znext| < 1e4, trajectory_variance < 0.05 }
-
-

@@ -1,14 +1,5 @@
-; ============================================================================
-; CRON Matrix 4.1 Flagship Cortex Kernel: cortex_program.cl
-; 4D Spherical Geodesic Kinematics & Wave-Interference Cortex Microcode
-; Architecture: 256-Core 4D-Torus S^3 x Z100 Hard Silicon
-; Specification: Pure 10-Character VLIW Cipher Microcode (Zero Verbal Words)
-; ============================================================================
-@kernel matrix4_cortex_flow
-.target silicon.4d_torus
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; Cycle 0: Silicon initialization, thermal sentry arm, load seed S^3 coordinate
 B0000: _RS00$000> _SH00$000> '=01#004D> _NO00$000>
 
 ; Cycle 1: 4D Phase Token injection onto S^3 and Layer IV Sensory clamping

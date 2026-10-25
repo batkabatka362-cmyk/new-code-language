@@ -126,7 +126,6 @@ fn test_cl_opt_mini_transformer_hardware_cosim_parity() {
 
     assert!(report.optimized_ipc > 0.0);
 
-    // Verify optimized code still achieves 100% bit-exact hardware parity in Co-Simulation!
     let cosim_opts = CosimOptions::default();
     let cosim_report = run_cl_cosim(&report.optimized_code, &cosim_opts)
         .expect("Co-simulation of optimized kernel must succeed");

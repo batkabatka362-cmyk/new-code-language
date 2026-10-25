@@ -1,7 +1,4 @@
-; CRON Flagship Microcode Kernel: sagi_omni_sensory_r1_cortex
-@kernel sagi_omni_sensory_r1_cortex
-.target silicon.omni_sensory_cortex
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#100p '==02#200u _TL03M102Y _OP04M300t
 B0001: _GE05M400E _SI06M500. _WD07M6025 ~RM08M700^

@@ -563,4 +563,4 @@ vivado -mode batch -source build_bitstream.tcl -notrace -log build.log -journal 
 '''
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-out_path = os.path.join(script_dir, " part1_append_clean.txt\)
+out_path = os.path.join(script_dir, "part1_append_clean.txt")

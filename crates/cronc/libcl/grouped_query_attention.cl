@@ -1,7 +1,4 @@
-; Auto-Vectorized VLIW Microcode Kernel: grouped_query_attention
-@kernel grouped_query_attention
-.target silicon.4d_torus_simd
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#0403 '==02#020k '==03#010Z _NO00#000L
 B0001: _MD04M102N _NO00#000L _NO00#000L _NO00#000L

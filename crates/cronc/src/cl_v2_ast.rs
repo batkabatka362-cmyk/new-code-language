@@ -135,6 +135,117 @@ pub struct MathStateDecl {
 pub struct MathStep {
     pub target_var: String,
     pub expr: String,
+    pub expr_ast: Option<MathExpr>,
+}
+
+// ----------------------------------------------------------------------------
+// [3b] RECURSIVE MATHEMATICAL EXPRESSION AST & SHAPE INFERENCE
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MathExpr {
+    Variable(String),
+    Immediate(f64),
+    Binary {
+        op: MathBinaryOp,
+        lhs: Box<MathExpr>,
+        rhs: Box<MathExpr>,
+    },
+    Unary {
+        op: MathUnaryOp,
+        operand: Box<MathExpr>,
+    },
+    Norm(Box<MathExpr>),
+    Activation {
+        kind: ActivationKind,
+        operand: Box<MathExpr>,
+    },
+    Primitive {
+        name: String,
+        args: Vec<MathExpr>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MathBinaryOp {
+    TensorMatMul,        // ⊗
+    InterferenceCoupling,// <~>
+    AssociativeScan,     // >>=
+    LogSpaceGating,      // <|>
+    RingReduction,       // <%>
+    RadixGraft,          // /@
+    PeriodicResonance,   // ~*~
+    ExteriorWedge,       // ^
+    InnerScalar,         // .
+    Add,                 // +
+    Sub,                 // -
+    Mul,                 // *
+    Div,                 // /
+    Mod,                 // %
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MathUnaryOp {
+    Neg,
+    RotorReverse,        // ~
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActivationKind {
+    Sigmoid,
+    Silu,
+    Gelu,
+    Relu,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TensorShape {
+    pub dims: Vec<usize>,
+    pub dtype: String,
+}
+
+impl TensorShape {
+    pub fn new(dims: Vec<usize>, dtype: &str) -> Self {
+        Self {
+            dims,
+            dtype: dtype.to_string(),
+        }
+    }
+
+    /// Check and infer matrix multiplication: (M, K) ⊗ (K, N) -> (M, N)
+    pub fn matmul(&self, other: &TensorShape) -> Result<TensorShape, String> {
+        if self.dims.len() < 2 || other.dims.len() < 2 {
+            return Ok(self.clone());
+        }
+        let k1 = self.dims[self.dims.len() - 1];
+        let k2 = other.dims[other.dims.len() - 2];
+        if k1 != k2 {
+            return Err(format!(
+                "Compile-time Dimension Mismatch in Tensor Contraction (⊗): {:?} cannot contract with {:?} ({} != {})",
+                self.dims, other.dims, k1, k2
+            ));
+        }
+        let mut out_dims = self.dims[..self.dims.len() - 1].to_vec();
+        out_dims.push(other.dims[other.dims.len() - 1]);
+        Ok(TensorShape {
+            dims: out_dims,
+            dtype: self.dtype.clone(),
+        })
+    }
+
+    /// Check and infer elementwise binary operation: shapes must broadcast or match
+    pub fn elementwise(&self, other: &TensorShape, op: MathBinaryOp) -> Result<TensorShape, String> {
+        if self.dims == other.dims || other.dims.is_empty() || self.dims.is_empty() {
+            return Ok(self.clone());
+        }
+        if self.dims.iter().product::<usize>() == other.dims.iter().product::<usize>() {
+            return Ok(self.clone());
+        }
+        Err(format!(
+            "Compile-time Shape Mismatch in Elementwise {:?}: {:?} vs {:?}",
+            op, self.dims, other.dims
+        ))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

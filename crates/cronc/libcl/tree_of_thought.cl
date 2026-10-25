@@ -1,7 +1,4 @@
-; CRON Standard Microcode Kernel: libcl/tree_of_thought.cl
-@kernel tree_of_thought_mcts
-.target silicon.tree_reasoning
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B0000: '==01#020/ '==02#004a _KG03M1021 _HE04M300t
 B0001: _SY05M4004 _PO06M500Y _SW07M600H ~RM08M700^

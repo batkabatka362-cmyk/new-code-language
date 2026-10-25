@@ -121,6 +121,82 @@ impl FormalDiagnosticReport {
 pub fn verify_and_heal_high_cl(source: &str, file_label: Option<&str>) -> FormalDiagnosticReport {
     let file = file_label.unwrap_or("inline.cl");
 
+    // Fast-path: Sovereign CL v2.0 Post-Human Standard
+    if source.contains('§') || source.contains("@kernel") || source.contains('↦') {
+        let doc = match crate::cl_v2_parser::parse_cl_v2(source) {
+            Ok(d) => d,
+            Err(err_msg) => {
+                let (line, col) = extract_line_col_heuristic(&err_msg, source);
+                return FormalDiagnosticReport::rejected(
+                    "SYNTAX_SOVEREIGN_V2_VIOLATION",
+                    file,
+                    line,
+                    col,
+                    MathematicalConflict {
+                        source_type: "RawSourceStream".to_string(),
+                        target_type: "ClV2Document".to_string(),
+                        root_cause: err_msg.clone(),
+                    },
+                    SelfHealPatch {
+                        required_primitive: "sovereign_morphism".to_string(),
+                        original_snippet: get_line_snippet(source, line),
+                        replacement_code: format!("// Auto-fix: check Sovereign 5-pillar syntax around line {}", line),
+                        explanation: format!("Sovereign CL v2 syntax error: {}", err_msg),
+                    },
+                );
+            }
+        };
+
+        let mut engine = crate::cl_v2_lowering::V2LoweringEngine::new();
+        let bundles = match engine.lower_document(&doc) {
+            Ok(b) => b,
+            Err(lower_err) => {
+                return FormalDiagnosticReport::rejected(
+                    "SOVEREIGN_LOWERING_MISMATCH",
+                    file,
+                    1,
+                    1,
+                    MathematicalConflict {
+                        source_type: "ClV2Document".to_string(),
+                        target_type: "VLIW128BitBundles".to_string(),
+                        root_cause: lower_err.clone(),
+                    },
+                    SelfHealPatch {
+                        required_primitive: "tensor_morphism".to_string(),
+                        original_snippet: "".to_string(),
+                        replacement_code: "".to_string(),
+                        explanation: lower_err,
+                    },
+                );
+            }
+        };
+
+        let mut doc_vliw = doc.clone();
+        doc_vliw.vliw_stream = bundles;
+        let report = engine.co_verify(&doc_vliw);
+        if !report.passed {
+            return FormalDiagnosticReport::rejected(
+                "FORMAL_CO_VERIFICATION_HAZARD",
+                file,
+                1,
+                1,
+                MathematicalConflict {
+                    source_type: "MathMorphism".to_string(),
+                    target_type: "SiliconVLIWStream".to_string(),
+                    root_cause: report.diagnostics.join("; "),
+                },
+                SelfHealPatch {
+                    required_primitive: "co_verify_fix".to_string(),
+                    original_snippet: "".to_string(),
+                    replacement_code: "".to_string(),
+                    explanation: format!("Co-verification hazards: {:?}", report.diagnostics),
+                },
+            );
+        }
+
+        return FormalDiagnosticReport::verified(doc_vliw.vliw_stream.len());
+    }
+
     // 1. Try parsing AST
     let module = match parse_high_cl(source) {
         Ok(m) => m,

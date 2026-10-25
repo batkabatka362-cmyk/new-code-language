@@ -1,15 +1,5 @@
-; ==============================================================================
-; CRON 4D SPHERICAL MATRIX SOVEREIGN MACHINE CODE KERNEL (.cl)
-; Target: 256-Core 4D-Torus Silicon Architecture / Zero-FLOP Geodesic Engine
-; Slot Format: 10 Characters per Slot, 4 Slots (Heads X, Z, Y, W) per Bundle:
-;   `[Snake+Mode64][Altitude W][Lat X][Lon Z][Quadrant][Step][ALU][Reg][Val]
-; ==============================================================================
-@kernel sphere_matrix_4d_geodesic
-.target silicon.sphere_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
-; Cycle 1: 4 Heads start at Center 0, Layer W=0
-; Register init: R0=0x0A, R1=0x05, R2=0x03, R3=0x07
 B0001: `A00010=0A `Q00030=15 `g00020=23 `w00040=37
 
 ; Cycle 2: Geodesic Step 1: Head W direct-penetrates to Layer W=1

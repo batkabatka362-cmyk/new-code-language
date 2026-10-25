@@ -366,6 +366,10 @@ pub fn is_cl_document(uri: &str, text: &str) -> bool {
         t.starts_with("@CORE")
             || t.starts_with(".core")
             || t.starts_with("@kernel")
+            || t.starts_with('§')
+            || t.contains('↦')
+            || t.contains('⟳')
+            || t.contains("!Δ")
             || is_bundle_header
             || (t.contains('|') && (t.contains('_') || t.contains("ALU") || t.contains("NOP") || t.contains("ADD")))
     })
@@ -374,6 +378,62 @@ pub fn is_cl_document(uri: &str, text: &str) -> bool {
 // === Machine Code (.cl) Real-Time Diagnostics ===
 
 pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
+    // Sovereign CL v2.0 Support: Pure Mathematical Morphisms and Silicon Control Flow
+    if source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {
+        let mut diagnostics = Vec::new();
+        match cronc::parse_cl_v2(source) {
+            Ok(doc) => {
+                let mut engine = cronc::V2LoweringEngine::new();
+                match engine.lower_document(&doc) {
+                    Ok(bundles) => {
+                        let mut doc_vliw = doc.clone();
+                        doc_vliw.vliw_stream = bundles;
+                        let report = engine.co_verify(&doc_vliw);
+                        if !report.passed {
+                            for diag_msg in report.diagnostics {
+                                diagnostics.push(Diagnostic {
+                                    range: Range {
+                                        start: Position { line: 0, character: 0 },
+                                        end: Position { line: 0, character: 10 },
+                                    },
+                                    severity: 2, // Warning
+                                    code: Some("CL_V2_COSIM".to_string()),
+                                    source: Some("cron-lsp".to_string()),
+                                    message: format!("Formal Co-Verification: {}", diag_msg),
+                                });
+                            }
+                        }
+                    }
+                    Err(lower_err) => {
+                        diagnostics.push(Diagnostic {
+                            range: Range {
+                                start: Position { line: 0, character: 0 },
+                                end: Position { line: 0, character: 10 },
+                            },
+                            severity: 1, // Error
+                            code: Some("CL_V2_LOWER".to_string()),
+                            source: Some("cron-lsp".to_string()),
+                            message: format!("VLIW Lowering Error: {}", lower_err),
+                        });
+                    }
+                }
+            }
+            Err(parse_err) => {
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position { line: 0, character: 0 },
+                        end: Position { line: 0, character: 10 },
+                    },
+                    severity: 1, // Error
+                    code: Some("CL_V2_SYNTAX".to_string()),
+                    source: Some("cron-lsp".to_string()),
+                    message: format!("Sovereign CL v2 syntax error: {}", parse_err),
+                });
+            }
+        }
+        return diagnostics;
+    }
+
     let mut diagnostics = Vec::new();
     let lines: Vec<&str> = source.lines().collect();
     let has_extended_registers = source.contains(".clifford") || source.contains("4d_torus") || source.contains("Rotor");
@@ -1223,6 +1283,23 @@ pub fn get_hover_documentation(word: &str) -> Option<String> {
 pub fn get_cl_completion_items(line_str: &str, character: usize) -> Vec<CompletionItem> {
     let mut items = Vec::new();
 
+    // High-Level Sovereign CL v2.0 (Non-VLIW lines: @kernel, §Block, :=, ↦, ⟳, !Δ)
+    if !line_str.contains('|') && !line_str.trim_start().starts_with("B0") && !line_str.trim_start().starts_with("W0") {
+        for (sym, insert, doc) in sovereign_primitives_list() {
+            items.push(CompletionItem {
+                label: sym.to_string(),
+                kind: 14, // Keyword / Operator
+                detail: Some(format!("Sovereign CL v2: {}", doc)),
+                documentation: Some(MarkupContent {
+                    kind: "markdown".to_string(),
+                    value: format!("**`{}`**\n\n{}", sym, doc),
+                }),
+                insert_text: Some(insert.to_string()),
+            });
+        }
+        return items;
+    }
+
     // Determine slot index from cursor character position
     let slot_idx = if line_str.contains('|') {
         let prefix = if character <= line_str.len() {
@@ -1355,12 +1432,50 @@ pub fn get_cl_completion_items(line_str: &str, character: usize) -> Vec<Completi
     items
 }
 
-// === High-Level Language (.cr) Completions ===
+pub fn sovereign_primitives_list() -> &'static [(&'static str, &'static str, &'static str)] {
+    &[
+        ("@kernel", "@kernel ${1:kernel_name}\n.target silicon.generic\n.ipc_target 4.0\n.cores 256\n@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)", "Pillar 1: Silicon Target Contract"),
+        ("@mesh", "@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)", "Pillar 1: 4D Torus NoC Mesh Routing"),
+        ("@io", "@io {\n    in:  ${1:In}[16×16:FP32]  @sram[0x0000]\n    out: ${2:Out}[16×16:FP32]  @sram[0x0400]\n}", "Pillar 2: Memory Tier Binding (@sram/@dram/@hbm)"),
+        ("§Block", "§${1:ComputeBlock}[16×16:FP32] {\n    ${2:X} ↦ ${3:Y} :\n        ${3:Y} := silu(${2:X})\n}", "Pillar 3: Mathematical Tensor Morphism Block"),
+        ("↦", "${1:X} ↦ ${2:Y} :", "Pillar 3: Tensor Morphism Mapping"),
+        (":=", "${1:Dest} := ${2:Expr}", "Pure Functional Assignment (no verbal 'let')"),
+        ("←", "#R${1:1} ← @sram[${2:0x0000}]", "Silicon Register Memory Transfer (Load/Store)"),
+        ("⟳", "⟳ (${1:256}) {\n    #R1 ← @sram[0x0000]\n    @sram[0x0400] ← #R1\n}", "Pillar 4: Zero-Overhead Hardware Loop"),
+        ("?", "? (${1:cond}) ⮞ {\n    #R1 ← 1\n} : {\n    #R1 ← 0\n}", "Pillar 4: Branchless Hardware Conditional"),
+        ("⮌", "⮌ ${1:result}", "Silicon Yield / Morphism Return"),
+        ("!Δ", "!Δ { |${1:Y}| < 1e4, latency < 10ns }", "Pillar 4: Invariant & Watchdog Sentry"),
+        ("<~>", "${1:a} <~> ${2:b}", "Photonic MZI Phase Coupling / Unitary Multiply"),
+        (">>=", "${1:a} >>= ${2:b}", "Continuous Associative State-Space Scan (Mamba-2 SSD)"),
+        ("<|>", "${1:a} <|> ${2:b}", "Log-Space Entropy Gating / Softmax"),
+        ("<%>", "${1:a} <%> ${2:b}", "Polynomial Crypto-Ring Modulo Reduction"),
+        ("/@", "${1:a} /@ ${2:b}", "Radix Tree Subtree Graft (Zero-Copy KV Cache)"),
+        ("~*~", "${1:a} ~*~ ${2:b}", "Periodic Harmonic Wave Resonance"),
+        ("^", "${1:a} ^ ${2:b}", "Clifford Geometric Algebra Exterior Wedge Product"),
+        ("~", "~${1:a}", "Clifford Rotor Reversion"),
+    ]
+}
+
+// === High-Level Language & Sovereign CL Completions ===
 
 pub fn get_completion_items() -> Vec<CompletionItem> {
     let mut items = Vec::new();
 
-    // Keywords
+    // 1. Sovereign CL v2.0 5-Pillar Non-Verbal Primitives (Primary)
+    for (sym, insert, doc) in sovereign_primitives_list() {
+        items.push(CompletionItem {
+            label: sym.to_string(),
+            kind: 14, // Keyword / Operator
+            detail: Some(format!("Sovereign CL v2: {}", doc)),
+            documentation: Some(MarkupContent {
+                kind: "markdown".to_string(),
+                value: format!("**`{}`**\n\n{}", sym, doc),
+            }),
+            insert_text: Some(insert.to_string()),
+        });
+    }
+
+    // 2. Legacy Keywords (Secondary)
     let keywords = [
         ("let", "let var = value", "Bind immutable variable"),
         ("lin", "let lin res = value", "Declare affine linear variable (must consume once)"),
@@ -3314,4 +3429,41 @@ mod tests {
         assert!(actions[0]["title"].as_str().unwrap().contains("consume(orphan_photon)"));
         assert_eq!(actions[0]["kind"], "quickfix");
     }
+
+    #[test]
+    fn test_lsp_sovereign_cl_v2_clean_diagnostics() {
+        let server = LspServer::new();
+        let v2_source = r#"
+@kernel test_v2_clean
+.target silicon.frontier_models
+.ipc_target 4.0
+.cores 256
+@mesh [4×4×4×4] : ⮑ (x+1, y, z, w)
+
+@io {
+    in:  X[16×16:FP32]  @sram[0x0000]
+    out: Y[16×16:FP32]  @sram[0x0400]
 }
+
+§CleanBlock[16×16:FP32] {
+    W: T[16×16:FP32]
+    X ↦ Y :
+        Norm := rmsnorm(X)
+        Y := silu(Norm)
+}
+
+§ControlFlow {
+    ⟳ (16) {
+        #R1 ← @sram[0x0000]
+        #R2 ← @sram[0x0040]
+        #R3 := #R1 * #R2
+        @sram[0x0400] ← #R3
+    }
+}
+!Δ { |Y| < 1000, latency < 15ns }
+"#;
+        let diags = server.compute_diagnostics_for_source("file:///frontier.cl", v2_source);
+        assert!(diags.is_empty(), "Sovereign CL v2 should produce 0 false diagnostic errors, found: {:?}", diags);
+    }
+}
+

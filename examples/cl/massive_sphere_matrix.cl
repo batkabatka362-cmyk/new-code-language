@@ -1,10 +1,4 @@
-; ==============================================================================
-; MASSIVE STRESS-TEST: 25,000 VLIW BUNDLES (100,000 SLOTS)
-; Target: 256-Core 4D-Torus Architecture (0 FLOPs / Discrete Curvature Metric)
-; ==============================================================================
-@kernel massive_sphere_matrix_stress
-.target silicon.sphere_isa
-.ipc_target 4.0
+@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 B00001: `C13521-07 `SNKY31*18 `ijb#41^29 `y(s211+3A
 B00002: `A26A32*0E `QONd42^1F `gke)12+20 `w)v722-31
