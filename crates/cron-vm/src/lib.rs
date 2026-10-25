@@ -7,9 +7,11 @@ pub mod cluster;
 pub mod core_engine;
 pub mod debugger;
 pub mod simulator;
+pub mod tetra;
 pub mod torus_mesh;
 
 pub use cluster::{ClusterCoord, ClusterNode, ClusterSimulator, ClusterStats, InterChipLink, InterChipPacket};
+pub use tetra::{BlochPhase, ResonanceKvCache, TetraBlock, TetrahedronSimplex, TetraTreeLmHead, Vec3D};
 pub use core_engine::CoreEngine;
 pub use debugger::{
     disassemble_bundle, disassemble_slot, Breakpoint, Debugger, DisassembledBundle, DisassembledSlot,
