@@ -1774,6 +1774,26 @@ fn main() {
                         }
                     }
                 }
+                "verilog" | "v" | "rtl" => {
+                    if out_path.is_empty() {
+                        out_path = format!("{}.v", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+                    }
+                    let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+                    println!("[CRON VERILOG BACKEND] Compiling '{}' to 1.0 GHz Synthesizable Verilog RTL...", input_path);
+                    match cronc::compile_to_verilog(&content, module_name) {
+                        Ok(v_code) => {
+                            if let Err(e) = fs::write(&out_path, &v_code) {
+                                eprintln!("Error writing output: {}", e);
+                                std::process::exit(1);
+                            }
+                            println!("[SUCCESS] Generated 1.0 GHz Verilog RTL: '{}'", out_path);
+                        }
+                        Err(e) => {
+                            eprintln!("[VERILOG ERROR] {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 _ => {
                     match cronc::compile_source_with_name(&content, Some(input_path)) {
                         Ok(cl_output) => {

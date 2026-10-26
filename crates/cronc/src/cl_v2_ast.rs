@@ -246,6 +246,70 @@ impl TensorShape {
             op, self.dims, other.dims
         ))
     }
+
+    /// Check and infer Associative Scan (>>=): input dimension must match state dimension
+    pub fn associative_scan(&self, state: &TensorShape) -> Result<TensorShape, String> {
+        if self.dims.is_empty() || state.dims.is_empty() {
+            return Ok(self.clone());
+        }
+        let in_d = self.dims[self.dims.len() - 1];
+        let state_d = state.dims[0];
+        if in_d != state_d {
+            return Err(format!(
+                "Compile-time Dimension Mismatch in Associative Scan (>>=): Input dim {} does not match State dim {} ({:?} vs {:?})",
+                in_d, state_d, self.dims, state.dims
+            ));
+        }
+        Ok(self.clone())
+    }
+
+    /// Check and infer Photonic Interference Coupling (<~>): MZI grid size parity
+    pub fn photonic_coupling(&self, other: &TensorShape) -> Result<TensorShape, String> {
+        if self.dims.is_empty() || other.dims.is_empty() {
+            return Ok(self.clone());
+        }
+        let d1 = self.dims[self.dims.len() - 1];
+        let d2 = other.dims[other.dims.len() - 1];
+        if d1 != d2 && self.dims != other.dims {
+            return Err(format!(
+                "Compile-time Phase Mismatch in Photonic Interference Coupling (<~>): MZI grid size {} != {} ({:?} vs {:?})",
+                d1, d2, self.dims, other.dims
+            ));
+        }
+        Ok(self.clone())
+    }
+
+    /// Check and infer Exterior Wedge Product (^): Clifford multivector space consistency
+    pub fn exterior_wedge(&self, other: &TensorShape) -> Result<TensorShape, String> {
+        if self.dims.is_empty() || other.dims.is_empty() {
+            return Ok(self.clone());
+        }
+        let d1 = self.dims[self.dims.len() - 1];
+        let d2 = other.dims[other.dims.len() - 1];
+        if d1 != d2 {
+            return Err(format!(
+                "Compile-time Multivector Space Mismatch in Exterior Wedge (^): Cl(n) dimension {} != {} ({:?} vs {:?})",
+                d1, d2, self.dims, other.dims
+            ));
+        }
+        Ok(self.clone())
+    }
+
+    /// Check and infer Polynomial NTT Crypto-Ring Reduction (<%>)
+    pub fn ring_reduction(&self, other: &TensorShape) -> Result<TensorShape, String> {
+        if self.dims.is_empty() || other.dims.is_empty() {
+            return Ok(self.clone());
+        }
+        let deg1 = self.dims[0];
+        let deg2 = other.dims[0];
+        if deg1 != deg2 {
+            return Err(format!(
+                "Compile-time Cyclotomic Degree Mismatch in Crypto-Ring Reduction (<%>): NTT degree {} != {} ({:?} vs {:?})",
+                deg1, deg2, self.dims, other.dims
+            ));
+        }
+        Ok(self.clone())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

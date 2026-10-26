@@ -136,6 +136,12 @@ impl V2LoweringEngine {
         // 1. Lower I/O Bindings into Register Initializations and Tensor Shapes
         if let Some(ref io) = doc.io_binding {
             for item in &io.items {
+                if item.tier == MemoryTier::Sram && item.address >= 0x10000 {
+                    return Err(format!(
+                        "Compile-time SRAM Overflow Error: Address 0x{:04X} for '{}' exceeds 64KB Core Local SRAM window (0x0000 - 0xFFFF)",
+                        item.address, item.name
+                    ));
+                }
                 let r = self.get_or_alloc_var(&item.name);
                 self.shape_map.insert(
                     item.name.clone(),
@@ -297,10 +303,13 @@ impl V2LoweringEngine {
             MathExpr::Binary { op, lhs, rhs } => {
                 let lhs_shape = self.infer_expr_shape(lhs, default_dims, default_dtype)?;
                 let rhs_shape = self.infer_expr_shape(rhs, default_dims, default_dtype)?;
-                if *op == MathBinaryOp::TensorMatMul {
-                    lhs_shape.matmul(&rhs_shape)
-                } else {
-                    lhs_shape.elementwise(&rhs_shape, *op)
+                match op {
+                    MathBinaryOp::TensorMatMul => lhs_shape.matmul(&rhs_shape),
+                    MathBinaryOp::AssociativeScan => lhs_shape.associative_scan(&rhs_shape),
+                    MathBinaryOp::InterferenceCoupling => lhs_shape.photonic_coupling(&rhs_shape),
+                    MathBinaryOp::ExteriorWedge => lhs_shape.exterior_wedge(&rhs_shape),
+                    MathBinaryOp::RingReduction => lhs_shape.ring_reduction(&rhs_shape),
+                    _ => lhs_shape.elementwise(&rhs_shape, *op),
                 }
             }
             MathExpr::Unary { operand, .. } => {
@@ -454,6 +463,66 @@ impl V2LoweringEngine {
                 opcode: "SS".to_string(),
                 dest: dest_r,
                 mode: '>',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 6b. Log-Space MoE Gating: <|>
+        if e.contains("<|>") {
+            let parts: Vec<&str> = e.split("<|>").collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "GT".to_string(),
+                dest: dest_r,
+                mode: '|',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 6c. Polynomial Crypto-Ring Reduction: <%>
+        if e.contains("<%>") {
+            let parts: Vec<&str> = e.split("<%>").collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "NT".to_string(),
+                dest: dest_r,
+                mode: '%',
+                src1: r1,
+                src2: Some(r2),
+                imm: 0,
+                is_16char: false,
+            });
+            return Ok(());
+        }
+
+        // 6d. Clifford Exterior Wedge Product: ^
+        if e.contains('^') {
+            let parts: Vec<&str> = e.split('^').collect();
+            let r1 = self.alloc_reg();
+            let r2 = self.alloc_reg();
+            self.lower_math_expr(parts[0], r1, x_reg, instrs)?;
+            self.lower_math_expr(parts[1], r2, x_reg, instrs)?;
+            instrs.push(IntermediateInstr {
+                prefix: '_',
+                opcode: "CW".to_string(),
+                dest: dest_r,
+                mode: '^',
                 src1: r1,
                 src2: Some(r2),
                 imm: 0,
