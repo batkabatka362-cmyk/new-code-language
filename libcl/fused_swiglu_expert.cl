@@ -1,4 +1,7 @@
-@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+; Auto-Vectorized VLIW Microcode Kernel: fused_swiglu_expert
+@kernel fused_swiglu_expert
+.target silicon.4d_torus_simd
+.ipc_target 4.0
 
 B0000: '==01#080O '==02#030" '==03#055} '==04#0AAO
 B0001: _TM05M203{ _TM06M204, _NO00#000L _NO00#000L

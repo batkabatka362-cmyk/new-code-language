@@ -107,6 +107,14 @@ pub fn export_cl_to_rtl(
     module_name: &str,
     config: &RtlExportConfig,
 ) -> Result<RtlExportPackage, String> {
+    let lowered_source;
+    let cl_source = if !cl_source.contains("B0") && !cl_source.contains("B0000:") {
+        lowered_source = crate::compile_source(cl_source)?;
+        &lowered_source
+    } else {
+        cl_source
+    };
+
     // 1. Synthesize core Verilog HDL
     let core_verilog = generate_verilog_hdl(cl_source, module_name)?;
 
@@ -118,8 +126,13 @@ pub fn export_cl_to_rtl(
     let mut total_words = 0usize;
     for line in cl_source.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with('B') && trimmed.contains(':') {
-            if let Some((_, slots_part)) = trimmed.split_once(':') {
+        let b_line = if trimmed.starts_with("; B") {
+            trimmed[2..].trim()
+        } else {
+            trimmed
+        };
+        if b_line.starts_with('B') && b_line.contains(':') {
+            if let Some((_, slots_part)) = b_line.split_once(':') {
                 for slot in slots_part.split_whitespace() {
                     if let Ok(parsed) = parse_slot(slot) {
                         let word = encode_slot_to_u32(&parsed);

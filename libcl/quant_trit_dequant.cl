@@ -1,4 +1,7 @@
-@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
+; Auto-Vectorized VLIW Microcode Kernel: quant_trit_dequant
+@kernel quant_trit_dequant
+.target silicon.4d_torus_simd
+.ipc_target 4.0
 
 B0000: '==01#0AA( '==02#018r _NO00#000L _NO00#000L
 B0001: _RO03M100W _NO00#000L _NO00#000L _NO00#000L

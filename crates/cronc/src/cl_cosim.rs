@@ -542,6 +542,9 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
     let cl_code = if cl_code.contains(".kernel") || cl_code.contains(".include") {
         lowered_code = crate::cl_lang::lower_cl_with_kernels(cl_code)?;
         &lowered_code
+    } else if !cl_code.contains("B0") && !cl_code.contains("B0000:") {
+        lowered_code = crate::compile_source(cl_code)?;
+        &lowered_code
     } else {
         cl_code
     };
@@ -567,17 +570,17 @@ pub fn run_cl_cosim(cl_code: &str, options: &CosimOptions) -> Result<ClCosimRepo
         }
 
         let trimmed = line.trim();
-        if trimmed.is_empty()
-            || trimmed.starts_with(';')
-            || trimmed.starts_with("//")
-            || trimmed.starts_with('@')
-            || trimmed.starts_with('.')
-            || !trimmed.starts_with('B')
-        {
+        let b_line = if trimmed.starts_with("; B") {
+            trimmed[2..].trim()
+        } else {
+            trimmed
+        };
+
+        if !b_line.starts_with('B') {
             continue;
         }
 
-        if let Some((b_label, slots_part)) = trimmed.split_once(':') {
+        if let Some((b_label, slots_part)) = b_line.split_once(':') {
             let slot_strs: Vec<&str> = slots_part.split_whitespace().collect();
             if slot_strs.is_empty() {
                 continue;

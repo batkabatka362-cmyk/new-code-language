@@ -140,14 +140,28 @@ pub fn encode_slot_to_u32(slot: &ClSlot) -> u32 {
 
 /// Generates synthesis-ready IEEE 1364-2001 Verilog HDL source from .cl machine text
 pub fn generate_verilog_hdl(cl_source: &str, module_name: &str) -> Result<String, String> {
+    let lowered_source;
+    let cl_source = if !cl_source.contains("B0") && !cl_source.contains("B0000:") {
+        lowered_source = crate::compile_source(cl_source)?;
+        &lowered_source
+    } else {
+        cl_source
+    };
+
     let mut words: Vec<u32> = Vec::new();
 
     for line in cl_source.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+        let b_line = if trimmed.starts_with("; B") {
+            trimmed[2..].trim()
+        } else {
+            trimmed
+        };
+
+        if b_line.is_empty() || b_line.starts_with("//") {
             continue;
         }
-        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        let parts: Vec<&str> = b_line.split_whitespace().collect();
         if parts.len() == 5 && parts[0].starts_with('B') && parts[0].ends_with(':') {
             for slot_str in &parts[1..5] {
                 let slot = parse_slot(slot_str)?;

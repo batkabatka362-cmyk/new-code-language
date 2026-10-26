@@ -115,6 +115,14 @@ struct ExtractedMemOp {
 
 /// Verifies .cl machine code for PGAS 16-bank conflicts and address space safety
 pub fn verify_cl_memory_access(cl_source: &str, options: &MemcheckOptions) -> Result<ClMemcheckReport, String> {
+    let lowered_source;
+    let cl_source = if !cl_source.contains("B0") && !cl_source.contains("B0000:") {
+        lowered_source = crate::compile_source(cl_source)?;
+        &lowered_source
+    } else {
+        cl_source
+    };
+
     let mut total_accesses = 0;
     let mut cycles_analyzed = 0;
     let mut conflict_free_cycles = 0;
@@ -129,15 +137,21 @@ pub fn verify_cl_memory_access(cl_source: &str, options: &MemcheckOptions) -> Re
 
     for line in cl_source.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
+        let b_line = if trimmed.starts_with("; B") {
+            trimmed[2..].trim()
+        } else {
+            trimmed
+        };
+
+        if b_line.is_empty() || b_line.starts_with("//") {
             continue;
         }
 
         // Track active core coordinates: .core [x, y, z, w]:
-        if trimmed.starts_with(".core") {
-            if let Some(start_bracket) = trimmed.find('[') {
-                if let Some(end_bracket) = trimmed.find(']') {
-                    let coords_str = &trimmed[start_bracket + 1..end_bracket];
+        if b_line.starts_with(".core") {
+            if let Some(start_bracket) = b_line.find('[') {
+                if let Some(end_bracket) = b_line.find(']') {
+                    let coords_str = &b_line[start_bracket + 1..end_bracket];
                     let mut parts = coords_str.split(',').map(|s| s.trim());
                     if let (Some(x_str), Some(y_str), Some(z_str), Some(w_str)) =
                         (parts.next(), parts.next(), parts.next(), parts.next())
@@ -153,11 +167,11 @@ pub fn verify_cl_memory_access(cl_source: &str, options: &MemcheckOptions) -> Re
             continue;
         }
 
-        if trimmed.starts_with('@') || trimmed.starts_with('.') || !trimmed.starts_with('B') {
+        if b_line.starts_with('@') || b_line.starts_with('.') || !b_line.starts_with('B') {
             continue;
         }
 
-        if let Some((_b_part, slots_part)) = trimmed.split_once(':') {
+        if let Some((_b_part, slots_part)) = b_line.split_once(':') {
             cycles_analyzed += 1;
             if cycles_analyzed > options.max_cycles {
                 break;
