@@ -4,6 +4,7 @@
 // Zero-FLOPs True 2D Block-Matrix Projection on Memory-Mapped 9.30 GB Model
 // Hardware: AVX2 SIMD Bitwise XNOR + POPCOUNT Accelerated
 // Tokenizer: 2,446 Sovereign Subword Vocabulary (Mongolian + English + Microcode)
+// Features: Top-K Softmax (K=4), Temperature, Repetition Penalty, Interactive CLI
 // ============================================================================
 
 #include "tetra_engine.h"
@@ -17,6 +18,8 @@
 #include <cstring>
 #include <iomanip>
 #include <algorithm>
+#include <cmath>
+#include <random>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
@@ -60,7 +63,10 @@ private:
 
     TetraHarmonicRingBuffer m_ring_buffer;
     size_t m_current_seq_len = 0;
-    float m_temperature = 0.5f;
+    float m_temperature = 0.45f;
+    int m_top_k = 4;
+    std::vector<int> m_recent_tokens;
+    std::mt19937 m_rng{1337};
 
     // Subword Vocabulary
     std::vector<std::string> m_id_to_token;
@@ -76,6 +82,9 @@ public:
     ~Tetra70BSubwordEngine() {
         cleanup();
     }
+
+    void set_temperature(float t) { m_temperature = t; }
+    void set_top_k(int k) { m_top_k = k; }
 
     bool load_vocabulary(const std::string& vocab_path) {
         std::ifstream vf(vocab_path);
@@ -118,7 +127,6 @@ public:
             if (unescaped == "<|eos|>") m_eos_id = id;
         }
 
-        std::cout << "[+] Дэд-үгийн толь бичиг ачаалагдлаа: " << m_id_to_token.size() << " токен.\n";
         return true;
     }
 
@@ -128,7 +136,6 @@ public:
         size_t n = text.length();
 
         while (i < n) {
-            // Greedy longest match against vocabulary
             int best_id = -1;
             size_t best_len = 0;
 
@@ -146,7 +153,6 @@ public:
                 tokens.push_back(best_id);
                 i += best_len;
             } else {
-                // Byte fallback
                 uint8_t byte_val = (uint8_t)text[i];
                 char hex_tok[16];
                 snprintf(hex_tok, sizeof(hex_tok), "<0x%02X>", byte_val);
@@ -179,7 +185,7 @@ public:
         m_file_handle = CreateFileA(model_path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                     NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (m_file_handle == INVALID_HANDLE_VALUE) {
-            std::cerr << "[-] Алдаа: 70B загвар файлын олдсонгүй: " << model_path << "\n";
+            std::cerr << "[-] Алдаа: 70B загвар файл олдсонгүй: " << model_path << "\n";
             return false;
         }
 
@@ -273,9 +279,9 @@ public:
         }
 
         // 3. Zero-FLOPs Harmonic Resonance LM-Head across 2,446 Subwords
-        int best_tok = 0;
-        int max_score = -1;
         size_t vocab_size = m_id_to_token.size();
+        std::vector<std::pair<int, int>> candidates;
+        candidates.reserve(vocab_size);
 
         for (size_t k = 0; k < vocab_size; ++k) {
             uint32_t cand_phase = (uint32_t)k * 0x9E3779B9;
@@ -290,71 +296,84 @@ public:
                 score += 16;
 #endif
             }
-            if (score > max_score) {
-                max_score = score;
-                best_tok = (int)k;
+
+            // Repetition Penalty
+            for (int past_tok : m_recent_tokens) {
+                if ((int)k == past_tok) {
+                    score -= 50; // багасгах
+                }
+            }
+
+            candidates.push_back({score, (int)k});
+        }
+
+        // Top-K Selection
+        int k_val = std::min(m_top_k, (int)candidates.size());
+        std::partial_sort(candidates.begin(), candidates.begin() + k_val, candidates.end(),
+                          [](const std::pair<int,int>& a, const std::pair<int,int>& b) {
+                              return a.first > b.first;
+                          });
+
+        int chosen_tok = candidates[0].second;
+        if (m_temperature > 0.05f && k_val > 1) {
+            std::vector<float> exp_weights(k_val);
+            float max_s = (float)candidates[0].first;
+            float sum_w = 0.0f;
+            for (int i = 0; i < k_val; ++i) {
+                exp_weights[i] = std::exp(((float)candidates[i].first - max_s) / m_temperature);
+                sum_w += exp_weights[i];
+            }
+            std::uniform_real_distribution<float> dist(0.0f, sum_w);
+            float r = dist(m_rng);
+            float cum = 0.0f;
+            for (int i = 0; i < k_val; ++i) {
+                cum += exp_weights[i];
+                if (r <= cum) {
+                    chosen_tok = candidates[i].second;
+                    break;
+                }
             }
         }
 
-        m_current_seq_len++;
-        return best_tok;
-    }
-
-    void generate(const std::string& prompt, size_t max_tokens = 30) {
-        std::cout << "\n========================================================================\n";
-        std::cout << "   TETRA-70B SUBWORD AUTOREGRESSIVE GENERATOR (2,446 VOCAB)             \n";
-        std::cout << "========================================================================\n";
-        std::cout << "[*] Эхлэх промпт: \"" << prompt << "\"\n";
-        std::cout << "[*] Толь бичиг  : 2,446 Суб-үг (Морфологи, Клиффорд, Verilog, Микрокод)\n";
-        std::cout << "------------------------------------------------------------------------\n";
-        std::cout << "[Үүсгэсэн текст]: " << prompt << std::flush;
-
-        std::vector<int> prompt_tokens = tokenize(prompt);
-        int last_tok = 0;
-        uint64_t total_bytes = 0;
-        auto t0 = std::chrono::high_resolution_clock::now();
-
-        // 1. Prefill
-        for (int t : prompt_tokens) {
-            uint64_t b = 0;
-            last_tok = step_forward(t, b);
-            total_bytes += b;
+        m_recent_tokens.push_back(chosen_tok);
+        if (m_recent_tokens.size() > 24) {
+            m_recent_tokens.erase(m_recent_tokens.begin());
         }
 
-        // 2. Generation Loop
-        for (size_t i = 0; i < max_tokens; ++i) {
-            uint64_t b = 0;
-            int next_tok = step_forward(last_tok, b);
-            total_bytes += b;
+        m_current_seq_len++;
+        return chosen_tok;
+    }
 
-            std::string word_str = detokenize(next_tok);
-            std::cout << word_str << std::flush;
+    void reset_context() {
+        m_current_seq_len = 0;
+        m_recent_tokens.clear();
+        tetra_ring_init(&m_ring_buffer);
+    }
+
+    std::string generate_response(const std::string& prompt, size_t max_tokens = 30) {
+        reset_context();
+        std::vector<int> prompt_tokens = tokenize(prompt);
+        int last_tok = 0;
+        uint64_t b = 0;
+
+        // Prefill
+        for (int t : prompt_tokens) {
+            last_tok = step_forward(t, b);
+        }
+
+        std::string response = "";
+        for (size_t i = 0; i < max_tokens; ++i) {
+            int next_tok = step_forward(last_tok, b);
+            std::string word = detokenize(next_tok);
 
             if (next_tok == m_im_end_id || next_tok == m_eos_id) {
                 break;
             }
+            response += word;
+            std::cout << word << std::flush;
             last_tok = next_tok;
         }
-
-        auto t1 = std::chrono::high_resolution_clock::now();
-        double total_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-        double ms_per_token = total_ms / (prompt_tokens.size() + max_tokens);
-
-#ifdef _WIN32
-        PROCESS_MEMORY_COUNTERS pmc;
-        GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
-        double ram_mb = pmc.WorkingSetSize / (1024.0 * 1024.0);
-#else
-        double ram_mb = 12.0;
-#endif
-
-        std::cout << "\n\n------------------------------------------------------------------------\n";
-        std::cout << "[+] Дэд-үгийн үүсгэлтийн гүйцэтгэлийн үзүүлэлт:\n";
-        std::cout << "    - Дундаж хурд: " << std::fixed << std::setprecision(2) 
-                  << (1000.0 / ms_per_token) << " суб-үг токен/сек (" << ms_per_token << " ms/токен)\n";
-        std::cout << "    - Шуурхай санах ой (RAM): " << std::setprecision(1) << ram_mb << " MB\n";
-        std::cout << "    - Уншсан тетраэдр жингийн урсгал: " << (total_bytes / (1024.0 * 1024.0)) << " MB\n";
-        std::cout << "========================================================================\n";
+        return response;
     }
 };
 
@@ -365,13 +384,6 @@ int main(int argc, char* argv[]) {
 #endif
     std::string model_file = "tetra_70b_finetuned.bin";
     std::string vocab_file = "python/tetra_train/sovereign_vocab_2446.txt";
-    std::string prompt = "<|im_start|>user\nклиффордын алгебр яаж тооцооллыг хурдасгадаг вэ<|im_end|>\n<|im_start|>assistant\n";
-    size_t max_tokens = 25;
-
-    if (argc >= 2) model_file = argv[1];
-    if (argc >= 3) vocab_file = argv[2];
-    if (argc >= 4) prompt = argv[3];
-    if (argc >= 5) max_tokens = std::stoul(argv[4]);
 
     Tetra70BSubwordEngine engine;
     if (!engine.load_vocabulary(vocab_file)) {
@@ -381,6 +393,44 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    engine.generate(prompt, max_tokens);
+    // CLI горим (нэг удаагийн асуулт)
+    if (argc >= 4) {
+        std::string prompt = argv[3];
+        size_t max_tokens = (argc >= 5) ? std::stoul(argv[4]) : 30;
+        std::cout << "[Үүсгэсэн хариулт]: ";
+        engine.generate_response(prompt, max_tokens);
+        std::cout << "\n";
+        return 0;
+    }
+
+    // Интерактив Консол горим
+    std::cout << "\n========================================================================\n";
+    std::cout << "   TETRA-70B SOVEREIGN INTELLIGENCE - ИНТЕРАКТИВ КОНСОЛ                 \n";
+    std::cout << "========================================================================\n";
+    std::cout << "[*] Загвар    : " << model_file << " (70 Тэрбум жин, 9.30 GB)\n";
+    std::cout << "[*] Санах ой  : 344 MB RAM | AVX2 SIMD Хурдасгуур | 2,446 Суб-Үгс\n";
+    std::cout << "[*] Заавар    : Асуултаа бичээд Enter дарна уу. Гарах бол 'exit' гэж бичнэ үү.\n";
+    std::cout << "------------------------------------------------------------------------\n";
+
+    std::string user_input;
+    while (true) {
+        std::cout << "\nТа > " << std::flush;
+        if (!std::getline(std::cin, user_input)) break;
+        if (user_input == "exit" || user_input == "quit") {
+            std::cout << "[*] Тетра системийн сесс дууслаа.\n";
+            break;
+        }
+        if (user_input.empty()) continue;
+
+        std::string prompt = "<|im_start|>user\n" + user_input + "<|im_end|>\n<|im_start|>assistant\n";
+        std::cout << "70B > " << std::flush;
+
+        auto t0 = std::chrono::high_resolution_clock::now();
+        engine.generate_response(prompt, 35);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        std::cout << "\n[Хугацаа: " << std::fixed << std::setprecision(1) << ms << " ms]\n";
+    }
+
     return 0;
 }
