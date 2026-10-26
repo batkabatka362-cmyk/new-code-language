@@ -224,21 +224,30 @@ public:
             std::memcpy(current_wave.data(), next_wave.data(), num_blocks * sizeof(GpuTetraEdge));
         }
 
-        // 4. Тетраэдр Модны 9-түвшний Детерминистик Самплер (DPSTA 9-Level Tree)
-        uint64_t tree_hash = 0;
-        for (size_t b = 0; b < num_blocks; ++b) {
-            uint64_t p64 = ((uint64_t)current_wave[b].e0 << 32) | current_wave[b].e1;
-            tree_hash ^= rotl64(p64, (unsigned int)(b & 63));
+        // 4. Тетраэдр Бүрэн Гармоник LM-Head Резонанс (Zero-FLOPs True Harmonic Projection)
+        int best_char_k = 0;
+        int max_score = -1;
+
+        for (uint32_t k = 0; k < DPSTA_CHAR_COUNT; ++k) {
+            uint32_t cand_phase = k * DPSTA_HARMONIC_MULT;
+            int score = 0;
+            for (size_t b = 0; b < num_blocks; ++b) {
+                uint32_t pos_phase = rotl32((uint32_t)(m_current_seq_len + 1) * 0x45D9F3B, (unsigned int)(b & 31));
+                uint32_t expected_e0 = cand_phase ^ pos_phase ^ ((uint32_t)b * 0x9E3779B9);
+                uint32_t match = ~(current_wave[b].e0 ^ expected_e0);
+#if defined(__GNUC__) || defined(__clang__)
+                score += __builtin_popcount(match);
+#else
+                score += 16;
+#endif
+            }
+            if (score > max_score) {
+                max_score = score;
+                best_char_k = (int)k;
+            }
         }
 
-        uint32_t char_idx = 0;
-        for (int lvl = 0; lvl < 9; ++lvl) {
-            uint32_t det_branch = (uint32_t)((tree_hash >> (lvl * 2)) & 0x03);
-            uint32_t branch = tetra_sample_facet_branch(det_branch, tree_hash, lvl, m_temperature, &m_rng_state);
-            char_idx = (char_idx * 4) + branch;
-        }
-
-        char predicted_char = (char)(DPSTA_CHAR_BASE + (char_idx % DPSTA_CHAR_COUNT));
+        char predicted_char = (char)(DPSTA_CHAR_BASE + best_char_k);
         m_current_seq_len++;
         return predicted_char;
     }
@@ -257,13 +266,21 @@ public:
         uint64_t total_bytes_streamed = 0;
         auto t0 = std::chrono::high_resolution_clock::now();
 
-        for (size_t i = 0; i < max_tokens; ++i) {
-            char input_c = (i < prompt.size()) ? prompt[i] : ' ';
+        // 1. Prefill шат: Промптын бүх тэмдэгтийг SSM буфер болон давхаргуудад шингээх
+        char last_char = ' ';
+        for (char pc : prompt) {
             uint64_t token_bytes = 0;
-            char out_c = step_forward(input_c, token_bytes);
+            last_char = step_forward(pc, token_bytes);
             total_bytes_streamed += token_bytes;
+        }
 
-            std::cout << out_c << std::flush;
+        // 2. Autoregressive үүсгэлтийн шат: Өмнөх үүсгэсэн тэмдэгтийг дараагийн алхамд буцаан өгөх
+        for (size_t i = 0; i < max_tokens; ++i) {
+            uint64_t token_bytes = 0;
+            char gen_char = step_forward(last_char, token_bytes);
+            total_bytes_streamed += token_bytes;
+            std::cout << gen_char << std::flush;
+            last_char = gen_char; // Жинхэнэ авторегрессив эргэх холбоо
         }
 
         auto t1 = std::chrono::high_resolution_clock::now();
