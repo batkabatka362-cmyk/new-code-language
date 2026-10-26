@@ -1,0 +1,9 @@
+{
+  "estimated_luts": 486,
+  "estimated_ffs": 536,
+  "estimated_dsps": 6,
+  "estimated_brams": 2,
+  "target_clock_mhz": 1000.0,
+  "nominal_ipc": 4.0,
+  "dynamic_power_mw": 234.375
+}
