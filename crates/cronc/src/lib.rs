@@ -654,6 +654,28 @@ pub fn compile_source(source: &str) -> Result<String, String> {
 }
 
 pub fn compile_source_with_color(source: &str, file_label: Option<&str>, use_color: bool) -> Result<String, String> {
+    // Sovereign CL v2.0 / High-Level Post-Human Detection
+    if source.contains("@⌖") || source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {
+        match crate::cl_v2_parser::parse_cl_v2(source) {
+            Ok(mut doc) => {
+                let mut engine = crate::cl_v2_lowering::V2LoweringEngine::new();
+                match engine.lower_document(&doc) {
+                    Ok(bundles) => {
+                        doc.vliw_stream = bundles;
+                        let output = engine.emit_canonical(&doc);
+                        return Ok(output);
+                    }
+                    Err(e) => {
+                        return Err(format!("[SOVEREIGN LOWERING ERROR] {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                return Err(format!("[SOVEREIGN PARSER ERROR] {}", e));
+            }
+        }
+    }
+
     let mut lexer = Lexer::new(source);
     let tokens = match lexer.tokenize() {
         Ok(t) => t,
@@ -750,6 +772,22 @@ fn extract_line_col_from_err(msg: &str) -> (usize, usize) {
 }
 
 pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
+    if source.contains("@⌖") || source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {
+        match crate::cl_v2_parser::parse_cl_v2(source) {
+            Ok(doc) => {
+                let mut engine = crate::cl_v2_lowering::V2LoweringEngine::new();
+                if let Err(e) = engine.lower_document(&doc) {
+                    return vec![Diagnostic::new("E_SOVEREIGN_LOWER", &e, 1, 1).with_source(source)];
+                }
+                return Vec::new();
+            }
+            Err(e) => {
+                let (l, c) = extract_line_col_from_err(&e);
+                return vec![Diagnostic::new("E_SOVEREIGN_PARSE", &e, l, c).with_source(source)];
+            }
+        }
+    }
+
     let mut lexer = Lexer::new(source);
     let tokens = match lexer.tokenize() {
         Ok(t) => t,
@@ -829,6 +867,14 @@ pub fn compile_to_c23(source: &str) -> Result<String, String> {
 }
 
 pub fn compile_to_c23_with_name(source: &str, file_label: Option<&str>) -> Result<String, String> {
+    if source.contains("@⌖") || source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {
+        let vliw_code = compile_source_with_name(source, file_label)?;
+        let module_name = file_label
+            .and_then(|p| std::path::Path::new(p).file_stem().and_then(|s| s.to_str()))
+            .unwrap_or("sovereign_kernel");
+        return cl_c23::compile_cl_to_c23(&vliw_code, module_name);
+    }
+
     let mut lexer = Lexer::new(source);
     let tokens = match lexer.tokenize() {
         Ok(t) => t,
