@@ -279,24 +279,28 @@ pub fn decode_u32_to_slot(encoded: u32) -> String {
 pub fn assemble_cl_to_clb(cl_content: &str) -> Result<Vec<u8>, String> {
     let mut bundles: Vec<(u32, [u32; 4])> = Vec::new();
 
-    for line in cl_content.lines() {
+    let lowered_content = if !cl_content.contains("B0") && !cl_content.contains("B0000:") {
+        crate::compile_source(cl_content)?
+    } else {
+        cl_content.to_string()
+    };
+
+    for line in lowered_content.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty()
-            || trimmed.starts_with(';')
-            || trimmed.starts_with("//")
-            || trimmed.starts_with('.')
-            || trimmed.starts_with('@')
-            || trimmed.starts_with('#')
-            || trimmed == "{"
-            || trimmed == "}"
-        {
+        let b_line = if trimmed.starts_with("; B") {
+            trimmed[2..].trim()
+        } else {
+            trimmed
+        };
+
+        if !b_line.starts_with('B') {
             continue;
         }
 
-        if let Some((cycle_part, slots_part)) = trimmed.split_once(':') {
+        if let Some((cycle_part, slots_part)) = b_line.split_once(':') {
             let cycle_str = cycle_part.trim().trim_start_matches('B');
-            let cycle = cycle_str
-                .parse::<u32>()
+            let cycle = u32::from_str_radix(cycle_str, 16)
+                .or_else(|_| cycle_str.parse::<u32>())
                 .map_err(|e| format!("Invalid cycle header '{}': {}", cycle_part, e))?;
 
             let slot_tokens: Vec<&str> = slots_part.split_whitespace().collect();
