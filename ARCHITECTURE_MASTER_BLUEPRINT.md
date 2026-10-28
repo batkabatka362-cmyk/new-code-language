@@ -114,9 +114,19 @@ new code language/
 ├── libcl/                  # Standard Library: 107 high-performance mathematical kernels
 ├── examples/               # Example programs, neural blocks, and hardware benchmarks
 ├── scripts/
-│   ├── e2e_showcase_tour.ps1             # 8-Stage Silicon Grand Tour PowerShell script
-│   ├── run_fpga_and_asic_pipeline.ps1    # 4-Target FPGA & Sky130 ASIC pipeline
-│   └── run_mongolian_sovereign_ai.ps1    # Mongolian Sovereign AI & Neural Speech pipeline
+│   ├── tour/                            # End-to-end Grand Tour showcase scripts
+│   │   └── e2e_showcase_tour.ps1        # 8-Stage Silicon Grand Tour PowerShell script
+│   ├── silicon/                         # FPGA & Sky130 ASIC hardware deployment flows
+│   │   └── run_fpga_and_asic_pipeline.ps1 # 4-Target FPGA & Sky130 ASIC pipeline
+│   ├── ai/                              # Mongolian Sovereign AI & Speech flows
+│   │   └── run_mongolian_sovereign_ai.ps1 # Mongolian Sovereign AI & Neural Speech pipeline
+│   ├── codegen/                         # Python microcode and model generators
+│   │   ├── gen_libcl.py                 # Generates 107 libcl standard library kernels
+│   │   ├── gen_living_agi_256core.py    # 256-core sovereign mind generator
+│   │   └── export_sovereign_1b_weights.py
+│   ├── e2e_showcase_tour.ps1            # Top-level forwarder to scripts/tour/
+│   ├── run_fpga_and_asic_pipeline.ps1   # Top-level forwarder to scripts/silicon/
+│   └── run_mongolian_sovereign_ai.ps1   # Top-level forwarder to scripts/ai/
 └── docs/                   # Specifications, architecture manuals, and API guides
 ```
 
