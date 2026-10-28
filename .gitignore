@@ -28,10 +28,18 @@ build_native/
 /telemetry/
 build_fpga_*/
 silicon_deployment/
+asic_tapeout/
+fpga_deployment/
+test_fpga_out/
+test_tapeout_out/
+test_dpsta_tapeout_export/
 *.csv
 agi_agent_telemetry.json
 training_telemetry.csv
 *.pdf
+*.cll
+*.safetensors
+*.jsonl
 # Node / VSCode
 node_modules/
 *.vsix

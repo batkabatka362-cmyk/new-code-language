@@ -254,7 +254,7 @@ impl CoreEngine {
         } else if exp == 31 {
             f32::from_bits((sign << 31) | (0xFF << 23) | (mant << 13))
         } else {
-            let exp_f32 = (exp + (127 - 15)) as u32;
+            let exp_f32 = exp + (127 - 15);
             f32::from_bits((sign << 31) | (exp_f32 << 23) | (mant << 13))
         }
     }
@@ -265,7 +265,7 @@ impl CoreEngine {
         let bits = val.to_bits();
         let sign = ((bits >> 31) & 1) as u16;
         let exp = ((bits >> 23) & 0xFF) as i32;
-        let mant = (bits & 0x7FFFFF) as u32;
+        let mant = bits & 0x7FFFFF;
 
         if exp == 0xFF {
             (sign << 15) | (0x1F << 10) | ((mant >> 13) as u16).max(if mant != 0 { 1 } else { 0 })

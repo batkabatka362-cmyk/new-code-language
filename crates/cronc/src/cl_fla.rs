@@ -77,7 +77,7 @@ impl FlashLinearAttentionEngine {
         let l = self.config.seq_len;
         let b = self.config.chunk_size;
         let d = self.config.head_dim;
-        let num_chunks = (l + b - 1) / b;
+        let num_chunks = l.div_ceil(b);
 
         let mut out = vec![0.0f32; l * d];
         let mut intra_ops = 0usize;

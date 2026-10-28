@@ -13042,7 +13042,7 @@ fn handle_cl_ingest_command(args: &[String]) {
     ingest_opts.emit_cldb = vault_opt.is_some();
     ingest_opts.tokenizer_mode = tokenizer_mode;
     ingest_opts.streaming = is_streaming;
-    if let Some(_) = vault_opt {
+    if vault_opt.is_some() {
         ingest_opts.vault_name = vault_name.clone();
     }
 
@@ -13695,7 +13695,7 @@ fn handle_weights_command(args: &[String]) {
                 );
             }
 
-            let ternary_bytes = (total_params + 4) / 5;
+            let ternary_bytes = total_params.div_ceil(5);
             println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
             println!("║ Total Ingested Parameters:  {:<57} ║", total_params);
             println!("║ Original Float32 Footprint: {:<57} ║", format!("{:.2} KB", total_raw_bytes as f64 / 1024.0));
@@ -13751,7 +13751,7 @@ fn run_showcase_tour() {
     println!("\x1b[33m[2/8] Testing 128-Bit Binary Bytecode Roundtrip...\x1b[0m");
     let clb_file = temp_dir.join("mamba2_tour.clb");
     let status = std::process::Command::new(&cron_exe)
-        .args(&["asm", cl_file.to_str().unwrap(), "-o", clb_file.to_str().unwrap()])
+        .args(["asm", cl_file.to_str().unwrap(), "-o", clb_file.to_str().unwrap()])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 2 FAILED]");
@@ -13763,7 +13763,7 @@ fn run_showcase_tour() {
     // Stage 3: JIT
     println!("\x1b[33m[3/8] Running Cycle-Accurate JIT Silicon Engine...\x1b[0m");
     let status = std::process::Command::new(&cron_exe)
-        .args(&["jit", cl_file.to_str().unwrap()])
+        .args(["jit", cl_file.to_str().unwrap()])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 3 FAILED]");
@@ -13774,7 +13774,7 @@ fn run_showcase_tour() {
     // Stage 4: Co-sim
     println!("\x1b[33m[4/8] Running Hardware Co-Simulation between JIT and Verilog RTL...\x1b[0m");
     let status = std::process::Command::new(&cron_exe)
-        .args(&["cl-cosim", cl_file.to_str().unwrap()])
+        .args(["cl-cosim", cl_file.to_str().unwrap()])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 4 FAILED]");
@@ -13785,7 +13785,7 @@ fn run_showcase_tour() {
     // Stage 5: Memcheck
     println!("\x1b[33m[5/8] Verifying 16-Bank PGAS Memory with GF16 Swizzle...\x1b[0m");
     let status = std::process::Command::new(&cron_exe)
-        .args(&["cl-memcheck", cl_file.to_str().unwrap(), "--strict"])
+        .args(["cl-memcheck", cl_file.to_str().unwrap(), "--strict"])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 5 FAILED]");
@@ -13797,7 +13797,7 @@ fn run_showcase_tour() {
     println!("\x1b[33m[6/8] Exporting 7-File Synthesizable Verilog RTL Package...\x1b[0m");
     let rtl_dir = temp_dir.join("rtl_export");
     let status = std::process::Command::new(&cron_exe)
-        .args(&["cl-export-rtl", cl_file.to_str().unwrap(), "-o", rtl_dir.to_str().unwrap()])
+        .args(["cl-export-rtl", cl_file.to_str().unwrap(), "-o", rtl_dir.to_str().unwrap()])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 6 FAILED]");
@@ -13813,7 +13813,7 @@ fn run_showcase_tour() {
     let _ = std::fs::write(&dataset_path, dataset_content);
     let adapter_file = temp_dir.join("mamba_adapter.cll");
     let status = std::process::Command::new(&cron_exe)
-        .args(&["finetune", dataset_path.to_str().unwrap(), "-o", adapter_file.to_str().unwrap(), "--rank", "2", "--alpha", "2.0"])
+        .args(["finetune", dataset_path.to_str().unwrap(), "-o", adapter_file.to_str().unwrap(), "--rank", "2", "--alpha", "2.0"])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 7 FAILED]");
@@ -13826,7 +13826,7 @@ fn run_showcase_tour() {
     println!("\x1b[33m[8/8] Executing Bidirectional Weight Cycle with SafeTensors Merge...\x1b[0m");
     let dense_delta = temp_dir.join("dense_delta.safetensors");
     let status = std::process::Command::new(&cron_exe)
-        .args(&["model-expand", adapter_file.to_str().unwrap(), "-o", dense_delta.to_str().unwrap()])
+        .args(["model-expand", adapter_file.to_str().unwrap(), "-o", dense_delta.to_str().unwrap()])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 8 FAILED]");

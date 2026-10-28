@@ -204,7 +204,7 @@ pub fn parse_cl_stream<'a>(source: &'a str) -> (Vec<SimdClBundle<'a>>, SimdParse
             let cycle_bytes = cycle_hdr.as_bytes();
             let mut cycle_num = 0usize;
             for &b in cycle_bytes {
-                if b >= b'0' && b <= b'9' {
+                if (b'0'..=b'9').contains(&b) {
                     cycle_num = (cycle_num * 10) + ((b - b'0') as usize);
                 }
             }

@@ -1358,9 +1358,9 @@ pub fn parse_slot_immediate(slot: &str) -> Option<u32> {
             if c3 > 0 {
                 return Some(v3);
             }
-            return None;
+            None
         } else {
-            return hex_digit_val(bytes[8]).map(|d| d as u32);
+            hex_digit_val(bytes[8]).map(|d| d as u32)
         }
     } else if let Some(hash_pos) = bytes.iter().position(|&b| b == b'#') {
         let mut val = 0u32;
