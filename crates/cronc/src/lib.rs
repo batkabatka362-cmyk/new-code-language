@@ -632,6 +632,7 @@ pub use cl_c23::{compile_cl_to_c23, compile_cl_to_native_binary, compile_c23_to_
 pub use model_importer::{
     import_model_file, lower_onnx_graph, lower_safetensors_model,
     safetensors_to_cl_lora, safetensors_to_cl_machine_code, safetensors_to_cl_weights_binding, parse_safetensors,
+    create_synthetic_safetensors, merge_safetensors_file_with_cl_lora,
     ImportOptions, ImportedModel, LoweredCode, LoweringOptions,
     QuantizationMode, QuantizationReport, QuantizedTensor,
     SafeTensorDType, SafeTensorData, SafeTensorsModel,

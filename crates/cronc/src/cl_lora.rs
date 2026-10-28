@@ -191,6 +191,34 @@ impl DiscreteLoraLayer {
 
         delta_y
     }
+
+    /// Reconstructs the full 2D dense matrix Delta W = (scale) * (B x A)
+    /// where Delta W is flat in row-major order with shape (out_dim, in_dim).
+    pub fn reconstruct_dense_delta(&self, scale: f64) -> Vec<f64> {
+        let a = self.unpack_a();
+        let b = self.unpack_b();
+        let mut delta_w = vec![0.0f64; self.out_dim * self.in_dim];
+
+        for o in 0..self.out_dim {
+            let b_row = o * self.rank;
+            let w_row = o * self.in_dim;
+            for i in 0..self.in_dim {
+                let mut acc = 0.0f64;
+                for r in 0..self.rank {
+                    let b_val = b[b_row + r];
+                    let a_val = a[r * self.in_dim + i];
+                    match (b_val, a_val) {
+                        (1, 1) | (-1, -1) => acc += 1.0,
+                        (1, -1) | (-1, 1) => acc -= 1.0,
+                        _ => {}
+                    }
+                }
+                delta_w[w_row + i] = acc * scale;
+            }
+        }
+
+        delta_w
+    }
 }
 
 /// Collection of Discrete LoRA Layers forming a complete trained adapter
@@ -217,9 +245,62 @@ impl ClLoraAdapter {
         self.save_to_bytes().len()
     }
 
+    /// Computes the effective scaling factor alpha / rank
+    #[inline]
+    pub fn scale(&self) -> f64 {
+        self.config.alpha / (self.config.rank as f64).max(1.0)
+    }
+
+    /// Reconstructs the dense weight update matrix Delta W for a specific layer and module
+    pub fn reconstruct_dense_delta(&self, layer_idx: usize, module_name: &str) -> Option<Vec<f64>> {
+        let scale = self.scale();
+        for l in &self.layers {
+            if l.layer_idx == layer_idx && l.module_name == module_name {
+                return Some(l.reconstruct_dense_delta(scale));
+            }
+        }
+        None
+    }
+
+    /// Exports all dense delta matrices across all layers
+    /// Returns Map of (layer_idx, module_name) -> (out_dim, in_dim, dense_deltas)
+    pub fn export_all_dense_deltas(&self) -> HashMap<(usize, String), (usize, usize, Vec<f64>)> {
+        let mut map = HashMap::new();
+        let scale = self.scale();
+        for l in &self.layers {
+            let delta = l.reconstruct_dense_delta(scale);
+            map.insert((l.layer_idx, l.module_name.clone()), (l.out_dim, l.in_dim, delta));
+        }
+        map
+    }
+
+    /// Merges the discrete low-rank adapter directly into a base weight tensor:
+    /// W_merged = W_base + Delta W
+    pub fn merge_into_dense_weights(
+        &self,
+        layer_idx: usize,
+        module_name: &str,
+        base_weights: &mut [f32],
+    ) -> Result<(), String> {
+        if let Some(delta) = self.reconstruct_dense_delta(layer_idx, module_name) {
+            if base_weights.len() != delta.len() {
+                return Err(format!(
+                    "Dimension mismatch merging layer {} '{}': base has {} elements, delta has {}",
+                    layer_idx, module_name, base_weights.len(), delta.len()
+                ));
+            }
+            for (w, dw) in base_weights.iter_mut().zip(delta.iter()) {
+                *w += *dw as f32;
+            }
+            Ok(())
+        } else {
+            Err(format!("Layer {} module '{}' not found in adapter", layer_idx, module_name))
+        }
+    }
+
     /// Applies fine-tuned delta projection to activation vector `x` if matching layer exists
     pub fn apply_delta(&self, layer_idx: usize, module_name: &str, x: &[f64]) -> Option<Vec<f64>> {
-        let scale = self.config.alpha / (self.config.rank as f64).max(1.0);
+        let scale = self.scale();
         for l in &self.layers {
             if l.layer_idx == layer_idx && l.module_name == module_name {
                 return Some(l.forward_delta(x, scale));

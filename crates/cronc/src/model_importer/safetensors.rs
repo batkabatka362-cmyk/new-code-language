@@ -39,6 +39,82 @@ pub struct SafeTensorsModel {
     pub tensors: HashMap<String, SafeTensorData>,
 }
 
+impl SafeTensorsModel {
+    /// Serializes the entire model back into a valid HuggingFace SafeTensors byte buffer
+    pub fn serialize_to_bytes(&self) -> Vec<u8> {
+        let mut tensor_refs: Vec<(&str, SafeTensorDType, &[usize], &[f32])> = Vec::new();
+        let mut keys: Vec<&String> = self.tensors.keys().collect();
+        keys.sort();
+        for k in keys {
+            let t = &self.tensors[k];
+            tensor_refs.push((t.name.as_str(), t.dtype.clone(), &t.shape, &t.values));
+        }
+        create_synthetic_safetensors(&tensor_refs)
+    }
+
+    /// Merges a discrete CL-LoRA adapter directly into the model's tensors
+    /// Returns the number of tensors successfully updated.
+    pub fn merge_cl_lora(&mut self, adapter: &crate::cl_lora::ClLoraAdapter) -> Result<usize, String> {
+        let mut merged_count = 0;
+        let scale = adapter.scale();
+
+        for layer in &adapter.layers {
+            let delta = layer.reconstruct_dense_delta(scale);
+            let mut matched_key: Option<String> = None;
+
+            for key in self.tensors.keys() {
+                let lower = key.to_lowercase();
+                let matches_module = lower.contains(&layer.module_name.to_lowercase());
+                let matches_layer = lower.contains(&format!("{}.", layer.layer_idx))
+                    || lower.contains(&format!("_{}_", layer.layer_idx))
+                    || lower.contains(&format!("layers.{}", layer.layer_idx))
+                    || (adapter.layers.len() == 1 && matches_module);
+
+                if matches_module && (matches_layer || self.tensors.len() == 1) {
+                    matched_key = Some(key.clone());
+                    break;
+                }
+            }
+
+            if matched_key.is_none() && self.tensors.contains_key(&layer.module_name) {
+                matched_key = Some(layer.module_name.clone());
+            }
+
+            if let Some(key) = matched_key {
+                let tensor = self.tensors.get_mut(&key).unwrap();
+                if tensor.values.len() == delta.len() {
+                    for (v, d) in tensor.values.iter_mut().zip(delta.iter()) {
+                        *v += *d as f32;
+                    }
+                    merged_count += 1;
+                }
+            }
+        }
+
+        Ok(merged_count)
+    }
+}
+
+/// Helper function to merge a SafeTensors file with a discrete CL-LoRA adapter and write output
+pub fn merge_safetensors_file_with_cl_lora(
+    base_model_path: &std::path::Path,
+    adapter_path: &std::path::Path,
+    output_path: &std::path::Path,
+) -> Result<usize, String> {
+    let base_bytes = std::fs::read(base_model_path)
+        .map_err(|e| format!("Failed to read base SafeTensors file '{}': {}", base_model_path.display(), e))?;
+    let mut model = parse_safetensors(&base_bytes)?;
+
+    let adapter = crate::cl_lora::ClLoraAdapter::load_from_file(adapter_path)?;
+    let merged_count = model.merge_cl_lora(&adapter)?;
+
+    let merged_bytes = model.serialize_to_bytes();
+    std::fs::write(output_path, merged_bytes)
+        .map_err(|e| format!("Failed to write merged SafeTensors to '{}': {}", output_path.display(), e))?;
+
+    Ok(merged_count)
+}
+
 /// Parse a HuggingFace SafeTensors binary byte buffer into structured metadata and f32 tensor buffers.
 pub fn parse_safetensors(bytes: &[u8]) -> Result<SafeTensorsModel, String> {
     if bytes.len() < 8 {

@@ -25,7 +25,7 @@ pub use quantize::{
 };
 pub use safetensors::{
     f16_to_f32, parse_safetensors, parse_safetensors_json, safetensors_to_cl_lora, safetensors_to_cl_machine_code,
-    safetensors_to_cl_weights_binding,
+    safetensors_to_cl_weights_binding, create_synthetic_safetensors, merge_safetensors_file_with_cl_lora,
     SafeTensorDType, SafeTensorData, SafeTensorMeta, SafeTensorsModel,
 };
 pub use ternary::{
