@@ -2001,6 +2001,43 @@ impl MathProgram {
         }
     }
 
+    /// Compiles standard math into standalone executable C23 source code with main() runner
+    pub fn to_c23_executable(&self) -> String {
+        let mut out = self.to_c23();
+        out.push_str("#include <stdio.h>\n\nint main(void) {\n");
+        out.push_str("    printf(\"================================================================================\\n\");\n");
+        out.push_str("    printf(\" CRON Mathematical Native Executable (Zero-Word Standard Calculus)\\n\");\n");
+        out.push_str("    printf(\"================================================================================\\n\");\n");
+        for item in &self.items {
+            if let MathItem::Binding { name, expr } = item {
+                out.push_str(&format!("    float {} = {};\n", name, Self::expr_to_c23(expr)));
+                out.push_str(&format!("    printf(\"  [=] {} = %f\\n\", (double){});\n", name, name));
+            } else if let MathItem::Expression(expr) = item {
+                out.push_str(&format!("    printf(\"  [+] Result = %f\\n\", (double)({}));\n", Self::expr_to_c23(expr)));
+            }
+        }
+        out.push_str("    printf(\"================================================================================\\n\");\n");
+        out.push_str("    return 0;\n}\n");
+        out
+    }
+
+    /// Compiles standard math program directly to a native binary using the host C compiler
+    pub fn compile_to_native(&self, output_path: &str, opt_level: &str) -> Result<(), String> {
+        let is_lib = output_path.ends_with(".dll")
+            || output_path.ends_with(".so")
+            || output_path.ends_with(".dylib");
+        let c_code = if is_lib {
+            self.to_c23()
+        } else {
+            self.to_c23_executable()
+        };
+        crate::cl_c23::compile_c23_to_native_binary(
+            &c_code,
+            output_path,
+            opt_level,
+        )
+    }
+
     /// Compiles standard math into real SSA NVIDIA CUDA PTX v7.5+ GPU kernels with full function inlining
     pub fn to_ptx(&self) -> String {
         let mut out = String::new();
@@ -2587,6 +2624,88 @@ pub fn parse_math_code(src: &str) -> Result<MathProgram, String> {
     let tokens = lexer.tokenize()?;
     let mut parser = MathParser::new(tokens);
     parser.parse_program()
+}
+
+/// Runs the interactive Mathematical REPL in the terminal
+pub fn run_math_repl() -> Result<(), String> {
+    use std::io::{self, BufRead, Write};
+
+    println!("================================================================================");
+    println!(" CRON SOVEREIGN MATHEMATICAL REPL (Zero-Word Calculus)");
+    println!(" Commands: :c23 (View C23) | :ptx (View PTX) | :vliw (View VLIW) | :reset | :quit");
+    println!("================================================================================");
+
+    let mut session_prog = MathProgram::default();
+    let mut eval = MathEvaluator::new();
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
+
+    loop {
+        print!("cron(math)> ");
+        stdout.flush().map_err(|e| e.to_string())?;
+
+        let mut line = String::new();
+        if stdin.lock().read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if trimmed.starts_with(':') {
+            match trimmed {
+                ":q" | ":quit" | ":exit" => {
+                    println!("Exiting CRON Math REPL.");
+                    break;
+                }
+                ":reset" | ":clear" => {
+                    session_prog = MathProgram::default();
+                    eval = MathEvaluator::new();
+                    println!("Session state reset.");
+                }
+                ":c23" => {
+                    println!("{}", session_prog.to_c23());
+                }
+                ":ptx" => {
+                    println!("{}", session_prog.to_ptx());
+                }
+                ":vliw" => {
+                    println!("{}", session_prog.to_vliw());
+                }
+                ":help" => {
+                    println!("Commands:\n  :c23   - View generated C23 code\n  :ptx   - View generated PTX kernel\n  :vliw  - View generated VLIW microcode\n  :reset - Reset variables and functions\n  :quit  - Exit REPL");
+                }
+                other => {
+                    println!("Unknown command '{}'. Type :help for commands.", other);
+                }
+            }
+            continue;
+        }
+
+        match parse_math_code(trimmed) {
+            Ok(prog) => {
+                match eval.execute_program_value(&prog) {
+                    Ok(Some(val)) => {
+                        println!("\x1b[32m=> {}\x1b[0m", val);
+                    }
+                    Ok(None) => {
+                        println!("\x1b[36m=> (defined)\x1b[0m");
+                    }
+                    Err(e) => {
+                        println!("\x1b[31m[Eval Error] {}\x1b[0m", e);
+                    }
+                }
+                session_prog.items.extend(prog.items);
+            }
+            Err(e) => {
+                println!("\x1b[31m[Parse Error] {}\x1b[0m", e);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 // ============================================================================

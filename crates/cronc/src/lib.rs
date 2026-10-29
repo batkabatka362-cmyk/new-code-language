@@ -207,7 +207,7 @@ pub use cl_v2_ast::*;
 pub use cl_v2_parser::parse_cl_v2;
 pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport, V2TensorRuntime};
 pub use cl_math::{
-    is_math_calculus_source, parse_math_code, MathBinOp, MathDtype, MathEvaluator, MathItem,
+    is_math_calculus_source, parse_math_code, run_math_repl, MathBinOp, MathDtype, MathEvaluator, MathItem,
     MathLexer, MathParam, MathParser, MathProgram, MathValue,
 };
 pub use cl_syntax_spec::{verify_sovereign_pure_cipher_syntax, SovereignSyntaxReport, SyntaxViolation, SOVEREIGN_SYNTAX_EBNF};

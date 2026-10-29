@@ -2640,12 +2640,34 @@ fn main() {
                 }
             }
         }
+        "math-repl" => {
+            if let Err(e) = cronc::run_math_repl() {
+                eprintln!("[REPL ERROR] {}", e);
+                std::process::exit(1);
+            }
+        }
         "math" | "cl-math" => {
+            if (args.len() >= 3 && (args[2] == "--repl" || args[2] == "repl")) || (args.len() == 2 && (args[1] == "math" || args[1] == "repl")) && args.get(2).map(|s| s == "--repl").unwrap_or(false) {
+                if let Err(e) = cronc::run_math_repl() {
+                    eprintln!("[REPL ERROR] {}", e);
+                    std::process::exit(1);
+                }
+                return;
+            }
+
             if args.len() < 3 {
-                println!("USAGE:\n    cron math <file.cl | 'expression'> [OPTIONS]\n");
+                println!("USAGE:\n    cron math <file.cl | 'expression'> [OPTIONS]\n    cron math --repl\n");
                 println!("DESCRIPTION:\n    Standard Mathematical Calculus Engine (Zero-Word Algebraic Pipelines)\n");
-                println!("OPTIONS:\n    --c23           Emit ISO C23 native source code\n    --ptx           Emit NVIDIA CUDA PTX v7.5+ GPU kernel\n    --eval          Evaluate mathematical expression and print result (default)\n    --json          Output structured JSON representation\n");
-                println!("EXAMPLES:\n    cron math \"f(x) = x^2 + 2*x + 1; f(5)\"\n    cron math \"x -> sq -> add_ten\"\n    cron math model.cl --c23");
+                println!("OPTIONS:\n    --c23           Emit ISO C23 native source code\n    --ptx           Emit NVIDIA CUDA PTX v7.5+ GPU kernel\n    --vliw          Emit 4-Slot 128-bit VLIW microcode\n    --repl          Launch interactive mathematical terminal REPL\n    -o <binary>     Compile directly to host native binary (.exe / .dll / .so)\n    --eval          Evaluate mathematical expression and print result (default)\n    --json          Output structured JSON representation\n");
+                println!("EXAMPLES:\n    cron math \"f(x) = x^2 + 2*x + 1; f(5)\"\n    cron math \"x -> sq -> add_ten\"\n    cron math model.cl --c23\n    cron math model.cl -o model.exe\n    cron math --repl");
+                return;
+            }
+
+            if args[2] == "--repl" || args[2] == "repl" {
+                if let Err(e) = cronc::run_math_repl() {
+                    eprintln!("[REPL ERROR] {}", e);
+                    std::process::exit(1);
+                }
                 return;
             }
 
@@ -2663,10 +2685,26 @@ fn main() {
             let emit_ptx = args.iter().any(|a| a == "--ptx");
             let emit_vliw = args.iter().any(|a| a == "--vliw" || a == "--cl");
             let is_json = args.iter().any(|a| a == "--json");
+            let output_bin = args
+                .iter()
+                .position(|a| a == "-o")
+                .and_then(|idx| args.get(idx + 1).cloned());
 
             match cronc::parse_math_code(&source) {
                 Ok(prog) => {
-                    if emit_c23 {
+                    if let Some(ref out_path) = output_bin {
+                        println!("[1/2] Lowering Standard Math to ISO C23 Native Source...");
+                        println!("[2/2] Invoking Host C Compiler to build '{}'...", out_path);
+                        match prog.compile_to_native(out_path, "3") {
+                            Ok(()) => {
+                                println!("\x1b[32m[+] Successfully compiled native binary: {}\x1b[0m", out_path);
+                            }
+                            Err(e) => {
+                                eprintln!("[NATIVE COMPILATION ERROR] {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                    } else if emit_c23 {
                         println!("{}", prog.to_c23());
                     } else if emit_ptx {
                         println!("{}", prog.to_ptx());
