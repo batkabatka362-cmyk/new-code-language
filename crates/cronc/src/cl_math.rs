@@ -218,6 +218,7 @@ pub enum MathExpr {
     Num(f64),
     Var(String),
     Array(Vec<MathExpr>), // Vector or Matrix literal: [1, 2, 3] or [[1, 2], [3, 4]]
+    Index(Box<MathExpr>, Box<MathExpr>), // Tensor / Vector indexing: x[i], W[i][j]
     Placeholder,          // '_' in pipeline chaining
     Unary(MathUnaryOp, Box<MathExpr>),
     Binary(Box<MathExpr>, MathBinOp, Box<MathExpr>),
@@ -239,6 +240,7 @@ impl fmt::Display for MathExpr {
                 let s: Vec<String> = elems.iter().map(|e| e.to_string()).collect();
                 write!(f, "[{}]", s.join(", "))
             }
+            MathExpr::Index(base, idx) => write!(f, "{}[{}]", base, idx),
             MathExpr::Placeholder => write!(f, "_"),
             MathExpr::Unary(MathUnaryOp::Neg, e) => write!(f, "(-{})", e),
             MathExpr::Unary(MathUnaryOp::Not, e) => write!(f, "(!{})", e),
@@ -255,6 +257,327 @@ impl fmt::Display for MathExpr {
             MathExpr::Pipeline(stages) => {
                 let s: Vec<String> = stages.iter().map(|st| st.to_string()).collect();
                 write!(f, "{}", s.join(" -> "))
+            }
+        }
+    }
+}
+
+impl MathExpr {
+    /// Beta-reduction variable substitution
+    pub fn substitute(&self, subst: &HashMap<String, MathExpr>) -> MathExpr {
+        match self {
+            MathExpr::Num(n) => MathExpr::Num(*n),
+            MathExpr::Var(v) => subst.get(v).cloned().unwrap_or_else(|| MathExpr::Var(v.clone())),
+            MathExpr::Array(elems) => {
+                MathExpr::Array(elems.iter().map(|e| e.substitute(subst)).collect())
+            }
+            MathExpr::Index(b, i) => MathExpr::Index(
+                Box::new(b.substitute(subst)),
+                Box::new(i.substitute(subst)),
+            ),
+            MathExpr::Placeholder => MathExpr::Placeholder,
+            MathExpr::Unary(op, inner) => {
+                MathExpr::Unary(*op, Box::new(inner.substitute(subst)))
+            }
+            MathExpr::Binary(l, op, r) => MathExpr::Binary(
+                Box::new(l.substitute(subst)),
+                *op,
+                Box::new(r.substitute(subst)),
+            ),
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => MathExpr::Ternary {
+                cond: Box::new(cond.substitute(subst)),
+                then_expr: Box::new(then_expr.substitute(subst)),
+                else_expr: Box::new(else_expr.substitute(subst)),
+            },
+            MathExpr::Call(name, args) => MathExpr::Call(
+                name.clone(),
+                args.iter().map(|a| a.substitute(subst)).collect(),
+            ),
+            MathExpr::Pipeline(stages) => {
+                MathExpr::Pipeline(stages.iter().map(|s| s.substitute(subst)).collect())
+            }
+        }
+    }
+
+    /// Recursively inlines user-defined functions (`inline_user_fns`) and expands symbolic `grad(f, x)`
+    pub fn inline_and_expand(
+        &self,
+        fns: &HashMap<String, (Vec<String>, MathExpr)>,
+        inline_user_fns: bool,
+        depth: usize,
+    ) -> MathExpr {
+        if depth > 16 {
+            return self.clone();
+        }
+        match self {
+            MathExpr::Num(_) | MathExpr::Var(_) | MathExpr::Placeholder => self.clone(),
+            MathExpr::Array(elems) => MathExpr::Array(
+                elems
+                    .iter()
+                    .map(|e| e.inline_and_expand(fns, inline_user_fns, depth + 1))
+                    .collect(),
+            ),
+            MathExpr::Index(b, i) => MathExpr::Index(
+                Box::new(b.inline_and_expand(fns, inline_user_fns, depth + 1)),
+                Box::new(i.inline_and_expand(fns, inline_user_fns, depth + 1)),
+            ),
+            MathExpr::Unary(op, inner) => MathExpr::Unary(
+                *op,
+                Box::new(inner.inline_and_expand(fns, inline_user_fns, depth + 1)),
+            ),
+            MathExpr::Binary(l, op, r) => MathExpr::Binary(
+                Box::new(l.inline_and_expand(fns, inline_user_fns, depth + 1)),
+                *op,
+                Box::new(r.inline_and_expand(fns, inline_user_fns, depth + 1)),
+            ),
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => MathExpr::Ternary {
+                cond: Box::new(cond.inline_and_expand(fns, inline_user_fns, depth + 1)),
+                then_expr: Box::new(then_expr.inline_and_expand(fns, inline_user_fns, depth + 1)),
+                else_expr: Box::new(else_expr.inline_and_expand(fns, inline_user_fns, depth + 1)),
+            },
+            MathExpr::Pipeline(stages) => {
+                let mut curr = stages[0].clone();
+                for st in &stages[1..] {
+                    curr = MathParser::desugar_pipe_step(curr, st.clone());
+                }
+                curr.inline_and_expand(fns, inline_user_fns, depth + 1)
+            }
+            MathExpr::Call(name, args) => {
+                if (name == "grad" || name == "diff") && args.len() == 2 {
+                    if let MathExpr::Var(wrt) = &args[1] {
+                        let expanded_target = args[0].inline_and_expand(fns, true, depth + 1);
+                        return expanded_target.differentiate(wrt).simplify();
+                    }
+                }
+                let expanded_args: Vec<MathExpr> = args
+                    .iter()
+                    .map(|a| a.inline_and_expand(fns, inline_user_fns, depth + 1))
+                    .collect();
+                if inline_user_fns {
+                    if let Some((param_names, body)) = fns.get(name) {
+                        if param_names.len() == expanded_args.len() {
+                            let mut subst = HashMap::new();
+                            for (p, a) in param_names.iter().zip(expanded_args.into_iter()) {
+                                subst.insert(p.clone(), a);
+                            }
+                            let inlined = body.substitute(&subst);
+                            return inlined.inline_and_expand(fns, inline_user_fns, depth + 1);
+                        }
+                    }
+                }
+                MathExpr::Call(name.clone(), expanded_args)
+            }
+        }
+    }
+
+    /// Compile-Time Symbolic Automatic Differentiation: d(self) / d(var)
+    pub fn differentiate(&self, var: &str) -> MathExpr {
+        match self {
+            MathExpr::Num(_) | MathExpr::Placeholder | MathExpr::Index(_, _) => MathExpr::Num(0.0),
+            MathExpr::Var(v) => {
+                if v == var {
+                    MathExpr::Num(1.0)
+                } else {
+                    MathExpr::Num(0.0)
+                }
+            }
+            MathExpr::Array(elems) => {
+                MathExpr::Array(elems.iter().map(|e| e.differentiate(var)).collect())
+            }
+            MathExpr::Unary(MathUnaryOp::Neg, inner) => {
+                MathExpr::Unary(MathUnaryOp::Neg, Box::new(inner.differentiate(var)))
+            }
+            MathExpr::Unary(MathUnaryOp::Not, _) => MathExpr::Num(0.0),
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => MathExpr::Ternary {
+                cond: cond.clone(),
+                then_expr: Box::new(then_expr.differentiate(var)),
+                else_expr: Box::new(else_expr.differentiate(var)),
+            },
+            MathExpr::Binary(u, op, v) => {
+                let du = u.differentiate(var);
+                let dv = v.differentiate(var);
+                match op {
+                    MathBinOp::Add => MathExpr::Binary(Box::new(du), MathBinOp::Add, Box::new(dv)),
+                    MathBinOp::Sub => MathExpr::Binary(Box::new(du), MathBinOp::Sub, Box::new(dv)),
+                    MathBinOp::Mul | MathBinOp::MatMul => {
+                        // Product rule: du * v + u * dv
+                        let left = MathExpr::Binary(Box::new(du), *op, v.clone());
+                        let right = MathExpr::Binary(u.clone(), *op, Box::new(dv));
+                        MathExpr::Binary(Box::new(left), MathBinOp::Add, Box::new(right))
+                    }
+                    MathBinOp::Div => {
+                        // Quotient rule: (du * v - u * dv) / (v ^ 2)
+                        let left = MathExpr::Binary(Box::new(du), MathBinOp::Mul, v.clone());
+                        let right = MathExpr::Binary(u.clone(), MathBinOp::Mul, Box::new(dv));
+                        let num = MathExpr::Binary(Box::new(left), MathBinOp::Sub, Box::new(right));
+                        let den = MathExpr::Binary(
+                            v.clone(),
+                            MathBinOp::Pow,
+                            Box::new(MathExpr::Num(2.0)),
+                        );
+                        MathExpr::Binary(Box::new(num), MathBinOp::Div, Box::new(den))
+                    }
+                    MathBinOp::Pow => {
+                        if let MathExpr::Num(c) = **v {
+                            // Power rule: c * u^(c-1) * du
+                            let coeff = MathExpr::Num(c);
+                            let pow_minus_1 = MathExpr::Binary(
+                                u.clone(),
+                                MathBinOp::Pow,
+                                Box::new(MathExpr::Num(c - 1.0)),
+                            );
+                            let term = MathExpr::Binary(
+                                Box::new(coeff),
+                                MathBinOp::Mul,
+                                Box::new(pow_minus_1),
+                            );
+                            MathExpr::Binary(Box::new(term), MathBinOp::Mul, Box::new(du))
+                        } else {
+                            MathExpr::Num(0.0)
+                        }
+                    }
+                    _ => MathExpr::Num(0.0),
+                }
+            }
+            MathExpr::Call(func, args) => {
+                if args.is_empty() {
+                    return MathExpr::Num(0.0);
+                }
+                let u = &args[0];
+                let du = u.differentiate(var);
+                let outer_deriv = match func.as_str() {
+                    "exp" => MathExpr::Call("exp".to_string(), vec![u.clone()]),
+                    "ln" | "log" => MathExpr::Binary(
+                        Box::new(MathExpr::Num(1.0)),
+                        MathBinOp::Div,
+                        Box::new(u.clone()),
+                    ),
+                    "sqrt" => MathExpr::Binary(
+                        Box::new(MathExpr::Num(1.0)),
+                        MathBinOp::Div,
+                        Box::new(MathExpr::Binary(
+                            Box::new(MathExpr::Num(2.0)),
+                            MathBinOp::Mul,
+                            Box::new(MathExpr::Call("sqrt".to_string(), vec![u.clone()])),
+                        )),
+                    ),
+                    "sin" => MathExpr::Call("cos".to_string(), vec![u.clone()]),
+                    "cos" => MathExpr::Unary(
+                        MathUnaryOp::Neg,
+                        Box::new(MathExpr::Call("sin".to_string(), vec![u.clone()])),
+                    ),
+                    "tanh" => {
+                        let t = MathExpr::Call("tanh".to_string(), vec![u.clone()]);
+                        let t2 =
+                            MathExpr::Binary(Box::new(t), MathBinOp::Pow, Box::new(MathExpr::Num(2.0)));
+                        MathExpr::Binary(
+                            Box::new(MathExpr::Num(1.0)),
+                            MathBinOp::Sub,
+                            Box::new(t2),
+                        )
+                    }
+                    "sigmoid" => {
+                        let s = MathExpr::Call("sigmoid".to_string(), vec![u.clone()]);
+                        let one_minus_s = MathExpr::Binary(
+                            Box::new(MathExpr::Num(1.0)),
+                            MathBinOp::Sub,
+                            Box::new(s.clone()),
+                        );
+                        MathExpr::Binary(Box::new(s), MathBinOp::Mul, Box::new(one_minus_s))
+                    }
+                    "relu" => MathExpr::Ternary {
+                        cond: Box::new(MathExpr::Binary(
+                            Box::new(u.clone()),
+                            MathBinOp::Gt,
+                            Box::new(MathExpr::Num(0.0)),
+                        )),
+                        then_expr: Box::new(MathExpr::Num(1.0)),
+                        else_expr: Box::new(MathExpr::Num(0.0)),
+                    },
+                    _ => MathExpr::Num(1.0),
+                };
+                MathExpr::Binary(Box::new(outer_deriv), MathBinOp::Mul, Box::new(du))
+            }
+            MathExpr::Pipeline(stages) => {
+                let mut curr = stages[0].clone();
+                for st in &stages[1..] {
+                    curr = MathParser::desugar_pipe_step(curr, st.clone());
+                }
+                curr.differentiate(var)
+            }
+        }
+    }
+
+    /// Algebraic simplification and constant folding pass
+    pub fn simplify(&self) -> MathExpr {
+        match self {
+            MathExpr::Num(_) | MathExpr::Var(_) | MathExpr::Placeholder => self.clone(),
+            MathExpr::Array(elems) => {
+                MathExpr::Array(elems.iter().map(|e| e.simplify()).collect())
+            }
+            MathExpr::Index(b, i) => {
+                MathExpr::Index(Box::new(b.simplify()), Box::new(i.simplify()))
+            }
+            MathExpr::Unary(op, inner) => {
+                let s = inner.simplify();
+                if *op == MathUnaryOp::Neg {
+                    if let MathExpr::Num(n) = s {
+                        return MathExpr::Num(-n);
+                    }
+                }
+                MathExpr::Unary(*op, Box::new(s))
+            }
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => MathExpr::Ternary {
+                cond: Box::new(cond.simplify()),
+                then_expr: Box::new(then_expr.simplify()),
+                else_expr: Box::new(else_expr.simplify()),
+            },
+            MathExpr::Call(name, args) => {
+                MathExpr::Call(name.clone(), args.iter().map(|a| a.simplify()).collect())
+            }
+            MathExpr::Pipeline(stages) => {
+                MathExpr::Pipeline(stages.iter().map(|s| s.simplify()).collect())
+            }
+            MathExpr::Binary(lhs, op, rhs) => {
+                let l = lhs.simplify();
+                let r = rhs.simplify();
+                match (&l, op, &r) {
+                    (MathExpr::Num(a), MathBinOp::Add, MathExpr::Num(b)) => MathExpr::Num(a + b),
+                    (MathExpr::Num(a), MathBinOp::Sub, MathExpr::Num(b)) => MathExpr::Num(a - b),
+                    (MathExpr::Num(a), MathBinOp::Mul, MathExpr::Num(b)) => MathExpr::Num(a * b),
+                    (MathExpr::Num(a), MathBinOp::Pow, MathExpr::Num(b)) => MathExpr::Num(a.powf(*b)),
+                    (MathExpr::Num(a), MathBinOp::Add, _) if a.abs() < 1e-12 => r,
+                    (_, MathBinOp::Add, MathExpr::Num(b)) if b.abs() < 1e-12 => l,
+                    (_, MathBinOp::Sub, MathExpr::Num(b)) if b.abs() < 1e-12 => l,
+                    (MathExpr::Num(a), MathBinOp::Sub, _) if a.abs() < 1e-12 => {
+                        MathExpr::Unary(MathUnaryOp::Neg, Box::new(r))
+                    }
+                    (MathExpr::Num(a), MathBinOp::Mul, _) if a.abs() < 1e-12 => MathExpr::Num(0.0),
+                    (_, MathBinOp::Mul, MathExpr::Num(b)) if b.abs() < 1e-12 => MathExpr::Num(0.0),
+                    (MathExpr::Num(a), MathBinOp::Mul, _) if (a - 1.0).abs() < 1e-12 => r,
+                    (_, MathBinOp::Mul, MathExpr::Num(b)) if (b - 1.0).abs() < 1e-12 => l,
+                    (_, MathBinOp::Div, MathExpr::Num(b)) if (b - 1.0).abs() < 1e-12 => l,
+                    (MathExpr::Num(a), MathBinOp::Div, _) if a.abs() < 1e-12 => MathExpr::Num(0.0),
+                    (_, MathBinOp::Pow, MathExpr::Num(b)) if (b - 1.0).abs() < 1e-12 => l,
+                    (_, MathBinOp::Pow, MathExpr::Num(b)) if b.abs() < 1e-12 => MathExpr::Num(1.0),
+                    _ => MathExpr::Binary(Box::new(l), *op, Box::new(r)),
+                }
             }
         }
     }
@@ -334,21 +657,38 @@ impl<'a> MathLexer<'a> {
 
     pub fn tokenize(&mut self) -> Result<Vec<Token>, String> {
         let mut tokens = Vec::new();
+        let mut depth: usize = 0;
 
         while let Some(&(i, ch)) = self.chars.peek() {
             match ch {
-                ' ' | '\t' | '\r' | '\n' => {
+                ' ' | '\t' | '\r' => {
                     self.chars.next();
+                }
+                '\n' => {
+                    self.chars.next();
+                    if depth == 0
+                        && matches!(
+                            tokens.last(),
+                            Some(
+                                Token::Ident(_)
+                                    | Token::Num(_)
+                                    | Token::RParen
+                                    | Token::RBracket
+                            )
+                        )
+                    {
+                        tokens.push(Token::Semicolon);
+                    }
                 }
                 '/' => {
                     self.chars.next();
                     if let Some(&(_, '/')) = self.chars.peek() {
                         self.chars.next();
                         while let Some(&(_, next_c)) = self.chars.peek() {
-                            self.chars.next();
                             if next_c == '\n' {
                                 break;
                             }
+                            self.chars.next();
                         }
                     } else if let Some(&(_, '*')) = self.chars.peek() {
                         self.chars.next();
@@ -435,18 +775,22 @@ impl<'a> MathLexer<'a> {
                 }
                 '(' => {
                     self.chars.next();
+                    depth += 1;
                     tokens.push(Token::LParen);
                 }
                 ')' => {
                     self.chars.next();
+                    depth = depth.saturating_sub(1);
                     tokens.push(Token::RParen);
                 }
                 '[' => {
                     self.chars.next();
+                    depth += 1;
                     tokens.push(Token::LBracket);
                 }
                 ']' => {
                     self.chars.next();
+                    depth = depth.saturating_sub(1);
                     tokens.push(Token::RBracket);
                 }
                 ',' => {
@@ -865,9 +1209,9 @@ impl MathParser {
     }
 
     fn parse_primary(&mut self) -> Result<MathExpr, String> {
-        match self.next_tok() {
-            Some(Token::Num(n)) => Ok(MathExpr::Num(n)),
-            Some(Token::Underscore) => Ok(MathExpr::Placeholder),
+        let mut base = match self.next_tok() {
+            Some(Token::Num(n)) => MathExpr::Num(n),
+            Some(Token::Underscore) => MathExpr::Placeholder,
             Some(Token::LBracket) => {
                 // Vector or Matrix literal: [1, 2, 3] or [[1, 2], [3, 4]]
                 let mut elems = Vec::new();
@@ -883,7 +1227,7 @@ impl MathParser {
                         }
                     }
                 }
-                Ok(MathExpr::Array(elems))
+                MathExpr::Array(elems)
             }
             Some(Token::Ident(name)) => {
                 if self.match_tok(&Token::LParen) {
@@ -900,18 +1244,27 @@ impl MathParser {
                             }
                         }
                     }
-                    Ok(MathExpr::Call(name, args))
+                    MathExpr::Call(name, args)
                 } else {
-                    Ok(MathExpr::Var(name))
+                    MathExpr::Var(name)
                 }
             }
             Some(Token::LParen) => {
                 let expr = self.parse_expr()?;
                 self.expect(&Token::RParen)?;
-                Ok(expr)
+                expr
             }
-            other => Err(format!("Unexpected token in expression: {:?}", other)),
+            other => return Err(format!("Unexpected token in expression: {:?}", other)),
+        };
+
+        // Support postfix indexing: x[0], W[1][0]
+        while self.match_tok(&Token::LBracket) {
+            let idx = self.parse_expr()?;
+            self.expect(&Token::RBracket)?;
+            base = MathExpr::Index(Box::new(base), Box::new(idx));
         }
+
+        Ok(base)
     }
 }
 
@@ -1022,6 +1375,33 @@ impl MathEvaluator {
                     Ok(MathValue::Vector(vec))
                 }
             }
+            MathExpr::Index(base, idx) => {
+                let b_val = self.eval_value(base)?;
+                let i_val = self.eval_value(idx)?;
+                let i_num = i_val
+                    .as_scalar()
+                    .ok_or_else(|| "Index must evaluate to a scalar integer".to_string())?
+                    as usize;
+                match b_val {
+                    MathValue::Vector(vec) => vec
+                        .get(i_num)
+                        .copied()
+                        .map(MathValue::Scalar)
+                        .ok_or_else(|| format!("Vector index {} out of bounds (len {})", i_num, vec.len())),
+                    MathValue::Matrix(mat) => mat
+                        .get(i_num)
+                        .cloned()
+                        .map(MathValue::Vector)
+                        .ok_or_else(|| format!("Matrix row index {} out of bounds (rows {})", i_num, mat.len())),
+                    MathValue::Scalar(s) => {
+                        if i_num == 0 {
+                            Ok(MathValue::Scalar(s))
+                        } else {
+                            Err("Cannot index into a scalar with index > 0".to_string())
+                        }
+                    }
+                }
+            }
             MathExpr::Placeholder => {
                 Err("Unexpected unresolved pipeline placeholder '_'".to_string())
             }
@@ -1117,6 +1497,74 @@ impl MathEvaluator {
                             all_elems.into_iter().fold(f64::INFINITY, f64::min)
                         };
                         Ok(MathValue::Scalar(res))
+                    }
+                    "prod" => {
+                        if args.is_empty() {
+                            return Err("'prod' requires at least one argument".to_string());
+                        }
+                        let mut all_elems = Vec::new();
+                        for a in args {
+                            all_elems.extend(self.eval_value(a)?.flatten_elements());
+                        }
+                        let prod: f64 = all_elems.iter().product();
+                        Ok(MathValue::Scalar(prod))
+                    }
+                    "scan" | "cumsum" => {
+                        let val = self.eval_single_val(args, name)?;
+                        let elems = val.flatten_elements();
+                        let mut running = 0.0;
+                        let mut out = Vec::with_capacity(elems.len());
+                        for x in elems {
+                            running += x;
+                            out.push(running);
+                        }
+                        Ok(MathValue::Vector(out))
+                    }
+                    "dot" => {
+                        if args.len() != 2 {
+                            return Err("'dot' expects 2 arguments".to_string());
+                        }
+                        let a = self.eval_value(&args[0])?;
+                        let b = self.eval_value(&args[1])?;
+                        self.eval_binary_op(&a, MathBinOp::MatMul, &b)
+                    }
+                    "range" => {
+                        let (start, end) = if args.len() == 1 {
+                            let n = self
+                                .eval_value(&args[0])?
+                                .as_scalar()
+                                .ok_or_else(|| "'range' expects scalar bound".to_string())?
+                                as i64;
+                            (0, n)
+                        } else if args.len() == 2 {
+                            let s = self
+                                .eval_value(&args[0])?
+                                .as_scalar()
+                                .ok_or_else(|| "'range' expects scalar start".to_string())?
+                                as i64;
+                            let e = self
+                                .eval_value(&args[1])?
+                                .as_scalar()
+                                .ok_or_else(|| "'range' expects scalar end".to_string())?
+                                as i64;
+                            (s, e)
+                        } else {
+                            return Err("'range' expects 1 or 2 arguments".to_string());
+                        };
+                        let vec: Vec<f64> = (start..end).map(|i| i as f64).collect();
+                        Ok(MathValue::Vector(vec))
+                    }
+                    "grad" | "diff" => {
+                        if args.len() != 2 {
+                            return Err(format!("'{}' expects (expr, var)", name));
+                        }
+                        let wrt = match &args[1] {
+                            MathExpr::Var(v) => v.clone(),
+                            _ => return Err("Second argument to 'grad' must be a variable name".to_string()),
+                        };
+                        let inlined = args[0].inline_and_expand(&self.functions, true, 0);
+                        let deriv_expr = inlined.differentiate(&wrt).simplify();
+                        self.eval_value(&deriv_expr)
                     }
                     user_fn => {
                         if let Some((param_names, body)) = self.functions.get(user_fn) {
@@ -1322,6 +1770,21 @@ impl MathEvaluator {
 // ============================================================================
 
 impl MathProgram {
+    /// Collects all defined mathematical functions for beta-reduction inlining and symbolic autodiff
+    pub fn collect_functions(&self) -> HashMap<String, (Vec<String>, MathExpr)> {
+        let mut fns = HashMap::new();
+        for item in &self.items {
+            if let MathItem::Function {
+                name, params, body, ..
+            } = item
+            {
+                let p_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+                fns.insert(name.clone(), (p_names, body.clone()));
+            }
+        }
+        fns
+    }
+
     /// Infers function return dtype from explicit annotation or parameter precisions
     fn infer_return_dtype(params: &[MathParam], explicit: &Option<MathDtype>) -> MathDtype {
         if let Some(dt) = explicit {
@@ -1336,7 +1799,8 @@ impl MathProgram {
         MathDtype::F32
     }
 
-    /// Compiles standard math into standalone ISO C23 source code with strength reduction
+    /// Compiles standard math into standalone ISO C23 source code with strength reduction,
+    /// symbolic autodiff (`grad`), and shaped tensor pointer loops (`f16[M, N]`)
     pub fn to_c23(&self) -> String {
         let mut out = String::new();
         out.push_str("// ============================================================================\n");
@@ -1344,6 +1808,8 @@ impl MathProgram {
         out.push_str("// Generated by CRON Sovereign Math Engine (Zero-Word Calculus)\n");
         out.push_str("// ============================================================================\n\n");
         out.push_str("#include <stdint.h>\n#include <stdbool.h>\n#include <math.h>\n\n");
+
+        let fns = self.collect_functions();
 
         for item in &self.items {
             if let MathItem::Constant { name, val } = item {
@@ -1362,6 +1828,64 @@ impl MathProgram {
             {
                 let inferred_ret = Self::infer_return_dtype(params, ret_type);
                 let r_type = inferred_ret.to_c23_type();
+                let expanded_body = body.inline_and_expand(&fns, false, 0).simplify();
+
+                // Check if function operates on shaped tensor tiles (e.g., W: f16[16, 16], x: f16[16])
+                let has_shaped_params = params.iter().any(|p| !p.dims.is_empty());
+                if has_shaped_params {
+                    let mut p_decls: Vec<String> = params
+                        .iter()
+                        .map(|p| {
+                            if p.dims.is_empty() {
+                                format!("{} {}", p.dtype.to_c23_type(), p.name)
+                            } else {
+                                format!("const {}* restrict {}", p.dtype.to_c23_type(), p.name)
+                            }
+                        })
+                        .collect();
+                    p_decls.push(format!("{}* restrict out", r_type));
+                    out.push_str(&format!("void {}({}) {{\n", name, p_decls.join(", ")));
+
+                    // Detect 2D Matrix-Vector Linear Layer pattern: W[M, N] @ x[N] (+ b[M])
+                    let mat_param = params.iter().find(|p| p.dims.len() == 2);
+                    let vec_param = params.iter().find(|p| p.dims.len() == 1);
+                    if let (Some(w_p), Some(x_p)) = (mat_param, vec_param) {
+                        let m = w_p.dims[0];
+                        let n = w_p.dims[1];
+                        let bias_param = params
+                            .iter()
+                            .find(|p| p.dims.len() == 1 && p.name != x_p.name);
+                        out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", m));
+                        if let Some(b_p) = bias_param {
+                            out.push_str(&format!(
+                                "        float acc = (float){}[i];\n",
+                                b_p.name
+                            ));
+                        } else {
+                            out.push_str("        float acc = 0.0f;\n");
+                        }
+                        out.push_str(&format!("        for (int j = 0; j < {}; ++j) {{\n", n));
+                        out.push_str(&format!(
+                            "            acc += (float){}[i * {} + j] * (float){}[j];\n",
+                            w_p.name, n, x_p.name
+                        ));
+                        out.push_str("        }\n");
+                        out.push_str(&format!("        out[i] = ({})acc;\n", r_type));
+                        out.push_str("    }\n}\n\n");
+                        continue;
+                    } else if let Some(v_p) = vec_param {
+                        let n = v_p.dims[0];
+                        out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", n));
+                        out.push_str(&format!(
+                            "        out[i] = ({} )({});\n",
+                            r_type,
+                            Self::expr_to_c23(&expanded_body).replace(&v_p.name, &format!("{}[i]", v_p.name))
+                        ));
+                        out.push_str("    }\n}\n\n");
+                        continue;
+                    }
+                }
+
                 let p_str = params
                     .iter()
                     .map(|p| format!("{} {}", p.dtype.to_c23_type(), p.name))
@@ -1371,7 +1895,7 @@ impl MathProgram {
                 out.push_str(&format!(
                     "    return ({} )({});\n",
                     r_type,
-                    Self::expr_to_c23(body)
+                    Self::expr_to_c23(&expanded_body)
                 ));
                 out.push_str("}\n\n");
             }
@@ -1387,6 +1911,9 @@ impl MathProgram {
             MathExpr::Array(elems) => {
                 let s: Vec<String> = elems.iter().map(Self::expr_to_c23).collect();
                 format!("{{ {} }}", s.join(", "))
+            }
+            MathExpr::Index(base, idx) => {
+                format!("{}[(int)({})]", Self::expr_to_c23(base), Self::expr_to_c23(idx))
             }
             MathExpr::Placeholder => "_".to_string(),
             MathExpr::Unary(MathUnaryOp::Neg, inner) => format!("(-{})", Self::expr_to_c23(inner)),
@@ -1474,7 +2001,7 @@ impl MathProgram {
         }
     }
 
-    /// Compiles standard math into real SSA NVIDIA CUDA PTX v7.5+ GPU kernels
+    /// Compiles standard math into real SSA NVIDIA CUDA PTX v7.5+ GPU kernels with full function inlining
     pub fn to_ptx(&self) -> String {
         let mut out = String::new();
         out.push_str("// ============================================================================\n");
@@ -1482,6 +2009,7 @@ impl MathProgram {
         out.push_str("// ============================================================================\n");
         out.push_str(".version 7.5\n.target sm_80\n.address_size 64\n\n");
 
+        let fns = self.collect_functions();
         let mut constants = HashMap::new();
         for item in &self.items {
             if let MathItem::Constant { name, val } = item {
@@ -1499,6 +2027,8 @@ impl MathProgram {
             {
                 let inferred_ret = Self::infer_return_dtype(params, ret_type);
                 let r_ptx = inferred_ret.to_ptx_type();
+                let fused_body = body.inline_and_expand(&fns, true, 0).simplify();
+
                 out.push_str(&format!(".visible .func (.param {} ret) {}(\n", r_ptx, name));
                 for (i, p) in params.iter().enumerate() {
                     let comma = if i + 1 < params.len() { "," } else { "" };
@@ -1527,7 +2057,7 @@ impl MathProgram {
                     builder.var_regs.insert(p.name.clone(), r);
                 }
 
-                let final_reg = builder.emit_expr(body, &mut instr_lines);
+                let final_reg = builder.emit_expr(&fused_body, &mut instr_lines);
 
                 out.push_str(&format!(
                     "    .reg .f32 %f<{}>;\n",
@@ -1559,17 +2089,17 @@ impl MathProgram {
         out
     }
 
-    /// Lowers mathematical functions into 4-slot 128-bit VLIW bundles with CRC-8 ATM sealing
+    /// Lowers mathematical functions into 4-slot 128-bit VLIW bundles with CRC-8 ATM sealing and inlining
     pub fn to_vliw_bundles(&self) -> Vec<VliwBundle> {
         let mut raw_slots: Vec<String> = Vec::new();
         let mut reg_map: HashMap<String, u8> = HashMap::new();
         let mut next_reg: u8 = 1;
+        let fns = self.collect_functions();
 
         for item in &self.items {
             match item {
                 MathItem::Constant { name, val } => {
-                    let r = next_reg.min(15);
-                    next_reg = next_reg.saturating_add(1);
+                    let r = Self::alloc_vliw_reg(&mut next_reg);
                     reg_map.insert(name.clone(), r);
                     let imm = (*val as u16) & 0xFFF;
                     raw_slots.push(Self::seal_slot(&format!("'=={:02X}#{:03X}", r, imm), '>'));
@@ -1577,17 +2107,18 @@ impl MathProgram {
                 MathItem::Function { params, body, .. } => {
                     for p in params {
                         if !reg_map.contains_key(&p.name) {
-                            let r = next_reg.min(15);
-                            next_reg = next_reg.saturating_add(1);
+                            let r = Self::alloc_vliw_reg(&mut next_reg);
                             reg_map.insert(p.name.clone(), r);
                             raw_slots.push(Self::seal_slot(&format!("'=={:02X}#{:03X}", r, r as u16 * 16), '>'));
                         }
                     }
-                    let res_reg = Self::lower_expr_to_vliw(body, &mut reg_map, &mut next_reg, &mut raw_slots);
+                    let fused_body = body.inline_and_expand(&fns, true, 0).simplify();
+                    let res_reg = Self::lower_expr_to_vliw(&fused_body, &mut reg_map, &mut next_reg, &mut raw_slots);
                     raw_slots.push(Self::seal_slot(&format!("_ST{:02X}#040", res_reg), '>'));
                 }
                 MathItem::Expression(expr) | MathItem::Binding { expr, .. } => {
-                    let res_reg = Self::lower_expr_to_vliw(expr, &mut reg_map, &mut next_reg, &mut raw_slots);
+                    let fused_expr = expr.inline_and_expand(&fns, true, 0).simplify();
+                    let res_reg = Self::lower_expr_to_vliw(&fused_expr, &mut reg_map, &mut next_reg, &mut raw_slots);
                     raw_slots.push(Self::seal_slot(&format!("_ST{:02X}#040", res_reg), '>'));
                 }
             }
@@ -2171,5 +2702,43 @@ mod tests {
         assert!(!doc.vliw_stream.is_empty());
         let diags = crate::check_source_diagnostics(code);
         assert!(diags.is_empty(), "Expected 0 diagnostics, got: {:?}", diags);
+    }
+
+    #[test]
+    fn test_symbolic_autodiff_grad_and_c23_lowering() {
+        let code = r#"
+            loss(w: f32, x: f32, y: f32) = (w * x - y)^2
+            d_loss(w: f32, x: f32, y: f32) = grad(loss(w, x, y), w)
+            // At w=3, x=2, y=1: loss = (6-1)^2 = 25, d_loss/dw = 2*(w*x - y)*x = 2*5*2 = 20
+            d_loss(3, 2, 1)
+        "#;
+        let prog = parse_math_code(code).expect("Failed to parse autodiff code");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Autodiff eval failed");
+        assert_eq!(res, Some(20.0));
+
+        // Verify C23 emits simplified analytical derivative without 'grad(' call
+        let c23 = prog.to_c23();
+        assert!(!c23.contains("grad("));
+        assert!(c23.contains("((2.000000f * ((w * x) - y)) * x)"));
+    }
+
+    #[test]
+    fn test_shaped_tensor_c23_gemv_and_indexing() {
+        let code = r#"
+            linear_tile(x: f16[16], W: f16[16, 16], b: f16[16]) = W @ x + b
+            seq = range(1, 5) -> scan
+            seq[3]
+        "#;
+        let prog = parse_math_code(code).expect("Failed to parse shaped tensor & scan");
+        let mut eval = MathEvaluator::new();
+        // range(1, 5) = [1, 2, 3, 4], scan = [1, 3, 6, 10], seq[3] = 10
+        let res = eval.execute_program(&prog).expect("Scan/index eval failed");
+        assert_eq!(res, Some(10.0));
+
+        let c23 = prog.to_c23();
+        assert!(c23.contains("const _Float16* restrict W"));
+        assert!(c23.contains("for (int i = 0; i < 16; ++i)"));
+        assert!(c23.contains("W[i * 16 + j]"));
     }
 }
