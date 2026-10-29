@@ -207,17 +207,25 @@ pub use cl_v2_ast::*;
 pub use cl_v2_parser::parse_cl_v2;
 pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport, V2TensorRuntime};
 pub use cl_math::{
-    parse_math_code, MathBinOp, MathDtype, MathEvaluator, MathItem, MathLexer, MathParam,
-    MathParser, MathProgram,
+    is_math_calculus_source, parse_math_code, MathBinOp, MathDtype, MathEvaluator, MathItem,
+    MathLexer, MathParam, MathParser, MathProgram, MathValue,
 };
 pub use cl_syntax_spec::{verify_sovereign_pure_cipher_syntax, SovereignSyntaxReport, SyntaxViolation, SOVEREIGN_SYNTAX_EBNF};
 
 /// Unified Entry Point for all .cl files in the CRON ecosystem.
 ///
-/// Unifies Dialect 3 (Low-Level Microcode / VLIW Bundles) and Dialect 4 (Sovereign CL v2.0 Post-Human Standard).
-/// Eliminates ambiguous dialects (CL v1 verbal keywords are deprecated and auto-migrated).
+/// Unifies:
+/// - Level 1A: Standard Mathematical Calculus (Zero-Word Algebraic Pipelines via `cl_math`)
+/// - Level 1B: Sovereign CL v2.0 5-Pillar Topology Morphisms (`cl_v2_parser`)
+/// - Level 2:  Low-Level Microcode / 128-bit 4-Slot VLIW Bundles
 pub fn parse_unified_cl(source: &str) -> Result<ClV2Document, String> {
-    // Check for legacy High-Level CL v1 keywords
+    // 1. Check for Standard Mathematical Calculus (f(x) = ..., x -> f -> g)
+    if cl_math::is_math_calculus_source(source) {
+        let prog = cl_math::parse_math_code(source)?;
+        return Ok(prog.to_cl_v2_document());
+    }
+
+    // 2. Check for legacy High-Level CL v1 keywords
     if source.lines().any(|l| {
         let t = l.trim();
         t.starts_with("module ") || t.starts_with("import libcl.") || t.starts_with("arch qp_")
@@ -229,6 +237,7 @@ pub fn parse_unified_cl(source: &str) -> Result<ClV2Document, String> {
         }
     }
 
+    // 3. Parse as Sovereign CL v2.0 or 4-Slot VLIW Microcode
     cl_v2_parser::parse_cl_v2(source)
 }
 
@@ -660,7 +669,13 @@ pub fn compile_source(source: &str) -> Result<String, String> {
 }
 
 pub fn compile_source_with_color(source: &str, file_label: Option<&str>, use_color: bool) -> Result<String, String> {
-    // Sovereign CL v2.0 / High-Level Post-Human Detection
+    // 1. Standard Mathematical Calculus (Zero-Word Algebraic Pipelines)
+    if crate::cl_math::is_math_calculus_source(source) {
+        let prog = crate::cl_math::parse_math_code(source)?;
+        return Ok(prog.to_vliw());
+    }
+
+    // 2. Sovereign CL v2.0 / High-Level Post-Human Detection
     if source.contains("@⌖") || source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {
         match crate::cl_v2_parser::parse_cl_v2(source) {
             Ok(mut doc) => {
@@ -778,6 +793,10 @@ fn extract_line_col_from_err(msg: &str) -> (usize, usize) {
 }
 
 pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
+    if crate::cl_math::is_math_calculus_source(source) {
+        return Vec::new();
+    }
+
     if source.contains("@⌖") || source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {
         match crate::cl_v2_parser::parse_cl_v2(source) {
             Ok(doc) => {

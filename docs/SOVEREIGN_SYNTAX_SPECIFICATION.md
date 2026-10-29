@@ -1,35 +1,74 @@
-# SOVEREIGN CL v2.0 POST-HUMAN PURE-CIPHER SYNTAX SPECIFICATION
-**Version:** 2.0.0 (Post-Human Pure Symbolic Standard)  
-**Compiler Substrate:** `cronc::cl_syntax_spec` (`crates/cronc/src/cl_syntax_spec.rs`)  
-**Target Hardware:** 256-Core 4D-Torus Neuromorphic & Photonic Silicon  
+# SOVEREIGN CL v2.0 MATHEMATICAL & SILICON SYNTAX SPECIFICATION
+**Version:** 2.1.0 (Unified Zero-Word Mathematical Algebra & Silicon Cipher Standard)  
+**Compiler Substrate:** `cronc::cl_math`, `cronc::cl_v2_parser`, `cronc::cl_syntax_spec`  
+**Target Hardware:** 256-Core 4D-Torus Silicon, ISO C23 Native CPU, & NVIDIA CUDA GPU PTX  
 
 ---
 
-## 1. The Zero-Verbal Constitution (Үггүй Цэвэр Математик Синтаксийн Хууль)
+## 1. The Zero-Verbal Constitution (Үггүй Цэвэр Математик ба Угсралтын Хууль)
 
-Sovereign CL v2.0 eliminates all human natural language English keywords (`kernel`, `module`, `function`, `let`, `return`, `class`, `struct`, etc.).
-Every program is a pure mathematical tensor morphism mapped directly to silicon physical coordinates.
+Sovereign CL eliminates all human natural language English keywords (`fn`, `def`, `let`, `return`, `var`, `import`, `if`, `for`, `class`, `struct`).
+Every program is written either in **Universal Conventional Mathematical Algebra + Pipeline Composition (`->`)** (`cl_math.rs`) or in **Explicit 5-Pillar Silicon Topology Morphisms** (`cl_v2_parser.rs`), and lowers automatically through a unified compiler pipeline (`parse_unified_cl`) to **4-Slot VLIW Microcode**, **ISO C23**, or **NVIDIA CUDA PTX**.
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│  LEVEL 1: High-Level Sovereign CL (Математик Морфизм & Топологи)       │
-│  • Тэмдэгт: @⌖, @io, §[Dims:Type], In ↦ Out, :=, ⊗, <~>, ⟳, !Δ        │
-│  • Зарчим: Цэвэр бэлгэдэл, 0 англи үг (Pure Ciphered Syntax)           │
-│  • Үүрэг: Хүн ба AI-д зориулсан математик загварчлал, квант топологи   │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ V2 Lowering / Co-Verification
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│  LEVEL 2: Low-Level Silicon VLIW CL (128-bit 4-Slot Микрокод)          │
-│  • Тэмдэгт: B####: [Slot0 Slot1 Slot2 Slot3], 10/16-char, CRC-8       │
-│  • Зарчим: 4-Snake тэг-хөөс хуваарилалт, 4.0 Peak IPC, CRC-8 баталгаа  │
-│  • Үүрэг: 256-цөмт 4D-Torus чипний шууд унших машины төрөлх сифер      │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│  LEVEL 1A: Universal Mathematical Algebra & Pipeline Calculus (cl_math)    │
+│  • Томьёо: f(x: f32) = x^2 + 2*x + 1,  linear(x: f16, W: f16, b: f16) = W @ x + b │
+│  • Угсралт (Pipeline): x -> norm -> linear(W1, b1) -> activate             │
+│  • Тензор ба Нөхцөл: [1, 2], [[1, 2], [3, 4]], z > 0 ? z : 0.1 * z         │
+│  • Төрлүүд: f16 (GPU Half), f32, f64, bf16, i32, i64, t2 (BitNet 1.58-bit) │
+└─────────────────────────────────────┬──────────────────────────────────────┘
+                                      │ Unified AST Lowering (parse_unified_cl)
+                                      ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│  LEVEL 1B: 5-Pillar Silicon Topology Morphism (cl_v2_ast)                  │
+│  • Тэмдэгт: @⌖, @io, §[Dims:Type], In ↦ Out, :=, ⊗, <~>, ⟳, !Δ            │
+│  • Үүрэг: 4D-Torus орон зайн чиглүүлэлт, SRAM/HBM санах ойн хатуу гэрээ    │
+└──────────────┬──────────────────────┬───────────────────────┬──────────────┘
+               │                      │                       │
+               ▼                      ▼                       ▼
+┌──────────────────────────┐ ┌─────────────────────┐ ┌───────────────────────┐
+│ LEVEL 2A: 4-Slot VLIW    │ │ LEVEL 2B: ISO C23   │ │ LEVEL 2C: CUDA PTX    │
+│ • B0000: 4x10-char slots │ │ • _Float16 / float  │ │ • SSA %f0..%fN, %p0   │
+│ • 100% CRC-8 ATM Sealed  │ │ • Strength Reduced  │ │ • PTX ISA v7.5 sm_80  │
+└──────────────────────────┘ └─────────────────────┘ └───────────────────────┘
 ```
 
 ---
 
 ## 2. Албан Ёсны EBNF Грамматик (Formal EBNF Grammar)
+
+### 2.1 Level 1A: Хэвшмэл Математик Алгебр ба Pipeline (`cl_math`)
+
+```ebnf
+MathProgram         ::= { ConstantDef | FunctionDef | BindingDef | MathExpression } ;
+
+ConstantDef         ::= Identifier "=" NumberLiteral ;
+BindingDef          ::= Identifier "=" MathExpression ;
+FunctionDef         ::= Identifier "(" [ ParamList ] ")" [ "->" Dtype ] "=" MathExpression ;
+ParamList           ::= Param { "," Param } ;
+Param               ::= Identifier [ ":" Dtype [ ShapeSpec ] ] ;
+Dtype               ::= "f16" | "f32" | "f64" | "bf16" | "i32" | "i64" | "t2" ;
+ShapeSpec           ::= "[" Dim { "," Dim } "]" ;
+
+MathExpression      ::= PipelineExpr ;
+PipelineExpr        ::= TernaryExpr { ( "->" | "|>" ) TernaryExpr } ;
+TernaryExpr         ::= ComparisonExpr [ "?" MathExpression ":" MathExpression ] ;
+ComparisonExpr      ::= AdditiveExpr [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) AdditiveExpr ] ;
+AdditiveExpr        ::= MultiplicativeExpr { ( "+" | "-" ) MultiplicativeExpr } ;
+MultiplicativeExpr  ::= PowerExpr { ( "*" | "/" | "@" ) PowerExpr } ;
+PowerExpr           ::= UnaryExpr [ "^" PowerExpr ] ;
+UnaryExpr           ::= [ "-" | "!" ] PrimaryExpr ;
+PrimaryExpr         ::= NumberLiteral
+                      | ArrayLiteral
+                      | Identifier "(" [ ArgList ] ")"
+                      | Identifier
+                      | "_"
+                      | "(" MathExpression ")" ;
+ArrayLiteral        ::= "[" [ MathExpression { "," MathExpression } ] "]" ;
+```
+
+### 2.2 Level 1B & Level 2A: 5 Тулгуурт Силикон Морфизм ба VLIW Микрокод
 
 ```ebnf
 Program             ::= [ TopologyHeader ] [ IoBlock ] [ MathBlock ] [ ControlBlock ] [ Invariant ] [ VliwStream ] ;
@@ -49,20 +88,8 @@ StateDecl           ::= Symbol ":" [ "SS" | "T" ] DimensionVector ;
 MorphismEquation    ::= Symbol "↦" Symbol ":" { MathStep } ;
 MathStep            ::= Symbol ":=" MathExpr ;
 
-MathExpr            ::= MathTerm { ( "+" | "-" ) MathTerm } ;
-MathTerm            ::= MathFactor { ( "*" | "/" | "%" | "⊗" | "<~>" | ">>=" | "<|>" | "<%>" | "/@" | "~*~" | "^" | "." ) MathFactor } ;
-MathFactor          ::= [ "-" | "~" ] ( Symbol | FloatLiteral | ActivationCall | NormCall | "(" MathExpr ")" ) ;
-ActivationCall      ::= "σ" "(" MathExpr ")" ;
-NormCall            ::= "∥" MathExpr "∥" ;
-
 ControlBlock        ::= "⟳" "(" Integer ")" "{" { SiliconStmt } "}" ;
-SiliconStmt         ::= RegTransfer | RegMath | RegBranch ;
-RegTransfer         ::= Register "←" Address | Address "←" Register ;
-RegMath             ::= Register ":=" Register ( "+" | "-" | "*" | "⊗" ) Register ;
-RegBranch           ::= "?" "(" Register ")" "⮞" HexLiteral ;
-
 Invariant           ::= "!Δ" "{" InvariantExpr { "," InvariantExpr } "}" ;
-InvariantExpr       ::= ( "∥" Symbol "∥" | "|" Symbol "|" ) ( "<" | ">" | "≤" | "≥" ) FloatLiteral ;
 
 VliwStream          ::= { BundleLine } ;
 BundleLine          ::= "B" HexLiteral4 ":" Slot Slot Slot Slot ;
@@ -71,9 +98,44 @@ Slot                ::= SlotPrefix Opcode DestReg Mode Src1 Src2 ImmNibble CrcTo
 
 ---
 
-## 3. 5 Тулгуурын Каноник Жишээ (Canonical 5-Pillar Golden Example)
+## 3. Каноник Жишээнүүд (Canonical Golden Examples)
 
-100% цэвэр, нэг ширхэг ч англи үггүй жишээ:
+### 3.1 Хэвшмэл Математик ба Жижиг Функц Угсралт (`examples/standard_neural_calculus.cl`)
+
+Нэг ч үгэн түлхүүр үггүй (`fn`, `let`, `return` байхгүй), цэвэр математик томьёо болон `->` угсралтын урсгал:
+
+```cl
+// 1. Тогтмолууд
+d_model = 1024
+eps = 1e-5
+
+// 2. Жижиг Математик Функцүүд (Үггүй, Хэвшмэл Алгебр)
+norm(x: f32) = x / sqrt(mean(x^2) + eps)
+linear(x: f16, W: f16, b: f16) = W @ x + b
+activate(z: f16) = 1 / (1 + exp(-z))
+leaky(z: f16) = z > 0 ? z : 0.1 * z
+
+// 3. Pipeline Функц Угсралт (Lego мэт залгах урсгал)
+forward(x: f16, W1: f16, b1: f16, W2: f16, b2: f16) =
+    x -> norm -> linear(W1, b1) -> activate -> linear(W2, b2)
+
+// 4. Шууд Вектор ба Матриц Тензор Бодолт
+x_vec = [3.0, 4.0]
+W_mat = [[1.0, 2.0], [3.0, 4.0]]
+b_vec = [1.0, -1.0]
+
+x_vec -> linear(W_mat, b_vec)
+```
+
+Терминал дээрээс шууд ажиллуулах болон хөрвүүлэх тушаалууд:
+```powershell
+cron math examples/standard_neural_calculus.cl          # Тензор/Скаляр утгыг шууд бодох ([12.0000, 24.0000])
+cron math examples/standard_neural_calculus.cl --c23    # ISO C23 (_Float16 / float) код үүсгэх
+cron math examples/standard_neural_calculus.cl --ptx    # NVIDIA CUDA PTX v7.5 SSA код үүсгэх
+cron math examples/standard_neural_calculus.cl --vliw   # 4-Slot 128-bit VLIW машин код үүсгэх
+```
+
+### 3.2 5 Тулгуурт Силикон Топологийн Жишээ
 
 ```cl
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
@@ -104,8 +166,7 @@ Slot                ::= SlotPrefix Opcode DestReg Mode Src1 Src2 ImmNibble CrcTo
 
 ---
 
-## 4. Синтакс Баталгаажуулагч (Syntax Conformance Verifier API)
+## 4. Нэгдсэн Компилятор ба Баталгаажуулагч (Unified Compiler Pipeline)
 
-Rust компилятор дотор `cronc::cl_syntax_spec::verify_sovereign_pure_cipher_syntax(&source)` функц нь аливаа эх кодыг шалгаж:
-- Англи үг байвал `SyntaxViolation` алдаа заана.
-- 5 тулгуурын тэмдэгтүүд, хаяглалтууд, хаалтуудыг формал дүрмээр шалгаж баталгаажуулна.
+- `cronc::parse_unified_cl(&source)`: Эх кодын диалектыг автоматаар таньж (`cl_math::is_math_calculus_source`), Level 1A математик томьёо болон Level 1B силикон морфизмыг нэгдсэн `ClV2Document` AST болон 4-slot VLIW урсгал руу хөрвүүлнэ.
+- `cronc::cl_lang::verify_cl_program(&vliw_code)`: Үүссэн 4-slot VLIW машин кодын бүх 10-тэмдэгт слотын CRC-8 ATM чексум болон RAW/WAW регистр зөрчлийг 100% шалгаж баталгаажуулна.

@@ -2661,6 +2661,7 @@ fn main() {
 
             let emit_c23 = args.iter().any(|a| a == "--c23");
             let emit_ptx = args.iter().any(|a| a == "--ptx");
+            let emit_vliw = args.iter().any(|a| a == "--vliw" || a == "--cl");
             let is_json = args.iter().any(|a| a == "--json");
 
             match cronc::parse_math_code(&source) {
@@ -2669,9 +2670,11 @@ fn main() {
                         println!("{}", prog.to_c23());
                     } else if emit_ptx {
                         println!("{}", prog.to_ptx());
+                    } else if emit_vliw {
+                        println!("{}", prog.to_vliw());
                     } else {
                         let mut eval = cronc::MathEvaluator::new();
-                        match eval.execute_program(&prog) {
+                        match eval.execute_program_value(&prog) {
                             Ok(res) => {
                                 if is_json {
                                     println!("{{\"success\":true,\"result\":{:?},\"functions\":{}}}", res, eval.functions.len());
