@@ -195,6 +195,7 @@ pub mod cl_tensor_engine;
 pub mod cl_v2_ast;
 pub mod cl_v2_parser;
 pub mod cl_v2_lowering;
+pub mod cl_math;
 pub mod cl_syntax_spec;
 
 pub use cl_high_ast::*;
@@ -205,6 +206,10 @@ pub use cl_tensor_engine::*;
 pub use cl_v2_ast::*;
 pub use cl_v2_parser::parse_cl_v2;
 pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport, V2TensorRuntime};
+pub use cl_math::{
+    parse_math_code, MathBinOp, MathDtype, MathEvaluator, MathItem, MathLexer, MathParam,
+    MathParser, MathProgram,
+};
 pub use cl_syntax_spec::{verify_sovereign_pure_cipher_syntax, SovereignSyntaxReport, SyntaxViolation, SOVEREIGN_SYNTAX_EBNF};
 
 /// Unified Entry Point for all .cl files in the CRON ecosystem.

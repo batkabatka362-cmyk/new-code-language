@@ -37,6 +37,7 @@ fn print_help() {
     println!("    run <file.cl>                  Compile and execute on 256-Core 4D-Torus Simulator");
     println!("    sim <file.cl|.clb>             Directly run .cl machine code or .clb binary in 4D-Torus VM");
     println!("    cl-v2 <file.cl> [opts]         Sovereign CL v2.0 Post-Human 5-Pillar Engine (Morphism, VLIW, Co-Verify)");
+    println!("    math <file.cl|expr> [opts]     Zero-word standard math calculus (functions, pipelines, C23, PTX)");
     println!("    build <file.cl> [--target <t>] Compile into target (cl, native, ptx, metal)");
     println!("    cl-llvm <file.cl> [-o out.ll]  Transpile .cl directly into SSA LLVM Intermediate Representation");
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
@@ -2635,6 +2636,66 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("[CL v2 PARSER ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        "math" | "cl-math" => {
+            if args.len() < 3 {
+                println!("USAGE:\n    cron math <file.cl | 'expression'> [OPTIONS]\n");
+                println!("DESCRIPTION:\n    Standard Mathematical Calculus Engine (Zero-Word Algebraic Pipelines)\n");
+                println!("OPTIONS:\n    --c23           Emit ISO C23 native source code\n    --ptx           Emit NVIDIA CUDA PTX v7.5+ GPU kernel\n    --eval          Evaluate mathematical expression and print result (default)\n    --json          Output structured JSON representation\n");
+                println!("EXAMPLES:\n    cron math \"f(x) = x^2 + 2*x + 1; f(5)\"\n    cron math \"x -> sq -> add_ten\"\n    cron math model.cl --c23");
+                return;
+            }
+
+            let input_arg = &args[2];
+            let source = if std::path::Path::new(input_arg).exists() {
+                fs::read_to_string(input_arg).unwrap_or_else(|e| {
+                    eprintln!("Error reading '{}': {}", input_arg, e);
+                    std::process::exit(1);
+                })
+            } else {
+                input_arg.clone()
+            };
+
+            let emit_c23 = args.iter().any(|a| a == "--c23");
+            let emit_ptx = args.iter().any(|a| a == "--ptx");
+            let is_json = args.iter().any(|a| a == "--json");
+
+            match cronc::parse_math_code(&source) {
+                Ok(prog) => {
+                    if emit_c23 {
+                        println!("{}", prog.to_c23());
+                    } else if emit_ptx {
+                        println!("{}", prog.to_ptx());
+                    } else {
+                        let mut eval = cronc::MathEvaluator::new();
+                        match eval.execute_program(&prog) {
+                            Ok(res) => {
+                                if is_json {
+                                    println!("{{\"success\":true,\"result\":{:?},\"functions\":{}}}", res, eval.functions.len());
+                                } else {
+                                    println!("================================================================================");
+                                    println!(" CRON MATHEMATICAL CALCULUS ENGINE (Zero-Word Algebraic Pipeline)");
+                                    println!("================================================================================");
+                                    println!("  [+] Functions Defined : {}", eval.functions.len());
+                                    println!("  [+] Constants Bound   : {}", eval.env.len());
+                                    if let Some(val) = res {
+                                        println!("  [+] Evaluation Result : {}", val);
+                                    }
+                                    println!("================================================================================");
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("[MATH EVAL ERROR] {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[MATH PARSE ERROR] {}", e);
                     std::process::exit(1);
                 }
             }
