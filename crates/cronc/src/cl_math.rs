@@ -86,12 +86,13 @@ impl MathDtype {
     }
 }
 
-/// First-class runtime value supporting Scalars, 1D Vectors, and 2D Matrices
+/// First-class runtime value supporting Scalars, 1D Vectors, 2D Matrices, and Multi-Weight Tuples
 #[derive(Debug, Clone, PartialEq)]
 pub enum MathValue {
     Scalar(f64),
     Vector(Vec<f64>),
     Matrix(Vec<Vec<f64>>),
+    Tuple(Vec<MathValue>),
 }
 
 impl MathValue {
@@ -104,6 +105,10 @@ impl MathValue {
     }
 
     pub fn map_unary<F: Fn(f64) -> f64>(&self, f: F) -> MathValue {
+        self.map_unary_dyn(&f)
+    }
+
+    fn map_unary_dyn(&self, f: &dyn Fn(f64) -> f64) -> MathValue {
         match self {
             MathValue::Scalar(v) => MathValue::Scalar(f(*v)),
             MathValue::Vector(vec) => MathValue::Vector(vec.iter().map(|&x| f(x)).collect()),
@@ -112,6 +117,9 @@ impl MathValue {
                     .map(|row| row.iter().map(|&x| f(x)).collect())
                     .collect(),
             ),
+            MathValue::Tuple(items) => {
+                MathValue::Tuple(items.iter().map(|item| item.map_unary_dyn(f)).collect())
+            }
         }
     }
 
@@ -120,6 +128,7 @@ impl MathValue {
             MathValue::Scalar(v) => vec![*v],
             MathValue::Vector(vec) => vec.clone(),
             MathValue::Matrix(mat) => mat.iter().flatten().copied().collect(),
+            MathValue::Tuple(items) => items.iter().flat_map(|item| item.flatten_elements()).collect(),
         }
     }
 
@@ -145,6 +154,13 @@ impl MathValue {
                     }
                 }
                 Ok(MathValue::Matrix(transposed))
+            }
+            MathValue::Tuple(items) => {
+                let mut res = Vec::with_capacity(items.len());
+                for item in items {
+                    res.push(item.transpose()?);
+                }
+                Ok(MathValue::Tuple(res))
             }
         }
     }
@@ -208,6 +224,15 @@ impl MathValue {
                     Ok(MathValue::Matrix(m[s..e].to_vec()))
                 }
             }
+            MathValue::Tuple(items) => {
+                let s = start.min(items.len());
+                let e = end.min(items.len());
+                if s > e {
+                    Ok(MathValue::Tuple(Vec::new()))
+                } else {
+                    Ok(MathValue::Tuple(items[s..e].to_vec()))
+                }
+            }
         }
     }
 
@@ -216,6 +241,7 @@ impl MathValue {
             MathValue::Scalar(_) => vec![],
             MathValue::Vector(v) => vec![v.len()],
             MathValue::Matrix(m) => vec![m.len(), m.first().map(|r| r.len()).unwrap_or(0)],
+            MathValue::Tuple(items) => vec![items.len()],
         }
     }
 
@@ -228,11 +254,25 @@ impl MathValue {
                 let cols = m.first().map(|r| r.len()).unwrap_or(0);
                 MathValue::Matrix(vec![vec![0.0; cols]; rows])
             }
+            MathValue::Tuple(items) => MathValue::Tuple(items.iter().map(|i| i.zeros_like()).collect()),
         }
     }
 
     pub fn add_accumulate(&mut self, other: &MathValue) -> Result<(), String> {
         match (self, other) {
+            (MathValue::Tuple(t1), MathValue::Tuple(t2)) => {
+                if t1.len() != t2.len() {
+                    return Err(format!(
+                        "Tuple length mismatch in add_accumulate: {} vs {}",
+                        t1.len(),
+                        t2.len()
+                    ));
+                }
+                for (a, b) in t1.iter_mut().zip(t2.iter()) {
+                    a.add_accumulate(b)?;
+                }
+                Ok(())
+            }
             (MathValue::Scalar(s1), MathValue::Scalar(s2)) => {
                 *s1 += s2;
                 Ok(())
@@ -328,6 +368,7 @@ impl MathValue {
                     Err(format!("Axis {} out of bounds for 2D matrix", axis))
                 }
             }
+            MathValue::Tuple(_) => Err("Cannot sum_axis on a Tuple".to_string()),
         }
     }
 }
@@ -364,6 +405,10 @@ impl fmt::Display for MathValue {
                     })
                     .collect();
                 write!(f, "[{}]", rows.join(", "))
+            }
+            MathValue::Tuple(items) => {
+                let parts: Vec<String> = items.iter().map(|i| format!("{}", i)).collect();
+                write!(f, "({})", parts.join(", "))
             }
         }
     }
@@ -426,6 +471,7 @@ pub enum MathExpr {
     Num(f64),
     Var(String),
     Array(Vec<MathExpr>), // Vector or Matrix literal: [1, 2, 3] or [[1, 2], [3, 4]]
+    Tuple(Vec<MathExpr>), // Multi-Weight / Optimizer State Tuple: (W1, b1, W2, b2)
     Index(Box<MathExpr>, Box<MathExpr>), // Tensor / Vector indexing: x[i], W[i][j]
     TensorRef {
         path: String,
@@ -456,6 +502,10 @@ impl fmt::Display for MathExpr {
             MathExpr::Array(elems) => {
                 let s: Vec<String> = elems.iter().map(|e| e.to_string()).collect();
                 write!(f, "[{}]", s.join(", "))
+            }
+            MathExpr::Tuple(items) => {
+                let s: Vec<String> = items.iter().map(|e| e.to_string()).collect();
+                write!(f, "({})", s.join(", "))
             }
             MathExpr::Index(base, idx) => write!(f, "{}[{}]", base, idx),
             MathExpr::TensorRef { path, key } => write!(f, "@\"{}:{}\"", path, key),
@@ -494,6 +544,9 @@ impl MathExpr {
                 .unwrap_or_else(|| MathExpr::Var(v.clone())),
             MathExpr::Array(elems) => {
                 MathExpr::Array(elems.iter().map(|e| e.substitute(subst)).collect())
+            }
+            MathExpr::Tuple(items) => {
+                MathExpr::Tuple(items.iter().map(|e| e.substitute(subst)).collect())
             }
             MathExpr::Index(b, i) => {
                 MathExpr::Index(Box::new(b.substitute(subst)), Box::new(i.substitute(subst)))
@@ -550,6 +603,12 @@ impl MathExpr {
             | MathExpr::TensorRef { .. } => self.clone(),
             MathExpr::Array(elems) => MathExpr::Array(
                 elems
+                    .iter()
+                    .map(|e| e.inline_and_expand(fns, inline_user_fns, depth + 1))
+                    .collect(),
+            ),
+            MathExpr::Tuple(items) => MathExpr::Tuple(
+                items
                     .iter()
                     .map(|e| e.inline_and_expand(fns, inline_user_fns, depth + 1))
                     .collect(),
@@ -632,6 +691,9 @@ impl MathExpr {
             }
             MathExpr::Array(elems) => {
                 MathExpr::Array(elems.iter().map(|e| e.differentiate(var)).collect())
+            }
+            MathExpr::Tuple(items) => {
+                MathExpr::Tuple(items.iter().map(|e| e.differentiate(var)).collect())
             }
             MathExpr::Unary(MathUnaryOp::Neg, inner) => {
                 MathExpr::Unary(MathUnaryOp::Neg, Box::new(inner.differentiate(var)))
@@ -788,6 +850,7 @@ impl MathExpr {
             | MathExpr::Placeholder
             | MathExpr::TensorRef { .. } => self.clone(),
             MathExpr::Array(elems) => MathExpr::Array(elems.iter().map(|e| e.simplify()).collect()),
+            MathExpr::Tuple(items) => MathExpr::Tuple(items.iter().map(|e| e.simplify()).collect()),
             MathExpr::Index(b, i) => {
                 MathExpr::Index(Box::new(b.simplify()), Box::new(i.simplify()))
             }
@@ -855,6 +918,9 @@ impl MathExpr {
         let simplified = match self {
             MathExpr::Array(elems) => {
                 MathExpr::Array(elems.iter().map(|e| e.optimize_tensor_graph()).collect())
+            }
+            MathExpr::Tuple(items) => {
+                MathExpr::Tuple(items.iter().map(|e| e.optimize_tensor_graph()).collect())
             }
             MathExpr::Index(b, i) => {
                 MathExpr::Index(
@@ -998,6 +1064,10 @@ pub enum MathItem {
     },
     Binding {
         name: String,
+        expr: MathExpr,
+    },
+    TupleBinding {
+        names: Vec<String>,
         expr: MathExpr,
     },
     Function {
@@ -1401,6 +1471,29 @@ impl MathParser {
         false
     }
 
+    fn is_tuple_binding(&self) -> bool {
+        if let Some(Token::LParen) = self.tokens.get(self.pos) {
+            let mut i = self.pos + 1;
+            let mut has_ident = false;
+            while i < self.tokens.len() {
+                match &self.tokens[i] {
+                    Token::Ident(_) => {
+                        has_ident = true;
+                        i += 1;
+                    }
+                    Token::Comma => {
+                        i += 1;
+                    }
+                    Token::RParen => {
+                        return has_ident && self.tokens.get(i + 1) == Some(&Token::Equal);
+                    }
+                    _ => return false,
+                }
+            }
+        }
+        false
+    }
+
     fn parse_item(&mut self) -> Result<MathItem, String> {
         // 0. Check for module link: << "path/to/module.cl"
         if self.match_tok(&Token::Shl) {
@@ -1411,7 +1504,30 @@ impl MathParser {
             }
         }
 
-        // 1. Check for function declaration: name(params) = expr
+        // 1. Check for tuple binding: (W1, b1, ...) = expr
+        if self.is_tuple_binding() {
+            self.expect(&Token::LParen)?;
+            let mut names = Vec::new();
+            while !self.match_tok(&Token::RParen) {
+                if let Some(Token::Ident(name)) = self.next_tok() {
+                    names.push(name);
+                    if self.match_tok(&Token::Comma) {
+                        continue;
+                    } else if self.match_tok(&Token::RParen) {
+                        break;
+                    } else {
+                        return Err("Expected ',' or ')' in tuple binding".to_string());
+                    }
+                } else {
+                    return Err("Expected identifier in tuple binding".to_string());
+                }
+            }
+            self.expect(&Token::Equal)?;
+            let expr = self.parse_expr()?;
+            return Ok(MathItem::TupleBinding { names, expr });
+        }
+
+        // 1.5. Check for function declaration: name(params) = expr
         if self.is_func_def() {
             if let Some(Token::Ident(name)) = self.next_tok() {
                 self.expect(&Token::LParen)?;
@@ -1744,8 +1860,23 @@ impl MathParser {
             }
             Some(Token::LParen) => {
                 let expr = self.parse_expr()?;
-                self.expect(&Token::RParen)?;
-                expr
+                if self.match_tok(&Token::Comma) {
+                    let mut items = vec![expr];
+                    while !self.match_tok(&Token::RParen) {
+                        items.push(self.parse_expr()?);
+                        if self.match_tok(&Token::Comma) {
+                            continue;
+                        } else if self.match_tok(&Token::RParen) {
+                            break;
+                        } else {
+                            return Err("Expected ',' or ')' in tuple expression".to_string());
+                        }
+                    }
+                    MathExpr::Tuple(items)
+                } else {
+                    self.expect(&Token::RParen)?;
+                    expr
+                }
             }
             other => return Err(format!("Unexpected token in expression: {:?}", other)),
         };
@@ -2366,6 +2497,18 @@ impl ExprTape {
                         Err("embed table is not a matrix".to_string())
                     }
                 }
+                "clip_grad" | "grad_clip" => {
+                    let elems = arg_vals[0].flatten_elements();
+                    let norm = elems.iter().map(|&x| x * x).sum::<f64>().sqrt();
+                    let max_norm = arg_vals[1].as_scalar().unwrap_or(1.0);
+                    let scale = if norm > max_norm && norm > 1e-12 {
+                        max_norm / norm
+                    } else {
+                        1.0
+                    };
+                    let adj_scaled = adj.map_unary(|x| x * scale);
+                    arg_tapes[0].backward(&adj_scaled, wrt, acc_grad, evaluator)
+                }
                 _ => Err(format!(
                     "Unsupported function call '{}' in analytical backward",
                     name
@@ -2431,6 +2574,29 @@ impl MathEvaluator {
                     let val = self.eval_value(expr)?;
                     self.env.insert(name.clone(), val);
                 }
+                MathItem::TupleBinding { names, expr } => {
+                    let val = self.eval_value(expr)?;
+                    match val {
+                        MathValue::Tuple(vals) => {
+                            if vals.len() != names.len() {
+                                return Err(format!(
+                                    "Cannot unpack tuple of length {} into {} variables",
+                                    vals.len(),
+                                    names.len()
+                                ));
+                            }
+                            for (name, v) in names.iter().zip(vals.into_iter()) {
+                                self.env.insert(name.clone(), v);
+                            }
+                        }
+                        other => {
+                            return Err(format!(
+                                "Cannot unpack non-tuple value {:?} into tuple binding",
+                                other
+                            ));
+                        }
+                    }
+                }
                 MathItem::Function {
                     name, params, body, ..
                 } => {
@@ -2494,6 +2660,13 @@ impl MathEvaluator {
                     Ok(MathValue::Vector(vec))
                 }
             }
+            MathExpr::Tuple(items) => {
+                let mut vals = Vec::with_capacity(items.len());
+                for item in items {
+                    vals.push(self.eval_value(item)?);
+                }
+                Ok(MathValue::Tuple(vals))
+            }
             MathExpr::Index(base, idx) => {
                 let b_val = self.eval_value(base)?;
                 let i_val = self.eval_value(idx)?;
@@ -2502,6 +2675,12 @@ impl MathEvaluator {
                     .ok_or_else(|| "Index must evaluate to a scalar integer".to_string())?
                     as usize;
                 match b_val {
+                    MathValue::Tuple(vals) => vals
+                        .get(i_num)
+                        .cloned()
+                        .ok_or_else(|| {
+                            format!("Tuple index {} out of bounds (len {})", i_num, vals.len())
+                        }),
                     MathValue::Vector(vec) => vec
                         .get(i_num)
                         .copied()
@@ -2614,6 +2793,7 @@ impl MathEvaluator {
                             }
                             Ok(MathValue::Matrix(res))
                         }
+                        MathValue::Tuple(_) => Err("Cannot compute softmax on a Tuple".to_string()),
                     }
                 }
                 "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
@@ -2734,6 +2914,7 @@ impl MathEvaluator {
                             }
                             Ok(MathValue::Matrix(res))
                         }
+                        MathValue::Tuple(_) => Err("Cannot compute rmsnorm on a Tuple".to_string()),
                     }
                 }
                 "rope" => {
@@ -2773,6 +2954,7 @@ impl MathEvaluator {
                             }
                             Ok(MathValue::Matrix(res))
                         }
+                        MathValue::Tuple(_) => Err("Cannot compute rmsnorm on a Tuple".to_string()),
                     }
                 }
                 "mean" | "sum" => {
@@ -3035,6 +3217,7 @@ impl MathEvaluator {
                             let indices: Vec<f64> = mat.iter().map(|row| find_idx(row)).collect();
                             Ok(MathValue::Vector(indices))
                         }
+                        MathValue::Tuple(_) => Err("Cannot compute argmax/argmin on a Tuple".to_string()),
                     }
                 }
                 "concat" => {
@@ -3139,6 +3322,7 @@ impl MathEvaluator {
                             let res = mat.iter().map(|r| calc_lse(r)).collect();
                             Ok(MathValue::Matrix(res))
                         }
+                        MathValue::Tuple(_) => Err("Cannot compute rmsnorm on a Tuple".to_string()),
                     }
                 }
                 "cross_entropy" => {
@@ -3191,15 +3375,211 @@ impl MathEvaluator {
                         ),
                     }
                 }
+                "clip_grad" | "grad_clip" => {
+                    if args.len() < 2 {
+                        return Err("'clip_grad(G, max_norm)' requires 2 arguments".to_string());
+                    }
+                    let g = self.eval_value(&args[0])?;
+                    let max_norm = self.eval_value(&args[1])?.as_scalar().ok_or_else(|| {
+                        "max_norm in clip_grad must be a scalar number".to_string()
+                    })?;
+                    let elems = g.flatten_elements();
+                    let sq_sum: f64 = elems.iter().map(|&x| x * x).sum();
+                    let norm = sq_sum.sqrt();
+                    if norm > max_norm && norm > 1e-12 {
+                        let scale = max_norm / norm;
+                        Ok(g.map_unary(|x| x * scale))
+                    } else {
+                        Ok(g)
+                    }
+                }
+                "cosine_lr" => {
+                    if args.len() < 3 {
+                        return Err("'cosine_lr(t, max_t, lr_max, [lr_min, warmup])' requires at least 3 arguments".to_string());
+                    }
+                    let t = self.eval_value(&args[0])?.as_scalar().ok_or_else(|| "'t' must be a scalar".to_string())?;
+                    let max_t = self.eval_value(&args[1])?.as_scalar().ok_or_else(|| "'max_t' must be a scalar".to_string())?;
+                    let lr_max = self.eval_value(&args[2])?.as_scalar().ok_or_else(|| "'lr_max' must be a scalar".to_string())?;
+                    let lr_min = if args.len() > 3 { self.eval_value(&args[3])?.as_scalar().unwrap_or(0.0) } else { 0.0 };
+                    let warmup = if args.len() > 4 { self.eval_value(&args[4])?.as_scalar().unwrap_or(0.0) } else { 0.0 };
+
+                    let lr = if t < warmup {
+                        lr_max * (t / warmup.max(1.0))
+                    } else {
+                        let progress = ((t - warmup) / (max_t - warmup).max(1.0)).clamp(0.0, 1.0);
+                        lr_min + 0.5 * (lr_max - lr_min) * (1.0 + (std::f64::consts::PI * progress).cos())
+                    };
+                    Ok(MathValue::Scalar(lr))
+                }
+                "adamw_step" | "adamw" => {
+                    if args.len() < 6 {
+                        return Err("'adamw_step(W, g, m, v, t, lr, [beta1, beta2, eps, wd])' requires at least 6 arguments".to_string());
+                    }
+                    let w_val = self.eval_value(&args[0])?;
+                    let g_val = self.eval_value(&args[1])?;
+                    let m_val = self.eval_value(&args[2])?;
+                    let v_val = self.eval_value(&args[3])?;
+                    let t = self.eval_value(&args[4])?.as_scalar().ok_or_else(|| "step count 't' must be a scalar".to_string())?;
+                    let lr = self.eval_value(&args[5])?.as_scalar().ok_or_else(|| "learning rate 'lr' must be a scalar".to_string())?;
+                    let beta1 = if args.len() > 6 { self.eval_value(&args[6])?.as_scalar().unwrap_or(0.9) } else { 0.9 };
+                    let beta2 = if args.len() > 7 { self.eval_value(&args[7])?.as_scalar().unwrap_or(0.999) } else { 0.999 };
+                    let eps = if args.len() > 8 { self.eval_value(&args[8])?.as_scalar().unwrap_or(1e-8) } else { 1e-8 };
+                    let wd = if args.len() > 9 { self.eval_value(&args[9])?.as_scalar().unwrap_or(0.01) } else { 0.01 };
+
+                    let w_elems = w_val.flatten_elements();
+                    let g_elems = g_val.flatten_elements();
+                    let m_elems = m_val.flatten_elements();
+                    let v_elems = v_val.flatten_elements();
+
+                    if w_elems.len() != g_elems.len() || w_elems.len() != m_elems.len() || w_elems.len() != v_elems.len() {
+                        return Err(format!(
+                            "Dimension mismatch in adamw_step: W len {}, g len {}, m len {}, v len {}",
+                            w_elems.len(), g_elems.len(), m_elems.len(), v_elems.len()
+                        ));
+                    }
+
+                    let bc1 = (1.0 - beta1.powf(t.max(1.0))).max(1e-12);
+                    let bc2 = (1.0 - beta2.powf(t.max(1.0))).max(1e-12);
+
+                    let mut w_new = Vec::with_capacity(w_elems.len());
+                    let mut m_new = Vec::with_capacity(m_elems.len());
+                    let mut v_new = Vec::with_capacity(v_elems.len());
+
+                    for i in 0..w_elems.len() {
+                        let w = w_elems[i];
+                        let g = g_elems[i];
+                        let m = m_elems[i];
+                        let v = v_elems[i];
+
+                        let w_decayed = w * (1.0 - lr * wd);
+                        let m_t = beta1 * m + (1.0 - beta1) * g;
+                        let v_t = beta2 * v + (1.0 - beta2) * (g * g);
+                        let m_hat = m_t / bc1;
+                        let v_hat = v_t / bc2;
+                        let w_t = w_decayed - lr * (m_hat / (v_hat.sqrt() + eps));
+
+                        w_new.push(w_t);
+                        m_new.push(m_t);
+                        v_new.push(v_t);
+                    }
+
+                    let shape = w_val.shape();
+                    let reconstruct = |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
+                        match shape.len() {
+                            0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
+                            1 => Ok(MathValue::Vector(elems)),
+                            2 => {
+                                let rows = shape[0];
+                                let cols = shape[1];
+                                let mut mat = Vec::with_capacity(rows);
+                                for r in 0..rows {
+                                    let start = r * cols;
+                                    let end = (start + cols).min(elems.len());
+                                    mat.push(elems[start..end].to_vec());
+                                }
+                                Ok(MathValue::Matrix(mat))
+                            }
+                            _ => Err("Unsupported tensor rank for reconstruction".to_string()),
+                        }
+                    };
+
+                    let w_out = reconstruct(w_new, &shape)?;
+                    let m_out = reconstruct(m_new, &shape)?;
+                    let v_out = reconstruct(v_new, &shape)?;
+
+                    Ok(MathValue::Tuple(vec![w_out, m_out, v_out]))
+                }
+                "lion_step" | "lion" => {
+                    if args.len() < 4 {
+                        return Err("'lion_step(W, g, m, lr, [beta1, beta2, wd])' requires at least 4 arguments".to_string());
+                    }
+                    let w_val = self.eval_value(&args[0])?;
+                    let g_val = self.eval_value(&args[1])?;
+                    let m_val = self.eval_value(&args[2])?;
+                    let lr = self.eval_value(&args[3])?.as_scalar().ok_or_else(|| "learning rate 'lr' must be a scalar".to_string())?;
+                    let beta1 = if args.len() > 4 { self.eval_value(&args[4])?.as_scalar().unwrap_or(0.9) } else { 0.9 };
+                    let beta2 = if args.len() > 5 { self.eval_value(&args[5])?.as_scalar().unwrap_or(0.99) } else { 0.99 };
+                    let wd = if args.len() > 6 { self.eval_value(&args[6])?.as_scalar().unwrap_or(0.01) } else { 0.01 };
+
+                    let w_elems = w_val.flatten_elements();
+                    let g_elems = g_val.flatten_elements();
+                    let m_elems = m_val.flatten_elements();
+
+                    if w_elems.len() != g_elems.len() || w_elems.len() != m_elems.len() {
+                        return Err(format!(
+                            "Dimension mismatch in lion_step: W len {}, g len {}, m len {}",
+                            w_elems.len(), g_elems.len(), m_elems.len()
+                        ));
+                    }
+
+                    let mut w_new = Vec::with_capacity(w_elems.len());
+                    let mut m_new = Vec::with_capacity(m_elems.len());
+
+                    for i in 0..w_elems.len() {
+                        let w = w_elems[i];
+                        let g = g_elems[i];
+                        let m = m_elems[i];
+
+                        let c = beta1 * m + (1.0 - beta1) * g;
+                        let sign_c = if c > 0.0 { 1.0 } else if c < 0.0 { -1.0 } else { 0.0 };
+                        let w_t = w * (1.0 - lr * wd) - lr * sign_c;
+                        let m_t = beta2 * m + (1.0 - beta2) * g;
+
+                        w_new.push(w_t);
+                        m_new.push(m_t);
+                    }
+
+                    let shape = w_val.shape();
+                    let reconstruct = |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
+                        match shape.len() {
+                            0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
+                            1 => Ok(MathValue::Vector(elems)),
+                            2 => {
+                                let rows = shape[0];
+                                let cols = shape[1];
+                                let mut mat = Vec::with_capacity(rows);
+                                for r in 0..rows {
+                                    let start = r * cols;
+                                    let end = (start + cols).min(elems.len());
+                                    mat.push(elems[start..end].to_vec());
+                                }
+                                Ok(MathValue::Matrix(mat))
+                            }
+                            _ => Err("Unsupported tensor rank for reconstruction".to_string()),
+                        }
+                    };
+
+                    let w_out = reconstruct(w_new, &shape)?;
+                    let m_out = reconstruct(m_new, &shape)?;
+
+                    Ok(MathValue::Tuple(vec![w_out, m_out]))
+                }
                 "grad" | "diff" => {
                     if args.len() != 2 {
                         return Err(format!("'{}' expects (expr, var)", name));
+                    }
+                    if let MathExpr::Tuple(vars) | MathExpr::Array(vars) = &args[1] {
+                        let inlined = args[0].inline_and_expand(&self.functions, true, 0).simplify();
+                        let mut grads = Vec::with_capacity(vars.len());
+                        for v_expr in vars {
+                            if let MathExpr::Var(wrt) = v_expr {
+                                if let Ok(analytical_grad) = self.eval_analytical_grad(&inlined, wrt) {
+                                    grads.push(analytical_grad);
+                                } else {
+                                    let g = self.eval_value(&MathExpr::Call("grad".to_string(), vec![args[0].clone(), v_expr.clone()]))?;
+                                    grads.push(g);
+                                }
+                            } else {
+                                return Err("Target variables in multi-gradient must be identifiers".to_string());
+                            }
+                        }
+                        return Ok(MathValue::Tuple(grads));
                     }
                     let wrt = match &args[1] {
                         MathExpr::Var(v) => v.clone(),
                         _ => {
                             return Err(
-                                "Second argument to 'grad' must be a variable name".to_string()
+                                "Second argument to 'grad' must be a variable name or tuple of variables".to_string()
                             )
                         }
                     };
@@ -3285,6 +3665,9 @@ impl MathEvaluator {
                                 }
                                 Ok(MathValue::Matrix(grad_mat))
                             }
+                            MathValue::Tuple(_) => {
+                                return Err("Cannot compute scalar grad directly wrt a Tuple variable".to_string());
+                            }
                         }
                     } else {
                         let inlined = args[0].inline_and_expand(&self.functions, true, 0);
@@ -3325,7 +3708,15 @@ impl MathEvaluator {
                         MathExpr::Var(f_name) => {
                             if let Some((params, body)) = self.functions.get(f_name).cloned() {
                                 let mut local_eval = self.clone();
-                                if !params.is_empty() {
+                                if let MathValue::Tuple(vals) = &curr_val {
+                                    if vals.len() == params.len() {
+                                        for (p, v) in params.iter().zip(vals.iter()) {
+                                            local_eval.env.insert(p.clone(), v.clone());
+                                        }
+                                    } else if !params.is_empty() {
+                                        local_eval.env.insert(params[0].clone(), curr_val);
+                                    }
+                                } else if !params.is_empty() {
                                     local_eval.env.insert(params[0].clone(), curr_val);
                                 }
                                 curr_val = local_eval.eval_value(&body)?;
@@ -3337,23 +3728,51 @@ impl MathEvaluator {
                             }
                         }
                         MathExpr::Call(f_name, args) => {
-                            let mut eval_args = Vec::new();
-                            let mut inserted = false;
-                            for arg in args {
-                                if let MathExpr::Placeholder = arg {
-                                    eval_args.push(curr_val.clone());
-                                    inserted = true;
-                                } else {
-                                    eval_args.push(self.eval_value(arg)?);
-                                }
-                            }
-                            if !inserted {
-                                eval_args.insert(0, curr_val);
-                            }
                             if let Some((params, body)) = self.functions.get(f_name).cloned() {
                                 let mut local_eval = self.clone();
-                                for (p, a) in params.iter().zip(eval_args.into_iter()) {
-                                    local_eval.env.insert(p.clone(), a);
+                                if let MathValue::Tuple(vals) = &curr_val {
+                                    if args.len() == 1
+                                        && matches!(args[0], MathExpr::Placeholder)
+                                        && vals.len() == params.len()
+                                    {
+                                        for (p, v) in params.iter().zip(vals.iter()) {
+                                            local_eval.env.insert(p.clone(), v.clone());
+                                        }
+                                    } else {
+                                        let mut eval_args = Vec::new();
+                                        let mut inserted = false;
+                                        for arg in args {
+                                            if let MathExpr::Placeholder = arg {
+                                                eval_args.push(curr_val.clone());
+                                                inserted = true;
+                                            } else {
+                                                eval_args.push(self.eval_value(arg)?);
+                                            }
+                                        }
+                                        if !inserted {
+                                            eval_args.insert(0, curr_val.clone());
+                                        }
+                                        for (p, a) in params.iter().zip(eval_args.into_iter()) {
+                                            local_eval.env.insert(p.clone(), a);
+                                        }
+                                    }
+                                } else {
+                                    let mut eval_args = Vec::new();
+                                    let mut inserted = false;
+                                    for arg in args {
+                                        if let MathExpr::Placeholder = arg {
+                                            eval_args.push(curr_val.clone());
+                                            inserted = true;
+                                        } else {
+                                            eval_args.push(self.eval_value(arg)?);
+                                        }
+                                    }
+                                    if !inserted {
+                                        eval_args.insert(0, curr_val.clone());
+                                    }
+                                    for (p, a) in params.iter().zip(eval_args.into_iter()) {
+                                        local_eval.env.insert(p.clone(), a);
+                                    }
                                 }
                                 curr_val = local_eval.eval_value(&body)?;
                             } else {
@@ -3648,6 +4067,35 @@ impl MathEvaluator {
                 }
                 Ok(MathValue::Matrix(out))
             }
+            (MathValue::Tuple(t1), MathValue::Tuple(t2)) => {
+                if t1.len() != t2.len() {
+                    return Err(format!(
+                        "Tuple length mismatch in binary op: {} vs {}",
+                        t1.len(),
+                        t2.len()
+                    ));
+                }
+                let mut out = Vec::with_capacity(t1.len());
+                for (a, b) in t1.iter().zip(t2.iter()) {
+                    out.push(self.eval_binary_op(a, op, b)?);
+                }
+                Ok(MathValue::Tuple(out))
+            }
+            (MathValue::Tuple(t), scalar @ MathValue::Scalar(_)) => {
+                let mut out = Vec::with_capacity(t.len());
+                for a in t {
+                    out.push(self.eval_binary_op(a, op, scalar)?);
+                }
+                Ok(MathValue::Tuple(out))
+            }
+            (scalar @ MathValue::Scalar(_), MathValue::Tuple(t)) => {
+                let mut out = Vec::with_capacity(t.len());
+                for a in t {
+                    out.push(self.eval_binary_op(scalar, op, a)?);
+                }
+                Ok(MathValue::Tuple(out))
+            }
+            _ => Err("Incompatible tensor operands in binary operation".to_string()),
         }
     }
 
@@ -3687,10 +4135,31 @@ impl MathEvaluator {
                 };
                 Ok((out_val, ExprTape::Array(tapes)))
             }
+            MathExpr::Tuple(items) => {
+                let mut vals = Vec::with_capacity(items.len());
+                let mut tapes = Vec::with_capacity(items.len());
+                for e in items {
+                    let (v, t) = self.eval_tape(e)?;
+                    vals.push(v);
+                    tapes.push(t);
+                }
+                Ok((MathValue::Tuple(vals), ExprTape::Array(tapes)))
+            }
             MathExpr::Index(base, idx_expr) => {
                 let (base_val, base_tape) = self.eval_tape(base)?;
                 let idx_val = self.eval(idx_expr)? as usize;
                 let out_val = match &base_val {
+                    MathValue::Tuple(vals) => {
+                        if idx_val < vals.len() {
+                            vals[idx_val].clone()
+                        } else {
+                            return Err(format!(
+                                "Index {} out of bounds for tuple of len {}",
+                                idx_val,
+                                vals.len()
+                            ));
+                        }
+                    }
                     MathValue::Vector(v) => {
                         if idx_val < v.len() {
                             MathValue::Scalar(v[idx_val])
@@ -3792,6 +4261,9 @@ impl MathEvaluator {
                 let cols = m.first().map(|r| r.len()).unwrap_or(0);
                 MathValue::Matrix(vec![vec![1.0; cols]; rows])
             }
+            MathValue::Tuple(items) => {
+                MathValue::Tuple(items.iter().map(|_| MathValue::Scalar(1.0)).collect())
+            }
         };
         tape.backward(&incoming_adj, wrt, &mut acc_grad, self)?;
         Ok(acc_grad)
@@ -3882,6 +4354,21 @@ impl MathProgram {
                         env.insert(name.clone(), shape);
                     }
                 }
+                MathItem::TupleBinding { names, expr } => {
+                    if let MathExpr::Tuple(items) = expr {
+                        for (name, item_expr) in names.iter().zip(items.iter()) {
+                            if let Some(shape) = Self::infer_shape_expr(
+                                item_expr,
+                                &env,
+                                &fns,
+                                &mut errors,
+                                Some(&format!("tuple binding '{}'", name)),
+                            ) {
+                                env.insert(name.clone(), shape);
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -3932,6 +4419,30 @@ impl MathProgram {
                     );
                     if let Some(shape) = shape_opt {
                         global_env.insert(name.clone(), shape);
+                    }
+                }
+                MathItem::TupleBinding { names, expr } => {
+                    if let MathExpr::Tuple(items) = expr {
+                        for (name, item_expr) in names.iter().zip(items.iter()) {
+                            let shape_opt = Self::infer_shape_expr(
+                                item_expr,
+                                &global_env,
+                                &fns,
+                                &mut errors,
+                                Some(&format!("tuple binding '{}'", name)),
+                            );
+                            if let Some(shape) = shape_opt {
+                                global_env.insert(name.clone(), shape);
+                            }
+                        }
+                    } else {
+                        let _ = Self::infer_shape_expr(
+                            expr,
+                            &global_env,
+                            &fns,
+                            &mut errors,
+                            Some("tuple binding expression"),
+                        );
                     }
                 }
                 MathItem::Expression(expr) => {
@@ -4001,6 +4512,12 @@ impl MathProgram {
                 full.extend(s0);
                 Some(full)
             }
+            MathExpr::Tuple(items) => {
+                for item in items {
+                    let _ = Self::infer_shape_expr(item, env, fn_sigs, errors, ctx);
+                }
+                None
+            }
             MathExpr::Index(base, idx) => {
                 let _ = Self::infer_shape_expr(idx, env, fn_sigs, errors, ctx);
                 if let Some(b_shape) = Self::infer_shape_expr(base, env, fn_sigs, errors, ctx) {
@@ -4024,6 +4541,7 @@ impl MathProgram {
                             let cols = m.first().map(|r| r.len()).unwrap_or(0);
                             Some(vec![rows, cols])
                         }
+                        MathValue::Tuple(_) => None,
                     }
                 } else {
                     None
@@ -4384,6 +4902,20 @@ impl MathProgram {
                     } else {
                         Some(vec![])
                     }
+                }
+                "clip_grad" | "grad_clip" => {
+                    if !args.is_empty() {
+                        Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx)
+                    } else {
+                        None
+                    }
+                }
+                "cosine_lr" => Some(vec![]),
+                "adamw_step" | "adamw" | "lion_step" | "lion" => {
+                    for a in args {
+                        let _ = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                    }
+                    None
                 }
                 "zeros" | "ones" => {
                     if args.len() == 1 {
@@ -4837,6 +5369,10 @@ impl MathProgram {
             MathExpr::Array(elems) => {
                 let s: Vec<String> = elems.iter().map(Self::expr_to_c23).collect();
                 format!("{{ {} }}", s.join(", "))
+            }
+            MathExpr::Tuple(items) => {
+                let s: Vec<String> = items.iter().map(Self::expr_to_c23).collect();
+                format!("/* tuple */ {{ {} }}", s.join(", "))
             }
             MathExpr::Index(base, idx) => {
                 format!(
@@ -5458,7 +5994,9 @@ impl MathProgram {
                     );
                     raw_slots.push(Self::seal_slot(&format!("_ST{:02X}#040", res_reg), '>'));
                 }
-                MathItem::Expression(expr) | MathItem::Binding { expr, .. } => {
+                MathItem::Expression(expr)
+                | MathItem::Binding { expr, .. }
+                | MathItem::TupleBinding { expr, .. } => {
                     let fused_expr = expr.inline_and_expand(&fns, true, 0).simplify();
                     let res_reg = Self::lower_expr_to_vliw(
                         &fused_expr,
@@ -6045,13 +6583,171 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
     }
 
     if path.ends_with(".safetensors") {
-        let (shape, raw_bytes) = match val {
-            MathValue::Scalar(s) => (vec![1usize], (*s as f32).to_le_bytes().to_vec()),
+        struct SafetensorEntry {
+            name: String,
+            dtype: String,
+            shape: Vec<usize>,
+            data: Vec<u8>,
+        }
+
+        let mut entries: Vec<SafetensorEntry> = Vec::new();
+        if std::path::Path::new(path).exists() {
+            if let Ok(bytes) = std::fs::read(path) {
+                if bytes.len() >= 8 {
+                    let header_len = u64::from_le_bytes(bytes[0..8].try_into().unwrap()) as usize;
+                    if bytes.len() >= 8 + header_len {
+                        if let Ok(header_str) = std::str::from_utf8(&bytes[8..8 + header_len]) {
+                            let data_buf = &bytes[8 + header_len..];
+                            let mut idx = 0;
+                            while let Some(q_start) = header_str[idx..].find('"') {
+                                let actual_start = idx + q_start + 1;
+                                if let Some(q_end) = header_str[actual_start..].find('"') {
+                                    let k = &header_str[actual_start..actual_start + q_end];
+                                    idx = actual_start + q_end + 1;
+                                    if k == "__metadata__"
+                                        || k.is_empty()
+                                        || k == "dtype"
+                                        || k == "shape"
+                                        || k == "data_offsets"
+                                    {
+                                        continue;
+                                    }
+                                    let rem = header_str[idx..].trim_start();
+                                    if rem.starts_with(':') {
+                                        let after_colon = rem[1..].trim_start();
+                                        if after_colon.starts_with('{') {
+                                            let block = after_colon;
+                                            let dtype_str = if let Some(d_pos) = block.find("\"dtype\"") {
+                                                let after = &block[d_pos + 7..];
+                                                if let Some(q1) = after.find('"') {
+                                                    if let Some(q2) = after[q1 + 1..].find('"') {
+                                                        &after[q1 + 1..q1 + 1 + q2]
+                                                    } else {
+                                                        "F32"
+                                                    }
+                                                } else {
+                                                    "F32"
+                                                }
+                                            } else {
+                                                "F32"
+                                            };
+
+                                            let mut shape = Vec::new();
+                                            if let Some(s_pos) = block.find("\"shape\"") {
+                                                let after = &block[s_pos + 7..];
+                                                if let Some(b1) = after.find('[') {
+                                                    if let Some(b2) = after[b1 + 1..].find(']') {
+                                                        let dims_str = &after[b1 + 1..b1 + 1 + b2];
+                                                        for d in dims_str.split(',') {
+                                                            if let Ok(n) = d.trim().parse::<usize>() {
+                                                                shape.push(n);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            let (s_off, e_off) = if let Some(o_pos) = block.find("\"data_offsets\"") {
+                                                let after = &block[o_pos + 14..];
+                                                if let Some(b1) = after.find('[') {
+                                                    if let Some(b2) = after[b1 + 1..].find(']') {
+                                                        let pair_str = &after[b1 + 1..b1 + 1 + b2];
+                                                        let parts: Vec<&str> = pair_str.split(',').collect();
+                                                        if parts.len() == 2 {
+                                                            let s = parts[0].trim().parse::<usize>().unwrap_or(0);
+                                                            let e = parts[1].trim().parse::<usize>().unwrap_or(0);
+                                                            (s, e)
+                                                        } else {
+                                                            (0, 0)
+                                                        }
+                                                    } else {
+                                                        (0, 0)
+                                                    }
+                                                } else {
+                                                    (0, 0)
+                                                }
+                                            } else {
+                                                (0, 0)
+                                            };
+
+                                            if e_off <= data_buf.len() && s_off <= e_off {
+                                                entries.push(SafetensorEntry {
+                                                    name: k.to_string(),
+                                                    dtype: dtype_str.to_string(),
+                                                    shape,
+                                                    data: data_buf[s_off..e_off].to_vec(),
+                                                });
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut new_tensors = Vec::new();
+        match val {
+            MathValue::Tuple(items) => {
+                let sub_keys: Vec<&str> = key.split(',').map(|s| s.trim()).collect();
+                for (i, item) in items.iter().enumerate() {
+                    let k = if let Some(&sk) = sub_keys.get(i) {
+                        if sk.is_empty() {
+                            format!("tensor_{}", i)
+                        } else {
+                            sk.to_string()
+                        }
+                    } else {
+                        format!("{}_{}", if key.is_empty() { "tensor" } else { key }, i)
+                    };
+                    let (shape, raw_bytes) = match item {
+                        MathValue::Scalar(s) => (vec![1usize], (*s as f32).to_le_bytes().to_vec()),
+                        MathValue::Vector(v) => (
+                            vec![v.len()],
+                            v.iter().flat_map(|&x| (x as f32).to_le_bytes()).collect(),
+                        ),
+                        MathValue::Matrix(m) => {
+                            let rows = m.len();
+                            let cols = m.first().map(|r| r.len()).unwrap_or(0);
+                            let bytes: Vec<u8> = m
+                                .iter()
+                                .flatten()
+                                .flat_map(|&x| (x as f32).to_le_bytes())
+                                .collect();
+                            (vec![rows, cols], bytes)
+                        }
+                        _ => (vec![1usize], vec![0u8; 4]),
+                    };
+                    new_tensors.push((k, shape, raw_bytes));
+                }
+            }
+            MathValue::Scalar(s) => {
+                let name = if key.is_empty() {
+                    "weights".to_string()
+                } else {
+                    key.to_string()
+                };
+                new_tensors.push((name, vec![1usize], (*s as f32).to_le_bytes().to_vec()));
+            }
             MathValue::Vector(vec) => {
+                let name = if key.is_empty() {
+                    "weights".to_string()
+                } else {
+                    key.to_string()
+                };
                 let bytes: Vec<u8> = vec.iter().flat_map(|&x| (x as f32).to_le_bytes()).collect();
-                (vec![vec.len()], bytes)
+                new_tensors.push((name, vec![vec.len()], bytes));
             }
             MathValue::Matrix(mat) => {
+                let name = if key.is_empty() {
+                    "weights".to_string()
+                } else {
+                    key.to_string()
+                };
                 let rows = mat.len();
                 let cols = mat.first().map(|r| r.len()).unwrap_or(0);
                 let bytes: Vec<u8> = mat
@@ -6059,24 +6755,46 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                     .flatten()
                     .flat_map(|&x| (x as f32).to_le_bytes())
                     .collect();
-                (vec![rows, cols], bytes)
+                new_tensors.push((name, vec![rows, cols], bytes));
             }
-        };
+        }
 
-        let tensor_name = if key.is_empty() { "weights" } else { key };
-        let header_json = format!(
-            "{{\"{}\":{{\"dtype\":\"F32\",\"shape\":{:?},\"data_offsets\":[0,{}]}}}}",
-            tensor_name,
-            shape,
-            raw_bytes.len()
-        );
+        for (name, shape, bytes) in new_tensors {
+            if let Some(existing) = entries.iter_mut().find(|e| e.name == name) {
+                existing.dtype = "F32".to_string();
+                existing.shape = shape;
+                existing.data = bytes;
+            } else {
+                entries.push(SafetensorEntry {
+                    name,
+                    dtype: "F32".to_string(),
+                    shape,
+                    data: bytes,
+                });
+            }
+        }
+
+        let mut header_parts = Vec::new();
+        let mut all_data = Vec::new();
+        let mut curr_offset: usize = 0;
+        for e in &entries {
+            let start = curr_offset;
+            let end = start + e.data.len();
+            curr_offset = end;
+            header_parts.push(format!(
+                "\"{}\":{{\"dtype\":\"{}\",\"shape\":{:?},\"data_offsets\":[{},{}]}}",
+                e.name, e.dtype, e.shape, start, end
+            ));
+            all_data.extend_from_slice(&e.data);
+        }
+        let header_json = format!("{{{}}}", header_parts.join(","));
         let header_bytes = header_json.as_bytes();
         let header_len = header_bytes.len() as u64;
 
-        let mut file_bytes = Vec::with_capacity(8 + header_bytes.len() + raw_bytes.len());
+        let mut file_bytes = Vec::with_capacity(8 + header_bytes.len() + all_data.len());
         file_bytes.extend_from_slice(&header_len.to_le_bytes());
         file_bytes.extend_from_slice(header_bytes);
-        file_bytes.extend_from_slice(&raw_bytes);
+        file_bytes.extend_from_slice(&all_data);
 
         std::fs::write(path, file_bytes)
             .map_err(|e| format!("Failed to write safetensors '{}': {}", path, e))?;
@@ -7235,5 +7953,156 @@ mod tests {
             }
             _ => panic!("Expected vector for row_sums, got {:?}", row_val),
         }
+    }
+
+    #[test]
+    fn test_tuple_state_iteration_and_deep_mlp_training() {
+        let code = r#"
+            // XOR-like binary dataset
+            X = [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]]
+            Y = [0.0, 1.0, 1.0, 0.0]
+            
+            // 2-layer MLP: [4, 2] @ [2, 3] + [3] -> [4, 3] -> relu -> @ [3, 2] + [2] -> [4, 2] logits
+            loss(W1, b1, W2, b2) = cross_entropy(relu(X @ W1 + b1) @ W2 + b2, Y)
+            
+            step(W1, b1, W2, b2) = (
+                W1 - 0.2 * grad(loss(W1, b1, W2, b2), W1),
+                b1 - 0.2 * grad(loss(W1, b1, W2, b2), b1),
+                W2 - 0.2 * grad(loss(W1, b1, W2, b2), W2),
+                b2 - 0.2 * grad(loss(W1, b1, W2, b2), b2)
+            )
+            
+            // Initial parameters
+            W1_0 = [[0.5, -0.2, 0.3], [0.1, 0.4, -0.5]]
+            b1_0 = [0.0, 0.1, -0.1]
+            W2_0 = [[0.3, -0.4], [0.2, 0.1], [-0.3, 0.5]]
+            b2_0 = [0.0, 0.0]
+            
+            init_loss = loss(W1_0, b1_0, W2_0, b2_0)
+            (W1_opt, b1_opt, W2_opt, b2_opt) = (W1_0, b1_0, W2_0, b2_0) -> step^40
+            final_loss = loss(W1_opt, b1_opt, W2_opt, b2_opt)
+        "#;
+        let prog = parse_math_code(code).expect("Parse deep mlp failed");
+        assert!(prog.verify_shapes().is_ok(), "Shapes must verify");
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+        let init_l = eval.env.get("init_loss").unwrap().as_scalar().unwrap();
+        let final_l = eval.env.get("final_loss").unwrap().as_scalar().unwrap();
+        assert!(final_l < init_l, "Trained loss {} should be less than init loss {}", final_l, init_l);
+    }
+
+    #[test]
+    fn test_adamw_and_lion_optimizers() {
+        let code = r#"
+            W = [[1.0, 2.0], [3.0, 4.0]]
+            G = [[0.1, -0.2], [0.3, -0.4]]
+            M = [[0.0, 0.0], [0.0, 0.0]]
+            V = [[0.0, 0.0], [0.0, 0.0]]
+            
+            // AdamW step
+            (W_adam, M_adam, V_adam) = adamw_step(W, G, M, V, 1.0, 0.01)
+            
+            // Lion step
+            (W_lion, M_lion) = lion_step(W, G, M, 0.01)
+        "#;
+        let prog = parse_math_code(code).expect("Parse optimizer code failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+        
+        let w_adam = eval.env.get("W_adam").unwrap();
+        let m_adam = eval.env.get("M_adam").unwrap();
+        let w_lion = eval.env.get("W_lion").unwrap();
+        
+        match (w_adam, m_adam, w_lion) {
+            (MathValue::Matrix(wa), MathValue::Matrix(ma), MathValue::Matrix(wl)) => {
+                assert_eq!(wa.len(), 2);
+                assert_eq!(wl.len(), 2);
+                // AdamW moved in opposite direction of gradient
+                assert!(wa[0][0] < 1.0, "W[0][0] should decrease with positive gradient");
+                assert!(wa[0][1] > 2.0, "W[0][1] should increase with negative gradient");
+                // M was updated: 0.1 * 0.1 = 0.01
+                assert!((ma[0][0] - 0.01).abs() < 1e-4);
+                // Lion updated with sign: sign(0.1) = 1.0 -> 1.0 - 0.01 * 1.0
+                assert!(wl[0][0] < 1.0);
+            }
+            _ => panic!("Expected matrices for optimizer outputs"),
+        }
+    }
+
+    #[test]
+    fn test_clip_grad_and_cosine_lr() {
+        let code = r#"
+            // G has norm sqrt(3^2 + 4^2) = 5.0
+            G = [3.0, 4.0]
+            G_clipped = clip_grad(G, 2.5)
+            
+            // Cosine LR: step 0 of warmup, step 5 warmup, step 10 final
+            lr_start = cosine_lr(0.0, 100.0, 0.01, 0.001, 10.0)
+            lr_warm = cosine_lr(5.0, 100.0, 0.01, 0.001, 10.0)
+            lr_end = cosine_lr(100.0, 100.0, 0.01, 0.001, 10.0)
+        "#;
+        let prog = parse_math_code(code).expect("Parse clip_grad and cosine_lr failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+        
+        let g_clip = eval.env.get("G_clipped").unwrap();
+        match g_clip {
+            MathValue::Vector(v) => {
+                let norm = (v[0]*v[0] + v[1]*v[1]).sqrt();
+                assert!((norm - 2.5).abs() < 1e-5, "Clipped norm should be 2.5, got {}", norm);
+                assert!((v[0] - 1.5).abs() < 1e-5);
+                assert!((v[1] - 2.0).abs() < 1e-5);
+            }
+            _ => panic!("Expected vector for G_clipped"),
+        }
+        
+        let lr_start = eval.env.get("lr_start").unwrap().as_scalar().unwrap();
+        let lr_warm = eval.env.get("lr_warm").unwrap().as_scalar().unwrap();
+        let lr_end = eval.env.get("lr_end").unwrap().as_scalar().unwrap();
+        
+        assert_eq!(lr_start, 0.0);
+        assert!((lr_warm - 0.005).abs() < 1e-5);
+        assert!((lr_end - 0.001).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_safetensors_multi_tensor_merge() {
+        let path = "test_multi_weights.safetensors";
+        let _ = std::fs::remove_file(path);
+        
+        let code = r#"
+            W_q = [[1.0, 2.0], [3.0, 4.0]]
+            W_k = [[5.0, 6.0], [7.0, 8.0]]
+            b_q = [0.5, 0.25]
+            
+            // Export multiple tensors to same safetensors file
+            W_q >> "test_multi_weights.safetensors:wq"
+            W_k >> "test_multi_weights.safetensors:wk"
+            b_q >> "test_multi_weights.safetensors:bq"
+            
+            // Read them back using external tensor references
+            Q_loaded = @"test_multi_weights.safetensors:wq"
+            K_loaded = @"test_multi_weights.safetensors:wk"
+            B_loaded = @"test_multi_weights.safetensors:bq"
+        "#;
+        let prog = parse_math_code(code).expect("Parse multi safetensors failed");
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+        
+        let q_loaded = eval.env.get("Q_loaded").unwrap();
+        let k_loaded = eval.env.get("K_loaded").unwrap();
+        let b_loaded = eval.env.get("B_loaded").unwrap();
+        
+        match (q_loaded, k_loaded, b_loaded) {
+            (MathValue::Matrix(q), MathValue::Matrix(k), MathValue::Vector(b)) => {
+                assert_eq!(q, &vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
+                assert_eq!(k, &vec![vec![5.0, 6.0], vec![7.0, 8.0]]);
+                assert_eq!(b, &vec![0.5, 0.25]);
+            }
+            _ => panic!("Expected loaded tensors to match shapes and values"),
+        }
+        let _ = std::fs::remove_file(path);
     }
 }
