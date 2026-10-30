@@ -616,6 +616,25 @@ impl MathExpr {
                         then_expr: Box::new(MathExpr::Num(1.0)),
                         else_expr: Box::new(MathExpr::Num(0.0)),
                     },
+                    "silu" => {
+                        let s = MathExpr::Call("sigmoid".to_string(), vec![u.clone()]);
+                        let one_minus_s = MathExpr::Binary(
+                            Box::new(MathExpr::Num(1.0)),
+                            MathBinOp::Sub,
+                            Box::new(s.clone()),
+                        );
+                        let u_s = MathExpr::Binary(
+                            Box::new(u.clone()),
+                            MathBinOp::Mul,
+                            Box::new(s.clone()),
+                        );
+                        let second_term =
+                            MathExpr::Binary(Box::new(u_s), MathBinOp::Mul, Box::new(one_minus_s));
+                        MathExpr::Binary(Box::new(s), MathBinOp::Add, Box::new(second_term))
+                    }
+                    "sum" | "mean" => {
+                        return MathExpr::Call(func.clone(), vec![du]);
+                    }
                     _ => MathExpr::Num(1.0),
                 };
                 MathExpr::Binary(Box::new(outer_deriv), MathBinOp::Mul, Box::new(du))
@@ -1705,10 +1724,11 @@ impl MathEvaluator {
                             }
                         }
                     }
-                    "attention" | "flash_attn" | "attn" => {
+                    "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
                         if args.len() < 3 {
                             return Err("'attention(Q, K, V)' requires at least 3 arguments".to_string());
                         }
+                        let is_causal = name == "causal_attn" || name == "masked_attn";
                         let q = self.eval_value(&args[0])?;
                         let k = self.eval_value(&args[1])?;
                         let v = self.eval_value(&args[2])?;
@@ -1729,9 +1749,20 @@ impl MathEvaluator {
                         let p = match scaled_scores {
                             MathValue::Matrix(mat) => {
                                 let mut res = Vec::new();
-                                for row in mat {
-                                    let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                                    let exps: Vec<f64> = row.iter().map(|&x| (x - max_v).exp()).collect();
+                                for (row_idx, row) in mat.into_iter().enumerate() {
+                                    let masked_row: Vec<f64> = row
+                                        .into_iter()
+                                        .enumerate()
+                                        .map(|(col_idx, val)| {
+                                            if is_causal && col_idx > row_idx {
+                                                f64::NEG_INFINITY
+                                            } else {
+                                                val
+                                            }
+                                        })
+                                        .collect();
+                                    let max_v = masked_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                                    let exps: Vec<f64> = masked_row.iter().map(|&x| (x - max_v).exp()).collect();
                                     let sum_val: f64 = exps.iter().sum();
                                     let sum_exp = sum_val.max(1e-12);
                                     res.push(exps.into_iter().map(|e| e / sum_exp).collect());
@@ -1987,6 +2018,149 @@ impl MathEvaluator {
                         let vec: Vec<f64> = (start..end).map(|i| i as f64).collect();
                         Ok(MathValue::Vector(vec))
                     }
+                    "zeros" | "ones" => {
+                        let fill = if name == "ones" { 1.0 } else { 0.0 };
+                        if args.len() == 1 {
+                            match self.eval_value(&args[0])? {
+                                MathValue::Scalar(n) => Ok(MathValue::Vector(vec![fill; n as usize])),
+                                MathValue::Vector(dims) if dims.len() == 1 => {
+                                    Ok(MathValue::Vector(vec![fill; dims[0] as usize]))
+                                }
+                                MathValue::Vector(dims) if dims.len() == 2 => {
+                                    let r = dims[0] as usize;
+                                    let c = dims[1] as usize;
+                                    Ok(MathValue::Matrix(vec![vec![fill; c]; r]))
+                                }
+                                _ => Err(format!("'{}' expects (N), (M, N), or ([M, N])", name)),
+                            }
+                        } else if args.len() == 2 {
+                            let r = self.eval(&args[0])? as usize;
+                            let c = self.eval(&args[1])? as usize;
+                            Ok(MathValue::Matrix(vec![vec![fill; c]; r]))
+                        } else {
+                            Err(format!("'{}' expects 1 or 2 dimension arguments", name))
+                        }
+                    }
+                    "eye" => {
+                        if args.len() != 1 {
+                            return Err("'eye(N)' expects exactly 1 argument".to_string());
+                        }
+                        let n = self.eval(&args[0])? as usize;
+                        let mut mat = vec![vec![0.0; n]; n];
+                        for (i, row) in mat.iter_mut().enumerate() {
+                            row[i] = 1.0;
+                        }
+                        Ok(MathValue::Matrix(mat))
+                    }
+                    "randn" => {
+                        if args.is_empty() {
+                            return Err("'randn' expects (N) or (M, N, [seed])".to_string());
+                        }
+                        let next_u64 = |state: &mut u64| -> f64 {
+                            *state = state.wrapping_add(0x9E3779B97F4A7C15);
+                            let mut z = *state;
+                            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+                            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+                            z ^= z >> 31;
+                            ((z >> 11) as f64) * (1.0 / ((1u64 << 53) as f64))
+                        };
+                        let sample_norm = |state: &mut u64, std_dev: f64| -> f64 {
+                            let u1 = next_u64(state).max(1e-12);
+                            let u2 = next_u64(state);
+                            let r = (-2.0 * u1.ln()).sqrt();
+                            let theta = 2.0 * std::f64::consts::PI * u2;
+                            r * theta.cos() * std_dev
+                        };
+                        if args.len() == 1 {
+                            let n = self.eval(&args[0])? as usize;
+                            let mut state = 42u64;
+                            let std_dev = 1.0 / (n.max(1) as f64).sqrt();
+                            let vec: Vec<f64> = (0..n).map(|_| sample_norm(&mut state, std_dev)).collect();
+                            Ok(MathValue::Vector(vec))
+                        } else {
+                            let r = self.eval(&args[0])? as usize;
+                            let c = self.eval(&args[1])? as usize;
+                            let mut state = if args.len() > 2 {
+                                self.eval(&args[2])? as u64
+                            } else {
+                                42u64
+                            };
+                            let std_dev = 1.0 / (c.max(1) as f64).sqrt();
+                            let mut mat = Vec::with_capacity(r);
+                            for _ in 0..r {
+                                let row: Vec<f64> = (0..c).map(|_| sample_norm(&mut state, std_dev)).collect();
+                                mat.push(row);
+                            }
+                            Ok(MathValue::Matrix(mat))
+                        }
+                    }
+                    "argmax" | "argmin" => {
+                        let val = self.eval_single_val(args, name)?;
+                        let is_max = name == "argmax";
+                        let find_idx = |slice: &[f64]| -> f64 {
+                            if slice.is_empty() {
+                                return 0.0;
+                            }
+                            let mut best_i = 0usize;
+                            let mut best_v = slice[0];
+                            for (i, &v) in slice.iter().enumerate().skip(1) {
+                                if (is_max && v > best_v) || (!is_max && v < best_v) {
+                                    best_v = v;
+                                    best_i = i;
+                                }
+                            }
+                            best_i as f64
+                        };
+                        match val {
+                            MathValue::Scalar(_) => Ok(MathValue::Scalar(0.0)),
+                            MathValue::Vector(vec) => Ok(MathValue::Scalar(find_idx(&vec))),
+                            MathValue::Matrix(mat) => {
+                                let indices: Vec<f64> = mat.iter().map(|row| find_idx(row)).collect();
+                                Ok(MathValue::Vector(indices))
+                            }
+                        }
+                    }
+                    "concat" => {
+                        if args.len() < 2 {
+                            return Err("'concat(A, B, [axis])' expects at least 2 arguments".to_string());
+                        }
+                        let a = self.eval_value(&args[0])?;
+                        let b = self.eval_value(&args[1])?;
+                        let axis = if args.len() > 2 {
+                            self.eval(&args[2])? as usize
+                        } else {
+                            0
+                        };
+                        match (a, b) {
+                            (MathValue::Vector(mut u), MathValue::Vector(v)) => {
+                                u.extend(v);
+                                Ok(MathValue::Vector(u))
+                            }
+                            (MathValue::Vector(mut u), MathValue::Scalar(s)) => {
+                                u.push(s);
+                                Ok(MathValue::Vector(u))
+                            }
+                            (MathValue::Matrix(mut m1), MathValue::Matrix(m2)) => {
+                                if axis == 0 {
+                                    m1.extend(m2);
+                                    Ok(MathValue::Matrix(m1))
+                                } else {
+                                    if m1.len() != m2.len() {
+                                        return Err("Matrix row counts must match for concat along axis 1".to_string());
+                                    }
+                                    for (r1, r2) in m1.iter_mut().zip(m2.into_iter()) {
+                                        r1.extend(r2);
+                                    }
+                                    Ok(MathValue::Matrix(m1))
+                                }
+                            }
+                            (MathValue::Matrix(mut m), MathValue::Vector(v)) => {
+                                m.push(v);
+                                Ok(MathValue::Matrix(m))
+                            }
+                            _ => Err("Unsupported operand types for 'concat'".to_string()),
+                        }
+                    }
                     "grad" | "diff" => {
                         if args.len() != 2 {
                             return Err(format!("'{}' expects (expr, var)", name));
@@ -1995,9 +2169,76 @@ impl MathEvaluator {
                             MathExpr::Var(v) => v.clone(),
                             _ => return Err("Second argument to 'grad' must be a variable name".to_string()),
                         };
-                        let inlined = args[0].inline_and_expand(&self.functions, true, 0);
-                        let deriv_expr = inlined.differentiate(&wrt).simplify();
-                        self.eval_value(&deriv_expr)
+                        if let Some(current_val) = self.env.get(&wrt).cloned() {
+                            let eps = 1e-6_f64;
+                            let eval_scalar_loss = |eval_ctx: &MathEvaluator, expr: &MathExpr| -> Result<f64, String> {
+                                let v = eval_ctx.eval_value(expr)?;
+                                Ok(v.flatten_elements().iter().sum())
+                            };
+                            match current_val {
+                                MathValue::Scalar(s) => {
+                                    let inlined = args[0].inline_and_expand(&self.functions, true, 0);
+                                    let deriv_expr = inlined.differentiate(&wrt).simplify();
+                                    if let Ok(MathValue::Scalar(sym_grad)) = self.eval_value(&deriv_expr) {
+                                        return Ok(MathValue::Scalar(sym_grad));
+                                    }
+                                    let mut eval_plus = self.clone();
+                                    eval_plus.env.insert(wrt.clone(), MathValue::Scalar(s + eps));
+                                    let f_plus = eval_scalar_loss(&eval_plus, &args[0])?;
+
+                                    let mut eval_minus = self.clone();
+                                    eval_minus.env.insert(wrt.clone(), MathValue::Scalar(s - eps));
+                                    let f_minus = eval_scalar_loss(&eval_minus, &args[0])?;
+                                    Ok(MathValue::Scalar((f_plus - f_minus) / (2.0 * eps)))
+                                }
+                                MathValue::Vector(vec) => {
+                                    let mut grad_vec = Vec::with_capacity(vec.len());
+                                    for i in 0..vec.len() {
+                                        let mut v_plus = vec.clone();
+                                        v_plus[i] += eps;
+                                        let mut eval_plus = self.clone();
+                                        eval_plus.env.insert(wrt.clone(), MathValue::Vector(v_plus));
+                                        let f_plus = eval_scalar_loss(&eval_plus, &args[0])?;
+
+                                        let mut v_minus = vec.clone();
+                                        v_minus[i] -= eps;
+                                        let mut eval_minus = self.clone();
+                                        eval_minus.env.insert(wrt.clone(), MathValue::Vector(v_minus));
+                                        let f_minus = eval_scalar_loss(&eval_minus, &args[0])?;
+
+                                        grad_vec.push((f_plus - f_minus) / (2.0 * eps));
+                                    }
+                                    Ok(MathValue::Vector(grad_vec))
+                                }
+                                MathValue::Matrix(mat) => {
+                                    let rows = mat.len();
+                                    let cols = mat.first().map(|r| r.len()).unwrap_or(0);
+                                    let mut grad_mat = vec![vec![0.0; cols]; rows];
+                                    for r in 0..rows {
+                                        for c in 0..cols {
+                                            let mut m_plus = mat.clone();
+                                            m_plus[r][c] += eps;
+                                            let mut eval_plus = self.clone();
+                                            eval_plus.env.insert(wrt.clone(), MathValue::Matrix(m_plus));
+                                            let f_plus = eval_scalar_loss(&eval_plus, &args[0])?;
+
+                                            let mut m_minus = mat.clone();
+                                            m_minus[r][c] -= eps;
+                                            let mut eval_minus = self.clone();
+                                            eval_minus.env.insert(wrt.clone(), MathValue::Matrix(m_minus));
+                                            let f_minus = eval_scalar_loss(&eval_minus, &args[0])?;
+
+                                            grad_mat[r][c] = (f_plus - f_minus) / (2.0 * eps);
+                                        }
+                                    }
+                                    Ok(MathValue::Matrix(grad_mat))
+                                }
+                            }
+                        } else {
+                            let inlined = args[0].inline_and_expand(&self.functions, true, 0);
+                            let deriv_expr = inlined.differentiate(&wrt).simplify();
+                            self.eval_value(&deriv_expr)
+                        }
                     }
                     user_fn => {
                         if let Some((param_names, body)) = self.functions.get(user_fn) {
@@ -2247,24 +2488,106 @@ impl MathEvaluator {
                 }
                 Ok(MathValue::Matrix(out))
             }
-            (MathValue::Matrix(a), MathValue::Matrix(b)) => {
-                if a.len() != b.len() {
-                    return Err("Matrix row count mismatch".to_string());
+            (MathValue::Matrix(mat), MathValue::Vector(vec)) => {
+                if mat.is_empty() {
+                    return Ok(MathValue::Matrix(Vec::new()));
                 }
-                let mut out = Vec::with_capacity(a.len());
-                for (ra, rb) in a.iter().zip(b.iter()) {
-                    if ra.len() != rb.len() {
-                        return Err("Matrix column count mismatch".to_string());
+                let cols = mat[0].len();
+                let rows = mat.len();
+                if vec.len() == cols {
+                    let mut out = Vec::with_capacity(rows);
+                    for row in mat {
+                        let mut r = Vec::with_capacity(cols);
+                        for (&x, &y) in row.iter().zip(vec.iter()) {
+                            r.push(scalar_op(x, y)?);
+                        }
+                        out.push(r);
                     }
-                    let mut row = Vec::with_capacity(ra.len());
-                    for (&x, &y) in ra.iter().zip(rb.iter()) {
-                        row.push(scalar_op(x, y)?);
+                    Ok(MathValue::Matrix(out))
+                } else if vec.len() == rows {
+                    let mut out = Vec::with_capacity(rows);
+                    for (row, &y) in mat.iter().zip(vec.iter()) {
+                        let mut r = Vec::with_capacity(cols);
+                        for &x in row {
+                            r.push(scalar_op(x, y)?);
+                        }
+                        out.push(r);
+                    }
+                    Ok(MathValue::Matrix(out))
+                } else {
+                    Err(format!(
+                        "Matrix-Vector broadcast mismatch: matrix [{}x{}] vs vector [{}]",
+                        rows,
+                        cols,
+                        vec.len()
+                    ))
+                }
+            }
+            (MathValue::Vector(vec), MathValue::Matrix(mat)) => {
+                if mat.is_empty() {
+                    return Ok(MathValue::Matrix(Vec::new()));
+                }
+                let cols = mat[0].len();
+                let rows = mat.len();
+                if vec.len() == cols {
+                    let mut out = Vec::with_capacity(rows);
+                    for row in mat {
+                        let mut r = Vec::with_capacity(cols);
+                        for (&x, &y) in vec.iter().zip(row.iter()) {
+                            r.push(scalar_op(x, y)?);
+                        }
+                        out.push(r);
+                    }
+                    Ok(MathValue::Matrix(out))
+                } else if vec.len() == rows {
+                    let mut out = Vec::with_capacity(rows);
+                    for (&x, row) in vec.iter().zip(mat.iter()) {
+                        let mut r = Vec::with_capacity(cols);
+                        for &y in row {
+                            r.push(scalar_op(x, y)?);
+                        }
+                        out.push(r);
+                    }
+                    Ok(MathValue::Matrix(out))
+                } else {
+                    Err(format!(
+                        "Vector-Matrix broadcast mismatch: vector [{}] vs matrix [{}x{}]",
+                        vec.len(),
+                        rows,
+                        cols
+                    ))
+                }
+            }
+            (MathValue::Matrix(a), MathValue::Matrix(b)) => {
+                if a.is_empty() || b.is_empty() {
+                    return Ok(MathValue::Matrix(Vec::new()));
+                }
+                let r_a = a.len();
+                let c_a = a[0].len();
+                let r_b = b.len();
+                let c_b = b[0].len();
+                if (r_a != r_b && r_a != 1 && r_b != 1) || (c_a != c_b && c_a != 1 && c_b != 1) {
+                    return Err(format!(
+                        "Matrix broadcast shape mismatch: [{}x{}] vs [{}x{}]",
+                        r_a, c_a, r_b, c_b
+                    ));
+                }
+                let rows = r_a.max(r_b);
+                let cols = c_a.max(c_b);
+                let mut out = Vec::with_capacity(rows);
+                for i in 0..rows {
+                    let mut row = Vec::with_capacity(cols);
+                    let ia = if r_a == 1 { 0 } else { i };
+                    let ib = if r_b == 1 { 0 } else { i };
+                    for j in 0..cols {
+                        let ja = if c_a == 1 { 0 } else { j };
+                        let jb = if c_b == 1 { 0 } else { j };
+                        row.push(scalar_op(a[ia][ja], b[ib][jb])?);
                     }
                     out.push(row);
                 }
                 Ok(MathValue::Matrix(out))
             }
-            _ => Err("Incompatible tensor shapes for binary operation".to_string()),
         }
     }
 }
@@ -2589,7 +2912,7 @@ impl MathProgram {
                         (None, None) => None,
                     }
                 } else {
-                    // Element-wise arithmetic & comparison ops
+                    // Element-wise arithmetic & comparison ops with NumPy/PyTorch broadcasting
                     match (l_opt, r_opt) {
                         (Some(l), Some(r)) => {
                             if l.is_empty() {
@@ -2598,6 +2921,18 @@ impl MathProgram {
                                 Some(l)
                             } else if l == r {
                                 Some(l)
+                            } else if l.len() == 2 && r.len() == 1 && (r[0] == l[1] || r[0] == l[0] || r[0] == 1) {
+                                Some(l)
+                            } else if l.len() == 1 && r.len() == 2 && (l[0] == r[1] || l[0] == r[0] || l[0] == 1) {
+                                Some(r)
+                            } else if l.len() == 2
+                                && r.len() == 2
+                                && (l[0] == r[0] || l[0] == 1 || r[0] == 1)
+                                && (l[1] == r[1] || l[1] == 1 || r[1] == 1)
+                            {
+                                Some(vec![l[0].max(r[0]), l[1].max(r[1])])
+                            } else if l.len() == 1 && r.len() == 1 && (l[0] == 1 || r[0] == 1) {
+                                Some(vec![l[0].max(r[0])])
                             } else {
                                 errors.push(format!(
                                     "{}Element-wise binary op '{}' shape mismatch: left shape {:?} != right shape {:?}",
@@ -2760,11 +3095,151 @@ impl MathProgram {
                         None
                     }
                 }
-                "sum" | "mean" | "norm" => {
+                "sum" | "mean" | "norm" | "max" | "min" | "prod" => {
                     if let Some(arg) = args.first() {
                         let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
                     }
                     Some(vec![])
+                }
+                "argmax" | "argmin" => {
+                    if let Some(arg) = args.first() {
+                        if let Some(s) = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx) {
+                            if s.len() == 2 {
+                                Some(vec![s[0]])
+                            } else {
+                                Some(vec![])
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        Some(vec![])
+                    }
+                }
+                "zeros" | "ones" => {
+                    if args.len() == 1 {
+                        match &args[0] {
+                            MathExpr::Num(n) => Some(vec![*n as usize]),
+                            MathExpr::Array(dims) => {
+                                let mut out = Vec::new();
+                                for d in dims {
+                                    if let MathExpr::Num(n) = d {
+                                        out.push(*n as usize);
+                                    }
+                                }
+                                Some(out)
+                            }
+                            _ => None,
+                        }
+                    } else if args.len() == 2 {
+                        if let (MathExpr::Num(r), MathExpr::Num(c)) = (&args[0], &args[1]) {
+                            Some(vec![*r as usize, *c as usize])
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!("{}'{}' expects 1 or 2 dimension arguments", prefix, func));
+                        None
+                    }
+                }
+                "eye" => {
+                    if args.len() == 1 {
+                        if let MathExpr::Num(n) = &args[0] {
+                            let d = *n as usize;
+                            Some(vec![d, d])
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!("{}eye(N) expects 1 argument", prefix));
+                        None
+                    }
+                }
+                "randn" => {
+                    if args.len() == 1 {
+                        if let MathExpr::Num(n) = &args[0] {
+                            Some(vec![*n as usize])
+                        } else {
+                            None
+                        }
+                    } else if args.len() >= 2 {
+                        if let (MathExpr::Num(r), MathExpr::Num(c)) = (&args[0], &args[1]) {
+                            Some(vec![*r as usize, *c as usize])
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!("{}randn() expects at least 1 argument", prefix));
+                        None
+                    }
+                }
+                "concat" => {
+                    if args.len() >= 2 {
+                        let a_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let b_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        let axis = if args.len() > 2 {
+                            if let MathExpr::Num(n) = &args[2] {
+                                *n as usize
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+                        if let (Some(a), Some(b)) = (a_s, b_s) {
+                            if a.len() == 1 && b.len() == 1 {
+                                Some(vec![a[0] + b[0]])
+                            } else if a.len() == 1 && b.is_empty() {
+                                Some(vec![a[0] + 1])
+                            } else if a.len() == 2 && b.len() == 2 {
+                                if axis == 0 {
+                                    if a[1] != b[1] {
+                                        errors.push(format!(
+                                            "{}concat(axis=0) column mismatch: {:?} vs {:?}",
+                                            prefix, a, b
+                                        ));
+                                        None
+                                    } else {
+                                        Some(vec![a[0] + b[0], a[1]])
+                                    }
+                                } else if a[0] != b[0] {
+                                    errors.push(format!(
+                                        "{}concat(axis=1) row mismatch: {:?} vs {:?}",
+                                        prefix, a, b
+                                    ));
+                                    None
+                                } else {
+                                    Some(vec![a[0], a[1] + b[1]])
+                                }
+                            } else if a.len() == 2 && b.len() == 1 {
+                                if a[1] != b[0] {
+                                    errors.push(format!(
+                                        "{}concat matrix-vector dimension mismatch: {:?} vs {:?}",
+                                        prefix, a, b
+                                    ));
+                                    None
+                                } else {
+                                    Some(vec![a[0] + 1, a[1]])
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!("{}concat() expects at least 2 arguments", prefix));
+                        None
+                    }
+                }
+                "grad" | "diff" => {
+                    if args.len() == 2 {
+                        let _ = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx)
+                    } else {
+                        errors.push(format!("{}grad() expects exactly 2 arguments (expr, wrt_var)", prefix));
+                        None
+                    }
                 }
                 "exp" | "ln" | "log" | "sqrt" | "sin" | "cos" | "tan" | "tanh" | "abs"
                 | "sigmoid" | "relu" | "gelu" | "softmax" | "silu" | "rmsnorm" | "rope" => {
@@ -2774,7 +3249,7 @@ impl MathProgram {
                         Some(vec![])
                     }
                 }
-                "attention" | "flash_attn" | "attn" => {
+                "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
                     if args.len() >= 3 {
                         let q = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let k = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -4743,5 +5218,79 @@ mod tests {
         let mut eval_silu = MathEvaluator::new();
         let res_silu = eval_silu.execute_program(&prog_silu).expect("Eval silu failed");
         assert_eq!(res_silu, Some(0.0));
+    }
+
+    #[test]
+    fn test_nd_tensor_grad_and_matrix_training() {
+        // Train a 2x2 weight matrix W so that X @ W = Y
+        // Target W* = [[2.0, 0.0], [0.0, 3.0]]
+        let code = r#"
+            X = [[1.0, 0.0], [0.0, 1.0]]
+            Y = [[2.0, 0.0], [0.0, 3.0]]
+            loss(W) = sum((X @ W - Y)^2)
+            step(W) = W - 0.1 * grad(loss(W), W)
+            W_trained = zeros(2, 2) -> step^60
+            loss(W_trained)
+        "#;
+        let prog = parse_math_code(code).expect("Parse matrix training failed");
+        assert!(prog.verify_shapes().is_ok(), "Shape check should pass for 2D matrix grad training");
+        let mut eval = MathEvaluator::new();
+        let final_loss = eval.execute_program(&prog).expect("Eval matrix training failed").unwrap();
+        assert!(final_loss < 1e-4, "Expected matrix training loss < 1e-4, got {}", final_loss);
+    }
+
+    #[test]
+    fn test_tensor_broadcasting_and_constructors() {
+        let code = r#"
+            Z = zeros(2, 3)
+            O = ones(2, 3)
+            b = [10.0, 20.0, 30.0]
+            // Broadcast [2, 3] + [3] -> [2, 3]
+            M = (Z + O) + b
+            // Row 0: [11, 21, 31], Row 1: [11, 21, 31] -> sum = 126.0
+            sum(M)
+        "#;
+        let prog = parse_math_code(code).expect("Parse broadcasting failed");
+        assert!(prog.verify_shapes().is_ok(), "Broadcasting shape verification should pass");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Eval broadcasting failed").unwrap();
+        assert!((res - 126.0).abs() < 1e-6);
+
+        // Also test eye(3) and randn(2, 2, 42)
+        let code2 = r#"
+            I = eye(3)
+            R = randn(2, 2, 42)
+            sum(I) + 0.0 * sum(R)
+        "#;
+        let prog2 = parse_math_code(code2).expect("Parse eye/randn failed");
+        assert!(prog2.verify_shapes().is_ok());
+        let mut eval2 = MathEvaluator::new();
+        let res2 = eval2.execute_program(&prog2).expect("Eval eye/randn failed").unwrap();
+        assert!((res2 - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_causal_attention_argmax_and_concat() {
+        // In causal attention, token 0 can only attend to token 0!
+        // So output row 0 must equal V[0] regardless of K[1] or V[1].
+        let code = r#"
+            Q = [[1.0, 0.0], [0.0, 1.0]]
+            K = [[1.0, 0.0], [100.0, 100.0]]
+            V = [[7.0, 8.0], [999.0, 999.0]]
+            O = causal_attn(Q, K, V)
+            // Row 0 of O must be [7.0, 8.0] because token 1 is causally masked out for token 0
+            r0 = O[0]
+            // Test argmax and concat
+            logits = [0.1, 0.5, 4.2, 0.3]
+            next_tok = argmax(logits)
+            seq = concat([1.0, 2.0], [next_tok])
+            sum(r0) + sum(seq)
+        "#;
+        let prog = parse_math_code(code).expect("Parse causal_attn/argmax/concat failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Eval causal_attn/argmax/concat failed").unwrap();
+        // sum(r0) = 7 + 8 = 15.0; next_tok = 2.0; seq = [1, 2, 2] -> sum(seq) = 5.0; total = 20.0
+        assert!((res - 20.0).abs() < 1e-5, "Expected 20.0, got {}", res);
     }
 }
