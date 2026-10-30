@@ -122,6 +122,94 @@ impl MathValue {
             MathValue::Matrix(mat) => mat.iter().flatten().copied().collect(),
         }
     }
+
+    pub fn transpose(&self) -> Result<MathValue, String> {
+        match self {
+            MathValue::Scalar(s) => Ok(MathValue::Scalar(*s)),
+            MathValue::Vector(v) => {
+                let mat: Vec<Vec<f64>> = v.iter().map(|&x| vec![x]).collect();
+                Ok(MathValue::Matrix(mat))
+            }
+            MathValue::Matrix(mat) => {
+                if mat.is_empty() {
+                    return Ok(MathValue::Matrix(Vec::new()));
+                }
+                let rows = mat.len();
+                let cols = mat[0].len();
+                let mut transposed = vec![vec![0.0; rows]; cols];
+                for r in 0..rows {
+                    for c in 0..cols {
+                        if c < mat[r].len() {
+                            transposed[c][r] = mat[r][c];
+                        }
+                    }
+                }
+                Ok(MathValue::Matrix(transposed))
+            }
+        }
+    }
+
+    pub fn reshape(&self, dims: &[usize]) -> Result<MathValue, String> {
+        let elems = self.flatten_elements();
+        let expected_total: usize = dims.iter().product();
+        if dims.is_empty() {
+            return Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0)));
+        }
+        if expected_total != elems.len() && !elems.is_empty() {
+            return Err(format!(
+                "Cannot reshape tensor of {} elements into shape {:?}",
+                elems.len(),
+                dims
+            ));
+        }
+        if dims.len() == 1 {
+            return Ok(MathValue::Vector(elems));
+        }
+        if dims.len() == 2 {
+            let rows = dims[0];
+            let cols = dims[1];
+            let mut mat = Vec::with_capacity(rows);
+            for r in 0..rows {
+                let start = r * cols;
+                let end = (start + cols).min(elems.len());
+                mat.push(elems[start..end].to_vec());
+            }
+            return Ok(MathValue::Matrix(mat));
+        }
+        let cols = *dims.last().unwrap_or(&1);
+        let rows = elems.len() / cols.max(1);
+        let mut mat = Vec::with_capacity(rows);
+        for r in 0..rows {
+            let start = r * cols;
+            let end = (start + cols).min(elems.len());
+            mat.push(elems[start..end].to_vec());
+        }
+        Ok(MathValue::Matrix(mat))
+    }
+
+    pub fn slice(&self, start: usize, end: usize) -> Result<MathValue, String> {
+        match self {
+            MathValue::Scalar(_) => Err("Cannot slice a scalar value".to_string()),
+            MathValue::Vector(v) => {
+                let s = start.min(v.len());
+                let e = end.min(v.len());
+                if s > e {
+                    Ok(MathValue::Vector(Vec::new()))
+                } else {
+                    Ok(MathValue::Vector(v[s..e].to_vec()))
+                }
+            }
+            MathValue::Matrix(m) => {
+                let s = start.min(m.len());
+                let e = end.min(m.len());
+                if s > e {
+                    Ok(MathValue::Matrix(Vec::new()))
+                } else {
+                    Ok(MathValue::Matrix(m[s..e].to_vec()))
+                }
+            }
+        }
+    }
 }
 
 impl fmt::Display for MathValue {
@@ -1559,6 +1647,14 @@ impl MathEvaluator {
                 }
             }
             MathExpr::Binary(lhs, op, rhs) => {
+                if *op == MathBinOp::Pow {
+                    if let MathExpr::Var(v) = &**rhs {
+                        if v == "T" {
+                            let l = self.eval_value(lhs)?;
+                            return l.transpose();
+                        }
+                    }
+                }
                 let l = self.eval_value(lhs)?;
                 let r = self.eval_value(rhs)?;
                 self.eval_binary_op(&l, *op, &r)
@@ -1657,6 +1753,64 @@ impl MathEvaluator {
                         let a = self.eval_value(&args[0])?;
                         let b = self.eval_value(&args[1])?;
                         self.eval_binary_op(&a, MathBinOp::MatMul, &b)
+                    }
+                    "transpose" | "T" => {
+                        let val = self.eval_single_val(args, "transpose")?;
+                        val.transpose()
+                    }
+                    "outer" => {
+                        if args.len() == 2 {
+                            let u_val = self.eval_value(&args[0])?;
+                            let v_val = self.eval_value(&args[1])?;
+                            match (u_val, v_val) {
+                                (MathValue::Vector(u), MathValue::Vector(v)) => {
+                                    let mut mat = Vec::with_capacity(u.len());
+                                    for &ui in &u {
+                                        let row: Vec<f64> = v.iter().map(|&vj| ui * vj).collect();
+                                        mat.push(row);
+                                    }
+                                    Ok(MathValue::Matrix(mat))
+                                }
+                                (MathValue::Scalar(s), v) | (v, MathValue::Scalar(s)) => {
+                                    self.eval_binary_op(&MathValue::Scalar(s), MathBinOp::Mul, &v)
+                                }
+                                _ => Err("'outer' expects two 1D vectors".to_string()),
+                            }
+                        } else {
+                            Err("'outer' expects exactly 2 arguments".to_string())
+                        }
+                    }
+                    "reshape" => {
+                        if args.len() == 2 {
+                            let val = self.eval_value(&args[0])?;
+                            let shape_val = self.eval_value(&args[1])?;
+                            let dims: Vec<usize> = match shape_val {
+                                MathValue::Vector(v) => v.iter().map(|&x| x as usize).collect(),
+                                MathValue::Scalar(s) => vec![s as usize],
+                                _ => return Err("Expected shape vector in reshape".to_string()),
+                            };
+                            val.reshape(&dims)
+                        } else if args.len() > 2 {
+                            let val = self.eval_value(&args[0])?;
+                            let mut dims = Vec::new();
+                            for a in &args[1..] {
+                                let d = self.eval(a)? as usize;
+                                dims.push(d);
+                            }
+                            val.reshape(&dims)
+                        } else {
+                            Err("'reshape' expects (tensor, shape)".to_string())
+                        }
+                    }
+                    "slice" => {
+                        if args.len() == 3 {
+                            let val = self.eval_value(&args[0])?;
+                            let s = self.eval(&args[1])? as usize;
+                            let e = self.eval(&args[2])? as usize;
+                            val.slice(s, e)
+                        } else {
+                            Err("'slice' expects (tensor, start, end)".to_string())
+                        }
                     }
                     "range" => {
                         let (start, end) = if args.len() == 1 {
@@ -1827,6 +1981,23 @@ impl MathEvaluator {
                         }
                         let dot: f64 = row.iter().zip(vec.iter()).map(|(a, b)| a * b).sum();
                         out.push(dot);
+                    }
+                    Ok(MathValue::Vector(out))
+                }
+                (MathValue::Vector(vec), MathValue::Matrix(mat)) => {
+                    if mat.is_empty() || vec.len() != mat.len() {
+                        return Err(format!(
+                            "Vector-Matrix dimension mismatch: vec len {} vs mat rows {}",
+                            vec.len(),
+                            mat.len()
+                        ));
+                    }
+                    let n = mat[0].len();
+                    let mut out = vec![0.0; n];
+                    for (k, &v) in vec.iter().enumerate() {
+                        for (j, o) in out.iter_mut().enumerate() {
+                            *o += v * mat[k][j];
+                        }
                     }
                     Ok(MathValue::Vector(out))
                 }
@@ -2120,6 +2291,11 @@ impl MathProgram {
                 let l = Self::expr_to_c23(lhs);
                 // Algebraic strength reduction for integer & half powers
                 if *op == MathBinOp::Pow {
+                    if let MathExpr::Var(v) = &**rhs {
+                        if v == "T" {
+                            return format!("transpose({})", l);
+                        }
+                    }
                     if let MathExpr::Num(exp) = **rhs {
                         if (exp - 2.0).abs() < 1e-9 {
                             return format!("({} * {})", l, l);
@@ -3500,5 +3676,61 @@ mod tests {
         assert!((res.unwrap() - 5.5).abs() < 1e-5, "Expected 5.5, got {:?}", res);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_matrix_transpose_pow_t_notation_and_gemv() {
+        let code = r#"
+            W = [[1.0, 2.0], [3.0, 4.0]]
+            x = [10.0, 20.0]
+            // W^T = [[1, 3], [2, 4]]
+            // W^T @ x = [1*10 + 3*20, 2*10 + 4*20] = [70, 100]
+            y = (W^T) @ x
+            y[0]
+        "#;
+        let prog = parse_math_code(code).expect("Failed to parse W^T transpose");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Evaluation of W^T failed");
+        assert_eq!(res, Some(70.0));
+
+        // Test vector @ matrix GEMV
+        let code_gemv = r#"
+            u = [2.0, 3.0]
+            M = [[1.0, 0.0], [0.0, 2.0]]
+            v = u @ M
+            v[1]
+        "#;
+        let prog_gemv = parse_math_code(code_gemv).expect("Failed to parse vector @ matrix");
+        let mut eval_gemv = MathEvaluator::new();
+        let res_gemv = eval_gemv.execute_program(&prog_gemv).expect("Evaluation of GEMV failed");
+        assert_eq!(res_gemv, Some(6.0));
+    }
+
+    #[test]
+    fn test_tensor_reshape_slice_and_outer_product() {
+        let code = r#"
+            v = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+            M = reshape(v, [2, 3])
+            // M is [[1, 2, 3], [4, 5, 6]], slice(0, 1) is [[1, 2, 3]]
+            row0 = slice(M, 0, 1)
+            sum(row0)
+        "#;
+        let prog = parse_math_code(code).expect("Failed to parse reshape & slice");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Reshape/slice evaluation failed");
+        assert_eq!(res, Some(6.0));
+
+        // Test outer product
+        let code_outer = r#"
+            a = [2.0, 3.0]
+            b = [4.0, 5.0]
+            // outer(a, b) = [[8, 10], [12, 15]]
+            O = outer(a, b)
+            O[1][1]
+        "#;
+        let prog_outer = parse_math_code(code_outer).expect("Failed to parse outer product");
+        let mut eval_outer = MathEvaluator::new();
+        let res_outer = eval_outer.execute_program(&prog_outer).expect("Outer product failed");
+        assert_eq!(res_outer, Some(15.0));
     }
 }

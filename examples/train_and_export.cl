@@ -23,3 +23,4 @@ w_opt >> "checkpoints/linear_model.safetensors:weight"
 // 5. Final Evaluation: Loss of Trained Model
 final_loss = loss(w_opt)
 final_loss
+
