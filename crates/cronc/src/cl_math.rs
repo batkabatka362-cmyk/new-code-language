@@ -220,6 +220,11 @@ pub enum MathExpr {
     Array(Vec<MathExpr>), // Vector or Matrix literal: [1, 2, 3] or [[1, 2], [3, 4]]
     Index(Box<MathExpr>, Box<MathExpr>), // Tensor / Vector indexing: x[i], W[i][j]
     TensorRef { path: String, key: String }, // External weights: @"model.safetensors:w" or @"weights.cll:w"
+    Iterate {
+        input: Box<MathExpr>,
+        func: Box<MathExpr>,
+        count: Box<MathExpr>,
+    }, // Functional power/iteration: x -> f^N
     Placeholder,          // '_' in pipeline chaining
     Unary(MathUnaryOp, Box<MathExpr>),
     Binary(Box<MathExpr>, MathBinOp, Box<MathExpr>),
@@ -243,6 +248,7 @@ impl fmt::Display for MathExpr {
             }
             MathExpr::Index(base, idx) => write!(f, "{}[{}]", base, idx),
             MathExpr::TensorRef { path, key } => write!(f, "@\"{}:{}\"", path, key),
+            MathExpr::Iterate { input, func, count } => write!(f, "({} -> {} ^ {})", input, func, count),
             MathExpr::Placeholder => write!(f, "_"),
             MathExpr::Unary(MathUnaryOp::Neg, e) => write!(f, "(-{})", e),
             MathExpr::Unary(MathUnaryOp::Not, e) => write!(f, "(!{})", e),
@@ -280,6 +286,11 @@ impl MathExpr {
             MathExpr::TensorRef { path, key } => MathExpr::TensorRef {
                 path: path.clone(),
                 key: key.clone(),
+            },
+            MathExpr::Iterate { input, func, count } => MathExpr::Iterate {
+                input: Box::new(input.substitute(subst)),
+                func: Box::new(func.substitute(subst)),
+                count: Box::new(count.substitute(subst)),
             },
             MathExpr::Placeholder => MathExpr::Placeholder,
             MathExpr::Unary(op, inner) => {
@@ -348,6 +359,11 @@ impl MathExpr {
                 cond: Box::new(cond.inline_and_expand(fns, inline_user_fns, depth + 1)),
                 then_expr: Box::new(then_expr.inline_and_expand(fns, inline_user_fns, depth + 1)),
                 else_expr: Box::new(else_expr.inline_and_expand(fns, inline_user_fns, depth + 1)),
+            },
+            MathExpr::Iterate { input, func, count } => MathExpr::Iterate {
+                input: Box::new(input.inline_and_expand(fns, inline_user_fns, depth + 1)),
+                func: Box::new(func.inline_and_expand(fns, inline_user_fns, depth + 1)),
+                count: Box::new(count.inline_and_expand(fns, inline_user_fns, depth + 1)),
             },
             MathExpr::Pipeline(stages) => {
                 let mut curr = stages[0].clone();
@@ -516,6 +532,7 @@ impl MathExpr {
                 };
                 MathExpr::Binary(Box::new(outer_deriv), MathBinOp::Mul, Box::new(du))
             }
+            MathExpr::Iterate { .. } => MathExpr::Num(0.0),
             MathExpr::Pipeline(stages) => {
                 let mut curr = stages[0].clone();
                 for st in &stages[1..] {
@@ -553,6 +570,11 @@ impl MathExpr {
                 cond: Box::new(cond.simplify()),
                 then_expr: Box::new(then_expr.simplify()),
                 else_expr: Box::new(else_expr.simplify()),
+            },
+            MathExpr::Iterate { input, func, count } => MathExpr::Iterate {
+                input: Box::new(input.simplify()),
+                func: Box::new(func.simplify()),
+                count: Box::new(count.simplify()),
             },
             MathExpr::Call(name, args) => {
                 MathExpr::Call(name.clone(), args.iter().map(|a| a.simplify()).collect())
@@ -593,6 +615,11 @@ impl MathExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MathItem {
     Link(String), // << "path/to/module.cl"
+    Export {
+        expr: MathExpr,
+        path: String,
+        key: String,
+    }, // expr >> "path.safetensors:key"
     Constant {
         name: String,
         val: f64,
@@ -626,6 +653,7 @@ pub enum Token {
     Num(f64),
     Str(String), // "..."
     Shl,         // << (Zero-verbal module link)
+    Shr,         // >> (Zero-verbal tensor export)
     Equal,      // =
     Arrow,      // ->
     Plus,       // +
@@ -781,6 +809,9 @@ impl<'a> MathLexer<'a> {
                     if let Some(&(_, '=')) = self.chars.peek() {
                         self.chars.next();
                         tokens.push(Token::Gte);
+                    } else if let Some(&(_, '>')) = self.chars.peek() {
+                        self.chars.next();
+                        tokens.push(Token::Shr);
                     } else {
                         tokens.push(Token::Gt);
                     }
@@ -1050,8 +1081,24 @@ impl MathParser {
             }
         }
 
-        // 3. Top-level expression
+        // 3. Top-level expression or tensor export: expr >> "path:key"
         let expr = self.parse_expr()?;
+        if self.match_tok(&Token::Shr) {
+            if let Some(Token::Str(s)) = self.next_tok() {
+                let (path, key) = if let Some((p, k)) = s.rsplit_once(':') {
+                    if k.contains('/') || k.contains('\\') {
+                        (s.clone(), String::new())
+                    } else {
+                        (p.to_string(), k.to_string())
+                    }
+                } else {
+                    (s.clone(), String::new())
+                };
+                return Ok(MathItem::Export { expr, path, key });
+            } else {
+                return Err("Expected string literal file path after '>>'".to_string());
+            }
+        }
         Ok(MathItem::Expression(expr))
     }
 
@@ -1148,6 +1195,14 @@ impl MathParser {
 
     fn desugar_pipe_step(input: MathExpr, target: MathExpr) -> MathExpr {
         match target {
+            MathExpr::Binary(func, MathBinOp::Pow, count) => {
+                // Functional power / iteration: x -> f^N
+                MathExpr::Iterate {
+                    input: Box::new(input),
+                    func,
+                    count,
+                }
+            }
             MathExpr::Var(func_name) => MathExpr::Call(func_name, vec![input]),
             MathExpr::Call(func_name, mut args) => {
                 let mut found_placeholder = false;
@@ -1377,6 +1432,11 @@ impl MathEvaluator {
         for item in &prog.items {
             match item {
                 MathItem::Link(_) => {}
+                MathItem::Export { expr, path, key } => {
+                    let val = self.eval_value(expr)?;
+                    save_tensor_resource(path, key, &val)?;
+                    last_res = Some(val);
+                }
                 MathItem::Constant { name, val } => {
                     self.env.insert(name.clone(), MathValue::Scalar(*val));
                 }
@@ -1657,6 +1717,60 @@ impl MathEvaluator {
                         }
                     }
                 }
+            }
+            MathExpr::Iterate { input, func, count } => {
+                let mut curr_val = self.eval_value(input)?;
+                let count_val = self.eval_value(count)?;
+                let n = count_val.as_scalar().ok_or_else(|| {
+                    format!("Iteration count must be a scalar number, got {}", count_val)
+                })? as usize;
+
+                for _ in 0..n {
+                    match &**func {
+                        MathExpr::Var(f_name) => {
+                            if let Some((params, body)) = self.functions.get(f_name).cloned() {
+                                let mut local_eval = self.clone();
+                                if !params.is_empty() {
+                                    local_eval.env.insert(params[0].clone(), curr_val);
+                                }
+                                curr_val = local_eval.eval_value(&body)?;
+                            } else {
+                                return Err(format!("Undefined function '{}' in functional iteration", f_name));
+                            }
+                        }
+                        MathExpr::Call(f_name, args) => {
+                            let mut eval_args = Vec::new();
+                            let mut inserted = false;
+                            for arg in args {
+                                if let MathExpr::Placeholder = arg {
+                                    eval_args.push(curr_val.clone());
+                                    inserted = true;
+                                } else {
+                                    eval_args.push(self.eval_value(arg)?);
+                                }
+                            }
+                            if !inserted {
+                                eval_args.insert(0, curr_val);
+                            }
+                            if let Some((params, body)) = self.functions.get(f_name).cloned() {
+                                let mut local_eval = self.clone();
+                                for (p, a) in params.iter().zip(eval_args.into_iter()) {
+                                    local_eval.env.insert(p.clone(), a);
+                                }
+                                curr_val = local_eval.eval_value(&body)?;
+                            } else {
+                                return Err(format!("Undefined function '{}' in functional iteration", f_name));
+                            }
+                        }
+                        other => {
+                            let step_expr = MathParser::desugar_pipe_step(MathExpr::Placeholder, other.clone());
+                            let mut local_eval = self.clone();
+                            local_eval.env.insert("_".to_string(), curr_val);
+                            curr_val = local_eval.eval_value(&step_expr)?;
+                        }
+                    }
+                }
+                Ok(curr_val)
             }
             MathExpr::Pipeline(stages) => {
                 let mut curr_expr = stages[0].clone();
@@ -2065,6 +2179,19 @@ impl MathProgram {
                     other => format!("{}({})", other, arg_strs.join(", ")),
                 }
             }
+            MathExpr::Iterate { input, func, count } => {
+                let in_c23 = Self::expr_to_c23(input);
+                let n_c23 = Self::expr_to_c23(count);
+                let func_name = match &**func {
+                    MathExpr::Var(n) => n.clone(),
+                    MathExpr::Call(n, _) => n.clone(),
+                    _ => "step".to_string(),
+                };
+                format!(
+                    "({{ float _iter_val = {}; for (int _i = 0; _i < (int)({}); ++_i) {{ _iter_val = {}(_iter_val); }} _iter_val; }})",
+                    in_c23, n_c23, func_name
+                )
+            }
             MathExpr::Pipeline(stages) => {
                 let mut curr = stages[0].clone();
                 for st in &stages[1..] {
@@ -2210,6 +2337,11 @@ impl MathProgram {
         for item in &self.items {
             match item {
                 MathItem::Link(_) => {}
+                MathItem::Export { expr, .. } => {
+                    let fused_expr = expr.inline_and_expand(&fns, true, 0).simplify();
+                    let res_reg = Self::lower_expr_to_vliw(&fused_expr, &mut reg_map, &mut next_reg, &mut raw_slots);
+                    raw_slots.push(Self::seal_slot(&format!("_ST{:02X}#040", res_reg), '>'));
+                }
                 MathItem::Constant { name, val } => {
                     let r = Self::alloc_vliw_reg(&mut next_reg);
                     reg_map.insert(name.clone(), r);
@@ -2425,6 +2557,7 @@ impl MathProgram {
         slots: &mut Vec<String>,
     ) -> u8 {
         match expr {
+            MathExpr::Iterate { input, .. } => Self::lower_expr_to_vliw(input, reg_map, next_reg, slots),
             MathExpr::TensorRef { .. } | MathExpr::Array(_) | MathExpr::Index(_, _) | MathExpr::Placeholder => {
                 let r = Self::alloc_vliw_reg(next_reg);
                 slots.push(Self::seal_slot(&format!("'LD{:02X}#010", r), '>'));
@@ -2557,6 +2690,7 @@ impl<'a> PtxBuilder<'a> {
                 lines.push(format!("    mov.f32 {}, 0.0;", r));
                 r
             }
+            MathExpr::Iterate { input, .. } => self.emit_expr(input, lines),
             MathExpr::Array(_) | MathExpr::Index(_, _) | MathExpr::Placeholder => {
                 let r = self.alloc_reg();
                 lines.push(format!("    mov.f32 {}, 0.0;", r));
@@ -2702,7 +2836,7 @@ pub fn is_math_calculus_source(src: &str) -> bool {
         {
             return false;
         }
-        if t.contains("->") || (t.contains('=') && !t.contains(":=")) || t.starts_with("<<") {
+        if t.contains("->") || (t.contains('=') && !t.contains(":=")) || t.starts_with("<<") || t.contains(">>") {
             has_math_def_or_pipe = true;
         }
     }
@@ -2766,6 +2900,57 @@ impl MathProgram {
         self.items = resolved_items;
         Ok(())
     }
+}
+
+/// Saves tensor weights to Safetensors or plain text / CLL tensor files
+pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        if !parent.as_os_str().is_empty() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
+    if path.ends_with(".safetensors") {
+        let (shape, raw_bytes) = match val {
+            MathValue::Scalar(s) => (vec![1usize], (*s as f32).to_le_bytes().to_vec()),
+            MathValue::Vector(vec) => {
+                let bytes: Vec<u8> = vec.iter().flat_map(|&x| (x as f32).to_le_bytes()).collect();
+                (vec![vec.len()], bytes)
+            }
+            MathValue::Matrix(mat) => {
+                let rows = mat.len();
+                let cols = mat.first().map(|r| r.len()).unwrap_or(0);
+                let bytes: Vec<u8> = mat.iter().flatten().flat_map(|&x| (x as f32).to_le_bytes()).collect();
+                (vec![rows, cols], bytes)
+            }
+        };
+
+        let tensor_name = if key.is_empty() { "weights" } else { key };
+        let header_json = format!(
+            "{{\"{}\":{{\"dtype\":\"F32\",\"shape\":{:?},\"data_offsets\":[0,{}]}}}}",
+            tensor_name,
+            shape,
+            raw_bytes.len()
+        );
+        let header_bytes = header_json.as_bytes();
+        let header_len = header_bytes.len() as u64;
+
+        let mut file_bytes = Vec::with_capacity(8 + header_bytes.len() + raw_bytes.len());
+        file_bytes.extend_from_slice(&header_len.to_le_bytes());
+        file_bytes.extend_from_slice(header_bytes);
+        file_bytes.extend_from_slice(&raw_bytes);
+
+        std::fs::write(path, file_bytes)
+            .map_err(|e| format!("Failed to write safetensors '{}': {}", path, e))?;
+    } else {
+        // Plain text CLL / CSV format
+        let name = if key.is_empty() { "tensor" } else { key };
+        let out_str = format!("{} = {}\n", name, val);
+        std::fs::write(path, out_str)
+            .map_err(|e| format!("Failed to write tensor file '{}': {}", path, e))?;
+    }
+
+    Ok(())
 }
 
 /// Loads tensor weights from Safetensors or plain text / CLL tensor files
@@ -3264,6 +3449,55 @@ mod tests {
         let res = eval.execute_program(&prog).expect("Evaluation of external tensor failed");
         // W @ [4, 5] = [2*4+0*5, 0*4+3*5] = [8, 15], y[1] = 15.0
         assert_eq!(res, Some(15.0));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_functional_iteration_power_training_loop() {
+        let code = r#"
+            loss(w: f32) = (w * 2.0 - 10.0)^2
+            step(w: f32) = w - 0.05 * grad(loss(w), w)
+            w_opt = 0.0 -> step^50
+            w_opt
+        "#;
+        let prog = parse_math_code(code).expect("Failed to parse functional power iteration");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Evaluation of training loop failed");
+        // w starts at 0, converges to 5.0
+        assert!((res.unwrap() - 5.0).abs() < 1e-4, "Expected 5.0, got {:?}", res);
+
+        // Verify C23 lowering emits functional loop
+        let c23 = prog.to_c23_executable();
+        assert!(c23.contains("for (int _i = 0; _i < (int)(50"));
+    }
+
+    #[test]
+    fn test_safetensors_export_and_import_roundtrip() {
+        let temp_dir = std::env::temp_dir().join(format!("cron_test_export_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let sf_file = temp_dir.join("matrix.safetensors");
+        let p_str = sf_file.to_str().unwrap().replace('\\', "/");
+
+        let export_code = format!(
+            "            W = [[1.5, 2.5], [3.5, 4.5]]\n            W >> \"{}:weights\"\n",
+            p_str
+        );
+        let prog_exp = parse_math_code(&export_code).expect("Failed to parse export code");
+        let mut eval_exp = MathEvaluator::new();
+        eval_exp.execute_program_value(&prog_exp).expect("Execution of export failed");
+        assert!(sf_file.exists(), "Safetensors file was not written to disk");
+
+        // Read it back via @
+        let import_code = format!(
+            "            W_read = @\"{}:weights\"\n            x = [2.0, 1.0]\n            y = W_read @ x\n            y[0]\n",
+            p_str
+        );
+        let prog_imp = parse_math_code(&import_code).expect("Failed to parse import code");
+        let mut eval_imp = MathEvaluator::new();
+        let res = eval_imp.execute_program(&prog_imp).expect("Execution of import/matmul failed");
+        // [1.5*2 + 2.5*1, 3.5*2 + 4.5*1] = [3.0+2.5, 7.0+4.5] = [5.5, 11.5], y[0] = 5.5
+        assert!((res.unwrap() - 5.5).abs() < 1e-5, "Expected 5.5, got {:?}", res);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

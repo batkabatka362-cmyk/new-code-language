@@ -27,3 +27,4 @@ grad_w(w: f32, x: f32, y: f32) = grad(loss(w, x, y), w)
 x = [1.2, -0.8]
 x_norm = x -> rmsnorm
 x_norm[0]
+
