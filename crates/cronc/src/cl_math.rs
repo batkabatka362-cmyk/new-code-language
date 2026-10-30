@@ -1680,13 +1680,64 @@ impl MathEvaluator {
                     })),
                     "softmax" => {
                         let val = self.eval_single_val(args, "softmax")?;
-                        let elems = val.flatten_elements();
-                        let max_v = elems.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                        let exps: Vec<f64> = elems.iter().map(|&x| (x - max_v).exp()).collect();
-                        let sum_exp: f64 = exps.iter().sum();
-                        Ok(MathValue::Vector(
-                            exps.into_iter().map(|e| e / sum_exp).collect(),
-                        ))
+                        match val {
+                            MathValue::Scalar(_) => Ok(MathValue::Scalar(1.0)),
+                            MathValue::Vector(vec) => {
+                                let max_v = vec.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                                let exps: Vec<f64> = vec.iter().map(|&x| (x - max_v).exp()).collect();
+                                let sum_val: f64 = exps.iter().sum();
+                                let sum_exp = sum_val.max(1e-12);
+                                Ok(MathValue::Vector(exps.into_iter().map(|e| e / sum_exp).collect()))
+                            }
+                            MathValue::Matrix(mat) => {
+                                let mut res = Vec::new();
+                                for row in mat {
+                                    let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                                    let exps: Vec<f64> = row.iter().map(|&x| (x - max_v).exp()).collect();
+                                    let sum_val: f64 = exps.iter().sum();
+                                    let sum_exp = sum_val.max(1e-12);
+                                    res.push(exps.into_iter().map(|e| e / sum_exp).collect());
+                                }
+                                Ok(MathValue::Matrix(res))
+                            }
+                        }
+                    }
+                    "attention" | "flash_attn" | "attn" => {
+                        if args.len() < 3 {
+                            return Err("'attention(Q, K, V)' requires at least 3 arguments".to_string());
+                        }
+                        let q = self.eval_value(&args[0])?;
+                        let k = self.eval_value(&args[1])?;
+                        let v = self.eval_value(&args[2])?;
+                        let scale = if args.len() > 3 {
+                            self.eval_value(&args[3])?.as_scalar().unwrap_or(1.0)
+                        } else {
+                            match &q {
+                                MathValue::Matrix(m) => {
+                                    let d = m.first().map(|r| r.len()).unwrap_or(1) as f64;
+                                    1.0 / d.sqrt().max(1e-6)
+                                }
+                                _ => 1.0,
+                            }
+                        };
+                        let k_t = k.transpose()?;
+                        let scores = self.eval_binary_op(&q, MathBinOp::MatMul, &k_t)?;
+                        let scaled_scores = self.eval_binary_op(&scores, MathBinOp::Mul, &MathValue::Scalar(scale))?;
+                        let p = match scaled_scores {
+                            MathValue::Matrix(mat) => {
+                                let mut res = Vec::new();
+                                for row in mat {
+                                    let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                                    let exps: Vec<f64> = row.iter().map(|&x| (x - max_v).exp()).collect();
+                                    let sum_val: f64 = exps.iter().sum();
+                                    let sum_exp = sum_val.max(1e-12);
+                                    res.push(exps.into_iter().map(|e| e / sum_exp).collect());
+                                }
+                                MathValue::Matrix(res)
+                            }
+                            other => other,
+                        };
+                        self.eval_binary_op(&p, MathBinOp::MatMul, &v)
                     }
                     "norm" => {
                         let val = self.eval_single_val(args, "norm")?;
@@ -2618,11 +2669,48 @@ impl MathProgram {
                     Some(vec![])
                 }
                 "exp" | "ln" | "log" | "sqrt" | "sin" | "cos" | "tan" | "tanh" | "abs"
-                | "sigmoid" | "relu" | "gelu" => {
+                | "sigmoid" | "relu" | "gelu" | "softmax" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
                         Some(vec![])
+                    }
+                }
+                "attention" | "flash_attn" | "attn" => {
+                    if args.len() >= 3 {
+                        let q = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let k = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        let v = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        if let (Some(q_s), Some(k_s), Some(v_s)) = (q, k, v) {
+                            if q_s.len() == 2 && k_s.len() == 2 && v_s.len() == 2 {
+                                if q_s[1] != k_s[1] {
+                                    errors.push(format!(
+                                        "{}Attention head dimension mismatch: Q has dim {} but K has dim {}",
+                                        prefix, q_s[1], k_s[1]
+                                    ));
+                                    None
+                                } else if k_s[0] != v_s[0] {
+                                    errors.push(format!(
+                                        "{}Attention sequence length mismatch: K has seq_len {} but V has seq_len {}",
+                                        prefix, k_s[0], v_s[0]
+                                    ));
+                                    None
+                                } else {
+                                    Some(vec![q_s[0], v_s[1]])
+                                }
+                            } else {
+                                errors.push(format!(
+                                    "{}Attention requires 2D matrices [seq, dim] for Q, K, V",
+                                    prefix
+                                ));
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!("{}Attention expects at least 3 arguments (Q, K, V)", prefix));
+                        None
                     }
                 }
                 user_fn => {
@@ -3076,6 +3164,33 @@ impl MathProgram {
                 body,
             } = item
             {
+                // Check if function is a 2D Tensor Core tile (e.g. A: f16[16, 16], B: f16[16, 16])
+                let is_wmma_gemm = params.len() == 2
+                    && params[0].dims == vec![16, 16]
+                    && params[1].dims == vec![16, 16]
+                    && params[0].dtype == MathDtype::F16
+                    && params[1].dtype == MathDtype::F16;
+
+                if is_wmma_gemm {
+                    out.push_str(&format!(
+                        "// NVIDIA Ampere/Hopper Tensor Core WMMA 16x16x16 Tile\n.visible .entry {}(\n    .param .u64 param_A,\n    .param .u64 param_B,\n    .param .u64 param_out\n) {{\n",
+                        name
+                    ));
+                    out.push_str("    .reg .b64 %rd<4>;\n    .reg .b32 %r<16>;\n    .reg .f32 %acc<8>;\n\n");
+                    out.push_str("    ld.param.u64 %rd0, [param_A];\n");
+                    out.push_str("    ld.param.u64 %rd1, [param_B];\n");
+                    out.push_str("    ld.param.u64 %rd2, [param_out];\n\n");
+                    out.push_str("    // Load 16x16 FP16 matrix tiles into Warp Matrix registers\n");
+                    out.push_str("    wmma.load.a.sync.aligned.row.m16n16k16.f16 {%r0, %r1, %r2, %r3, %r4, %r5, %r6, %r7}, [%rd0], 16;\n");
+                    out.push_str("    wmma.load.b.sync.aligned.row.m16n16k16.f16 {%r8, %r9, %r10, %r11, %r12, %r13, %r14, %r15}, [%rd1], 16;\n\n");
+                    out.push_str("    // Execute Tensor Core Hardware Matrix Multiply-Accumulate\n");
+                    out.push_str("    wmma.mma.sync.aligned.row.row.m16n16k16.f32.f16 {%acc0, %acc1, %acc2, %acc3, %acc4, %acc5, %acc6, %acc7}, {%r0, %r1, %r2, %r3, %r4, %r5, %r6, %r7}, {%r8, %r9, %r10, %r11, %r12, %r13, %r14, %r15}, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};\n\n");
+                    out.push_str("    // Store FP32 result tile to global memory\n");
+                    out.push_str("    wmma.store.d.sync.aligned.row.m16n16k16.f32 [%rd2], {%acc0, %acc1, %acc2, %acc3, %acc4, %acc5, %acc6, %acc7}, 16;\n");
+                    out.push_str("    ret;\n}\n\n");
+                    continue;
+                }
+
                 let inferred_ret = Self::infer_return_dtype(params, ret_type);
                 let r_ptx = inferred_ret.to_ptx_type();
                 let fused_body = body.inline_and_expand(&fns, true, 0).simplify();
@@ -4446,5 +4561,36 @@ mod tests {
         assert!(c23_exec.contains("alignas(64) float y[2];"), "Expected alignas(64) output buffer");
         assert!(!c23_exec.contains("malloc"), "C23 static stack arena must have 0 malloc calls");
         assert!(!c23_exec.contains("free("), "C23 static stack arena must have 0 free calls");
+    }
+
+    #[test]
+    fn test_row_wise_matrix_softmax_and_attention() {
+        let code = r#"
+            Q = [[1.0, 0.0], [0.0, 1.0]]
+            K = [[1.0, 0.0], [0.0, 1.0]]
+            V = [[10.0, 20.0], [30.0, 40.0]]
+            out = attention(Q, K, V)
+            sum(out)
+        "#;
+        let prog = parse_math_code(code).expect("Attention code parsing failed");
+        assert!(prog.verify_shapes().is_ok(), "Attention shape verification must pass");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Attention execution failed");
+        // Sum of attention output over rows is exactly 100.0
+        assert!((res.unwrap() - 100.0).abs() < 1e-4, "Attention sum should equal 100.0");
+    }
+
+    #[test]
+    fn test_ptx_tensor_core_wmma_emission() {
+        let code = r#"
+            gemm_tc(A: f16[16, 16], B: f16[16, 16]) = A @ B
+        "#;
+        let prog = parse_math_code(code).expect("Parsing wmma tile failed");
+        assert!(prog.verify_shapes().is_ok(), "Shapes should be valid");
+        let ptx = prog.to_ptx();
+        assert!(ptx.contains("wmma.load.a.sync.aligned.row.m16n16k16.f16"), "Expected WMMA load A");
+        assert!(ptx.contains("wmma.load.b.sync.aligned.row.m16n16k16.f16"), "Expected WMMA load B");
+        assert!(ptx.contains("wmma.mma.sync.aligned.row.row.m16n16k16.f32.f16"), "Expected WMMA MMA instruction");
+        assert!(ptx.contains("wmma.store.d.sync.aligned.row.m16n16k16.f32"), "Expected WMMA store");
     }
 }
