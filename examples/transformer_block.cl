@@ -1,30 +1,39 @@
 // ============================================================================
-// CRON SOVEREIGN MATHEMATICS: FULL TRANSFORMER BLOCK
-// Pure Zero-Verbal Calculus (Attention + RMSNorm + SwiGLU + AdamW)
+// CRON Sovereign Modern Transformer Block (LLaMA-3 / DeepSeek-V3 Standard)
+// Zero-Word Mathematical Calculus: Pre-RMSNorm + RoPE + Self-Attn + SwiGLU MLP
 // ============================================================================
 
-<< "libcl/math/attention.cl"
-<< "libcl/math/adam.cl"
+// 1. Attention Projection Weights
+W_q = [[1.0, 0.0], [0.0, 1.0]]
+W_k = [[1.0, 0.0], [0.0, 1.0]]
+W_v = [[1.0, 2.0], [3.0, 4.0]]
+gamma1 = [1.0, 1.0]
 
-eps_norm = 1e-5
+// 2. SwiGLU MLP Projection Weights
+W_gate = [[1.0, 0.5], [0.5, 1.0]]
+W_up   = [[0.5, 1.0], [1.0, 0.5]]
+W_down = [[1.0, 0.0], [0.0, 1.0]]
+gamma2 = [1.0, 1.0]
 
-// 1. RMSNorm: Root Mean Square Normalization
-rmsnorm(x: f32) = x / sqrt(mean(x^2) + eps_norm)
+// 3. Input Hidden States (Batch of 2 tokens, 2 hidden dimensions)
+x = [[1.0, 2.0], [3.0, 4.0]]
 
-// 2. SwiGLU Activation: silu(gate) * up
-silu(x: f32) = x / (1.0 + exp(-x))
-swiglu(gate: f32, up: f32) = (gate -> silu) * up
+// 4. Pre-RMSNorm & Rotary Position Embeddings (RoPE)
+x_norm1 = rmsnorm(x, gamma1)
+q = rope(x_norm1 @ W_q, 0)
+k = rope(x_norm1 @ W_k, 0)
+v = x_norm1 @ W_v
 
-// 3. Feed-Forward Network
-ffn(x: f32, Wg: f32, Wu: f32, Wd: f32) =
-    Wd @ swiglu(Wg @ x, Wu @ x)
+// 5. Scaled Dot-Product Attention with Residual Connection
+attn_out = attention(q, k, v)
+x_mid = x + attn_out
 
-// 4. Analytical Training Loss & Gradient
-loss(w: f32, x: f32, y: f32) = (w * x - y)^2
-grad_w(w: f32, x: f32, y: f32) = grad(loss(w, x, y), w)
+// 6. SwiGLU MLP Block with Residual Connection
+x_norm2 = rmsnorm(x_mid, gamma2)
+h_gate = silu(x_norm2 @ W_gate)
+h_up = x_norm2 @ W_up
+mlp_out = (h_gate * h_up) @ W_down
+x_out = x_mid + mlp_out
 
-// 5. Forward Inference with Input Vector
-x = [1.2, -0.8]
-x_norm = x -> rmsnorm
-x_norm[0]
-
+// Output sum reduction
+sum(x_out)

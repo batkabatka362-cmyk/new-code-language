@@ -1675,6 +1675,9 @@ impl MathEvaluator {
                     "relu" => Ok(self
                         .eval_single_val(args, "relu")?
                         .map_unary(|z| z.max(0.0))),
+                    "silu" => Ok(self
+                        .eval_single_val(args, "silu")?
+                        .map_unary(|z| z / (1.0 + (-z).exp()))),
                     "gelu" => Ok(self.eval_single_val(args, "gelu")?.map_unary(|z| {
                         0.5 * z * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh())
                     })),
@@ -1744,6 +1747,101 @@ impl MathEvaluator {
                         let elems = val.flatten_elements();
                         let sq_sum: f64 = elems.iter().map(|x| x * x).sum();
                         Ok(MathValue::Scalar(sq_sum.sqrt()))
+                    }
+                    "rmsnorm" => {
+                        if args.is_empty() {
+                            return Err("'rmsnorm(x, [gamma], [eps])' requires at least 1 argument".to_string());
+                        }
+                        let x = self.eval_value(&args[0])?;
+                        let gamma_opt = if args.len() > 1 {
+                            Some(self.eval_value(&args[1])?)
+                        } else {
+                            None
+                        };
+                        let eps = if args.len() > 2 {
+                            self.eval_value(&args[2])?.as_scalar().unwrap_or(1e-6)
+                        } else {
+                            1e-6
+                        };
+                        match x {
+                            MathValue::Scalar(s) => {
+                                let norm_s = s / (s * s + eps).sqrt();
+                                if let Some(MathValue::Scalar(g)) = gamma_opt {
+                                    Ok(MathValue::Scalar(norm_s * g))
+                                } else {
+                                    Ok(MathValue::Scalar(norm_s))
+                                }
+                            }
+                            MathValue::Vector(vec) => {
+                                let mean_sq = vec.iter().map(|&v| v * v).sum::<f64>() / vec.len().max(1) as f64;
+                                let rms = (mean_sq + eps).sqrt();
+                                let mut norm_v: Vec<f64> = vec.iter().map(|&v| v / rms).collect();
+                                if let Some(g_val) = gamma_opt {
+                                    let g_elems = g_val.flatten_elements();
+                                    for (i, v) in norm_v.iter_mut().enumerate() {
+                                        let g = g_elems.get(i).copied().unwrap_or(1.0);
+                                        *v *= g;
+                                    }
+                                }
+                                Ok(MathValue::Vector(norm_v))
+                            }
+                            MathValue::Matrix(mat) => {
+                                let g_elems_opt = gamma_opt.map(|g| g.flatten_elements());
+                                let mut res = Vec::new();
+                                for row in mat {
+                                    let mean_sq = row.iter().map(|&v| v * v).sum::<f64>() / row.len().max(1) as f64;
+                                    let rms = (mean_sq + eps).sqrt();
+                                    let mut norm_r: Vec<f64> = row.iter().map(|&v| v / rms).collect();
+                                    if let Some(ref g_elems) = g_elems_opt {
+                                        for (i, v) in norm_r.iter_mut().enumerate() {
+                                            let g = g_elems.get(i).copied().unwrap_or(1.0);
+                                            *v *= g;
+                                        }
+                                    }
+                                    res.push(norm_r);
+                                }
+                                Ok(MathValue::Matrix(res))
+                            }
+                        }
+                    }
+                    "rope" => {
+                        if args.is_empty() {
+                            return Err("'rope(x, [pos])' requires at least 1 argument".to_string());
+                        }
+                        let x = self.eval_value(&args[0])?;
+                        let base_pos = if args.len() > 1 {
+                            self.eval_value(&args[1])?.as_scalar().unwrap_or(0.0)
+                        } else {
+                            0.0
+                        };
+                        let rotate_vec = |v: &[f64], pos: f64| -> Vec<f64> {
+                            let mut out = v.to_vec();
+                            let d = v.len();
+                            for i in (0..d).step_by(2) {
+                                if i + 1 < d {
+                                    let theta = pos * 10000.0_f64.powf(-(i as f64) / (d as f64));
+                                    let cos_t = theta.cos();
+                                    let sin_t = theta.sin();
+                                    let x0 = v[i];
+                                    let x1 = v[i + 1];
+                                    out[i] = x0 * cos_t - x1 * sin_t;
+                                    out[i + 1] = x0 * sin_t + x1 * cos_t;
+                                }
+                            }
+                            out
+                        };
+                        match x {
+                            MathValue::Scalar(s) => Ok(MathValue::Scalar(s)),
+                            MathValue::Vector(v) => Ok(MathValue::Vector(rotate_vec(&v, base_pos))),
+                            MathValue::Matrix(mat) => {
+                                let mut res = Vec::new();
+                                for (row_idx, row) in mat.iter().enumerate() {
+                                    let pos = base_pos + row_idx as f64;
+                                    res.push(rotate_vec(row, pos));
+                                }
+                                Ok(MathValue::Matrix(res))
+                            }
+                        }
                     }
                     "mean" | "sum" => {
                         if args.is_empty() {
@@ -2669,7 +2767,7 @@ impl MathProgram {
                     Some(vec![])
                 }
                 "exp" | "ln" | "log" | "sqrt" | "sin" | "cos" | "tan" | "tanh" | "abs"
-                | "sigmoid" | "relu" | "gelu" | "softmax" => {
+                | "sigmoid" | "relu" | "gelu" | "softmax" | "silu" | "rmsnorm" | "rope" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
@@ -3002,6 +3100,7 @@ impl MathProgram {
                     "tanh" => format!("tanhf({})", a0),
                     "abs" => format!("fabsf({})", a0),
                     "sigmoid" => format!("(1.0f / (1.0f + expf(-{})))", a0),
+                    "silu" => format!("(({0}) / (1.0f + expf(-({0}))))", a0),
                     "relu" => format!("(({}) > 0.0f ? ({}) : 0.0f)", a0, a0),
                     "gelu" => format!(
                         "(0.5f * ({0}) * (1.0f + tanhf(0.79788456f * (({0}) + 0.044715f * (({0}) * ({0}) * ({0}))))))",
@@ -3727,6 +3826,19 @@ impl<'a> PtxBuilder<'a> {
                         lines.push(format!("    ex2.approx.f32 {}, {};", ex, scaled));
                         lines.push(format!("    add.f32 {}, {}, 1.0;", denom, ex));
                         lines.push(format!("    rcp.rn.f32 {}, {};", dst, denom));
+                    }
+                    "silu" => {
+                        let neg = self.alloc_reg();
+                        let scaled = self.alloc_reg();
+                        let ex = self.alloc_reg();
+                        let denom = self.alloc_reg();
+                        let sig = self.alloc_reg();
+                        lines.push(format!("    neg.f32 {}, {};", neg, arg0));
+                        lines.push(format!("    mul.f32 {}, {}, 1.442695;", scaled, neg));
+                        lines.push(format!("    ex2.approx.f32 {}, {};", ex, scaled));
+                        lines.push(format!("    add.f32 {}, {}, 1.0;", denom, ex));
+                        lines.push(format!("    rcp.rn.f32 {}, {};", sig, denom));
+                        lines.push(format!("    mul.f32 {}, {}, {};", dst, arg0, sig));
                     }
                     _ => lines.push(format!("    mov.f32 {}, {};", dst, arg0)),
                 }
@@ -4592,5 +4704,44 @@ mod tests {
         assert!(ptx.contains("wmma.load.b.sync.aligned.row.m16n16k16.f16"), "Expected WMMA load B");
         assert!(ptx.contains("wmma.mma.sync.aligned.row.row.m16n16k16.f32.f16"), "Expected WMMA MMA instruction");
         assert!(ptx.contains("wmma.store.d.sync.aligned.row.m16n16k16.f32"), "Expected WMMA store");
+    }
+
+    #[test]
+    fn test_llm_operators_rmsnorm_rope_silu() {
+        // Test RMSNorm
+        let code_norm = r#"
+            x = [3.0, 4.0]
+            g = [1.0, 1.0]
+            // norm: rms of [3, 4] is sqrt(25/2) = sqrt(12.5) ~ 3.5355
+            // x_norm: [3/3.5355, 4/3.5355] -> sum of squares is 2.0
+            y = rmsnorm(x, g, 0.0)
+            sum(y^2)
+        "#;
+        let prog_norm = parse_math_code(code_norm).expect("Parse rmsnorm failed");
+        let mut eval_norm = MathEvaluator::new();
+        let res_norm = eval_norm.execute_program(&prog_norm).expect("Eval rmsnorm failed");
+        assert!((res_norm.unwrap() - 2.0).abs() < 1e-4, "RMSNorm squared sum should be 2.0 (length of vector)");
+
+        // Test RoPE
+        let code_rope = r#"
+            x = [1.0, 0.0]
+            // pos 0: angle 0 -> [1.0, 0.0]
+            r0 = rope(x, 0)
+            r0[0]
+        "#;
+        let prog_rope = parse_math_code(code_rope).expect("Parse rope failed");
+        let mut eval_rope = MathEvaluator::new();
+        let res_rope = eval_rope.execute_program(&prog_rope).expect("Eval rope failed");
+        assert!((res_rope.unwrap() - 1.0).abs() < 1e-6);
+
+        // Test SiLU
+        let code_silu = r#"
+            // silu(0) = 0 * 0.5 = 0
+            silu(0.0)
+        "#;
+        let prog_silu = parse_math_code(code_silu).expect("Parse silu failed");
+        let mut eval_silu = MathEvaluator::new();
+        let res_silu = eval_silu.execute_program(&prog_silu).expect("Eval silu failed");
+        assert_eq!(res_silu, Some(0.0));
     }
 }
