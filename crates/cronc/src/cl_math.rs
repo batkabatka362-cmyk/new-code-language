@@ -93,13 +93,158 @@ pub enum MathValue {
     Vector(Vec<f64>),
     Matrix(Vec<Vec<f64>>),
     Tuple(Vec<MathValue>),
+    Tensor {
+        shape: Vec<usize>,
+        strides: Vec<usize>,
+        data: Vec<f64>,
+    },
 }
 
 impl MathValue {
+    pub fn compute_contiguous_strides(shape: &[usize]) -> Vec<usize> {
+        if shape.is_empty() {
+            return vec![];
+        }
+        let mut strides = vec![1; shape.len()];
+        for i in (0..shape.len() - 1).rev() {
+            strides[i] = strides[i + 1] * shape[i + 1];
+        }
+        strides
+    }
+
+    pub fn new_tensor(shape: Vec<usize>, data: Vec<f64>) -> Result<Self, String> {
+        let expected_total: usize = if shape.is_empty() { 0 } else { shape.iter().product() };
+        if !data.is_empty() && expected_total != data.len() {
+            return Err(format!(
+                "Tensor shape {:?} expects {} elements, but got {}",
+                shape, expected_total, data.len()
+            ));
+        }
+        let strides = Self::compute_contiguous_strides(&shape);
+        Ok(MathValue::Tensor { shape, strides, data })
+    }
+
+    pub fn get_flattened_strided(shape: &[usize], strides: &[usize], data: &[f64]) -> Vec<f64> {
+        if shape.is_empty() {
+            return data.first().copied().map(|x| vec![x]).unwrap_or_default();
+        }
+        let total: usize = shape.iter().product();
+        if data.is_empty() {
+            return vec![0.0; total];
+        }
+        let mut res = Vec::with_capacity(total);
+        let ndim = shape.len();
+        let mut idxs = vec![0; ndim];
+        for _ in 0..total {
+            let mut offset = 0;
+            for d in 0..ndim {
+                offset += idxs[d] * strides[d];
+            }
+            res.push(data.get(offset).copied().unwrap_or(0.0));
+            for d in (0..ndim).rev() {
+                idxs[d] += 1;
+                if idxs[d] < shape[d] {
+                    break;
+                }
+                idxs[d] = 0;
+            }
+        }
+        res
+    }
+
+    pub fn to_contiguous(&self) -> MathValue {
+        match self {
+            MathValue::Tensor { shape, strides, data } => {
+                let canonical = Self::compute_contiguous_strides(shape);
+                if strides == &canonical {
+                    self.clone()
+                } else {
+                    let flat = Self::get_flattened_strided(shape, strides, data);
+                    MathValue::Tensor {
+                        shape: shape.clone(),
+                        strides: canonical,
+                        data: flat,
+                    }
+                }
+            }
+            other => other.clone(),
+        }
+    }
+
+    pub fn transpose_axes(&self, ax1: usize, ax2: usize) -> Result<MathValue, String> {
+        match self {
+            MathValue::Tensor { shape, strides, data } => {
+                let ndim = shape.len();
+                if ax1 >= ndim || ax2 >= ndim {
+                    return Err(format!(
+                        "Axis index out of bounds for transpose_axes: axes ({}, {}) for rank {}",
+                        ax1, ax2, ndim
+                    ));
+                }
+                let mut new_shape = shape.clone();
+                let mut new_strides = strides.clone();
+                new_shape.swap(ax1, ax2);
+                new_strides.swap(ax1, ax2);
+                Ok(MathValue::Tensor {
+                    shape: new_shape,
+                    strides: new_strides,
+                    data: data.clone(),
+                })
+            }
+            MathValue::Matrix(_) => {
+                if (ax1 == 0 && ax2 == 1) || (ax1 == 1 && ax2 == 0) {
+                    self.transpose()
+                } else {
+                    Err(format!("Invalid axes ({}, {}) for 2D matrix", ax1, ax2))
+                }
+            }
+            _ => Err("transpose_axes requires Tensor or Matrix".to_string()),
+        }
+    }
+
+    pub fn permute(&self, dims: &[usize]) -> Result<MathValue, String> {
+        match self {
+            MathValue::Tensor { shape, strides, data } => {
+                let ndim = shape.len();
+                if dims.len() != ndim {
+                    return Err(format!(
+                        "permute dims length {} does not match tensor rank {}",
+                        dims.len(), ndim
+                    ));
+                }
+                let mut seen = vec![false; ndim];
+                for &d in dims {
+                    if d >= ndim || seen[d] {
+                        return Err(format!("Invalid permutation dims: {:?}", dims));
+                    }
+                    seen[d] = true;
+                }
+                let new_shape: Vec<usize> = dims.iter().map(|&d| shape[d]).collect();
+                let new_strides: Vec<usize> = dims.iter().map(|&d| strides[d]).collect();
+                Ok(MathValue::Tensor {
+                    shape: new_shape,
+                    strides: new_strides,
+                    data: data.clone(),
+                })
+            }
+            MathValue::Matrix(_) => {
+                if dims == [1, 0] {
+                    self.transpose()
+                } else if dims == [0, 1] {
+                    Ok(self.clone())
+                } else {
+                    Err(format!("Invalid permutation {:?} for 2D matrix", dims))
+                }
+            }
+            _ => Err("permute requires Tensor or Matrix".to_string()),
+        }
+    }
+
     pub fn as_scalar(&self) -> Option<f64> {
         match self {
             MathValue::Scalar(v) => Some(*v),
             MathValue::Vector(vec) if vec.len() == 1 => Some(vec[0]),
+            MathValue::Tensor { data, .. } if data.len() == 1 => Some(data[0]),
             _ => None,
         }
     }
@@ -120,6 +265,11 @@ impl MathValue {
             MathValue::Tuple(items) => {
                 MathValue::Tuple(items.iter().map(|item| item.map_unary_dyn(f)).collect())
             }
+            MathValue::Tensor { shape, strides, data } => MathValue::Tensor {
+                shape: shape.clone(),
+                strides: strides.clone(),
+                data: data.iter().map(|&x| f(x)).collect(),
+            },
         }
     }
 
@@ -129,6 +279,9 @@ impl MathValue {
             MathValue::Vector(vec) => vec.clone(),
             MathValue::Matrix(mat) => mat.iter().flatten().copied().collect(),
             MathValue::Tuple(items) => items.iter().flat_map(|item| item.flatten_elements()).collect(),
+            MathValue::Tensor { shape, strides, data } => {
+                Self::get_flattened_strided(shape, strides, data)
+            }
         }
     }
 
@@ -162,6 +315,22 @@ impl MathValue {
                 }
                 Ok(MathValue::Tuple(res))
             }
+            MathValue::Tensor { shape, strides, data } => {
+                if shape.len() < 2 {
+                    Ok(self.clone())
+                } else {
+                    let n = shape.len();
+                    let mut new_shape = shape.clone();
+                    let mut new_strides = strides.clone();
+                    new_shape.swap(n - 2, n - 1);
+                    new_strides.swap(n - 2, n - 1);
+                    Ok(MathValue::Tensor {
+                        shape: new_shape,
+                        strides: new_strides,
+                        data: data.clone(),
+                    })
+                }
+            }
         }
     }
 
@@ -192,15 +361,12 @@ impl MathValue {
             }
             return Ok(MathValue::Matrix(mat));
         }
-        let cols = *dims.last().unwrap_or(&1);
-        let rows = elems.len() / cols.max(1);
-        let mut mat = Vec::with_capacity(rows);
-        for r in 0..rows {
-            let start = r * cols;
-            let end = (start + cols).min(elems.len());
-            mat.push(elems[start..end].to_vec());
-        }
-        Ok(MathValue::Matrix(mat))
+        let strides = Self::compute_contiguous_strides(dims);
+        Ok(MathValue::Tensor {
+            shape: dims.to_vec(),
+            strides,
+            data: elems,
+        })
     }
 
     pub fn slice(&self, start: usize, end: usize) -> Result<MathValue, String> {
@@ -233,6 +399,29 @@ impl MathValue {
                     Ok(MathValue::Tuple(items[s..e].to_vec()))
                 }
             }
+            MathValue::Tensor { shape, strides, data } => {
+                if shape.is_empty() {
+                    return Err("Cannot slice empty tensor".to_string());
+                }
+                let d0 = shape[0];
+                let s = start.min(d0);
+                let e = end.min(d0);
+                let mut new_shape = shape.clone();
+                if s >= e {
+                    new_shape[0] = 0;
+                    let new_strides = Self::compute_contiguous_strides(&new_shape);
+                    Ok(MathValue::Tensor { shape: new_shape, strides: new_strides, data: Vec::new() })
+                } else {
+                    new_shape[0] = e - s;
+                    let flat = Self::get_flattened_strided(shape, strides, data);
+                    let elems_per_d0: usize = shape[1..].iter().product();
+                    let s_offset = s * elems_per_d0;
+                    let e_offset = e * elems_per_d0;
+                    let new_data = flat[s_offset..e_offset.min(flat.len())].to_vec();
+                    let new_strides = Self::compute_contiguous_strides(&new_shape);
+                    Ok(MathValue::Tensor { shape: new_shape, strides: new_strides, data: new_data })
+                }
+            }
         }
     }
 
@@ -242,6 +431,7 @@ impl MathValue {
             MathValue::Vector(v) => vec![v.len()],
             MathValue::Matrix(m) => vec![m.len(), m.first().map(|r| r.len()).unwrap_or(0)],
             MathValue::Tuple(items) => vec![items.len()],
+            MathValue::Tensor { shape, .. } => shape.clone(),
         }
     }
 
@@ -255,6 +445,11 @@ impl MathValue {
                 MathValue::Matrix(vec![vec![0.0; cols]; rows])
             }
             MathValue::Tuple(items) => MathValue::Tuple(items.iter().map(|i| i.zeros_like()).collect()),
+            MathValue::Tensor { shape, strides, data } => MathValue::Tensor {
+                shape: shape.clone(),
+                strides: strides.clone(),
+                data: vec![0.0; data.len()],
+            },
         }
     }
 
@@ -328,6 +523,29 @@ impl MathValue {
                     ))
                 }
             }
+            (
+                MathValue::Tensor {
+                    shape: s1,
+                    data: d1,
+                    ..
+                },
+                MathValue::Tensor {
+                    shape: s2,
+                    data: d2,
+                    ..
+                },
+            ) => {
+                if s1 != s2 || d1.len() != d2.len() {
+                    return Err(format!(
+                        "Shape mismatch in tensor accumulation: {:?} vs {:?}",
+                        s1, s2
+                    ));
+                }
+                for (a, &b) in d1.iter_mut().zip(d2.iter()) {
+                    *a += b;
+                }
+                Ok(())
+            }
             (MathValue::Scalar(s), tensor) => {
                 *s += tensor.flatten_elements().iter().sum::<f64>();
                 Ok(())
@@ -369,6 +587,67 @@ impl MathValue {
                 }
             }
             MathValue::Tuple(_) => Err("Cannot sum_axis on a Tuple".to_string()),
+            MathValue::Tensor { shape, strides, data } => {
+                let ndim = shape.len();
+                if axis >= ndim {
+                    return Err(format!("Axis {} out of bounds for tensor of rank {}", axis, ndim));
+                }
+                let mut out_shape = shape.clone();
+                let _removed_dim = out_shape.remove(axis);
+                let out_total: usize = if out_shape.is_empty() { 1 } else { out_shape.iter().product() };
+                let mut out_data = vec![0.0; out_total];
+                let out_strides = Self::compute_contiguous_strides(&out_shape);
+
+                let total: usize = shape.iter().product();
+                let mut idxs = vec![0; ndim];
+                for _ in 0..total {
+                    let mut in_offset = 0;
+                    for d in 0..ndim {
+                        in_offset += idxs[d] * strides[d];
+                    }
+                    let val = data.get(in_offset).copied().unwrap_or(0.0);
+
+                    let mut out_offset = 0;
+                    let mut od = 0;
+                    for d in 0..ndim {
+                        if d != axis {
+                            out_offset += idxs[d] * out_strides[od];
+                            od += 1;
+                        }
+                    }
+                    if out_offset < out_data.len() {
+                        out_data[out_offset] += val;
+                    }
+
+                    for d in (0..ndim).rev() {
+                        idxs[d] += 1;
+                        if idxs[d] < shape[d] {
+                            break;
+                        }
+                        idxs[d] = 0;
+                    }
+                }
+
+                if out_shape.is_empty() {
+                    Ok(MathValue::Scalar(out_data.first().copied().unwrap_or(0.0)))
+                } else if out_shape.len() == 1 {
+                    Ok(MathValue::Vector(out_data))
+                } else if out_shape.len() == 2 {
+                    let r = out_shape[0];
+                    let c = out_shape[1];
+                    let mut mat = Vec::with_capacity(r);
+                    for i in 0..r {
+                        mat.push(out_data[i * c..(i + 1) * c].to_vec());
+                    }
+                    Ok(MathValue::Matrix(mat))
+                } else {
+                    Ok(MathValue::Tensor {
+                        shape: out_shape.clone(),
+                        strides: out_strides,
+                        data: out_data,
+                    })
+                }
+            }
         }
     }
 }
@@ -409,6 +688,23 @@ impl fmt::Display for MathValue {
             MathValue::Tuple(items) => {
                 let parts: Vec<String> = items.iter().map(|i| format!("{}", i)).collect();
                 write!(f, "({})", parts.join(", "))
+            }
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
+                let flat = Self::get_flattened_strided(shape, strides, data);
+                let preview: Vec<String> =
+                    flat.iter().take(6).map(|v| format!("{:.4}", v)).collect();
+                let suffix = if flat.len() > 6 { ", ..." } else { "" };
+                write!(
+                    f,
+                    "Tensor(shape={:?}, [{}{}])",
+                    shape,
+                    preview.join(", "),
+                    suffix
+                )
             }
         }
     }
@@ -1957,6 +2253,37 @@ fn reduce_adjoint_to_shape(adj: &MathValue, target_shape: &[usize]) -> Result<Ma
             return Ok(MathValue::Matrix(vec![out_row]));
         }
     }
+    // 1D Vector [D] target from N-D Tensor [..., D] (reduction over all leading batch/sequence dims)
+    if target_shape.len() == 1
+        && adj_shape.len() > 1
+        && *adj_shape.last().unwrap_or(&0) == target_shape[0]
+    {
+        let last_dim = target_shape[0];
+        let flat = adj.flatten_elements();
+        let mut out = vec![0.0; last_dim];
+        for (i, &val) in flat.iter().enumerate() {
+            out[i % last_dim] += val;
+        }
+        return Ok(MathValue::Vector(out));
+    }
+    // 2D Matrix [M, N] target from N-D Tensor [..., M, N] (reduction over leading batch/head dims)
+    if target_shape.len() == 2
+        && adj_shape.len() > 2
+        && &adj_shape[adj_shape.len() - 2..] == target_shape
+    {
+        let rows = target_shape[0];
+        let cols = target_shape[1];
+        let mat_size = rows * cols;
+        let flat = adj.flatten_elements();
+        let mut out = vec![vec![0.0; cols]; rows];
+        for (i, &val) in flat.iter().enumerate() {
+            let inner_idx = i % mat_size;
+            let r = inner_idx / cols;
+            let c = inner_idx % cols;
+            out[r][c] += val;
+        }
+        return Ok(MathValue::Matrix(out));
+    }
     Err(format!(
         "Cannot reduce adjoint of shape {:?} to target shape {:?}",
         adj_shape, target_shape
@@ -2077,11 +2404,18 @@ impl ExprTape {
                     Ok(())
                 }
                 MathBinOp::MatMul => match (lhs_val, rhs_val) {
-                    (MathValue::Matrix(_), MathValue::Matrix(_)) => {
+                    (MathValue::Matrix(_), MathValue::Matrix(_))
+                    | (MathValue::Tensor { .. }, MathValue::Matrix(_))
+                    | (MathValue::Matrix(_), MathValue::Tensor { .. })
+                    | (MathValue::Tensor { .. }, MathValue::Tensor { .. }) => {
                         let v_t = rhs_val.transpose()?;
-                        let adj_u = evaluator.eval_binary_op(adj, MathBinOp::MatMul, &v_t)?;
+                        let raw_adj_u = evaluator.eval_binary_op(adj, MathBinOp::MatMul, &v_t)?;
+                        let adj_u = reduce_adjoint_to_shape(&raw_adj_u, &lhs_val.shape())?;
+
                         let u_t = lhs_val.transpose()?;
-                        let adj_v = evaluator.eval_binary_op(&u_t, MathBinOp::MatMul, adj)?;
+                        let raw_adj_v = evaluator.eval_binary_op(&u_t, MathBinOp::MatMul, adj)?;
+                        let adj_v = reduce_adjoint_to_shape(&raw_adj_v, &rhs_val.shape())?;
+
                         lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
                         rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
                         Ok(())
@@ -2509,6 +2843,73 @@ impl ExprTape {
                     let adj_scaled = adj.map_unary(|x| x * scale);
                     arg_tapes[0].backward(&adj_scaled, wrt, acc_grad, evaluator)
                 }
+                "split_heads" => {
+                    let adj_merged = evaluator.merge_heads(adj)?;
+                    arg_tapes[0].backward(&adj_merged, wrt, acc_grad, evaluator)
+                }
+                "merge_heads" => {
+                    let in_shape = arg_vals[0].shape();
+                    let nh = in_shape.first().copied().unwrap_or(1);
+                    let adj_split = evaluator.split_heads(adj, nh)?;
+                    arg_tapes[0].backward(&adj_split, wrt, acc_grad, evaluator)
+                }
+                "permute" => {
+                    let dims = match &arg_vals[1] {
+                        MathValue::Vector(v) => v.iter().map(|&d| d as usize).collect::<Vec<usize>>(),
+                        _ => arg_vals[0].shape(),
+                    };
+                    let mut inv_dims = vec![0; dims.len()];
+                    for (i, &d) in dims.iter().enumerate() {
+                        if d < inv_dims.len() {
+                            inv_dims[d] = i;
+                        }
+                    }
+                    let adj_perm = adj.permute(&inv_dims)?;
+                    arg_tapes[0].backward(&adj_perm, wrt, acc_grad, evaluator)
+                }
+                "reshape" => {
+                    let in_shape = arg_vals[0].shape();
+                    let adj_reshaped = adj.reshape(&in_shape)?;
+                    arg_tapes[0].backward(&adj_reshaped, wrt, acc_grad, evaluator)
+                }
+                "ssd_scan" | "mamba_ssd" => {
+                    let d_elems = arg_vals[1].flatten_elements();
+                    let adj_flat = adj.flatten_elements();
+                    let x_shape = arg_vals[0].shape();
+                    let last_dim = *x_shape.last().unwrap_or(&1);
+                    let num_rows = adj_flat.len() / last_dim.max(1);
+                    let mut grad_x = vec![0.0; adj_flat.len()];
+
+                    for c in 0..last_dim {
+                        let a = d_elems.get(c % d_elems.len()).copied().unwrap_or(0.9);
+                        let mut delta = 0.0;
+                        for r in (0..num_rows).rev() {
+                            let idx = r * last_dim + c;
+                            delta = adj_flat[idx] + a * delta;
+                            grad_x[idx] = delta;
+                        }
+                    }
+                    let reconstruct = |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
+                        match shape.len() {
+                            0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
+                            1 => Ok(MathValue::Vector(elems)),
+                            2 => {
+                                let rows = shape[0];
+                                let cols = shape[1];
+                                let mut mat = Vec::with_capacity(rows);
+                                for r in 0..rows {
+                                    let start = r * cols;
+                                    let end = (start + cols).min(elems.len());
+                                    mat.push(elems[start..end].to_vec());
+                                }
+                                Ok(MathValue::Matrix(mat))
+                            }
+                            _ => MathValue::new_tensor(shape.to_vec(), elems),
+                        }
+                    };
+                    let adj_x = reconstruct(grad_x, &x_shape)?;
+                    arg_tapes[0].backward(&adj_x, wrt, acc_grad, evaluator)
+                }
                 _ => Err(format!(
                     "Unsupported function call '{}' in analytical backward",
                     name
@@ -2613,6 +3014,454 @@ impl MathEvaluator {
         Ok(last_res)
     }
 
+    pub fn split_heads(&self, val: &MathValue, n_heads: usize) -> Result<MathValue, String> {
+        if n_heads == 0 {
+            return Err("n_heads must be at least 1".to_string());
+        }
+        match val {
+            MathValue::Matrix(m) => {
+                let seq = m.len();
+                let dim = m.first().map(|r| r.len()).unwrap_or(0);
+                if dim % n_heads != 0 {
+                    return Err(format!(
+                        "split_heads: hidden dimension {} must be divisible by n_heads {}",
+                        dim, n_heads
+                    ));
+                }
+                let head_dim = dim / n_heads;
+                let mut out = vec![0.0; n_heads * seq * head_dim];
+                for h in 0..n_heads {
+                    for s in 0..seq {
+                        for d in 0..head_dim {
+                            let in_val = m[s][h * head_dim + d];
+                            let out_idx = h * (seq * head_dim) + s * head_dim + d;
+                            out[out_idx] = in_val;
+                        }
+                    }
+                }
+                MathValue::new_tensor(vec![n_heads, seq, head_dim], out)
+            }
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
+                let ndim = shape.len();
+                if ndim < 2 {
+                    return Err("split_heads requires at least 2D tensor".to_string());
+                }
+                let dim = *shape.last().unwrap_or(&0);
+                if dim % n_heads != 0 {
+                    return Err(format!(
+                        "split_heads: hidden dimension {} must be divisible by n_heads {}",
+                        dim, n_heads
+                    ));
+                }
+                let head_dim = dim / n_heads;
+                let seq = shape[ndim - 2];
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+
+                if ndim == 2 {
+                    let mut out = vec![0.0; n_heads * seq * head_dim];
+                    for h in 0..n_heads {
+                        for s in 0..seq {
+                            for d in 0..head_dim {
+                                let in_val = flat[s * dim + h * head_dim + d];
+                                out[h * (seq * head_dim) + s * head_dim + d] = in_val;
+                            }
+                        }
+                    }
+                    MathValue::new_tensor(vec![n_heads, seq, head_dim], out)
+                } else if ndim == 3 {
+                    let batch = shape[0];
+                    let mut out = vec![0.0; batch * n_heads * seq * head_dim];
+                    for b in 0..batch {
+                        for h in 0..n_heads {
+                            for s in 0..seq {
+                                for d in 0..head_dim {
+                                    let in_idx = b * (seq * dim) + s * dim + h * head_dim + d;
+                                    let out_idx = b * (n_heads * seq * head_dim)
+                                        + h * (seq * head_dim)
+                                        + s * head_dim
+                                        + d;
+                                    out[out_idx] = flat[in_idx];
+                                }
+                            }
+                        }
+                    }
+                    MathValue::new_tensor(vec![batch, n_heads, seq, head_dim], out)
+                } else {
+                    Err(format!("split_heads unsupported for rank {}", ndim))
+                }
+            }
+            _ => Err("split_heads expects a Matrix or Tensor".to_string()),
+        }
+    }
+
+    pub fn merge_heads(&self, val: &MathValue) -> Result<MathValue, String> {
+        match val {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                if shape.len() == 3 {
+                    let n_heads = shape[0];
+                    let seq = shape[1];
+                    let head_dim = shape[2];
+                    let dim = n_heads * head_dim;
+                    let mut mat = vec![vec![0.0; dim]; seq];
+                    for s in 0..seq {
+                        for h in 0..n_heads {
+                            for d in 0..head_dim {
+                                let in_idx = h * (seq * head_dim) + s * head_dim + d;
+                                mat[s][h * head_dim + d] = flat[in_idx];
+                            }
+                        }
+                    }
+                    Ok(MathValue::Matrix(mat))
+                } else if shape.len() == 4 {
+                    let batch = shape[0];
+                    let n_heads = shape[1];
+                    let seq = shape[2];
+                    let head_dim = shape[3];
+                    let dim = n_heads * head_dim;
+                    let mut out = vec![0.0; batch * seq * dim];
+                    for b in 0..batch {
+                        for s in 0..seq {
+                            for h in 0..n_heads {
+                                for d in 0..head_dim {
+                                    let in_idx = b * (n_heads * seq * head_dim)
+                                        + h * (seq * head_dim)
+                                        + s * head_dim
+                                        + d;
+                                    let out_idx = b * (seq * dim) + s * dim + h * head_dim + d;
+                                    out[out_idx] = flat[in_idx];
+                                }
+                            }
+                        }
+                    }
+                    MathValue::new_tensor(vec![batch, seq, dim], out)
+                } else {
+                    Err(format!(
+                        "merge_heads expects 3D or 4D Tensor, got shape {:?}",
+                        shape
+                    ))
+                }
+            }
+            _ => Err("merge_heads expects a Tensor".to_string()),
+        }
+    }
+
+    pub fn eval_gqa_attn(
+        &self,
+        q: &MathValue,
+        k: &MathValue,
+        v: &MathValue,
+        n_heads: usize,
+        n_kv_heads: usize,
+        scale: Option<f64>,
+        is_causal: bool,
+    ) -> Result<MathValue, String> {
+        if n_heads == 0 || n_kv_heads == 0 {
+            return Err("n_heads and n_kv_heads must be at least 1".to_string());
+        }
+        if n_heads % n_kv_heads != 0 {
+            return Err(format!(
+                "gqa_attn: n_heads ({}) must be divisible by n_kv_heads ({})",
+                n_heads, n_kv_heads
+            ));
+        }
+        let group_size = n_heads / n_kv_heads;
+
+        if let (MathValue::Matrix(q_m), MathValue::Matrix(k_m), MathValue::Matrix(v_m)) = (q, k, v)
+        {
+            let seq_q = q_m.len();
+            let seq_k = k_m.len();
+            let dim_q = q_m.first().map(|r| r.len()).unwrap_or(0);
+            let dim_k = k_m.first().map(|r| r.len()).unwrap_or(0);
+            let dim_v = v_m.first().map(|r| r.len()).unwrap_or(0);
+
+            if dim_q % n_heads != 0 {
+                return Err(format!(
+                    "gqa_attn: Q dim {} must be divisible by n_heads {}",
+                    dim_q, n_heads
+                ));
+            }
+            let head_dim = dim_q / n_heads;
+            if dim_k != n_kv_heads * head_dim || dim_v != n_kv_heads * head_dim {
+                return Err(format!(
+                    "gqa_attn: K/V dim ({} / {}) must equal n_kv_heads * head_dim ({} * {} = {})",
+                    dim_k,
+                    dim_v,
+                    n_kv_heads,
+                    head_dim,
+                    n_kv_heads * head_dim
+                ));
+            }
+
+            let s = scale.unwrap_or(1.0 / (head_dim as f64).sqrt().max(1e-6));
+            let mut out_m = vec![vec![0.0; dim_q]; seq_q];
+
+            for h in 0..n_heads {
+                let kv_h = h / group_size;
+                let q_col_start = h * head_dim;
+                let kv_col_start = kv_h * head_dim;
+
+                let mut q_h = Vec::with_capacity(seq_q);
+                for row in q_m {
+                    q_h.push(row[q_col_start..q_col_start + head_dim].to_vec());
+                }
+                let mut k_kv = Vec::with_capacity(seq_k);
+                for row in k_m {
+                    k_kv.push(row[kv_col_start..kv_col_start + head_dim].to_vec());
+                }
+                let mut v_kv = Vec::with_capacity(seq_k);
+                for row in v_m {
+                    v_kv.push(row[kv_col_start..kv_col_start + head_dim].to_vec());
+                }
+
+                let mut p_mat: Vec<Vec<f64>> = Vec::with_capacity(seq_q);
+                for (r, q_row) in q_h.iter().enumerate() {
+                    let mut score_row = Vec::with_capacity(seq_k);
+                    for (c, k_row) in k_kv.iter().enumerate() {
+                        if is_causal && c > r {
+                            score_row.push(f64::NEG_INFINITY);
+                        } else {
+                            let dot: f64 =
+                                q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
+                            score_row.push(dot * s);
+                        }
+                    }
+                    let max_v = score_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let exps: Vec<f64> = score_row.iter().map(|&x| (x - max_v).exp()).collect();
+                    let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                    p_mat.push(exps.into_iter().map(|e| e / sum_exp).collect());
+                }
+
+                for (r, p_row) in p_mat.iter().enumerate() {
+                    for d in 0..head_dim {
+                        let mut dot = 0.0;
+                        for (c, &p_val) in p_row.iter().enumerate() {
+                            dot += p_val * v_kv[c][d];
+                        }
+                        out_m[r][q_col_start + d] = dot;
+                    }
+                }
+            }
+            Ok(MathValue::Matrix(out_m))
+        } else {
+            let q_heads = if q.shape().len() == 2 {
+                self.split_heads(q, n_heads)?
+            } else {
+                q.clone()
+            };
+            let k_heads = if k.shape().len() == 2 {
+                self.split_heads(k, n_kv_heads)?
+            } else {
+                k.clone()
+            };
+            let v_heads = if v.shape().len() == 2 {
+                self.split_heads(v, n_kv_heads)?
+            } else {
+                v.clone()
+            };
+
+            let q_shape = q_heads.shape();
+            let k_shape = k_heads.shape();
+            let v_shape = v_heads.shape();
+
+            if q_shape.len() == 3 && k_shape.len() == 3 && v_shape.len() == 3 {
+                let seq_q = q_shape[1];
+                let head_dim = q_shape[2];
+                let seq_k = k_shape[1];
+                let s = scale.unwrap_or(1.0 / (head_dim as f64).sqrt().max(1e-6));
+
+                let q_flat = q_heads.flatten_elements();
+                let k_flat = k_heads.flatten_elements();
+                let v_flat = v_heads.flatten_elements();
+
+                let mut out_data = vec![0.0; n_heads * seq_q * head_dim];
+
+                for h in 0..n_heads {
+                    let kv_h = h / group_size;
+                    let q_offset = h * (seq_q * head_dim);
+                    let k_offset = kv_h * (seq_k * head_dim);
+                    let v_offset = kv_h * (seq_k * head_dim);
+
+                    for r in 0..seq_q {
+                        let q_row =
+                            &q_flat[q_offset + r * head_dim..q_offset + (r + 1) * head_dim];
+                        let mut score_row = Vec::with_capacity(seq_k);
+                        for c in 0..seq_k {
+                            if is_causal && c > r {
+                                score_row.push(f64::NEG_INFINITY);
+                            } else {
+                                let k_row =
+                                    &k_flat[k_offset + c * head_dim..k_offset + (c + 1) * head_dim];
+                                let dot: f64 =
+                                    q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
+                                score_row.push(dot * s);
+                            }
+                        }
+                        let max_v = score_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let exps: Vec<f64> = score_row.iter().map(|&x| (x - max_v).exp()).collect();
+                        let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                        let probs: Vec<f64> = exps.into_iter().map(|e| e / sum_exp).collect();
+
+                        for d in 0..head_dim {
+                            let mut dot = 0.0;
+                            for (c, &p_val) in probs.iter().enumerate() {
+                                let v_val = v_flat[v_offset + c * head_dim + d];
+                                dot += p_val * v_val;
+                            }
+                            let out_idx = h * (seq_q * head_dim) + r * head_dim + d;
+                            out_data[out_idx] = dot;
+                        }
+                    }
+                }
+                MathValue::new_tensor(vec![n_heads, seq_q, head_dim], out_data)
+            } else {
+                Err(format!(
+                    "gqa_attn: unsupported operand shapes: Q {:?}, K {:?}, V {:?}",
+                    q_shape, k_shape, v_shape
+                ))
+            }
+        }
+    }
+
+    pub fn eval_mla_attn(
+        &self,
+        x: &MathValue,
+        w_dkv: &MathValue,
+        w_uk: &MathValue,
+        w_uv: &MathValue,
+        w_q: &MathValue,
+        w_o_opt: Option<&MathValue>,
+        is_causal: bool,
+    ) -> Result<MathValue, String> {
+        let w_dkv_t = w_dkv.transpose()?;
+        let c_kv = self.eval_binary_op(x, MathBinOp::MatMul, &w_dkv_t)?;
+
+        let w_uk_t = w_uk.transpose()?;
+        let k = self.eval_binary_op(&c_kv, MathBinOp::MatMul, &w_uk_t)?;
+
+        let w_uv_t = w_uv.transpose()?;
+        let v = self.eval_binary_op(&c_kv, MathBinOp::MatMul, &w_uv_t)?;
+
+        let w_q_t = w_q.transpose()?;
+        let q = self.eval_binary_op(x, MathBinOp::MatMul, &w_q_t)?;
+
+        let k_t = k.transpose()?;
+        let scores = self.eval_binary_op(&q, MathBinOp::MatMul, &k_t)?;
+
+        let d_k = k.shape().last().copied().unwrap_or(1) as f64;
+        let scale = 1.0 / d_k.sqrt().max(1e-6);
+        let scaled_scores =
+            self.eval_binary_op(&scores, MathBinOp::Mul, &MathValue::Scalar(scale))?;
+
+        let p = match scaled_scores {
+            MathValue::Matrix(mat) => {
+                let mut res = Vec::new();
+                for (row_idx, row) in mat.into_iter().enumerate() {
+                    let masked_row: Vec<f64> = row
+                        .into_iter()
+                        .enumerate()
+                        .map(|(col_idx, val)| {
+                            if is_causal && col_idx > row_idx {
+                                f64::NEG_INFINITY
+                            } else {
+                                val
+                            }
+                        })
+                        .collect();
+                    let max_v = masked_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let exps: Vec<f64> = masked_row.iter().map(|&z| (z - max_v).exp()).collect();
+                    let sum_exp = exps.iter().sum::<f64>().max(1e-12);
+                    res.push(exps.into_iter().map(|e| e / sum_exp).collect());
+                }
+                MathValue::Matrix(res)
+            }
+            other => other,
+        };
+
+        let attn_out = self.eval_binary_op(&p, MathBinOp::MatMul, &v)?;
+
+        if let Some(w_o) = w_o_opt {
+            let w_o_t = w_o.transpose()?;
+            self.eval_binary_op(&attn_out, MathBinOp::MatMul, &w_o_t)
+        } else {
+            Ok(attn_out)
+        }
+    }
+
+    pub fn eval_ssd_scan(
+        &self,
+        x: &MathValue,
+        decay_dt: &MathValue,
+    ) -> Result<MathValue, String> {
+        match x {
+            MathValue::Vector(x_vec) => {
+                let d_vec = decay_dt.flatten_elements();
+                let mut out = Vec::with_capacity(x_vec.len());
+                let mut h = 0.0;
+                for (t, &xt) in x_vec.iter().enumerate() {
+                    let a = d_vec.get(t % d_vec.len()).copied().unwrap_or(0.9).min(1.0).max(0.0);
+                    h = a * h + xt;
+                    out.push(h);
+                }
+                Ok(MathValue::Vector(out))
+            }
+            MathValue::Matrix(mat) => {
+                let d_elems = decay_dt.flatten_elements();
+                let rows = mat.len();
+                let cols = mat.first().map(|r| r.len()).unwrap_or(0);
+                let mut out = vec![vec![0.0; cols]; rows];
+                let mut h = vec![0.0; cols];
+
+                for r in 0..rows {
+                    for c in 0..cols {
+                        let a_idx = if d_elems.len() == cols {
+                            c
+                        } else {
+                            (r * cols + c) % d_elems.len()
+                        };
+                        let a = d_elems.get(a_idx).copied().unwrap_or(0.9).min(1.0).max(0.0);
+                        h[c] = a * h[c] + mat[r][c];
+                        out[r][c] = h[c];
+                    }
+                }
+                Ok(MathValue::Matrix(out))
+            }
+            MathValue::Tensor { shape, strides, data } => {
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let d_elems = decay_dt.flatten_elements();
+                let ndim = shape.len();
+                let seq = shape[ndim - 2];
+                let dim = shape[ndim - 1];
+                let total = flat.len();
+                let batch_size = total / (seq * dim);
+                let mut out = vec![0.0; total];
+
+                for b in 0..batch_size {
+                    let mut h = vec![0.0; dim];
+                    let b_offset = b * (seq * dim);
+                    for s in 0..seq {
+                        let s_offset = b_offset + s * dim;
+                        for d in 0..dim {
+                            let a = d_elems.get(d % d_elems.len()).copied().unwrap_or(0.9).min(1.0).max(0.0);
+                            h[d] = a * h[d] + flat[s_offset + d];
+                            out[s_offset + d] = h[d];
+                        }
+                    }
+                }
+                MathValue::new_tensor(shape.clone(), out)
+            }
+            _ => Err("ssd_scan expects Vector, Matrix, or Tensor".to_string()),
+        }
+    }
+
     pub fn eval(&self, expr: &MathExpr) -> Result<f64, String> {
         let val = self.eval_value(expr)?;
         val.as_scalar()
@@ -2636,7 +3485,38 @@ impl MathEvaluator {
                 if evaluated.is_empty() {
                     return Ok(MathValue::Vector(Vec::new()));
                 }
-                if matches!(evaluated[0], MathValue::Vector(_)) {
+                if matches!(evaluated[0], MathValue::Matrix(_)) {
+                    let mut mat_list = Vec::with_capacity(evaluated.len());
+                    for item in evaluated {
+                        if let MathValue::Matrix(m) = item {
+                            mat_list.push(m);
+                        } else {
+                            return Err("Inconsistent tensor types in 3D array literal".to_string());
+                        }
+                    }
+                    let r = mat_list[0].len();
+                    let c = mat_list[0].first().map(|row| row.len()).unwrap_or(0);
+                    let shape = vec![mat_list.len(), r, c];
+                    let flat: Vec<f64> = mat_list.into_iter().flatten().flatten().collect();
+                    MathValue::new_tensor(shape, flat)
+                } else if matches!(evaluated[0], MathValue::Tensor { .. }) {
+                    let mut sub_tensors = Vec::with_capacity(evaluated.len());
+                    for item in evaluated {
+                        if let MathValue::Tensor { shape, strides, data } = item {
+                            sub_tensors.push((shape, strides, data));
+                        } else {
+                            return Err("Inconsistent tensor types in ND array literal".to_string());
+                        }
+                    }
+                    let sub_shape = sub_tensors[0].0.clone();
+                    let mut shape = vec![sub_tensors.len()];
+                    shape.extend_from_slice(&sub_shape);
+                    let mut flat = Vec::new();
+                    for (sh, st, dt) in sub_tensors {
+                        flat.extend(MathValue::get_flattened_strided(&sh, &st, &dt));
+                    }
+                    MathValue::new_tensor(shape, flat)
+                } else if matches!(evaluated[0], MathValue::Vector(_)) {
                     let mut rows = Vec::with_capacity(evaluated.len());
                     for item in evaluated {
                         if let MathValue::Vector(r) = item {
@@ -2699,6 +3579,37 @@ impl MathEvaluator {
                                 mat.len()
                             )
                         }),
+                    MathValue::Tensor { shape, strides, data } => {
+                        if shape.is_empty() {
+                            return Err("Cannot index empty tensor".to_string());
+                        }
+                        if i_num >= shape[0] {
+                            return Err(format!(
+                                "Tensor index {} out of bounds for axis 0 (dim {})",
+                                i_num, shape[0]
+                            ));
+                        }
+                        let sub_shape = shape[1..].to_vec();
+                        let flat = MathValue::get_flattened_strided(&shape, &strides, &data);
+                        let sub_total: usize = sub_shape.iter().product();
+                        let s_offset = i_num * sub_total;
+                        let e_offset = s_offset + sub_total;
+                        let sub_data = flat[s_offset..e_offset.min(flat.len())].to_vec();
+                        match sub_shape.len() {
+                            0 => Ok(MathValue::Scalar(sub_data.first().copied().unwrap_or(0.0))),
+                            1 => Ok(MathValue::Vector(sub_data)),
+                            2 => {
+                                let r = sub_shape[0];
+                                let c = sub_shape[1];
+                                let mut mat = Vec::with_capacity(r);
+                                for i in 0..r {
+                                    mat.push(sub_data[i * c..(i + 1) * c].to_vec());
+                                }
+                                Ok(MathValue::Matrix(mat))
+                            }
+                            _ => MathValue::new_tensor(sub_shape, sub_data),
+                        }
+                    }
                     MathValue::Scalar(s) => {
                         if i_num == 0 {
                             Ok(MathValue::Scalar(s))
@@ -2793,6 +3704,29 @@ impl MathEvaluator {
                             }
                             Ok(MathValue::Matrix(res))
                         }
+                        MathValue::Tensor {
+                            shape,
+                            strides,
+                            data,
+                        } => {
+                            let last_dim = *shape.last().unwrap_or(&1);
+                            let flat = MathValue::get_flattened_strided(&shape, &strides, &data);
+                            let mut out = vec![0.0; flat.len()];
+                            let num_rows = flat.len() / last_dim.max(1);
+                            for r in 0..num_rows {
+                                let start = r * last_dim;
+                                let end = start + last_dim;
+                                let row = &flat[start..end];
+                                let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                                let exps: Vec<f64> =
+                                    row.iter().map(|&x| (x - max_v).exp()).collect();
+                                let sum_exp = exps.iter().sum::<f64>().max(1e-12);
+                                for (i, e) in exps.into_iter().enumerate() {
+                                    out[start + i] = e / sum_exp;
+                                }
+                            }
+                            MathValue::new_tensor(shape, out)
+                        }
                         MathValue::Tuple(_) => Err("Cannot compute softmax on a Tuple".to_string()),
                     }
                 }
@@ -2812,6 +3746,10 @@ impl MathEvaluator {
                         match &q {
                             MathValue::Matrix(m) => {
                                 let d = m.first().map(|r| r.len()).unwrap_or(1) as f64;
+                                1.0 / d.sqrt().max(1e-6)
+                            }
+                            MathValue::Tensor { shape, .. } => {
+                                let d = *shape.last().unwrap_or(&1) as f64;
                                 1.0 / d.sqrt().max(1e-6)
                             }
                             _ => 1.0,
@@ -2849,6 +3787,88 @@ impl MathEvaluator {
                         other => other,
                     };
                     self.eval_binary_op(&p, MathBinOp::MatMul, &v)
+                }
+                "split_heads" => {
+                    if args.len() != 2 {
+                        return Err("'split_heads(X, n_heads)' expects 2 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let nh = self.eval(&args[1])? as usize;
+                    self.split_heads(&x, nh)
+                }
+                "merge_heads" => {
+                    let x = self.eval_single_val(args, "merge_heads")?;
+                    self.merge_heads(&x)
+                }
+                "gqa_attn" | "gqa" | "causal_gqa" => {
+                    if args.len() < 5 {
+                        return Err(
+                            "'gqa_attn(Q, K, V, n_heads, n_kv_heads, [scale])' requires at least 5 arguments"
+                                .to_string(),
+                        );
+                    }
+                    let is_causal = name == "causal_gqa";
+                    let q = self.eval_value(&args[0])?;
+                    let k = self.eval_value(&args[1])?;
+                    let v = self.eval_value(&args[2])?;
+                    let nh = self.eval(&args[3])? as usize;
+                    let nkv = self.eval(&args[4])? as usize;
+                    let scale = if args.len() > 5 {
+                        Some(self.eval(&args[5])?)
+                    } else {
+                        None
+                    };
+                    self.eval_gqa_attn(&q, &k, &v, nh, nkv, scale, is_causal)
+                }
+                "mla_attn" | "mla" | "causal_mla" => {
+                    if args.len() < 5 {
+                        return Err(
+                            "'mla_attn(X, W_dkv, W_uk, W_uv, W_q, [W_o])' requires at least 5 arguments"
+                                .to_string(),
+                        );
+                    }
+                    let is_causal = name == "causal_mla";
+                    let x = self.eval_value(&args[0])?;
+                    let w_dkv = self.eval_value(&args[1])?;
+                    let w_uk = self.eval_value(&args[2])?;
+                    let w_uv = self.eval_value(&args[3])?;
+                    let w_q = self.eval_value(&args[4])?;
+                    let w_o = if args.len() > 5 {
+                        Some(self.eval_value(&args[5])?)
+                    } else {
+                        None
+                    };
+                    self.eval_mla_attn(&x, &w_dkv, &w_uk, &w_uv, &w_q, w_o.as_ref(), is_causal)
+                }
+                "ssd_scan" | "mamba_ssd" => {
+                    if args.len() < 2 {
+                        return Err(
+                            "'ssd_scan(X, decay_dt)' requires at least 2 arguments".to_string()
+                        );
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let d = self.eval_value(&args[1])?;
+                    self.eval_ssd_scan(&x, &d)
+                }
+                "permute" => {
+                    if args.is_empty() {
+                        return Err("'permute(X, dims)' requires at least 1 argument".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let dims: Vec<usize> = if args.len() == 2 {
+                        match self.eval_value(&args[1])? {
+                            MathValue::Vector(v) => v.iter().map(|&d| d as usize).collect(),
+                            MathValue::Scalar(s) => vec![s as usize],
+                            _ => return Err("Expected permutation dims vector".to_string()),
+                        }
+                    } else {
+                        let mut ds = Vec::new();
+                        for a in &args[1..] {
+                            ds.push(self.eval(a)? as usize);
+                        }
+                        ds
+                    };
+                    x.permute(&dims)
                 }
                 "norm" => {
                     let val = self.eval_single_val(args, "norm")?;
@@ -2914,7 +3934,37 @@ impl MathEvaluator {
                             }
                             Ok(MathValue::Matrix(res))
                         }
-                        MathValue::Tuple(_) => Err("Cannot compute rmsnorm on a Tuple".to_string()),
+                        MathValue::Tensor {
+                            shape,
+                            strides,
+                            data,
+                        } => {
+                            let last_dim = *shape.last().unwrap_or(&1);
+                            let flat = MathValue::get_flattened_strided(&shape, &strides, &data);
+                            let g_elems_opt = gamma_opt.map(|g| g.flatten_elements());
+                            let mut out = vec![0.0; flat.len()];
+                            let num_rows = flat.len() / last_dim.max(1);
+                            for r in 0..num_rows {
+                                let start = r * last_dim;
+                                let end = start + last_dim;
+                                let row = &flat[start..end];
+                                let mean_sq =
+                                    row.iter().map(|&v| v * v).sum::<f64>() / last_dim.max(1) as f64;
+                                let rms = (mean_sq + eps).sqrt();
+                                for (i, &v) in row.iter().enumerate() {
+                                    let mut val = v / rms;
+                                    if let Some(ref g_elems) = g_elems_opt {
+                                        val *=
+                                            g_elems.get(i % g_elems.len()).copied().unwrap_or(1.0);
+                                    }
+                                    out[start + i] = val;
+                                }
+                            }
+                            MathValue::new_tensor(shape, out)
+                        }
+                        MathValue::Tuple(_) => {
+                            Err("Cannot compute rmsnorm on a Tuple".to_string())
+                        }
                     }
                 }
                 "rope" => {
@@ -2954,7 +4004,27 @@ impl MathEvaluator {
                             }
                             Ok(MathValue::Matrix(res))
                         }
-                        MathValue::Tuple(_) => Err("Cannot compute rmsnorm on a Tuple".to_string()),
+                        MathValue::Tensor {
+                            shape,
+                            strides,
+                            data,
+                        } => {
+                            let last_dim = *shape.last().unwrap_or(&1);
+                            let flat = MathValue::get_flattened_strided(&shape, &strides, &data);
+                            let mut out = vec![0.0; flat.len()];
+                            let ndim = shape.len();
+                            let seq_dim = if ndim >= 2 { shape[ndim - 2] } else { 1 };
+                            let num_rows = flat.len() / last_dim.max(1);
+                            for r in 0..num_rows {
+                                let pos = base_pos + (r % seq_dim) as f64;
+                                let start = r * last_dim;
+                                let end = start + last_dim;
+                                let rotated = rotate_vec(&flat[start..end], pos);
+                                out[start..end].copy_from_slice(&rotated);
+                            }
+                            MathValue::new_tensor(shape, out)
+                        }
+                        MathValue::Tuple(_) => Err("Cannot compute rope on a Tuple".to_string()),
                     }
                 }
                 "mean" | "sum" => {
@@ -3032,8 +4102,29 @@ impl MathEvaluator {
                     self.eval_binary_op(&a, MathBinOp::MatMul, &b)
                 }
                 "transpose" | "T" => {
-                    let val = self.eval_single_val(args, "transpose")?;
-                    val.transpose()
+                    if args.is_empty() {
+                        return Err("'transpose' expects at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    if args.len() == 1 {
+                        val.transpose()
+                    } else if args.len() == 2 {
+                        if let MathValue::Vector(v) = self.eval_value(&args[1])? {
+                            if v.len() == 2 {
+                                val.transpose_axes(v[0] as usize, v[1] as usize)
+                            } else {
+                                val.transpose()
+                            }
+                        } else {
+                            val.transpose()
+                        }
+                    } else if args.len() >= 3 {
+                        let ax1 = self.eval(&args[1])? as usize;
+                        let ax2 = self.eval(&args[2])? as usize;
+                        val.transpose_axes(ax1, ax2)
+                    } else {
+                        val.transpose()
+                    }
                 }
                 "outer" => {
                     if args.len() == 2 {
@@ -3117,25 +4208,27 @@ impl MathEvaluator {
                 }
                 "zeros" | "ones" => {
                     let fill = if name == "ones" { 1.0 } else { 0.0 };
-                    if args.len() == 1 {
+                    let dims: Vec<usize> = if args.len() == 1 {
                         match self.eval_value(&args[0])? {
-                            MathValue::Scalar(n) => Ok(MathValue::Vector(vec![fill; n as usize])),
-                            MathValue::Vector(dims) if dims.len() == 1 => {
-                                Ok(MathValue::Vector(vec![fill; dims[0] as usize]))
-                            }
-                            MathValue::Vector(dims) if dims.len() == 2 => {
-                                let r = dims[0] as usize;
-                                let c = dims[1] as usize;
-                                Ok(MathValue::Matrix(vec![vec![fill; c]; r]))
-                            }
-                            _ => Err(format!("'{}' expects (N), (M, N), or ([M, N])", name)),
+                            MathValue::Scalar(n) => vec![n as usize],
+                            MathValue::Vector(v) => v.iter().map(|&x| x as usize).collect(),
+                            _ => return Err(format!("'{}' expects (N), (M, N), or shape vector", name)),
                         }
-                    } else if args.len() == 2 {
-                        let r = self.eval(&args[0])? as usize;
-                        let c = self.eval(&args[1])? as usize;
-                        Ok(MathValue::Matrix(vec![vec![fill; c]; r]))
                     } else {
-                        Err(format!("'{}' expects 1 or 2 dimension arguments", name))
+                        let mut ds = Vec::new();
+                        for a in args {
+                            ds.push(self.eval(a)? as usize);
+                        }
+                        ds
+                    };
+                    match dims.len() {
+                        0 => Ok(MathValue::Scalar(fill)),
+                        1 => Ok(MathValue::Vector(vec![fill; dims[0]])),
+                        2 => Ok(MathValue::Matrix(vec![vec![fill; dims[1]]; dims[0]])),
+                        _ => {
+                            let total: usize = dims.iter().product();
+                            MathValue::new_tensor(dims, vec![fill; total])
+                        }
                     }
                 }
                 "eye" => {
@@ -3151,7 +4244,7 @@ impl MathEvaluator {
                 }
                 "randn" => {
                     if args.is_empty() {
-                        return Err("'randn' expects (N) or (M, N, [seed])".to_string());
+                        return Err("'randn' expects dimension arguments".to_string());
                     }
                     let next_u64 = |state: &mut u64| -> f64 {
                         *state = state.wrapping_add(0x9E3779B97F4A7C15);
@@ -3168,29 +4261,41 @@ impl MathEvaluator {
                         let theta = 2.0 * std::f64::consts::PI * u2;
                         r * theta.cos() * std_dev
                     };
-                    if args.len() == 1 {
-                        let n = self.eval(&args[0])? as usize;
-                        let mut state = 42u64;
-                        let std_dev = 1.0 / (n.max(1) as f64).sqrt();
-                        let vec: Vec<f64> =
-                            (0..n).map(|_| sample_norm(&mut state, std_dev)).collect();
-                        Ok(MathValue::Vector(vec))
-                    } else {
-                        let r = self.eval(&args[0])? as usize;
-                        let c = self.eval(&args[1])? as usize;
-                        let mut state = if args.len() > 2 {
-                            self.eval(&args[2])? as u64
-                        } else {
-                            42u64
-                        };
-                        let std_dev = 1.0 / (c.max(1) as f64).sqrt();
-                        let mut mat = Vec::with_capacity(r);
-                        for _ in 0..r {
-                            let row: Vec<f64> =
-                                (0..c).map(|_| sample_norm(&mut state, std_dev)).collect();
-                            mat.push(row);
+                    let dims: Vec<usize> = if args.len() == 1 {
+                        match self.eval_value(&args[0])? {
+                            MathValue::Scalar(n) => vec![n as usize],
+                            MathValue::Vector(v) => v.iter().map(|&x| x as usize).collect(),
+                            _ => return Err("'randn' expects dimension arguments".to_string()),
                         }
-                        Ok(MathValue::Matrix(mat))
+                    } else {
+                        let mut ds = Vec::new();
+                        for a in args {
+                            if let Ok(val) = self.eval_value(a) {
+                                if let Some(s) = val.as_scalar() {
+                                    ds.push(s as usize);
+                                }
+                            }
+                        }
+                        ds
+                    };
+                    let last_d = *dims.last().unwrap_or(&1);
+                    let std_dev = 1.0 / (last_d.max(1) as f64).sqrt();
+                    let mut state = 42u64;
+                    let total: usize = dims.iter().product();
+                    let samples: Vec<f64> = (0..total).map(|_| sample_norm(&mut state, std_dev)).collect();
+                    match dims.len() {
+                        0 => Ok(MathValue::Scalar(samples.first().copied().unwrap_or(0.0))),
+                        1 => Ok(MathValue::Vector(samples)),
+                        2 => {
+                            let r = dims[0];
+                            let c = dims[1];
+                            let mut mat = Vec::with_capacity(r);
+                            for i in 0..r {
+                                mat.push(samples[i * c..(i + 1) * c].to_vec());
+                            }
+                            Ok(MathValue::Matrix(mat))
+                        }
+                        _ => MathValue::new_tensor(dims, samples),
                     }
                 }
                 "argmax" | "argmin" => {
@@ -3217,7 +4322,30 @@ impl MathEvaluator {
                             let indices: Vec<f64> = mat.iter().map(|row| find_idx(row)).collect();
                             Ok(MathValue::Vector(indices))
                         }
-                        MathValue::Tuple(_) => Err("Cannot compute argmax/argmin on a Tuple".to_string()),
+                        MathValue::Tensor {
+                            shape,
+                            strides,
+                            data,
+                        } => {
+                            let last_dim = *shape.last().unwrap_or(&1);
+                            let flat = MathValue::get_flattened_strided(&shape, &strides, &data);
+                            let num_rows = flat.len() / last_dim.max(1);
+                            let mut indices = Vec::with_capacity(num_rows);
+                            for r in 0..num_rows {
+                                let start = r * last_dim;
+                                let end = start + last_dim;
+                                indices.push(find_idx(&flat[start..end]));
+                            }
+                            if shape.len() <= 2 {
+                                Ok(MathValue::Vector(indices))
+                            } else {
+                                let out_shape = shape[..shape.len() - 1].to_vec();
+                                MathValue::new_tensor(out_shape, indices)
+                            }
+                        }
+                        MathValue::Tuple(_) => {
+                            Err("Cannot compute argmax/argmin on a Tuple".to_string())
+                        }
                     }
                 }
                 "concat" => {
@@ -3322,7 +4450,26 @@ impl MathEvaluator {
                             let res = mat.iter().map(|r| calc_lse(r)).collect();
                             Ok(MathValue::Matrix(res))
                         }
-                        MathValue::Tuple(_) => Err("Cannot compute rmsnorm on a Tuple".to_string()),
+                        MathValue::Tensor {
+                            shape,
+                            strides,
+                            data,
+                        } => {
+                            let last_dim = *shape.last().unwrap_or(&1);
+                            let flat = MathValue::get_flattened_strided(&shape, &strides, &data);
+                            let mut out = vec![0.0; flat.len()];
+                            let num_rows = flat.len() / last_dim.max(1);
+                            for r in 0..num_rows {
+                                let start = r * last_dim;
+                                let end = start + last_dim;
+                                let lse_row = calc_lse(&flat[start..end]);
+                                out[start..end].copy_from_slice(&lse_row);
+                            }
+                            MathValue::new_tensor(shape, out)
+                        }
+                        MathValue::Tuple(_) => {
+                            Err("Cannot compute log_softmax on a Tuple".to_string())
+                        }
                     }
                 }
                 "cross_entropy" => {
@@ -3479,7 +4626,7 @@ impl MathEvaluator {
                                 }
                                 Ok(MathValue::Matrix(mat))
                             }
-                            _ => Err("Unsupported tensor rank for reconstruction".to_string()),
+                            _ => MathValue::new_tensor(shape.to_vec(), elems),
                         }
                     };
 
@@ -3545,7 +4692,7 @@ impl MathEvaluator {
                                 }
                                 Ok(MathValue::Matrix(mat))
                             }
-                            _ => Err("Unsupported tensor rank for reconstruction".to_string()),
+                            _ => MathValue::new_tensor(shape.to_vec(), elems),
                         }
                     };
 
@@ -3664,6 +4811,38 @@ impl MathEvaluator {
                                     }
                                 }
                                 Ok(MathValue::Matrix(grad_mat))
+                            }
+                            MathValue::Tensor {
+                                shape,
+                                strides,
+                                data,
+                            } => {
+                                let total: usize = shape.iter().product();
+                                let flat =
+                                    MathValue::get_flattened_strided(&shape, &strides, &data);
+                                let mut grad_data = vec![0.0; total];
+                                for i in 0..total {
+                                    let mut flat_plus = flat.clone();
+                                    flat_plus[i] += eps;
+                                    let mut eval_plus = self.clone();
+                                    eval_plus.env.insert(
+                                        wrt.clone(),
+                                        MathValue::new_tensor(shape.clone(), flat_plus)?,
+                                    );
+                                    let f_plus = eval_scalar_loss(&eval_plus, &args[0])?;
+
+                                    let mut flat_minus = flat.clone();
+                                    flat_minus[i] -= eps;
+                                    let mut eval_minus = self.clone();
+                                    eval_minus.env.insert(
+                                        wrt.clone(),
+                                        MathValue::new_tensor(shape.clone(), flat_minus)?,
+                                    );
+                                    let f_minus = eval_scalar_loss(&eval_minus, &args[0])?;
+
+                                    grad_data[i] = (f_plus - f_minus) / (2.0 * eps);
+                                }
+                                MathValue::new_tensor(shape, grad_data)
                             }
                             MathValue::Tuple(_) => {
                                 return Err("Cannot compute scalar grad directly wrt a Tuple variable".to_string());
@@ -3885,6 +5064,151 @@ impl MathEvaluator {
                     }
                     Ok(MathValue::Matrix(out))
                 }
+                (
+                    MathValue::Tensor {
+                        shape: s1,
+                        strides: str1,
+                        data: d1,
+                    },
+                    MathValue::Matrix(b),
+                ) => {
+                    let ndim = s1.len();
+                    if ndim < 2 {
+                        return Err("Tensor rank must be at least 2 for MatMul".to_string());
+                    }
+                    let k = *s1.last().unwrap_or(&0);
+                    let s = s1[ndim - 2];
+                    if b.is_empty() || k != b.len() {
+                        return Err(format!(
+                            "Dimension mismatch in batched MatMul: tensor inner dim {} != matrix rows {}",
+                            k,
+                            b.len()
+                        ));
+                    }
+                    let n = b[0].len();
+                    let mut out_shape = s1.clone();
+                    out_shape[ndim - 1] = n;
+                    let flat_lhs = MathValue::get_flattened_strided(s1, str1, d1);
+                    let lhs_mat_size = s * k;
+                    let num_mats = flat_lhs.len() / lhs_mat_size.max(1);
+                    let mut out_data = Vec::with_capacity(num_mats * s * n);
+                    for m_idx in 0..num_mats {
+                        let slice = &flat_lhs[m_idx * lhs_mat_size..(m_idx + 1) * lhs_mat_size];
+                        for i in 0..s {
+                            for j in 0..n {
+                                let mut acc = 0.0;
+                                for p in 0..k {
+                                    acc += slice[i * k + p] * b[p][j];
+                                }
+                                out_data.push(acc);
+                            }
+                        }
+                    }
+                    MathValue::new_tensor(out_shape, out_data)
+                }
+                (
+                    MathValue::Matrix(a),
+                    MathValue::Tensor {
+                        shape: s2,
+                        strides: str2,
+                        data: d2,
+                    },
+                ) => {
+                    let ndim = s2.len();
+                    if ndim < 2 {
+                        return Err("Tensor rank must be at least 2 for MatMul".to_string());
+                    }
+                    if a.is_empty() {
+                        return Err("Empty left matrix in MatMul".to_string());
+                    }
+                    let m = a.len();
+                    let k_a = a[0].len();
+                    let k_b = s2[ndim - 2];
+                    let n = *s2.last().unwrap_or(&0);
+                    if k_a != k_b {
+                        return Err(format!(
+                            "Dimension mismatch in matrix-tensor MatMul: matrix cols {} != tensor rows {}",
+                            k_a, k_b
+                        ));
+                    }
+                    let mut out_shape = s2.clone();
+                    out_shape[ndim - 2] = m;
+                    let flat_rhs = MathValue::get_flattened_strided(s2, str2, d2);
+                    let rhs_mat_size = k_b * n;
+                    let num_mats = flat_rhs.len() / rhs_mat_size.max(1);
+                    let mut out_data = Vec::with_capacity(num_mats * m * n);
+                    for m_idx in 0..num_mats {
+                        let slice = &flat_rhs[m_idx * rhs_mat_size..(m_idx + 1) * rhs_mat_size];
+                        for i in 0..m {
+                            for j in 0..n {
+                                let mut acc = 0.0;
+                                for p in 0..k_a {
+                                    acc += a[i][p] * slice[p * n + j];
+                                }
+                                out_data.push(acc);
+                            }
+                        }
+                    }
+                    MathValue::new_tensor(out_shape, out_data)
+                }
+                (
+                    MathValue::Tensor {
+                        shape: s1,
+                        strides: str1,
+                        data: d1,
+                    },
+                    MathValue::Tensor {
+                        shape: s2,
+                        strides: str2,
+                        data: d2,
+                    },
+                ) => {
+                    let n1 = s1.len();
+                    let n2 = s2.len();
+                    if n1 < 2 || n2 < 2 {
+                        return Err("Both tensors must have rank >= 2 for MatMul".to_string());
+                    }
+                    let m = s1[n1 - 2];
+                    let k1 = s1[n1 - 1];
+                    let k2 = s2[n2 - 2];
+                    let n = s2[n2 - 1];
+                    if k1 != k2 {
+                        return Err(format!(
+                            "Inner dimension mismatch in tensor MatMul: {} vs {}",
+                            k1, k2
+                        ));
+                    }
+                    let batch_dims = if n1 >= n2 { &s1[..n1 - 2] } else { &s2[..n2 - 2] };
+                    let mut out_shape = batch_dims.to_vec();
+                    out_shape.push(m);
+                    out_shape.push(n);
+
+                    let flat1 = MathValue::get_flattened_strided(s1, str1, d1);
+                    let flat2 = MathValue::get_flattened_strided(s2, str2, d2);
+                    let mat1_size = m * k1;
+                    let mat2_size = k2 * n;
+                    let num_mats1 = flat1.len() / mat1_size.max(1);
+                    let num_mats2 = flat2.len() / mat2_size.max(1);
+                    let num_out_mats = num_mats1.max(num_mats2);
+                    let mut out_data = Vec::with_capacity(num_out_mats * m * n);
+
+                    for b_idx in 0..num_out_mats {
+                        let b1 = b_idx % num_mats1;
+                        let b2 = b_idx % num_mats2;
+                        let slice1 = &flat1[b1 * mat1_size..(b1 + 1) * mat1_size];
+                        let slice2 = &flat2[b2 * mat2_size..(b2 + 1) * mat2_size];
+                        for i in 0..m {
+                            for j in 0..n {
+                                let mut acc = 0.0;
+                                for p in 0..k1 {
+                                    acc += slice1[i * k1 + p] * slice2[p * n + j];
+                                }
+                                out_data.push(acc);
+                            }
+                        }
+                    }
+                    MathValue::new_tensor(out_shape, out_data)
+                }
                 _ => Err("Invalid operand shapes for '@' matrix multiplication".to_string()),
             };
         }
@@ -4095,6 +5419,108 @@ impl MathEvaluator {
                 }
                 Ok(MathValue::Tuple(out))
             }
+            (
+                MathValue::Tensor {
+                    shape,
+                    strides,
+                    data,
+                },
+                MathValue::Scalar(s),
+            ) => {
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let mut out = Vec::with_capacity(flat.len());
+                for x in flat {
+                    out.push(scalar_op(x, *s)?);
+                }
+                MathValue::new_tensor(shape.clone(), out)
+            }
+            (
+                MathValue::Scalar(s),
+                MathValue::Tensor {
+                    shape,
+                    strides,
+                    data,
+                },
+            ) => {
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let mut out = Vec::with_capacity(flat.len());
+                for x in flat {
+                    out.push(scalar_op(*s, x)?);
+                }
+                MathValue::new_tensor(shape.clone(), out)
+            }
+            (
+                MathValue::Tensor {
+                    shape: s1,
+                    strides: str1,
+                    data: d1,
+                },
+                MathValue::Tensor {
+                    shape: s2,
+                    strides: str2,
+                    data: d2,
+                },
+            ) => {
+                if s1 != s2 {
+                    return Err(format!(
+                        "Shape mismatch in tensor elementwise op: {:?} vs {:?}",
+                        s1, s2
+                    ));
+                }
+                let flat1 = MathValue::get_flattened_strided(s1, str1, d1);
+                let flat2 = MathValue::get_flattened_strided(s2, str2, d2);
+                let mut out = Vec::with_capacity(flat1.len());
+                for (a, b) in flat1.into_iter().zip(flat2.into_iter()) {
+                    out.push(scalar_op(a, b)?);
+                }
+                MathValue::new_tensor(s1.clone(), out)
+            }
+            (
+                MathValue::Tensor {
+                    shape,
+                    strides,
+                    data,
+                },
+                MathValue::Vector(v),
+            ) => {
+                let last_dim = *shape.last().unwrap_or(&1);
+                if v.len() != last_dim {
+                    return Err(format!(
+                        "Vector broadcast mismatch on tensor: vector len {} != tensor last dim {}",
+                        v.len(),
+                        last_dim
+                    ));
+                }
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let mut out = Vec::with_capacity(flat.len());
+                for (i, x) in flat.into_iter().enumerate() {
+                    out.push(scalar_op(x, v[i % last_dim])?);
+                }
+                MathValue::new_tensor(shape.clone(), out)
+            }
+            (
+                MathValue::Vector(v),
+                MathValue::Tensor {
+                    shape,
+                    strides,
+                    data,
+                },
+            ) => {
+                let last_dim = *shape.last().unwrap_or(&1);
+                if v.len() != last_dim {
+                    return Err(format!(
+                        "Vector broadcast mismatch on tensor: vector len {} != tensor last dim {}",
+                        v.len(),
+                        last_dim
+                    ));
+                }
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let mut out = Vec::with_capacity(flat.len());
+                for (i, x) in flat.into_iter().enumerate() {
+                    out.push(scalar_op(v[i % last_dim], x)?);
+                }
+                MathValue::new_tensor(shape.clone(), out)
+            }
             _ => Err("Incompatible tensor operands in binary operation".to_string()),
         }
     }
@@ -4119,6 +5545,7 @@ impl MathEvaluator {
                 }
                 let is_all_scalars = vals.iter().all(|v| matches!(v, MathValue::Scalar(_)));
                 let is_all_vectors = vals.iter().all(|v| matches!(v, MathValue::Vector(_)));
+                let is_all_matrices = vals.iter().all(|v| matches!(v, MathValue::Matrix(_)));
                 let out_val = if is_all_scalars {
                     MathValue::Vector(vals.into_iter().map(|v| v.as_scalar().unwrap()).collect())
                 } else if is_all_vectors {
@@ -4130,6 +5557,18 @@ impl MathEvaluator {
                             })
                             .collect(),
                     )
+                } else if is_all_matrices {
+                    let mut mat_list = Vec::with_capacity(vals.len());
+                    for v in vals {
+                        if let MathValue::Matrix(m) = v {
+                            mat_list.push(m);
+                        }
+                    }
+                    let r = mat_list[0].len();
+                    let c = mat_list[0].first().map(|row| row.len()).unwrap_or(0);
+                    let shape = vec![mat_list.len(), r, c];
+                    let flat: Vec<f64> = mat_list.into_iter().flatten().flatten().collect();
+                    MathValue::new_tensor(shape, flat)?
                 } else {
                     return Err("Mixed types in array literal for tape".to_string());
                 };
@@ -4180,6 +5619,37 @@ impl MathEvaluator {
                                 idx_val,
                                 m.len()
                             ));
+                        }
+                    }
+                    MathValue::Tensor { shape, strides, data } => {
+                        if shape.is_empty() {
+                            return Err("Cannot index empty tensor in tape".to_string());
+                        }
+                        if idx_val >= shape[0] {
+                            return Err(format!(
+                                "Index {} out of bounds for tensor with dim {}",
+                                idx_val, shape[0]
+                            ));
+                        }
+                        let sub_shape = shape[1..].to_vec();
+                        let flat = MathValue::get_flattened_strided(shape, strides, data);
+                        let sub_total: usize = sub_shape.iter().product();
+                        let s_offset = idx_val * sub_total;
+                        let e_offset = s_offset + sub_total;
+                        let sub_data = flat[s_offset..e_offset.min(flat.len())].to_vec();
+                        match sub_shape.len() {
+                            0 => MathValue::Scalar(sub_data.first().copied().unwrap_or(0.0)),
+                            1 => MathValue::Vector(sub_data),
+                            2 => {
+                                let r = sub_shape[0];
+                                let c = sub_shape[1];
+                                let mut mat = Vec::with_capacity(r);
+                                for i in 0..r {
+                                    mat.push(sub_data[i * c..(i + 1) * c].to_vec());
+                                }
+                                MathValue::Matrix(mat)
+                            }
+                            _ => MathValue::new_tensor(sub_shape, sub_data)?,
                         }
                     }
                     _ => return Err("Cannot index scalar in tape".to_string()),
@@ -4263,6 +5733,14 @@ impl MathEvaluator {
             }
             MathValue::Tuple(items) => {
                 MathValue::Tuple(items.iter().map(|_| MathValue::Scalar(1.0)).collect())
+            }
+            MathValue::Tensor { shape, .. } => {
+                let total: usize = shape.iter().product();
+                MathValue::Tensor {
+                    shape: shape.clone(),
+                    strides: MathValue::compute_contiguous_strides(shape),
+                    data: vec![1.0; total],
+                }
             }
         };
         tape.backward(&incoming_adj, wrt, &mut acc_grad, self)?;
@@ -4541,6 +6019,7 @@ impl MathProgram {
                             let cols = m.first().map(|r| r.len()).unwrap_or(0);
                             Some(vec![rows, cols])
                         }
+                        MathValue::Tensor { shape, .. } => Some(shape),
                         MathValue::Tuple(_) => None,
                     }
                 } else {
@@ -4562,12 +6041,10 @@ impl MathProgram {
                                 } else if s.is_empty() {
                                     return Some(vec![]);
                                 } else {
-                                    errors.push(format!(
-                                        "{}Transpose (^T) unsupported on tensor of rank {}",
-                                        prefix,
-                                        s.len()
-                                    ));
-                                    return None;
+                                    let mut out = s.clone();
+                                    let n = out.len();
+                                    out.swap(n - 2, n - 1);
+                                    return Some(out);
                                 }
                             }
                         }
@@ -4628,6 +6105,23 @@ impl MathProgram {
                             }
                             (0, _) => Some(r),
                             (_, 0) => Some(l),
+                            (nl, nr) if nl >= 2 && nr >= 2 => {
+                                let k_l = l[nl - 1];
+                                let k_r = r[nr - 2];
+                                if k_l != k_r {
+                                    errors.push(format!(
+                                        "{}Batched MatMul (@) inner dimension mismatch: left shape {:?} (dim {}) cannot multiply right shape {:?} (dim {})",
+                                        prefix, l, k_l, r, k_r
+                                    ));
+                                    None
+                                } else {
+                                    let batch_dims = if nl >= nr { &l[..nl - 2] } else { &r[..nr - 2] };
+                                    let mut out = batch_dims.to_vec();
+                                    out.push(l[nl - 2]);
+                                    out.push(r[nr - 1]);
+                                    Some(out)
+                                }
+                            }
                             _ => {
                                 errors.push(format!(
                                     "{}MatMul (@) unsupported between rank {} and rank {}",
@@ -4731,6 +6225,11 @@ impl MathProgram {
                                 Some(vec![s[1], s[0]])
                             } else if s.len() == 1 {
                                 Some(vec![s[0], 1])
+                            } else if s.len() >= 3 {
+                                let mut out = s.clone();
+                                let n = out.len();
+                                out.swap(n - 2, n - 1);
+                                Some(out)
                             } else {
                                 Some(s)
                             }
@@ -4932,17 +6431,19 @@ impl MathProgram {
                             }
                             _ => None,
                         }
-                    } else if args.len() == 2 {
-                        if let (MathExpr::Num(r), MathExpr::Num(c)) = (&args[0], &args[1]) {
-                            Some(vec![*r as usize, *c as usize])
+                    } else if args.len() >= 2 {
+                        let mut out = Vec::new();
+                        for a in args {
+                            if let MathExpr::Num(n) = a {
+                                out.push(*n as usize);
+                            }
+                        }
+                        if out.len() == args.len() {
+                            Some(out)
                         } else {
                             None
                         }
                     } else {
-                        errors.push(format!(
-                            "{}'{}' expects 1 or 2 dimension arguments",
-                            prefix, func
-                        ));
                         None
                     }
                 }
@@ -4961,14 +6462,28 @@ impl MathProgram {
                 }
                 "randn" => {
                     if args.len() == 1 {
-                        if let MathExpr::Num(n) = &args[0] {
-                            Some(vec![*n as usize])
-                        } else {
-                            None
+                        match &args[0] {
+                            MathExpr::Num(n) => Some(vec![*n as usize]),
+                            MathExpr::Array(dims) => {
+                                let mut out = Vec::new();
+                                for d in dims {
+                                    if let MathExpr::Num(n) = d {
+                                        out.push(*n as usize);
+                                    }
+                                }
+                                Some(out)
+                            }
+                            _ => None,
                         }
                     } else if args.len() >= 2 {
-                        if let (MathExpr::Num(r), MathExpr::Num(c)) = (&args[0], &args[1]) {
-                            Some(vec![*r as usize, *c as usize])
+                        let mut out = Vec::new();
+                        for a in args {
+                            if let MathExpr::Num(n) = a {
+                                out.push(*n as usize);
+                            }
+                        }
+                        if out.len() == args.len() {
+                            Some(out)
                         } else {
                             None
                         }
@@ -5143,6 +6658,149 @@ impl MathProgram {
                     } else {
                         errors.push(format!(
                             "{}Attention expects at least 3 arguments (Q, K, V)",
+                            prefix
+                        ));
+                        None
+                    }
+                }
+                "split_heads" => {
+                    if args.len() >= 2 {
+                        let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let n_heads = if let MathExpr::Num(n) = &args[1] {
+                            *n as usize
+                        } else {
+                            1
+                        };
+                        if let Some(s) = x_s {
+                            if s.len() == 2 {
+                                let (seq, hidden) = (s[0], s[1]);
+                                let head_dim = hidden / n_heads.max(1);
+                                Some(vec![n_heads, seq, head_dim])
+                            } else if s.len() == 3 {
+                                let (batch, seq, hidden) = (s[0], s[1], s[2]);
+                                let head_dim = hidden / n_heads.max(1);
+                                Some(vec![batch, n_heads, seq, head_dim])
+                            } else {
+                                errors.push(format!(
+                                    "{}split_heads expects 2D or 3D tensor, got {:?}",
+                                    prefix, s
+                                ));
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!(
+                            "{}split_heads(X, n_heads) expects 2 arguments",
+                            prefix
+                        ));
+                        None
+                    }
+                }
+                "merge_heads" => {
+                    if let Some(arg) = args.first() {
+                        if let Some(s) = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx) {
+                            if s.len() == 3 {
+                                let (n_heads, seq, head_dim) = (s[0], s[1], s[2]);
+                                Some(vec![seq, n_heads * head_dim])
+                            } else if s.len() == 4 {
+                                let (batch, n_heads, seq, head_dim) = (s[0], s[1], s[2], s[3]);
+                                Some(vec![batch, seq, n_heads * head_dim])
+                            } else {
+                                errors.push(format!(
+                                    "{}merge_heads expects 3D or 4D tensor, got {:?}",
+                                    prefix, s
+                                ));
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!("{}merge_heads(X) expects 1 argument", prefix));
+                        None
+                    }
+                }
+                "gqa_attn" => {
+                    if args.len() >= 5 {
+                        let q = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let _k = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        let _v = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        q
+                    } else {
+                        errors.push(format!(
+                            "{}gqa_attn(Q, K, V, n_heads, n_kv_heads, ...) expects at least 5 arguments",
+                            prefix
+                        ));
+                        None
+                    }
+                }
+                "mla_attn" => {
+                    if args.len() >= 5 {
+                        let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        for a in &args[1..] {
+                            let _ = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                        }
+                        x_s
+                    } else {
+                        errors.push(format!(
+                            "{}mla_attn(X, W_dkv, W_uk, W_uv, W_q, [W_o]) expects at least 5 arguments",
+                            prefix
+                        ));
+                        None
+                    }
+                }
+                "ssd_scan" => {
+                    if args.len() >= 2 {
+                        let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let _dt_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        x_s
+                    } else {
+                        errors.push(format!(
+                            "{}ssd_scan(X, decay_dt) expects 2 arguments",
+                            prefix
+                        ));
+                        None
+                    }
+                }
+                "permute" => {
+                    if args.len() >= 2 {
+                        let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let mut dims = Vec::new();
+                        if args.len() == 2 {
+                            if let MathExpr::Array(items) = &args[1] {
+                                for it in items {
+                                    if let MathExpr::Num(n) = it {
+                                        dims.push(*n as usize);
+                                    }
+                                }
+                            }
+                        } else {
+                            for a in &args[1..] {
+                                if let MathExpr::Num(n) = a {
+                                    dims.push(*n as usize);
+                                }
+                            }
+                        }
+                        if let Some(s) = x_s {
+                            if dims.len() == s.len() {
+                                let mut out = vec![0; s.len()];
+                                for (i, &d) in dims.iter().enumerate() {
+                                    if d < s.len() {
+                                        out[i] = s[d];
+                                    }
+                                }
+                                Some(out)
+                            } else {
+                                Some(s)
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!(
+                            "{}permute(X, dims) expects at least 2 arguments",
                             prefix
                         ));
                         None
@@ -6720,6 +8378,11 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                                 .collect();
                             (vec![rows, cols], bytes)
                         }
+                        MathValue::Tensor { shape, strides, data } => {
+                            let flat = MathValue::get_flattened_strided(shape, strides, data);
+                            let bytes: Vec<u8> = flat.iter().flat_map(|&x| (x as f32).to_le_bytes()).collect();
+                            (shape.clone(), bytes)
+                        }
                         _ => (vec![1usize], vec![0u8; 4]),
                     };
                     new_tensors.push((k, shape, raw_bytes));
@@ -6756,6 +8419,23 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                     .flat_map(|&x| (x as f32).to_le_bytes())
                     .collect();
                 new_tensors.push((name, vec![rows, cols], bytes));
+            }
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
+                let name = if key.is_empty() {
+                    "weights".to_string()
+                } else {
+                    key.to_string()
+                };
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let bytes: Vec<u8> = flat
+                    .iter()
+                    .flat_map(|&x| (x as f32).to_le_bytes())
+                    .collect();
+                new_tensors.push((name, shape.clone(), bytes));
             }
         }
 
@@ -6993,15 +8673,7 @@ pub fn load_tensor_resource(path: &str, key: &str) -> Result<MathValue, String> 
             }
             Ok(MathValue::Matrix(mat))
         } else {
-            let cols = *shape.last().unwrap_or(&1);
-            let rows = floats.len() / cols.max(1);
-            let mut mat = Vec::with_capacity(rows);
-            for r in 0..rows {
-                let start = r * cols;
-                let end = (start + cols).min(floats.len());
-                mat.push(floats[start..end].to_vec());
-            }
-            Ok(MathValue::Matrix(mat))
+            MathValue::new_tensor(shape, floats)
         }
     } else {
         // 2. Plain Text CLL / Vector / Matrix format
@@ -8104,5 +9776,176 @@ mod tests {
             _ => panic!("Expected loaded tensors to match shapes and values"),
         }
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_nd_tensor_strides_permute_and_reshape() {
+        let code = r#"
+            // Create a 3D tensor [2, 3, 2]
+            T = [[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], [[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]]
+            
+            // Permute axes [1, 0, 2] -> shape [3, 2, 2]
+            P = permute(T, [1, 0, 2])
+            
+            // Transpose last 2 dims using ^T -> shape [2, 2, 3]
+            Tr = T^T
+            
+            // Reshape [2, 3, 2] -> [6, 2]
+            R = reshape(T, [6, 2])
+        "#;
+        let prog = parse_math_code(code).expect("Parse N-D tensor ops failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+
+        let t_val = eval.env.get("T").unwrap();
+        assert_eq!(t_val.shape(), vec![2, 3, 2]);
+
+        let p_val = eval.env.get("P").unwrap();
+        assert_eq!(p_val.shape(), vec![3, 2, 2]);
+
+        let tr_val = eval.env.get("Tr").unwrap();
+        assert_eq!(tr_val.shape(), vec![2, 2, 3]);
+
+        let r_val = eval.env.get("R").unwrap();
+        assert_eq!(r_val.shape(), vec![6, 2]);
+    }
+
+    #[test]
+    fn test_split_heads_and_merge_heads() {
+        let code = r#"
+            // 2D sequence matrix: [seq=4, hidden=8]
+            X = [[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+                 [9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
+                 [17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0],
+                 [25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0]]
+            
+            // Split into 2 heads -> [n_heads=2, seq=4, head_dim=4]
+            H = split_heads(X, 2)
+            
+            // Merge heads back -> [seq=4, hidden=8]
+            X_rec = merge_heads(H)
+        "#;
+        let prog = parse_math_code(code).expect("Parse split/merge heads failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+
+        let h_val = eval.env.get("H").unwrap();
+        assert_eq!(h_val.shape(), vec![2, 4, 4]);
+
+        let x_rec = eval.env.get("X_rec").unwrap();
+        assert_eq!(x_rec.shape(), vec![4, 8]);
+        assert_eq!(x_rec.flatten_elements(), eval.env.get("X").unwrap().flatten_elements());
+    }
+
+    #[test]
+    fn test_grouped_query_attention_gqa() {
+        let code = r#"
+            // Q has 4 heads (hidden=8, head_dim=2), seq=3
+            Q = [[1.0, 0.0, 0.5, 0.2, 0.1, 0.3, 0.0, 1.0],
+                 [0.0, 1.0, 0.2, 0.5, 0.3, 0.1, 1.0, 0.0],
+                 [0.5, 0.5, 0.1, 0.1, 0.2, 0.2, 0.5, 0.5]]
+            
+            // K and V have 2 heads (hidden=4, head_dim=2), seq=3
+            K = [[1.0, 0.0, 0.5, 0.2],
+                 [0.0, 1.0, 0.2, 0.5],
+                 [0.5, 0.5, 0.1, 0.1]]
+            V = [[0.8, 0.1, 0.4, 0.2],
+                 [0.2, 0.7, 0.1, 0.6],
+                 [0.5, 0.4, 0.3, 0.3]]
+            
+            // GQA with 4 Q heads, 2 KV heads, scale=0.7071
+            Out = gqa_attn(Q, K, V, 4, 2, 0.7071)
+        "#;
+        let prog = parse_math_code(code).expect("Parse GQA failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+
+        let out = eval.env.get("Out").unwrap();
+        assert_eq!(out.shape(), vec![3, 8]);
+        // All values should be finite and non-zero
+        for &v in &out.flatten_elements() {
+            assert!(v.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_deepseek_mla_attention() {
+        let code = r#"
+            // X: [seq=2, hidden=4]
+            X = [[1.0, 2.0, 0.5, 0.1], [0.5, 1.0, 2.0, 0.2]]
+            
+            // DeepSeek Low-Rank KV Compression matrices
+            // W_dkv: [dkv=2, hidden=4]
+            W_dkv = [[0.5, 0.2, 0.1, 0.0], [0.1, 0.4, 0.2, 0.3]]
+            // W_uk: [hidden=4, dkv=2]
+            W_uk = [[0.3, 0.1], [0.2, 0.4], [0.1, 0.5], [0.4, 0.2]]
+            // W_uv: [hidden=4, dkv=2]
+            W_uv = [[0.2, 0.3], [0.4, 0.1], [0.3, 0.2], [0.1, 0.4]]
+            // W_q: [hidden=4, hidden=4]
+            W_q = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+            // W_o: [hidden=4, hidden=4]
+            W_o = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+            
+            // MLA Forward pass
+            Out = mla_attn(X, W_dkv, W_uk, W_uv, W_q, W_o)
+        "#;
+        let prog = parse_math_code(code).expect("Parse DeepSeek MLA failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+
+        let out = eval.env.get("Out").unwrap();
+        assert_eq!(out.shape(), vec![2, 4]);
+        for &v in &out.flatten_elements() {
+            assert!(v.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_mamba2_ssd_scan_and_autodiff() {
+        let code = r#"
+            // Sequence of inputs: [seq=3, dim=2]
+            X = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+            decay_dt = [0.5, 0.8]
+            
+            // Parallel associative state space scan
+            Y = ssd_scan(X, decay_dt)
+            
+            // Compute gradient of total scanned sum wrt X
+            loss(W) = sum(ssd_scan(W, decay_dt))
+            grad_X = grad(loss(X), X)
+        "#;
+        let prog = parse_math_code(code).expect("Parse Mamba-2 SSD scan failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+
+        let y_val = eval.env.get("Y").unwrap();
+        assert_eq!(y_val.shape(), vec![3, 2]);
+
+        // Verify recurrence:
+        // Y[0] = X[0] = [1.0, 2.0]
+        // Y[1] = Y[0] * decay_dt + X[1] = [1.0*0.5 + 3.0, 2.0*0.8 + 4.0] = [3.5, 5.6]
+        // Y[2] = Y[1] * decay_dt + X[2] = [3.5*0.5 + 5.0, 5.6*0.8 + 6.0] = [6.75, 10.48]
+        if let MathValue::Matrix(m) = y_val {
+            assert!((m[0][0] - 1.0).abs() < 1e-5);
+            assert!((m[0][1] - 2.0).abs() < 1e-5);
+            assert!((m[1][0] - 3.5).abs() < 1e-5);
+            assert!((m[1][1] - 5.6).abs() < 1e-5);
+            assert!((m[2][0] - 6.75).abs() < 1e-5);
+            assert!((m[2][1] - 10.48).abs() < 1e-5);
+        } else {
+            panic!("Expected matrix for SSD scan output");
+        }
+
+        let grad_x = eval.env.get("grad_X").unwrap();
+        assert_eq!(grad_x.shape(), vec![3, 2]);
+        for &g in &grad_x.flatten_elements() {
+            assert!(g.is_finite());
+            assert!(g > 0.0);
+        }
     }
 }
