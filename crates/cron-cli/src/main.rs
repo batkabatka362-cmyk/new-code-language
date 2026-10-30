@@ -2711,8 +2711,10 @@ fn main() {
             };
 
             let emit_c23 = args.iter().any(|a| a == "--c23");
+            let emit_c23_exec = args.iter().any(|a| a == "--c23-exec" || a == "--exec");
             let emit_ptx = args.iter().any(|a| a == "--ptx");
             let emit_vliw = args.iter().any(|a| a == "--vliw" || a == "--cl");
+            let do_opt = args.iter().any(|a| a == "--opt" || a == "-O");
             let is_json = args.iter().any(|a| a == "--json");
             let output_bin = args
                 .iter()
@@ -2723,6 +2725,9 @@ fn main() {
                 prog.resolve_links(&base_dir)?;
                 if let Err(shape_errors) = prog.verify_shapes() {
                     return Err(format!("Shape verification failed:\n  {}", shape_errors.join("\n  ")));
+                }
+                if do_opt {
+                    prog = prog.optimize_tensor_graph();
                 }
                 Ok(prog)
             });
@@ -2741,6 +2746,8 @@ fn main() {
                                 std::process::exit(1);
                             }
                         }
+                    } else if emit_c23_exec {
+                        println!("{}", prog.to_c23_executable());
                     } else if emit_c23 {
                         println!("{}", prog.to_c23());
                     } else if emit_ptx {

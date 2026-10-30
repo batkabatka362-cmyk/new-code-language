@@ -729,6 +729,138 @@ impl MathExpr {
             }
         }
     }
+
+    /// High-level Tensor Graph Optimization & Kernel Fusion pass
+    pub fn optimize_tensor_graph(&self) -> MathExpr {
+        let simplified = match self {
+            MathExpr::Array(elems) => {
+                MathExpr::Array(elems.iter().map(|e| e.optimize_tensor_graph()).collect())
+            }
+            MathExpr::Index(b, i) => {
+                MathExpr::Index(
+                    Box::new(b.optimize_tensor_graph()),
+                    Box::new(i.optimize_tensor_graph()),
+                )
+            }
+            MathExpr::Unary(op, inner) => {
+                MathExpr::Unary(*op, Box::new(inner.optimize_tensor_graph()))
+            }
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => MathExpr::Ternary {
+                cond: Box::new(cond.optimize_tensor_graph()),
+                then_expr: Box::new(then_expr.optimize_tensor_graph()),
+                else_expr: Box::new(else_expr.optimize_tensor_graph()),
+            },
+            MathExpr::Iterate { input, func, count } => MathExpr::Iterate {
+                input: Box::new(input.optimize_tensor_graph()),
+                func: Box::new(func.optimize_tensor_graph()),
+                count: Box::new(count.optimize_tensor_graph()),
+            },
+            MathExpr::Call(name, args) => {
+                let opt_args: Vec<MathExpr> =
+                    args.iter().map(|a| a.optimize_tensor_graph()).collect();
+                // Rule 1: transpose(transpose(X)) -> X
+                if (name == "transpose" || name == "T") && opt_args.len() == 1 {
+                    if let MathExpr::Call(sub_name, sub_args) = &opt_args[0] {
+                        if (sub_name == "transpose" || sub_name == "T") && sub_args.len() == 1 {
+                            return sub_args[0].clone();
+                        }
+                    }
+                }
+                MathExpr::Call(name.clone(), opt_args)
+            }
+            MathExpr::Pipeline(stages) => {
+                MathExpr::Pipeline(stages.iter().map(|s| s.optimize_tensor_graph()).collect())
+            }
+            MathExpr::Binary(lhs, op, rhs) => {
+                let l = lhs.optimize_tensor_graph();
+                let r = rhs.optimize_tensor_graph();
+                // Rule 2: Identity MatMul: X @ eye(N) -> X, eye(N) @ X -> X
+                if *op == MathBinOp::MatMul {
+                    if let MathExpr::Call(ref name, _) = r {
+                        if name == "eye" {
+                            return l;
+                        }
+                    }
+                    if let MathExpr::Call(ref name, _) = l {
+                        if name == "eye" {
+                            return r;
+                        }
+                    }
+                    // Rule 3: Attention Fusion: softmax((Q @ K^T) * scale) @ V -> attention(Q, K, V, scale)
+                    if let MathExpr::Call(ref s_name, ref s_args) = l {
+                        if s_name == "softmax" && s_args.len() == 1 {
+                            let inner_score = &s_args[0];
+                            let mut scale_val = None;
+                            let qk_expr = match inner_score {
+                                MathExpr::Binary(qk, MathBinOp::Mul, scale_expr) => {
+                                    scale_val = Some(*scale_expr.clone());
+                                    qk.as_ref()
+                                }
+                                MathExpr::Binary(qk, MathBinOp::Div, scale_expr) => {
+                                    scale_val = Some(MathExpr::Binary(
+                                        Box::new(MathExpr::Num(1.0)),
+                                        MathBinOp::Div,
+                                        scale_expr.clone(),
+                                    ));
+                                    qk.as_ref()
+                                }
+                                other => other,
+                            };
+                            if let MathExpr::Binary(q_box, MathBinOp::MatMul, kt_box) = qk_expr {
+                                if let MathExpr::Call(kt_name, kt_args) = kt_box.as_ref() {
+                                    if (kt_name == "transpose" || kt_name == "T")
+                                        && kt_args.len() == 1
+                                    {
+                                        let q = *q_box.clone();
+                                        let k = kt_args[0].clone();
+                                        let v = r.clone();
+                                        let mut call_args = vec![q, k, v];
+                                        if let Some(s) = scale_val {
+                                            call_args.push(s);
+                                        }
+                                        return MathExpr::Call("attention".to_string(), call_args);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Rule 4: Zero Tensor Addition: X + zeros(...) -> X, zeros(...) + X -> X
+                if *op == MathBinOp::Add {
+                    if let MathExpr::Call(ref name, _) = r {
+                        if name == "zeros" {
+                            return l;
+                        }
+                    }
+                    if let MathExpr::Call(ref name, _) = l {
+                        if name == "zeros" {
+                            return r;
+                        }
+                    }
+                }
+                // Rule 5: Ones Tensor Multiplication: X * ones(...) -> X, ones(...) * X -> X
+                if *op == MathBinOp::Mul {
+                    if let MathExpr::Call(ref name, _) = r {
+                        if name == "ones" {
+                            return l;
+                        }
+                    }
+                    if let MathExpr::Call(ref name, _) = l {
+                        if name == "ones" {
+                            return r;
+                        }
+                    }
+                }
+                MathExpr::Binary(Box::new(l), *op, Box::new(r))
+            }
+            _ => self.clone(),
+        };
+        simplified.simplify()
+    }
 }
 
 /// Top-level Items in a Mathematical Module
@@ -2203,6 +2335,114 @@ impl MathEvaluator {
                         _ => Err("Unsupported operand types for 'concat'".to_string()),
                     }
                 }
+                "embed" => {
+                    if args.len() < 2 {
+                        return Err("'embed(E, tokens)' expects 2 arguments".to_string());
+                    }
+                    let table = self.eval_value(&args[0])?;
+                    let tokens = self.eval_value(&args[1])?;
+                    match (table, tokens) {
+                        (MathValue::Matrix(vocab_mat), MathValue::Vector(toks)) => {
+                            let mut res = Vec::with_capacity(toks.len());
+                            for t in toks {
+                                let idx = t as usize;
+                                if idx < vocab_mat.len() {
+                                    res.push(vocab_mat[idx].clone());
+                                } else {
+                                    return Err(format!(
+                                        "Token index {} out of bounds for vocab size {}",
+                                        idx,
+                                        vocab_mat.len()
+                                    ));
+                                }
+                            }
+                            Ok(MathValue::Matrix(res))
+                        }
+                        (MathValue::Matrix(vocab_mat), MathValue::Scalar(s)) => {
+                            let idx = s as usize;
+                            if idx < vocab_mat.len() {
+                                Ok(MathValue::Vector(vocab_mat[idx].clone()))
+                            } else {
+                                Err(format!(
+                                    "Token index {} out of bounds for vocab size {}",
+                                    idx,
+                                    vocab_mat.len()
+                                ))
+                            }
+                        }
+                        _ => Err(
+                            "'embed' expects a 2D weight matrix and 1D vector (or scalar) of token indices"
+                                .to_string(),
+                        ),
+                    }
+                }
+                "log_softmax" => {
+                    let val = self.eval_single_val(args, "log_softmax")?;
+                    let calc_lse = |row: &[f64]| -> Vec<f64> {
+                        let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let sum_exp: f64 = row.iter().map(|&x| (x - max_v).exp()).sum();
+                        let lse = max_v + sum_exp.max(1e-12).ln();
+                        row.iter().map(|&x| x - lse).collect()
+                    };
+                    match val {
+                        MathValue::Scalar(_) => Ok(MathValue::Scalar(0.0)),
+                        MathValue::Vector(vec) => Ok(MathValue::Vector(calc_lse(&vec))),
+                        MathValue::Matrix(mat) => {
+                            let res = mat.iter().map(|r| calc_lse(r)).collect();
+                            Ok(MathValue::Matrix(res))
+                        }
+                    }
+                }
+                "cross_entropy" => {
+                    if args.len() < 2 {
+                        return Err(
+                            "'cross_entropy(logits, targets)' expects 2 arguments".to_string()
+                        );
+                    }
+                    let logits = self.eval_value(&args[0])?;
+                    let targets = self.eval_value(&args[1])?;
+                    let calc_row_ce = |row: &[f64], target_idx: usize| -> Result<f64, String> {
+                        if target_idx >= row.len() {
+                            return Err(format!(
+                                "Target index {} exceeds vocab dimension {}",
+                                target_idx,
+                                row.len()
+                            ));
+                        }
+                        let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let sum_exp: f64 = row.iter().map(|&x| (x - max_v).exp()).sum();
+                        let lse = max_v + sum_exp.max(1e-12).ln();
+                        Ok(-(row[target_idx] - lse))
+                    };
+                    match (logits, targets) {
+                        (MathValue::Matrix(mat), MathValue::Vector(target_vec)) => {
+                            if mat.len() != target_vec.len() {
+                                return Err(format!(
+                                    "Batch/Seq length mismatch: {} logits rows vs {} targets",
+                                    mat.len(),
+                                    target_vec.len()
+                                ));
+                            }
+                            let mut total_loss = 0.0;
+                            for (row, &t) in mat.iter().zip(target_vec.iter()) {
+                                total_loss += calc_row_ce(row, t as usize)?;
+                            }
+                            Ok(MathValue::Scalar(total_loss / mat.len().max(1) as f64))
+                        }
+                        (MathValue::Vector(vec), MathValue::Scalar(t)) => {
+                            let loss = calc_row_ce(&vec, t as usize)?;
+                            Ok(MathValue::Scalar(loss))
+                        }
+                        (MathValue::Vector(vec), MathValue::Vector(t_vec)) if t_vec.len() == 1 => {
+                            let loss = calc_row_ce(&vec, t_vec[0] as usize)?;
+                            Ok(MathValue::Scalar(loss))
+                        }
+                        _ => Err(
+                            "cross_entropy expects (Matrix[Seq, Vocab], Vector[Seq]) or (Vector[Vocab], Scalar)"
+                                .to_string(),
+                        ),
+                    }
+                }
                 "grad" | "diff" => {
                     if args.len() != 2 {
                         return Err(format!("'{}' expects (expr, var)", name));
@@ -2664,6 +2904,26 @@ impl MathEvaluator {
 // ============================================================================
 
 impl MathProgram {
+    /// High-level Tensor Graph Optimization & Kernel Fusion pass across all program items
+    pub fn optimize_tensor_graph(&self) -> MathProgram {
+        let mut opt = self.clone();
+        for item in &mut opt.items {
+            match item {
+                MathItem::Binding { expr, .. } | MathItem::Expression(expr) => {
+                    *expr = expr.optimize_tensor_graph();
+                }
+                MathItem::Export { expr, .. } => {
+                    *expr = expr.optimize_tensor_graph();
+                }
+                MathItem::Function { body, .. } => {
+                    *body = body.optimize_tensor_graph();
+                }
+                _ => {}
+            }
+        }
+        opt
+    }
+
     /// Collects all defined mathematical functions for beta-reduction inlining and symbolic autodiff
     pub fn collect_functions(&self) -> HashMap<String, (Vec<String>, MathExpr)> {
         let mut fns = HashMap::new();
@@ -3320,11 +3580,63 @@ impl MathProgram {
                     }
                 }
                 "exp" | "ln" | "log" | "sqrt" | "sin" | "cos" | "tan" | "tanh" | "abs"
-                | "sigmoid" | "relu" | "gelu" | "softmax" | "silu" | "rmsnorm" | "rope" => {
+                | "sigmoid" | "relu" | "gelu" | "softmax" | "silu" | "rmsnorm" | "rope"
+                | "log_softmax" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
                         Some(vec![])
+                    }
+                }
+                "embed" => {
+                    if args.len() >= 2 {
+                        let table_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let tok_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        match (table_s, tok_s) {
+                            (Some(tbl), Some(tok)) => {
+                                if tbl.len() != 2 {
+                                    errors.push(format!(
+                                        "{}embed table must be a 2D matrix [vocab_size, dim], got {:?}",
+                                        prefix, tbl
+                                    ));
+                                    None
+                                } else if tok.len() == 1 {
+                                    Some(vec![tok[0], tbl[1]])
+                                } else if tok.is_empty() {
+                                    Some(vec![tbl[1]])
+                                } else {
+                                    errors.push(format!(
+                                        "{}embed tokens must be 1D vector or scalar, got {:?}",
+                                        prefix, tok
+                                    ));
+                                    None
+                                }
+                            }
+                            (Some(tbl), None) => {
+                                if tbl.len() == 2 {
+                                    Some(vec![1, tbl[1]])
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        errors.push(format!("{}embed(E, tokens) expects 2 arguments", prefix));
+                        None
+                    }
+                }
+                "cross_entropy" => {
+                    if args.len() >= 2 {
+                        let _ = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let _ = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        Some(vec![])
+                    } else {
+                        errors.push(format!(
+                            "{}cross_entropy(logits, targets) expects 2 arguments",
+                            prefix
+                        ));
+                        None
                     }
                 }
                 "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
@@ -3749,7 +4061,8 @@ impl MathProgram {
                         } else if let MathExpr::Binary(lhs, MathBinOp::MatMul, rhs) = expr {
                             let l_str = Self::expr_to_c23(lhs);
                             let r_str = Self::expr_to_c23(rhs);
-                            let l_shape = shapes.get(&l_str).cloned().unwrap_or_else(|| vec![n, n]);
+                            let l_shape =
+                                shapes.get(&l_str).cloned().unwrap_or_else(|| vec![n, n]);
                             let k = if l_shape.len() == 2 { l_shape[1] } else { n };
                             out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
                             out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
@@ -3765,6 +4078,58 @@ impl MathProgram {
                             out.push_str("        }\n");
                             out.push_str(&format!("        {}[_i] = _acc;\n", name));
                             out.push_str("    }\n");
+                        } else if let MathExpr::Call(func, args) = expr {
+                            match func.as_str() {
+                                "zeros" => {
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}] = {{ 0.0f }};\n",
+                                        name, n
+                                    ));
+                                }
+                                "ones" => {
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}];\n",
+                                        name, n
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {}[_i] = 1.0f;\n",
+                                        n, name
+                                    ));
+                                }
+                                "argmax" => {
+                                    let arg_s = Self::expr_to_c23(&args[0]);
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}];\n",
+                                        name, n
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        n
+                                    ));
+                                    out.push_str(&format!(
+                                        "        int _best_j = 0; float _best_v = {}[_i][0];\n",
+                                        arg_s
+                                    ));
+                                    out.push_str("        for (int _j = 1; _j < sizeof(");
+                                    out.push_str(&format!(
+                                        "{}[_i])/sizeof({}[_i][0]); ++_j) {{\n",
+                                        arg_s, arg_s
+                                    ));
+                                    out.push_str(&format!(
+                                        "            if ({}[_i][_j] > _best_v) {{ _best_v = {}[_i][_j]; _best_j = _j; }}\n",
+                                        arg_s, arg_s
+                                    ));
+                                    out.push_str("        }\n");
+                                    out.push_str(&format!("        {}[_i] = (float)_best_j;\n", name));
+                                    out.push_str("    }\n");
+                                }
+                                _ => {
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}] = {{ 0.0f }};\n",
+                                        name, n
+                                    ));
+                                }
+                            }
                         } else {
                             out.push_str(&format!(
                                 "    alignas(64) float {}[{}] = {{ 0.0f }};\n",
@@ -3773,7 +4138,10 @@ impl MathProgram {
                         }
                         out.push_str(&format!("    printf(\"  [=] {} = [\");\n", name));
                         out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
-                        out.push_str(&format!("        printf(\"%f%s\", (double){}[_i], (_i + 1 < {}) ? \", \" : \"\");\n", name, n));
+                        out.push_str(&format!(
+                            "        printf(\"%f%s\", (double){}[_i], (_i + 1 < {}) ? \", \" : \"\");\n",
+                            name, n
+                        ));
                         out.push_str("    }\n    printf(\"]\\n\");\n");
                     }
                     2 => {
@@ -3795,6 +4163,136 @@ impl MathProgram {
                                 cols,
                                 row_strs.join(", ")
                             ));
+                        } else if let MathExpr::Binary(lhs, MathBinOp::MatMul, rhs) = expr {
+                            let l_str = Self::expr_to_c23(lhs);
+                            let r_str = Self::expr_to_c23(rhs);
+                            let l_shape = shapes.get(&l_str).cloned().unwrap_or_else(|| vec![rows, cols]);
+                            let k = if l_shape.len() == 2 { l_shape[1] } else { cols };
+                            out.push_str(&format!(
+                                "    alignas(64) float {}[{}][{}];\n",
+                                name, rows, cols
+                            ));
+                            out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                            out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                            out.push_str("            float _acc = 0.0f;\n");
+                            out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                            out.push_str(&format!(
+                                "                _acc += (float){}[_i][_k] * (float){}[_k][_j];\n",
+                                l_str, r_str
+                            ));
+                            out.push_str("            }\n");
+                            out.push_str(&format!("            {}[_i][_j] = _acc;\n", name));
+                            out.push_str("        }\n");
+                            out.push_str("    }\n");
+                        } else if let MathExpr::Binary(lhs, op, rhs) = expr {
+                            let l_str = Self::expr_to_c23(lhs);
+                            let r_str = Self::expr_to_c23(rhs);
+                            let r_shape = shapes.get(&r_str).cloned().unwrap_or_default();
+                            let op_c = match op {
+                                MathBinOp::Add => "+",
+                                MathBinOp::Sub => "-",
+                                MathBinOp::Mul => "*",
+                                MathBinOp::Div => "/",
+                                _ => "+",
+                            };
+                            out.push_str(&format!(
+                                "    alignas(64) float {}[{}][{}];\n",
+                                name, rows, cols
+                            ));
+                            out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                            out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                            if r_shape.len() == 1 {
+                                // 2D-1D Broadcasting: [rows, cols] op [cols]
+                                out.push_str(&format!(
+                                    "            {}[_i][_j] = (float){}[_i][_j] {} (float){}[_j];\n",
+                                    name, l_str, op_c, r_str
+                                ));
+                            } else {
+                                out.push_str(&format!(
+                                    "            {}[_i][_j] = (float){}[_i][_j] {} (float){}[_i][_j];\n",
+                                    name, l_str, op_c, r_str
+                                ));
+                            }
+                            out.push_str("        }\n");
+                            out.push_str("    }\n");
+                        } else if let MathExpr::Call(func, args) = expr {
+                            match func.as_str() {
+                                "transpose" | "T" => {
+                                    let arg_s = Self::expr_to_c23(&args[0]);
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = (float){}[_j][_i];\n",
+                                        name, arg_s
+                                    ));
+                                    out.push_str("        }\n");
+                                    out.push_str("    }\n");
+                                }
+                                "eye" => {
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}] = {{ 0.0f }};\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {}[_i][_i] = 1.0f;\n",
+                                        rows.min(cols), name
+                                    ));
+                                }
+                                "zeros" => {
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}] = {{ 0.0f }};\n",
+                                        name, rows, cols
+                                    ));
+                                }
+                                "ones" => {
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!("            {}[_i][_j] = 1.0f;\n", name));
+                                    out.push_str("        }\n");
+                                    out.push_str("    }\n");
+                                }
+                                "rmsnorm" => {
+                                    let arg_s = Self::expr_to_c23(&args[0]);
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str("        float _ss = 0.0f;\n");
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) _ss += (float){}[_i][_j] * (float){}[_i][_j];\n", cols, arg_s, arg_s));
+                                    out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + 1e-5f);\n", cols));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j] * _scale;\n", cols, name, arg_s));
+                                    out.push_str("    }\n");
+                                }
+                                "embed" => {
+                                    let table_s = Self::expr_to_c23(&args[0]);
+                                    let toks_s = Self::expr_to_c23(&args[1]);
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!("        int _tok = (int){}[_i];\n", toks_s));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!("            {}[_i][_j] = (float){}[_tok][_j];\n", name, table_s));
+                                    out.push_str("        }\n");
+                                    out.push_str("    }\n");
+                                }
+                                _ => {
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}] = {{ 0.0f }};\n",
+                                        name, rows, cols
+                                    ));
+                                }
+                            }
                         } else {
                             out.push_str(&format!(
                                 "    alignas(64) float {}[{}][{}] = {{ 0.0f }};\n",
@@ -3808,7 +4306,10 @@ impl MathProgram {
                             "        for (int _j = 0; _j < {}; ++_j) {{\n",
                             cols
                         ));
-                        out.push_str(&format!("            printf(\"%f%s\", (double){}[_i][_j], (_j + 1 < {}) ? \", \" : \"\");\n", name, cols));
+                        out.push_str(&format!(
+                            "            printf(\"%f%s\", (double){}[_i][_j], (_j + 1 < {}) ? \", \" : \"\");\n",
+                            name, cols
+                        ));
                         out.push_str("        }\n");
                         out.push_str(&format!(
                             "        printf(\"]%s\", (_i + 1 < {}) ? \", \" : \"\");\n",
@@ -5646,5 +6147,98 @@ mod tests {
             .unwrap();
         // sum(r0) = 7 + 8 = 15.0; next_tok = 2.0; seq = [1, 2, 2] -> sum(seq) = 5.0; total = 20.0
         assert!((res - 20.0).abs() < 1e-5, "Expected 20.0, got {}", res);
+    }
+
+    #[test]
+    fn test_tensor_graph_optimization_and_fusion() {
+        // Test algebraic identity simplifications: (A^T)^T -> A, X @ eye(2) -> X, X + zeros(...) -> X
+        let code = r#"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            // (X^T)^T -> X
+            A = transpose(transpose(X))
+            // X @ eye(2) -> X
+            B = X @ eye(2)
+            // X + zeros(2, 2) -> X
+            C = X + zeros(2, 2)
+            // Attention Fusion: softmax((Q @ K^T) * 0.5) @ V -> attention(Q, K, V, 0.5)
+            Q = [[1.0, 0.0], [0.0, 1.0]]
+            K = [[1.0, 0.0], [0.0, 1.0]]
+            V = [[10.0, 20.0], [30.0, 40.0]]
+            attn_fused = softmax((Q @ transpose(K)) * 0.5) @ V
+        "#;
+        let prog = parse_math_code(code).expect("Parse optimization code failed");
+        let opt_prog = prog.optimize_tensor_graph();
+
+        // Verify attention fusion in the optimized AST
+        let mut found_fused_attn = false;
+        for item in &opt_prog.items {
+            if let MathItem::Binding { name, expr } = item {
+                if name == "attn_fused" {
+                    if let MathExpr::Call(fn_name, args) = expr {
+                        if fn_name == "attention" && args.len() == 4 {
+                            found_fused_attn = true;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(found_fused_attn, "Expected softmax(...) @ V to be fused into attention(Q, K, V, scale)");
+
+        // Verify shape checking and evaluation
+        assert!(opt_prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        let _ = eval.execute_program(&opt_prog).expect("Eval optimized graph failed");
+    }
+
+    #[test]
+    fn test_llm_embedding_and_cross_entropy_training() {
+        // Embed lookup + Linear logits + Cross Entropy Loss + Autodiff Matrix Training
+        let code = r#"
+            // Vocab = 4, Dim = 3
+            E = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]
+            toks = [0.0, 2.0]
+            targets = [1.0, 0.0]
+            // Lookup input tokens -> [2, 3] matrix
+            H = embed(E, toks)
+            // Linear projection to vocab logits [2, 4]
+            loss(W) = cross_entropy(H @ W, targets)
+            step(W) = W - 0.2 * grad(loss(W), W)
+            W_trained = zeros(3, 4) -> step^80
+            loss(W_trained)
+        "#;
+        let prog = parse_math_code(code).expect("Parse embedding & cross entropy failed");
+        assert!(prog.verify_shapes().is_ok(), "Shapes should be valid for embedding & cross entropy");
+        let mut eval = MathEvaluator::new();
+        let final_loss = eval.execute_program(&prog).expect("Eval training failed").unwrap();
+        // Initial loss at zeros(3, 4) is log(4) ~ 1.386. After 80 steps it converges < 0.15
+        assert!(final_loss < 0.15, "Expected trained cross-entropy loss < 0.15, got {}", final_loss);
+    }
+
+    #[test]
+    fn test_full_2d_c23_native_gemm_and_broadcasting() {
+        let code = r#"
+            W = [[1.0, 2.0], [3.0, 4.0]]
+            X = [[5.0, 6.0], [7.0, 8.0]]
+            b = [0.5, 1.5]
+            // GEMM [2, 2] @ [2, 2]
+            Y = X @ W
+            // 2D-1D Broadcasting: [2, 2] + [2]
+            Z = Y + b
+            // Transpose & RMSNorm
+            Z_t = transpose(Z)
+            Z_norm = rmsnorm(Z_t)
+        "#;
+        let prog = parse_math_code(code).expect("Parse C23 test failed");
+        assert!(prog.verify_shapes().is_ok());
+        let c23_code = prog.to_c23_executable();
+        // Check generated 2D GEMM nested loop
+        assert!(c23_code.contains("alignas(64) float Y[2][2];"), "Expected 2D matrix buffer for Y");
+        assert!(c23_code.contains("for (int _k = 0; _k < 2; ++_k)"), "Expected 2D GEMM inner loop");
+        // Check 2D-1D Bias broadcasting
+        assert!(c23_code.contains("(float)Y[_i][_j] + (float)b[_j];"), "Expected 2D-1D bias broadcast");
+        // Check 2D Transpose
+        assert!(c23_code.contains("(float)Z[_j][_i];"), "Expected 2D transpose indexing");
+        // Check 2D RMSNorm
+        assert!(c23_code.contains("1.0f / sqrtf((_ss / (float)2) + 1e-5f);"), "Expected RMSNorm row scaling");
     }
 }
