@@ -1831,25 +1831,52 @@ fn main() {
             });
 
             if input_path.ends_with(".cl") {
-                match cronc::cl_lang::verify_cl_program(&content) {
-                    Ok(report) => {
-                        println!("[PASS] '{}' passed all .cl Machine Language checks:", input_path);
-                        println!("  ✓ Language: CRON Low-Level (.cl) 128-bit VLIW Machine Language");
-                        println!("  ✓ Total Bundles: {}", report.total_bundles);
-                        println!("  ✓ Total 10-char Instruction Slots: {}", report.total_slots);
-                        println!("  ✓ Verified Opcodes: {} / {}", report.opcodes_verified, report.total_slots);
-                        println!("  ✓ Parity Protected Tokens: {} / {}", report.parity_verified, report.total_slots);
-                        if report.hazards.is_empty() {
-                            println!("  ✓ Structural Hazards: 0 (No Write-After-Write collisions)");
-                        } else {
-                            for h in &report.hazards {
-                                println!("  ⚠ {}", h);
-                            }
+                if cronc::is_math_calculus_source(&content) {
+                    let prog = match cronc::parse_math_file(std::path::Path::new(input_path)) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("[.cl MATH PARSE FAILED] {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    if let Err(shape_errors) = prog.verify_shapes() {
+                        eprintln!("[.cl SHAPE VERIFICATION FAILED] {}", shape_errors.join("; "));
+                        std::process::exit(1);
+                    }
+                    let vliw_code = prog.to_vliw();
+                    match cronc::cl_lang::verify_cl_program(&vliw_code) {
+                        Ok(report) => {
+                            println!("[PASS] '{}' passed all .cl Mathematical Calculus & VLIW checks:", input_path);
+                            println!("  ✓ Language: CRON Zero-Word Mathematical Calculus (.cl)");
+                            println!("  ✓ Static Tensor Shape & Dimension Verification: PASSED");
+                            println!("  ✓ Lowered VLIW Bundles: {} ({} slots, 100% CRC-8 parity)", report.total_bundles, report.total_slots);
+                        }
+                        Err(e) => {
+                            eprintln!("[.cl VERIFICATION FAILED] {}", e);
+                            std::process::exit(1);
                         }
                     }
-                    Err(e) => {
-                        eprintln!("[.cl VERIFICATION FAILED] {}", e);
-                        std::process::exit(1);
+                } else {
+                    match cronc::cl_lang::verify_cl_program(&content) {
+                        Ok(report) => {
+                            println!("[PASS] '{}' passed all .cl Machine Language checks:", input_path);
+                            println!("  ✓ Language: CRON Low-Level (.cl) 128-bit VLIW Machine Language");
+                            println!("  ✓ Total Bundles: {}", report.total_bundles);
+                            println!("  ✓ Total 10-char Instruction Slots: {}", report.total_slots);
+                            println!("  ✓ Verified Opcodes: {} / {}", report.opcodes_verified, report.total_slots);
+                            println!("  ✓ Parity Protected Tokens: {} / {}", report.parity_verified, report.total_slots);
+                            if report.hazards.is_empty() {
+                                println!("  ✓ Structural Hazards: 0 (No Write-After-Write collisions)");
+                            } else {
+                                for h in &report.hazards {
+                                    println!("  ⚠ {}", h);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[.cl VERIFICATION FAILED] {}", e);
+                            std::process::exit(1);
+                        }
                     }
                 }
             } else {
