@@ -219,6 +219,7 @@ pub enum MathExpr {
     Var(String),
     Array(Vec<MathExpr>), // Vector or Matrix literal: [1, 2, 3] or [[1, 2], [3, 4]]
     Index(Box<MathExpr>, Box<MathExpr>), // Tensor / Vector indexing: x[i], W[i][j]
+    TensorRef { path: String, key: String }, // External weights: @"model.safetensors:w" or @"weights.cll:w"
     Placeholder,          // '_' in pipeline chaining
     Unary(MathUnaryOp, Box<MathExpr>),
     Binary(Box<MathExpr>, MathBinOp, Box<MathExpr>),
@@ -241,6 +242,7 @@ impl fmt::Display for MathExpr {
                 write!(f, "[{}]", s.join(", "))
             }
             MathExpr::Index(base, idx) => write!(f, "{}[{}]", base, idx),
+            MathExpr::TensorRef { path, key } => write!(f, "@\"{}:{}\"", path, key),
             MathExpr::Placeholder => write!(f, "_"),
             MathExpr::Unary(MathUnaryOp::Neg, e) => write!(f, "(-{})", e),
             MathExpr::Unary(MathUnaryOp::Not, e) => write!(f, "(!{})", e),
@@ -275,6 +277,10 @@ impl MathExpr {
                 Box::new(b.substitute(subst)),
                 Box::new(i.substitute(subst)),
             ),
+            MathExpr::TensorRef { path, key } => MathExpr::TensorRef {
+                path: path.clone(),
+                key: key.clone(),
+            },
             MathExpr::Placeholder => MathExpr::Placeholder,
             MathExpr::Unary(op, inner) => {
                 MathExpr::Unary(*op, Box::new(inner.substitute(subst)))
@@ -314,7 +320,7 @@ impl MathExpr {
             return self.clone();
         }
         match self {
-            MathExpr::Num(_) | MathExpr::Var(_) | MathExpr::Placeholder => self.clone(),
+            MathExpr::Num(_) | MathExpr::Var(_) | MathExpr::Placeholder | MathExpr::TensorRef { .. } => self.clone(),
             MathExpr::Array(elems) => MathExpr::Array(
                 elems
                     .iter()
@@ -381,7 +387,7 @@ impl MathExpr {
     /// Compile-Time Symbolic Automatic Differentiation: d(self) / d(var)
     pub fn differentiate(&self, var: &str) -> MathExpr {
         match self {
-            MathExpr::Num(_) | MathExpr::Placeholder | MathExpr::Index(_, _) => MathExpr::Num(0.0),
+            MathExpr::Num(_) | MathExpr::Placeholder | MathExpr::Index(_, _) | MathExpr::TensorRef { .. } => MathExpr::Num(0.0),
             MathExpr::Var(v) => {
                 if v == var {
                     MathExpr::Num(1.0)
@@ -523,7 +529,7 @@ impl MathExpr {
     /// Algebraic simplification and constant folding pass
     pub fn simplify(&self) -> MathExpr {
         match self {
-            MathExpr::Num(_) | MathExpr::Var(_) | MathExpr::Placeholder => self.clone(),
+            MathExpr::Num(_) | MathExpr::Var(_) | MathExpr::Placeholder | MathExpr::TensorRef { .. } => self.clone(),
             MathExpr::Array(elems) => {
                 MathExpr::Array(elems.iter().map(|e| e.simplify()).collect())
             }
@@ -586,6 +592,7 @@ impl MathExpr {
 /// Top-level Items in a Mathematical Module
 #[derive(Debug, Clone, PartialEq)]
 pub enum MathItem {
+    Link(String), // << "path/to/module.cl"
     Constant {
         name: String,
         val: f64,
@@ -617,6 +624,8 @@ pub struct MathProgram {
 pub enum Token {
     Ident(String),
     Num(f64),
+    Str(String), // "..."
+    Shl,         // << (Zero-verbal module link)
     Equal,      // =
     Arrow,      // ->
     Plus,       // +
@@ -760,6 +769,9 @@ impl<'a> MathLexer<'a> {
                     if let Some(&(_, '=')) = self.chars.peek() {
                         self.chars.next();
                         tokens.push(Token::Lte);
+                    } else if let Some(&(_, '<')) = self.chars.peek() {
+                        self.chars.next();
+                        tokens.push(Token::Shl);
                     } else {
                         tokens.push(Token::Lt);
                     }
@@ -844,6 +856,37 @@ impl<'a> MathLexer<'a> {
                         .parse()
                         .map_err(|e| format!("Invalid number '{}': {}", num_str, e))?;
                     tokens.push(Token::Num(val));
+                }
+                '"' => {
+                    self.chars.next();
+                    let mut s = String::new();
+                    let mut closed = false;
+                    while let Some((_, c)) = self.chars.next() {
+                        if c == '"' {
+                            closed = true;
+                            break;
+                        } else if c == '\\' {
+                            if let Some((_, esc)) = self.chars.next() {
+                                match esc {
+                                    'n' => s.push('\n'),
+                                    't' => s.push('\t'),
+                                    'r' => s.push('\r'),
+                                    '\\' => s.push('\\'),
+                                    '"' => s.push('"'),
+                                    other => {
+                                        s.push('\\');
+                                        s.push(other);
+                                    }
+                                }
+                            }
+                        } else {
+                            s.push(c);
+                        }
+                    }
+                    if !closed {
+                        return Err(format!("Unterminated string literal at byte offset {}", i));
+                    }
+                    tokens.push(Token::Str(s));
                 }
                 'a'..='z' | 'A'..='Z' => {
                     let start = i;
@@ -962,6 +1005,15 @@ impl MathParser {
     }
 
     fn parse_item(&mut self) -> Result<MathItem, String> {
+        // 0. Check for module link: << "path/to/module.cl"
+        if self.match_tok(&Token::Shl) {
+            if let Some(Token::Str(path)) = self.next_tok() {
+                return Ok(MathItem::Link(path));
+            } else {
+                return Err("Expected string file path after '<<'".to_string());
+            }
+        }
+
         // 1. Check for function declaration: name(params) = expr
         if self.is_func_def() {
             if let Some(Token::Ident(name)) = self.next_tok() {
@@ -1212,6 +1264,22 @@ impl MathParser {
         let mut base = match self.next_tok() {
             Some(Token::Num(n)) => MathExpr::Num(n),
             Some(Token::Underscore) => MathExpr::Placeholder,
+            Some(Token::At) => {
+                if let Some(Token::Str(s)) = self.next_tok() {
+                    let (path, key) = if let Some((p, k)) = s.rsplit_once(':') {
+                        if k.contains('/') || k.contains('\\') {
+                            (s.clone(), String::new())
+                        } else {
+                            (p.to_string(), k.to_string())
+                        }
+                    } else {
+                        (s.clone(), String::new())
+                    };
+                    MathExpr::TensorRef { path, key }
+                } else {
+                    return Err("Expected string literal after '@' for tensor reference, e.g. @\"model.safetensors:w\"".to_string());
+                }
+            }
             Some(Token::LBracket) => {
                 // Vector or Matrix literal: [1, 2, 3] or [[1, 2], [3, 4]]
                 let mut elems = Vec::new();
@@ -1308,6 +1376,7 @@ impl MathEvaluator {
 
         for item in &prog.items {
             match item {
+                MathItem::Link(_) => {}
                 MathItem::Constant { name, val } => {
                     self.env.insert(name.clone(), MathValue::Scalar(*val));
                 }
@@ -1340,6 +1409,7 @@ impl MathEvaluator {
     pub fn eval_value(&self, expr: &MathExpr) -> Result<MathValue, String> {
         match expr {
             MathExpr::Num(n) => Ok(MathValue::Scalar(*n)),
+            MathExpr::TensorRef { path, key } => load_tensor_resource(path, key),
             MathExpr::Var(name) => self
                 .env
                 .get(name)
@@ -1915,6 +1985,10 @@ impl MathProgram {
             MathExpr::Index(base, idx) => {
                 format!("{}[(int)({})]", Self::expr_to_c23(base), Self::expr_to_c23(idx))
             }
+            MathExpr::TensorRef { path, key } => {
+                let safe_ident = if key.is_empty() { "weights" } else { key.as_str() };
+                format!("/* @\"{}:{}\" */ ({})", path, key, safe_ident)
+            }
             MathExpr::Placeholder => "_".to_string(),
             MathExpr::Unary(MathUnaryOp::Neg, inner) => format!("(-{})", Self::expr_to_c23(inner)),
             MathExpr::Unary(MathUnaryOp::Not, inner) => format!("(!{})", Self::expr_to_c23(inner)),
@@ -2135,6 +2209,7 @@ impl MathProgram {
 
         for item in &self.items {
             match item {
+                MathItem::Link(_) => {}
                 MathItem::Constant { name, val } => {
                     let r = Self::alloc_vliw_reg(&mut next_reg);
                     reg_map.insert(name.clone(), r);
@@ -2350,6 +2425,11 @@ impl MathProgram {
         slots: &mut Vec<String>,
     ) -> u8 {
         match expr {
+            MathExpr::TensorRef { .. } | MathExpr::Array(_) | MathExpr::Index(_, _) | MathExpr::Placeholder => {
+                let r = Self::alloc_vliw_reg(next_reg);
+                slots.push(Self::seal_slot(&format!("'LD{:02X}#010", r), '>'));
+                r
+            }
             MathExpr::Num(n) => {
                 let r = Self::alloc_vliw_reg(next_reg);
                 let imm = (*n as u16) & 0xFFF;
@@ -2471,6 +2551,17 @@ impl<'a> PtxBuilder<'a> {
 
     fn emit_expr(&mut self, expr: &MathExpr, lines: &mut Vec<String>) -> String {
         match expr {
+            MathExpr::TensorRef { path, key } => {
+                let r = self.alloc_reg();
+                lines.push(format!("    // load weight @\"{}:{}\"", path, key));
+                lines.push(format!("    mov.f32 {}, 0.0;", r));
+                r
+            }
+            MathExpr::Array(_) | MathExpr::Index(_, _) | MathExpr::Placeholder => {
+                let r = self.alloc_reg();
+                lines.push(format!("    mov.f32 {}, 0.0;", r));
+                r
+            }
             MathExpr::Num(n) => {
                 let r = self.alloc_reg();
                 lines.push(format!("    mov.f32 {}, {:.6};", r, n));
@@ -2611,11 +2702,286 @@ pub fn is_math_calculus_source(src: &str) -> bool {
         {
             return false;
         }
-        if t.contains("->") || (t.contains('=') && !t.contains(":=")) {
+        if t.contains("->") || (t.contains('=') && !t.contains(":=")) || t.starts_with("<<") {
             has_math_def_or_pipe = true;
         }
     }
     has_math_def_or_pipe && parse_math_code(src).is_ok()
+}
+
+impl MathProgram {
+    /// Recursively resolves all `<< "path.cl"` module links starting from `base_dir`
+    pub fn resolve_links(&mut self, base_dir: &std::path::Path) -> Result<(), String> {
+        let mut visited = std::collections::HashSet::new();
+        self.resolve_links_internal(base_dir, &mut visited)
+    }
+
+    fn resolve_links_internal(
+        &mut self,
+        base_dir: &std::path::Path,
+        visited: &mut std::collections::HashSet<std::path::PathBuf>,
+    ) -> Result<(), String> {
+        let mut resolved_items = Vec::new();
+
+        for item in std::mem::take(&mut self.items) {
+            match item {
+                MathItem::Link(rel_path) => {
+                    let mut candidate = base_dir.join(&rel_path);
+                    if !candidate.exists() {
+                        let alt = std::path::Path::new(&rel_path);
+                        if alt.exists() {
+                            candidate = alt.to_path_buf();
+                        } else {
+                            return Err(format!(
+                                "Cannot resolve link '<< \"{}\"': file not found (tried '{}' and '{}')",
+                                rel_path,
+                                candidate.display(),
+                                alt.display()
+                            ));
+                        }
+                    }
+
+                    let canonical = candidate.canonicalize().map_err(|e| {
+                        format!("Cannot canonicalize path '{}': {}", candidate.display(), e)
+                    })?;
+
+                    if !visited.insert(canonical.clone()) {
+                        continue;
+                    }
+
+                    let content = std::fs::read_to_string(&canonical).map_err(|e| {
+                        format!("Failed to read file '{}': {}", canonical.display(), e)
+                    })?;
+
+                    let mut sub_prog = parse_math_code(&content)?;
+                    let sub_base = canonical.parent().unwrap_or(base_dir);
+                    sub_prog.resolve_links_internal(sub_base, visited)?;
+
+                    resolved_items.extend(sub_prog.items);
+                }
+                other => resolved_items.push(other),
+            }
+        }
+
+        self.items = resolved_items;
+        Ok(())
+    }
+}
+
+/// Loads tensor weights from Safetensors or plain text / CLL tensor files
+pub fn load_tensor_resource(path: &str, key: &str) -> Result<MathValue, String> {
+    let p = std::path::Path::new(path);
+    if !p.exists() {
+        return Err(format!("Tensor file not found: '{}' (key: '{}')", path, key));
+    }
+
+    let bytes = std::fs::read(p).map_err(|e| format!("Failed to read tensor file '{}': {}", path, e))?;
+
+    // 1. SAFETENSORS
+    if path.ends_with(".safetensors") {
+        if bytes.len() < 8 {
+            return Err(format!("Invalid safetensors file '{}': too short", path));
+        }
+        let header_len = u64::from_le_bytes(bytes[0..8].try_into().unwrap()) as usize;
+        if bytes.len() < 8 + header_len {
+            return Err(format!("Corrupt safetensors header in '{}'", path));
+        }
+        let header_bytes = &bytes[8..8 + header_len];
+        let header_str = std::str::from_utf8(header_bytes)
+            .map_err(|e| format!("Invalid UTF-8 in safetensors header: {}", e))?;
+
+        let target_key = if key.is_empty() {
+            let mut found = None;
+            let mut idx = 0;
+            while let Some(q_start) = header_str[idx..].find('"') {
+                let actual_start = idx + q_start + 1;
+                if let Some(q_end) = header_str[actual_start..].find('"') {
+                    let k = &header_str[actual_start..actual_start + q_end];
+                    if k != "__metadata__" && !k.is_empty() {
+                        found = Some(k.to_string());
+                        break;
+                    }
+                    idx = actual_start + q_end + 1;
+                } else {
+                    break;
+                }
+            }
+            found.ok_or_else(|| format!("No tensors found in '{}'", path))?
+        } else {
+            key.to_string()
+        };
+
+        let pattern = format!("\"{}\"", target_key);
+        let key_pos = header_str
+            .find(&pattern)
+            .ok_or_else(|| format!("Tensor '{}' not found in safetensors file '{}'", target_key, path))?;
+
+        let block = &header_str[key_pos..];
+
+        let dtype_str = if let Some(d_pos) = block.find("\"dtype\"") {
+            let after = &block[d_pos + 7..];
+            if let Some(q1) = after.find('"') {
+                if let Some(q2) = after[q1 + 1..].find('"') {
+                    &after[q1 + 1..q1 + 1 + q2]
+                } else {
+                    "F32"
+                }
+            } else {
+                "F32"
+            }
+        } else {
+            "F32"
+        };
+
+        let mut shape = Vec::new();
+        if let Some(s_pos) = block.find("\"shape\"") {
+            let after = &block[s_pos + 7..];
+            if let Some(b1) = after.find('[') {
+                if let Some(b2) = after[b1 + 1..].find(']') {
+                    let dims_str = &after[b1 + 1..b1 + 1 + b2];
+                    for d in dims_str.split(',') {
+                        let trimmed = d.trim();
+                        if let Ok(n) = trimmed.parse::<usize>() {
+                            shape.push(n);
+                        }
+                    }
+                }
+            }
+        }
+
+        let (start_offset, end_offset) = if let Some(o_pos) = block.find("\"data_offsets\"") {
+            let after = &block[o_pos + 14..];
+            if let Some(b1) = after.find('[') {
+                if let Some(b2) = after[b1 + 1..].find(']') {
+                    let pair_str = &after[b1 + 1..b1 + 1 + b2];
+                    let parts: Vec<&str> = pair_str.split(',').collect();
+                    if parts.len() == 2 {
+                        let s = parts[0].trim().parse::<usize>().unwrap_or(0);
+                        let e = parts[1].trim().parse::<usize>().unwrap_or(0);
+                        (s, e)
+                    } else {
+                        (0, 0)
+                    }
+                } else {
+                    (0, 0)
+                }
+            } else {
+                (0, 0)
+            }
+        } else {
+            (0, 0)
+        };
+
+        let data_start = 8 + header_len + start_offset;
+        let data_end = 8 + header_len + end_offset;
+        if data_end > bytes.len() || data_start > data_end {
+            return Err(format!("Invalid data offsets [{}-{}] in '{}'", start_offset, end_offset, path));
+        }
+
+        let tensor_raw = &bytes[data_start..data_end];
+        let mut floats = Vec::new();
+
+        match dtype_str {
+            "F32" => {
+                for chunk in tensor_raw.chunks_exact(4) {
+                    let val = f32::from_le_bytes(chunk.try_into().unwrap());
+                    floats.push(val as f64);
+                }
+            }
+            "F16" => {
+                for chunk in tensor_raw.chunks_exact(2) {
+                    let u = u16::from_le_bytes(chunk.try_into().unwrap());
+                    let sign = if (u >> 15) != 0 { -1.0 } else { 1.0 };
+                    let exp = (u >> 10) & 0x1F;
+                    let mant = u & 0x3FF;
+                    let val = if exp == 0 {
+                        sign * (mant as f64 / 1024.0) * (2.0f64.powi(-14))
+                    } else if exp == 31 {
+                        if mant == 0 { sign * f64::INFINITY } else { f64::NAN }
+                    } else {
+                        sign * (1.0 + (mant as f64 / 1024.0)) * (2.0f64.powi(exp as i32 - 15))
+                    };
+                    floats.push(val);
+                }
+            }
+            "BF16" => {
+                for chunk in tensor_raw.chunks_exact(2) {
+                    let u = u16::from_le_bytes(chunk.try_into().unwrap());
+                    let f = f32::from_bits((u as u32) << 16);
+                    floats.push(f as f64);
+                }
+            }
+            _ => {
+                return Err(format!("Unsupported safetensors dtype '{}' in '{}'", dtype_str, path));
+            }
+        }
+
+        if shape.is_empty() {
+            Ok(MathValue::Scalar(floats.first().copied().unwrap_or(0.0)))
+        } else if shape.len() == 1 {
+            Ok(MathValue::Vector(floats))
+        } else if shape.len() == 2 {
+            let rows = shape[0];
+            let cols = shape[1];
+            let mut mat = Vec::with_capacity(rows);
+            for r in 0..rows {
+                let start = r * cols;
+                let end = (start + cols).min(floats.len());
+                if start < floats.len() {
+                    mat.push(floats[start..end].to_vec());
+                } else {
+                    mat.push(vec![0.0; cols]);
+                }
+            }
+            Ok(MathValue::Matrix(mat))
+        } else {
+            let cols = *shape.last().unwrap_or(&1);
+            let rows = floats.len() / cols.max(1);
+            let mut mat = Vec::with_capacity(rows);
+            for r in 0..rows {
+                let start = r * cols;
+                let end = (start + cols).min(floats.len());
+                mat.push(floats[start..end].to_vec());
+            }
+            Ok(MathValue::Matrix(mat))
+        }
+    } else {
+        // 2. Plain Text CLL / Vector / Matrix format
+        let text = String::from_utf8_lossy(&bytes);
+        if text.contains('[') {
+            let expr_str = if let Some(eq_pos) = text.find('=') {
+                &text[eq_pos + 1..]
+            } else {
+                &text
+            };
+            let prog = parse_math_code(expr_str.trim())?;
+            let mut eval = MathEvaluator::new();
+            eval.execute_program_value(&prog)?
+                .ok_or_else(|| format!("No tensor value found in '{}'", path))
+        } else {
+            let mut nums = Vec::new();
+            for word in text.split(|c: char| c.is_whitespace() || c == ',') {
+                let w = word.trim();
+                if !w.is_empty() {
+                    if let Ok(n) = w.parse::<f64>() {
+                        nums.push(n);
+                    }
+                }
+            }
+            Ok(MathValue::Vector(nums))
+        }
+    }
+}
+
+/// Convenience function: parses a .cl math file and automatically resolves all `<<` module links
+pub fn parse_math_file(path: impl AsRef<std::path::Path>) -> Result<MathProgram, String> {
+    let p = path.as_ref();
+    let content = std::fs::read_to_string(p)
+        .map_err(|e| format!("Failed to read math file '{}': {}", p.display(), e))?;
+    let mut prog = parse_math_code(&content)?;
+    let base_dir = p.parent().unwrap_or_else(|| std::path::Path::new("."));
+    prog.resolve_links(base_dir)?;
+    Ok(prog)
 }
 
 /// Convenience parser function
@@ -2859,5 +3225,46 @@ mod tests {
         assert!(c23.contains("const _Float16* restrict W"));
         assert!(c23.contains("for (int i = 0; i < 16; ++i)"));
         assert!(c23.contains("W[i * 16 + j]"));
+    }
+
+    #[test]
+    fn test_zero_word_module_linking_resolution() {
+        let temp_dir = std::env::temp_dir().join(format!("cron_test_link_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let mod_file = temp_dir.join("sub_math.cl");
+        std::fs::write(&mod_file, "square(x: f32) = x * x\ncube(x: f32) = x * square(x)\n").unwrap();
+
+        let main_code = "        << \"sub_math.cl\"\n        val = cube(3.0)\n        val\n";
+        let mut prog = parse_math_code(main_code).expect("Failed to parse main module link");
+        prog.resolve_links(&temp_dir).expect("Failed to resolve module links");
+
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Evaluation failed");
+        assert_eq!(res, Some(27.0));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_external_tensor_weights_loading_and_gemv() {
+        let temp_dir = std::env::temp_dir().join(format!("cron_test_tensor_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let weights_file = temp_dir.join("weights.cll");
+        std::fs::write(&weights_file, "W = [[2.0, 0.0], [0.0, 3.0]]\n").unwrap();
+
+        // Use absolute path in forward slashes
+        let p_str = weights_file.to_str().unwrap().replace('\\', "/");
+        let main_code = format!(
+            "            W = @\"{}:W\"\n            x = [4.0, 5.0]\n            y = W @ x\n            y[1]\n",
+            p_str
+        );
+
+        let prog = parse_math_code(&main_code).expect("Failed to parse tensor ref code");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program(&prog).expect("Evaluation of external tensor failed");
+        // W @ [4, 5] = [2*4+0*5, 0*4+3*5] = [8, 15], y[1] = 15.0
+        assert_eq!(res, Some(15.0));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

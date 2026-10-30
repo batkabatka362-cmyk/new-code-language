@@ -2672,13 +2672,15 @@ fn main() {
             }
 
             let input_arg = &args[2];
-            let source = if std::path::Path::new(input_arg).exists() {
-                fs::read_to_string(input_arg).unwrap_or_else(|e| {
+            let (source, base_dir) = if std::path::Path::new(input_arg).exists() {
+                let s = fs::read_to_string(input_arg).unwrap_or_else(|e| {
                     eprintln!("Error reading '{}': {}", input_arg, e);
                     std::process::exit(1);
-                })
+                });
+                let dir = std::path::Path::new(input_arg).parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+                (s, dir)
             } else {
-                input_arg.clone()
+                (input_arg.clone(), std::path::PathBuf::from("."))
             };
 
             let emit_c23 = args.iter().any(|a| a == "--c23");
@@ -2690,7 +2692,12 @@ fn main() {
                 .position(|a| a == "-o")
                 .and_then(|idx| args.get(idx + 1).cloned());
 
-            match cronc::parse_math_code(&source) {
+            let parse_res = cronc::parse_math_code(&source).and_then(|mut prog| {
+                prog.resolve_links(&base_dir)?;
+                Ok(prog)
+            });
+
+            match parse_res {
                 Ok(prog) => {
                     if let Some(ref out_path) = output_bin {
                         println!("[1/2] Lowering Standard Math to ISO C23 Native Source...");
