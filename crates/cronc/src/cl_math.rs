@@ -210,6 +210,126 @@ impl MathValue {
             }
         }
     }
+
+    pub fn shape(&self) -> Vec<usize> {
+        match self {
+            MathValue::Scalar(_) => vec![],
+            MathValue::Vector(v) => vec![v.len()],
+            MathValue::Matrix(m) => vec![m.len(), m.first().map(|r| r.len()).unwrap_or(0)],
+        }
+    }
+
+    pub fn zeros_like(&self) -> MathValue {
+        match self {
+            MathValue::Scalar(_) => MathValue::Scalar(0.0),
+            MathValue::Vector(v) => MathValue::Vector(vec![0.0; v.len()]),
+            MathValue::Matrix(m) => {
+                let rows = m.len();
+                let cols = m.first().map(|r| r.len()).unwrap_or(0);
+                MathValue::Matrix(vec![vec![0.0; cols]; rows])
+            }
+        }
+    }
+
+    pub fn add_accumulate(&mut self, other: &MathValue) -> Result<(), String> {
+        match (self, other) {
+            (MathValue::Scalar(s1), MathValue::Scalar(s2)) => {
+                *s1 += s2;
+                Ok(())
+            }
+            (MathValue::Vector(v1), MathValue::Vector(v2)) => {
+                if v1.len() != v2.len() {
+                    return Err(format!(
+                        "Vector dimension mismatch in add_accumulate: {} vs {}",
+                        v1.len(),
+                        v2.len()
+                    ));
+                }
+                for (a, b) in v1.iter_mut().zip(v2.iter()) {
+                    *a += b;
+                }
+                Ok(())
+            }
+            (MathValue::Matrix(m1), MathValue::Matrix(m2)) => {
+                if m1.len() != m2.len() {
+                    return Err(format!(
+                        "Matrix row mismatch in add_accumulate: {} vs {}",
+                        m1.len(),
+                        m2.len()
+                    ));
+                }
+                for (r1, r2) in m1.iter_mut().zip(m2.iter()) {
+                    for (a, b) in r1.iter_mut().zip(r2.iter()) {
+                        *a += b;
+                    }
+                }
+                Ok(())
+            }
+            (MathValue::Vector(v1), MathValue::Matrix(m2)) => {
+                let cols = m2.first().map(|r| r.len()).unwrap_or(0);
+                if v1.len() == cols {
+                    for row in m2 {
+                        for (a, b) in v1.iter_mut().zip(row.iter()) {
+                            *a += b;
+                        }
+                    }
+                    Ok(())
+                } else if v1.len() == m2.len() {
+                    for (a, row) in v1.iter_mut().zip(m2.iter()) {
+                        *a += row.iter().sum::<f64>();
+                    }
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Cannot accumulate matrix of shape [{}, {}] into vector of length {}",
+                        m2.len(),
+                        cols,
+                        v1.len()
+                    ))
+                }
+            }
+            (MathValue::Scalar(s), tensor) => {
+                *s += tensor.flatten_elements().iter().sum::<f64>();
+                Ok(())
+            }
+            _ => Err("Incompatible shapes in add_accumulate".to_string()),
+        }
+    }
+
+    pub fn sum_axis(&self, axis: usize) -> Result<MathValue, String> {
+        match self {
+            MathValue::Scalar(s) => Ok(MathValue::Scalar(*s)),
+            MathValue::Vector(v) => {
+                if axis == 0 {
+                    Ok(MathValue::Scalar(v.iter().sum()))
+                } else {
+                    Err(format!("Axis {} out of bounds for 1D vector", axis))
+                }
+            }
+            MathValue::Matrix(m) => {
+                if m.is_empty() {
+                    return Ok(MathValue::Vector(Vec::new()));
+                }
+                let cols = m[0].len();
+                if axis == 0 {
+                    let mut out = vec![0.0; cols];
+                    for row in m {
+                        for (c, &val) in row.iter().enumerate() {
+                            if c < cols {
+                                out[c] += val;
+                            }
+                        }
+                    }
+                    Ok(MathValue::Vector(out))
+                } else if axis == 1 {
+                    let out: Vec<f64> = m.iter().map(|row| row.iter().sum()).collect();
+                    Ok(MathValue::Vector(out))
+                } else {
+                    Err(format!("Axis {} out of bounds for 2D matrix", axis))
+                }
+            }
+        }
+    }
 }
 
 impl fmt::Display for MathValue {
@@ -1642,6 +1762,620 @@ impl MathParser {
 }
 
 // ============================================================================
+// ANALYTICAL REVERSE-MODE TAPE AUTODIFF ENGINE (VJP Matrix Backprop)
+// ============================================================================
+
+fn reduce_adjoint_to_shape(adj: &MathValue, target_shape: &[usize]) -> Result<MathValue, String> {
+    let adj_shape = adj.shape();
+    if adj_shape == target_shape {
+        return Ok(adj.clone());
+    }
+    // Target is scalar: sum all elements of adj
+    if target_shape.is_empty() {
+        let sum: f64 = adj.flatten_elements().iter().sum();
+        return Ok(MathValue::Scalar(sum));
+    }
+    // 1D Vector [N] target from 2D Matrix [M, N] (row-wise broadcast reduction):
+    if target_shape.len() == 1 && adj_shape.len() == 2 {
+        if let MathValue::Matrix(m) = adj {
+            let cols = target_shape[0];
+            let mut out = vec![0.0; cols];
+            for row in m {
+                for (j, &val) in row.iter().enumerate() {
+                    if j < cols {
+                        out[j] += val;
+                    }
+                }
+            }
+            return Ok(MathValue::Vector(out));
+        }
+    }
+    // 1D Vector [M] target from 2D Matrix [M, 1]
+    if target_shape.len() == 1 && adj_shape == vec![target_shape[0], 1] {
+        if let MathValue::Matrix(m) = adj {
+            let out: Vec<f64> = m
+                .iter()
+                .map(|row| row.first().copied().unwrap_or(0.0))
+                .collect();
+            return Ok(MathValue::Vector(out));
+        }
+    }
+    // 2D Matrix [M, 1] target from 2D Matrix [M, N]
+    if target_shape.len() == 2 && target_shape[1] == 1 && adj_shape.len() == 2 {
+        if let MathValue::Matrix(m) = adj {
+            let rows = target_shape[0];
+            let mut out = Vec::with_capacity(rows);
+            for row in m {
+                out.push(vec![row.iter().sum::<f64>()]);
+            }
+            return Ok(MathValue::Matrix(out));
+        }
+    }
+    // 2D Matrix [1, N] target from 2D Matrix [M, N]
+    if target_shape.len() == 2 && target_shape[0] == 1 && adj_shape.len() == 2 {
+        if let MathValue::Matrix(m) = adj {
+            let cols = target_shape[1];
+            let mut out_row = vec![0.0; cols];
+            for row in m {
+                for (j, &val) in row.iter().enumerate() {
+                    if j < cols {
+                        out_row[j] += val;
+                    }
+                }
+            }
+            return Ok(MathValue::Matrix(vec![out_row]));
+        }
+    }
+    Err(format!(
+        "Cannot reduce adjoint of shape {:?} to target shape {:?}",
+        adj_shape, target_shape
+    ))
+}
+
+enum ExprTape {
+    Num,
+    Var(String),
+    Array(Vec<ExprTape>),
+    Index {
+        base_val: MathValue,
+        base_tape: Box<ExprTape>,
+        idx_val: usize,
+    },
+    Unary(MathUnaryOp, MathValue, Box<ExprTape>),
+    Binary {
+        op: MathBinOp,
+        lhs_val: MathValue,
+        lhs_tape: Box<ExprTape>,
+        rhs_val: MathValue,
+        rhs_tape: Box<ExprTape>,
+    },
+    Call {
+        name: String,
+        arg_vals: Vec<MathValue>,
+        arg_tapes: Vec<ExprTape>,
+    },
+}
+
+impl ExprTape {
+    fn backward(
+        &self,
+        adj: &MathValue,
+        wrt: &str,
+        acc_grad: &mut MathValue,
+        evaluator: &MathEvaluator,
+    ) -> Result<(), String> {
+        match self {
+            ExprTape::Num => Ok(()),
+            ExprTape::Var(v) => {
+                if v == wrt {
+                    acc_grad.add_accumulate(adj)?;
+                }
+                Ok(())
+            }
+            ExprTape::Array(tapes) => match adj {
+                MathValue::Vector(v) => {
+                    for (tape, &val) in tapes.iter().zip(v.iter()) {
+                        tape.backward(&MathValue::Scalar(val), wrt, acc_grad, evaluator)?;
+                    }
+                    Ok(())
+                }
+                MathValue::Matrix(m) => {
+                    for (tape, row) in tapes.iter().zip(m.iter()) {
+                        tape.backward(&MathValue::Vector(row.clone()), wrt, acc_grad, evaluator)?;
+                    }
+                    Ok(())
+                }
+                _ => Ok(()),
+            },
+            ExprTape::Index {
+                base_val,
+                base_tape,
+                idx_val,
+            } => match base_val {
+                MathValue::Vector(v) => {
+                    let mut zero_vec = vec![0.0; v.len()];
+                    if *idx_val < zero_vec.len() {
+                        zero_vec[*idx_val] = adj.as_scalar().unwrap_or(0.0);
+                    }
+                    base_tape.backward(&MathValue::Vector(zero_vec), wrt, acc_grad, evaluator)
+                }
+                MathValue::Matrix(m) => {
+                    let rows = m.len();
+                    let cols = m.first().map(|r| r.len()).unwrap_or(0);
+                    let mut zero_mat = vec![vec![0.0; cols]; rows];
+                    if *idx_val < rows {
+                        if let MathValue::Vector(adj_row) = adj {
+                            for (c, &val) in adj_row.iter().enumerate() {
+                                if c < cols {
+                                    zero_mat[*idx_val][c] = val;
+                                }
+                            }
+                        }
+                    }
+                    base_tape.backward(&MathValue::Matrix(zero_mat), wrt, acc_grad, evaluator)
+                }
+                _ => Ok(()),
+            },
+            ExprTape::Unary(op, _inner_val, inner_tape) => match op {
+                MathUnaryOp::Neg => {
+                    let neg_adj = adj.map_unary(|x| -x);
+                    inner_tape.backward(&neg_adj, wrt, acc_grad, evaluator)
+                }
+                MathUnaryOp::Not => Ok(()),
+            },
+            ExprTape::Binary {
+                op,
+                lhs_val,
+                lhs_tape,
+                rhs_val,
+                rhs_tape,
+            } => match op {
+                MathBinOp::Add => {
+                    let lhs_adj = reduce_adjoint_to_shape(adj, &lhs_val.shape())?;
+                    let rhs_adj = reduce_adjoint_to_shape(adj, &rhs_val.shape())?;
+                    lhs_tape.backward(&lhs_adj, wrt, acc_grad, evaluator)?;
+                    rhs_tape.backward(&rhs_adj, wrt, acc_grad, evaluator)?;
+                    Ok(())
+                }
+                MathBinOp::Sub => {
+                    let lhs_adj = reduce_adjoint_to_shape(adj, &lhs_val.shape())?;
+                    let rhs_adj_raw = reduce_adjoint_to_shape(adj, &rhs_val.shape())?;
+                    let rhs_adj = rhs_adj_raw.map_unary(|x| -x);
+                    lhs_tape.backward(&lhs_adj, wrt, acc_grad, evaluator)?;
+                    rhs_tape.backward(&rhs_adj, wrt, acc_grad, evaluator)?;
+                    Ok(())
+                }
+                MathBinOp::MatMul => match (lhs_val, rhs_val) {
+                    (MathValue::Matrix(_), MathValue::Matrix(_)) => {
+                        let v_t = rhs_val.transpose()?;
+                        let adj_u = evaluator.eval_binary_op(adj, MathBinOp::MatMul, &v_t)?;
+                        let u_t = lhs_val.transpose()?;
+                        let adj_v = evaluator.eval_binary_op(&u_t, MathBinOp::MatMul, adj)?;
+                        lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                        rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
+                        Ok(())
+                    }
+                    (MathValue::Matrix(_), MathValue::Vector(v)) => match adj {
+                        MathValue::Vector(adj_vec) => {
+                            let mut outer_mat = Vec::with_capacity(adj_vec.len());
+                            for &ai in adj_vec {
+                                outer_mat.push(v.iter().map(|&vj| ai * vj).collect());
+                            }
+                            let adj_u = MathValue::Matrix(outer_mat);
+                            let u_t = lhs_val.transpose()?;
+                            let adj_v = evaluator.eval_binary_op(&u_t, MathBinOp::MatMul, adj)?;
+                            lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                            rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
+                            Ok(())
+                        }
+                        _ => Err("Expected vector adjoint for matrix-vector product".to_string()),
+                    },
+                    (MathValue::Vector(u), MathValue::Matrix(_)) => {
+                        let v_t = rhs_val.transpose()?;
+                        let adj_u = evaluator.eval_binary_op(adj, MathBinOp::MatMul, &v_t)?;
+                        match adj {
+                            MathValue::Vector(adj_vec) => {
+                                let mut outer_mat = Vec::with_capacity(u.len());
+                                for &ui in u {
+                                    outer_mat.push(adj_vec.iter().map(|&aj| ui * aj).collect());
+                                }
+                                let adj_v = MathValue::Matrix(outer_mat);
+                                lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                                rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
+                                Ok(())
+                            }
+                            _ => Err(
+                                "Expected vector adjoint for vector-matrix product".to_string()
+                            ),
+                        }
+                    }
+                    (MathValue::Vector(u), MathValue::Vector(v)) => {
+                        let s = adj.as_scalar().unwrap_or(1.0);
+                        let adj_u = MathValue::Vector(v.iter().map(|&x| s * x).collect());
+                        let adj_v = MathValue::Vector(u.iter().map(|&x| s * x).collect());
+                        lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                        rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
+                        Ok(())
+                    }
+                    (MathValue::Scalar(s1), MathValue::Scalar(s2)) => {
+                        let s = adj.as_scalar().unwrap_or(1.0);
+                        let adj_u = MathValue::Scalar(s * s2);
+                        let adj_v = MathValue::Scalar(s * s1);
+                        lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                        rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
+                        Ok(())
+                    }
+                    _ => Err("Unsupported shapes in MatMul backward".to_string()),
+                },
+                MathBinOp::Mul => {
+                    let raw_adj_u = evaluator.eval_binary_op(adj, MathBinOp::Mul, rhs_val)?;
+                    let raw_adj_v = evaluator.eval_binary_op(adj, MathBinOp::Mul, lhs_val)?;
+                    let adj_u = reduce_adjoint_to_shape(&raw_adj_u, &lhs_val.shape())?;
+                    let adj_v = reduce_adjoint_to_shape(&raw_adj_v, &rhs_val.shape())?;
+                    lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                    rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
+                    Ok(())
+                }
+                MathBinOp::Pow => {
+                    if let Some(c) = rhs_val.as_scalar() {
+                        let c_minus_1 = evaluator.eval_binary_op(
+                            lhs_val,
+                            MathBinOp::Pow,
+                            &MathValue::Scalar(c - 1.0),
+                        )?;
+                        let factor = evaluator.eval_binary_op(
+                            &c_minus_1,
+                            MathBinOp::Mul,
+                            &MathValue::Scalar(c),
+                        )?;
+                        let raw_adj_u = evaluator.eval_binary_op(adj, MathBinOp::Mul, &factor)?;
+                        let adj_u = reduce_adjoint_to_shape(&raw_adj_u, &lhs_val.shape())?;
+                        lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                        Ok(())
+                    } else {
+                        Err("Only scalar power supported in analytical backward".to_string())
+                    }
+                }
+                MathBinOp::Div => {
+                    let raw_adj_u = evaluator.eval_binary_op(adj, MathBinOp::Div, rhs_val)?;
+                    let adj_u = reduce_adjoint_to_shape(&raw_adj_u, &lhs_val.shape())?;
+                    let v_sq = evaluator.eval_binary_op(rhs_val, MathBinOp::Mul, rhs_val)?;
+                    let u_div_vsq = evaluator.eval_binary_op(lhs_val, MathBinOp::Div, &v_sq)?;
+                    let raw_adj_v = evaluator
+                        .eval_binary_op(adj, MathBinOp::Mul, &u_div_vsq)?
+                        .map_unary(|x| -x);
+                    let adj_v = reduce_adjoint_to_shape(&raw_adj_v, &rhs_val.shape())?;
+                    lhs_tape.backward(&adj_u, wrt, acc_grad, evaluator)?;
+                    rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
+                    Ok(())
+                }
+                _ => Err(format!("Unsupported binary op {:?} in backward", op)),
+            },
+            ExprTape::Call {
+                name,
+                arg_vals,
+                arg_tapes,
+            } => match name.as_str() {
+                "sum" => {
+                    let s = adj.as_scalar().unwrap_or(1.0);
+                    let in_adj = arg_vals[0].map_unary(|_| s);
+                    arg_tapes[0].backward(&in_adj, wrt, acc_grad, evaluator)
+                }
+                "mean" => {
+                    let s = adj.as_scalar().unwrap_or(1.0);
+                    let count = arg_vals[0].flatten_elements().len().max(1) as f64;
+                    let in_adj = arg_vals[0].map_unary(|_| s / count);
+                    arg_tapes[0].backward(&in_adj, wrt, acc_grad, evaluator)
+                }
+                "sum_axis" => {
+                    let axis = if arg_vals.len() > 1 {
+                        arg_vals[1].as_scalar().unwrap_or(0.0) as usize
+                    } else {
+                        0
+                    };
+                    match &arg_vals[0] {
+                        MathValue::Matrix(m) => {
+                            let rows = m.len();
+                            let cols = m.first().map(|r| r.len()).unwrap_or(0);
+                            if axis == 0 {
+                                if let MathValue::Vector(adj_v) = adj {
+                                    let broadcast_m = vec![adj_v.clone(); rows];
+                                    arg_tapes[0].backward(
+                                        &MathValue::Matrix(broadcast_m),
+                                        wrt,
+                                        acc_grad,
+                                        evaluator,
+                                    )
+                                } else {
+                                    Err("sum_axis(axis=0) expects vector adjoint".to_string())
+                                }
+                            } else {
+                                if let MathValue::Vector(adj_v) = adj {
+                                    let mut broadcast_m = Vec::with_capacity(rows);
+                                    for &ai in adj_v {
+                                        broadcast_m.push(vec![ai; cols]);
+                                    }
+                                    arg_tapes[0].backward(
+                                        &MathValue::Matrix(broadcast_m),
+                                        wrt,
+                                        acc_grad,
+                                        evaluator,
+                                    )
+                                } else {
+                                    Err("sum_axis(axis=1) expects vector adjoint".to_string())
+                                }
+                            }
+                        }
+                        MathValue::Vector(v) => {
+                            let s = adj.as_scalar().unwrap_or(1.0);
+                            let in_adj = MathValue::Vector(vec![s; v.len()]);
+                            arg_tapes[0].backward(&in_adj, wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("Unsupported tensor type for sum_axis backward".to_string()),
+                    }
+                }
+                "cross_entropy" => {
+                    let s = adj.as_scalar().unwrap_or(1.0);
+                    let logits = &arg_vals[0];
+                    let targets = &arg_vals[1];
+                    let calc_softmax_grad =
+                        |row: &[f64], target_idx: usize, batch_scale: f64| -> Vec<f64> {
+                            let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                            let exps: Vec<f64> = row.iter().map(|&x| (x - max_v).exp()).collect();
+                            let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                            let mut grad_row = Vec::with_capacity(row.len());
+                            for (j, &e) in exps.iter().enumerate() {
+                                let p = e / sum_exp;
+                                let delta = if j == target_idx { 1.0 } else { 0.0 };
+                                grad_row.push(batch_scale * (p - delta));
+                            }
+                            grad_row
+                        };
+                    match (logits, targets) {
+                        (MathValue::Matrix(mat), MathValue::Vector(t_vec)) => {
+                            let b = mat.len().max(1) as f64;
+                            let scale = s / b;
+                            let mut grad_mat = Vec::with_capacity(mat.len());
+                            for (row, &t) in mat.iter().zip(t_vec.iter()) {
+                                grad_mat.push(calc_softmax_grad(row, t as usize, scale));
+                            }
+                            let logits_adj = MathValue::Matrix(grad_mat);
+                            arg_tapes[0].backward(&logits_adj, wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Vector(vec), MathValue::Scalar(t)) => {
+                            let grad_vec = calc_softmax_grad(vec, *t as usize, s);
+                            let logits_adj = MathValue::Vector(grad_vec);
+                            arg_tapes[0].backward(&logits_adj, wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Vector(vec), MathValue::Vector(t_vec)) if t_vec.len() == 1 => {
+                            let grad_vec = calc_softmax_grad(vec, t_vec[0] as usize, s);
+                            let logits_adj = MathValue::Vector(grad_vec);
+                            arg_tapes[0].backward(&logits_adj, wrt, acc_grad, evaluator)
+                        }
+                        _ => Err(
+                            "cross_entropy expects (Matrix, Vector) or (Vector, Scalar)".to_string()
+                        ),
+                    }
+                }
+                "log_softmax" => {
+                    let calc_log_softmax_vjp = |x: &[f64], adj_row: &[f64]| -> Vec<f64> {
+                        let max_v = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let exps: Vec<f64> = x.iter().map(|&xi| (xi - max_v).exp()).collect();
+                        let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                        let sum_adj: f64 = adj_row.iter().sum();
+                        let mut out = Vec::with_capacity(x.len());
+                        for (j, &e) in exps.iter().enumerate() {
+                            let p = e / sum_exp;
+                            out.push(adj_row[j] - p * sum_adj);
+                        }
+                        out
+                    };
+                    match (&arg_vals[0], adj) {
+                        (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
+                            let vjp = calc_log_softmax_vjp(v, adj_v);
+                            arg_tapes[0].backward(&MathValue::Vector(vjp), wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
+                            let mut out_m = Vec::with_capacity(m.len());
+                            for (row, adj_row) in m.iter().zip(adj_m.iter()) {
+                                out_m.push(calc_log_softmax_vjp(row, adj_row));
+                            }
+                            arg_tapes[0].backward(&MathValue::Matrix(out_m), wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("log_softmax shape mismatch in backward".to_string()),
+                    }
+                }
+                "softmax" => {
+                    let calc_softmax_vjp = |x: &[f64], adj_row: &[f64]| -> Vec<f64> {
+                        let max_v = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let exps: Vec<f64> = x.iter().map(|&xi| (xi - max_v).exp()).collect();
+                        let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                        let probs: Vec<f64> = exps.iter().map(|&e| e / sum_exp).collect();
+                        let dot: f64 = probs
+                            .iter()
+                            .zip(adj_row.iter())
+                            .map(|(&p, &a)| p * a)
+                            .sum();
+                        probs
+                            .iter()
+                            .zip(adj_row.iter())
+                            .map(|(&p, &a)| p * (a - dot))
+                            .collect()
+                    };
+                    match (&arg_vals[0], adj) {
+                        (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
+                            let vjp = calc_softmax_vjp(v, adj_v);
+                            arg_tapes[0].backward(&MathValue::Vector(vjp), wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
+                            let mut out_m = Vec::with_capacity(m.len());
+                            for (row, adj_row) in m.iter().zip(adj_m.iter()) {
+                                out_m.push(calc_softmax_vjp(row, adj_row));
+                            }
+                            arg_tapes[0].backward(&MathValue::Matrix(out_m), wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("softmax shape mismatch in backward".to_string()),
+                    }
+                }
+                "rmsnorm" => {
+                    let calc_rmsnorm_vjp = |x: &[f64], adj_row: &[f64]| -> Vec<f64> {
+                        let d = x.len().max(1) as f64;
+                        let sq_sum: f64 = x.iter().map(|&xi| xi * xi).sum();
+                        let rms = (sq_sum / d + 1e-5).sqrt();
+                        let dot: f64 = x.iter().zip(adj_row.iter()).map(|(&xi, &ai)| xi * ai).sum();
+                        let rms3_d = rms * rms * rms * d;
+                        let mut out = Vec::with_capacity(x.len());
+                        for (j, &xi) in x.iter().enumerate() {
+                            out.push(adj_row[j] / rms - (xi / rms3_d) * dot);
+                        }
+                        out
+                    };
+                    match (&arg_vals[0], adj) {
+                        (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
+                            let vjp = calc_rmsnorm_vjp(v, adj_v);
+                            arg_tapes[0].backward(&MathValue::Vector(vjp), wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
+                            let mut out_m = Vec::with_capacity(m.len());
+                            for (row, adj_row) in m.iter().zip(adj_m.iter()) {
+                                out_m.push(calc_rmsnorm_vjp(row, adj_row));
+                            }
+                            arg_tapes[0].backward(&MathValue::Matrix(out_m), wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("rmsnorm shape mismatch in backward".to_string()),
+                    }
+                }
+                "silu" => {
+                    let sig = |x: f64| 1.0 / (1.0 + (-x).exp());
+                    let calc_silu_vjp = |x: f64, a: f64| -> f64 {
+                        let s = sig(x);
+                        a * (s * (1.0 + x * (1.0 - s)))
+                    };
+                    match (&arg_vals[0], adj) {
+                        (MathValue::Scalar(s), MathValue::Scalar(a)) => arg_tapes[0].backward(
+                            &MathValue::Scalar(calc_silu_vjp(*s, *a)),
+                            wrt,
+                            acc_grad,
+                            evaluator,
+                        ),
+                        (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
+                            let out: Vec<f64> = v
+                                .iter()
+                                .zip(adj_v.iter())
+                                .map(|(&x, &a)| calc_silu_vjp(x, a))
+                                .collect();
+                            arg_tapes[0].backward(&MathValue::Vector(out), wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
+                            let out: Vec<Vec<f64>> = m
+                                .iter()
+                                .zip(adj_m.iter())
+                                .map(|(r, ar)| {
+                                    r.iter()
+                                        .zip(ar.iter())
+                                        .map(|(&x, &a)| calc_silu_vjp(x, a))
+                                        .collect()
+                                })
+                                .collect();
+                            arg_tapes[0].backward(&MathValue::Matrix(out), wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("silu shape mismatch in backward".to_string()),
+                    }
+                }
+                "relu" => {
+                    let calc_relu_vjp =
+                        |x: f64, a: f64| -> f64 { if x > 0.0 { a } else { 0.0 } };
+                    match (&arg_vals[0], adj) {
+                        (MathValue::Scalar(s), MathValue::Scalar(a)) => arg_tapes[0].backward(
+                            &MathValue::Scalar(calc_relu_vjp(*s, *a)),
+                            wrt,
+                            acc_grad,
+                            evaluator,
+                        ),
+                        (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
+                            let out: Vec<f64> = v
+                                .iter()
+                                .zip(adj_v.iter())
+                                .map(|(&x, &a)| calc_relu_vjp(x, a))
+                                .collect();
+                            arg_tapes[0].backward(&MathValue::Vector(out), wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
+                            let out: Vec<Vec<f64>> = m
+                                .iter()
+                                .zip(adj_m.iter())
+                                .map(|(r, ar)| {
+                                    r.iter()
+                                        .zip(ar.iter())
+                                        .map(|(&x, &a)| calc_relu_vjp(x, a))
+                                        .collect()
+                                })
+                                .collect();
+                            arg_tapes[0].backward(&MathValue::Matrix(out), wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("relu shape mismatch in backward".to_string()),
+                    }
+                }
+                "transpose" | "T" => {
+                    let adj_t = adj.transpose()?;
+                    arg_tapes[0].backward(&adj_t, wrt, acc_grad, evaluator)
+                }
+                "embed" => {
+                    if let MathValue::Matrix(e_mat) = &arg_vals[0] {
+                        let vocab_size = e_mat.len();
+                        let dim = e_mat.first().map(|r| r.len()).unwrap_or(0);
+                        let mut grad_e = vec![vec![0.0; dim]; vocab_size];
+                        match (adj, &arg_vals[1]) {
+                            (MathValue::Matrix(adj_m), MathValue::Vector(tok_v)) => {
+                                for (adj_row, &t) in adj_m.iter().zip(tok_v.iter()) {
+                                    let idx = t as usize;
+                                    if idx < vocab_size {
+                                        for (d, &val) in adj_row.iter().enumerate() {
+                                            if d < dim {
+                                                grad_e[idx][d] += val;
+                                            }
+                                        }
+                                    }
+                                }
+                                arg_tapes[0].backward(
+                                    &MathValue::Matrix(grad_e),
+                                    wrt,
+                                    acc_grad,
+                                    evaluator,
+                                )
+                            }
+                            (MathValue::Vector(adj_v), MathValue::Scalar(t)) => {
+                                let idx = *t as usize;
+                                if idx < vocab_size {
+                                    for (d, &val) in adj_v.iter().enumerate() {
+                                        if d < dim {
+                                            grad_e[idx][d] += val;
+                                        }
+                                    }
+                                }
+                                arg_tapes[0].backward(
+                                    &MathValue::Matrix(grad_e),
+                                    wrt,
+                                    acc_grad,
+                                    evaluator,
+                                )
+                            }
+                            _ => Err("embed shape mismatch in backward".to_string()),
+                        }
+                    } else {
+                        Err("embed table is not a matrix".to_string())
+                    }
+                }
+                _ => Err(format!(
+                    "Unsupported function call '{}' in analytical backward",
+                    name
+                )),
+            },
+        }
+    }
+}
+
+// ============================================================================
 // RUNTIME EVALUATOR (Scalars, Vectors, Matrices & Tensor Reductions)
 // ============================================================================
 
@@ -2056,6 +2790,20 @@ impl MathEvaluator {
                         Ok(MathValue::Scalar(sum))
                     }
                 }
+                "sum_axis" => {
+                    if args.is_empty() {
+                        return Err(
+                            "'sum_axis(X, [axis])' requires at least 1 argument".to_string()
+                        );
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let axis = if args.len() > 1 {
+                        self.eval(&args[1])? as usize
+                    } else {
+                        0
+                    };
+                    val.sum_axis(axis)
+                }
                 "max" | "min" => {
                     if args.is_empty() {
                         return Err(format!("'{}' requires at least one argument", name));
@@ -2455,6 +3203,11 @@ impl MathEvaluator {
                             )
                         }
                     };
+                    let inlined = args[0].inline_and_expand(&self.functions, true, 0).simplify();
+                    // 1. Try Analytical Reverse-Mode Tape Autodiff first (O(1) backpropagation)
+                    if let Ok(analytical_grad) = self.eval_analytical_grad(&inlined, &wrt) {
+                        return Ok(analytical_grad);
+                    }
                     if let Some(current_val) = self.env.get(&wrt).cloned() {
                         let eps = 1e-6_f64;
                         let eval_scalar_loss =
@@ -2896,6 +3649,152 @@ impl MathEvaluator {
                 Ok(MathValue::Matrix(out))
             }
         }
+    }
+
+    fn eval_tape(&self, expr: &MathExpr) -> Result<(MathValue, ExprTape), String> {
+        match expr {
+            MathExpr::Num(n) => Ok((MathValue::Scalar(*n), ExprTape::Num)),
+            MathExpr::Var(v) => {
+                if let Some(val) = self.env.get(v) {
+                    Ok((val.clone(), ExprTape::Var(v.clone())))
+                } else {
+                    Err(format!("Variable '{}' not found in environment for autodiff", v))
+                }
+            }
+            MathExpr::Array(elems) => {
+                let mut vals = Vec::with_capacity(elems.len());
+                let mut tapes = Vec::with_capacity(elems.len());
+                for e in elems {
+                    let (v, t) = self.eval_tape(e)?;
+                    vals.push(v);
+                    tapes.push(t);
+                }
+                let is_all_scalars = vals.iter().all(|v| matches!(v, MathValue::Scalar(_)));
+                let is_all_vectors = vals.iter().all(|v| matches!(v, MathValue::Vector(_)));
+                let out_val = if is_all_scalars {
+                    MathValue::Vector(vals.into_iter().map(|v| v.as_scalar().unwrap()).collect())
+                } else if is_all_vectors {
+                    MathValue::Matrix(
+                        vals.into_iter()
+                            .map(|v| match v {
+                                MathValue::Vector(row) => row,
+                                _ => vec![],
+                            })
+                            .collect(),
+                    )
+                } else {
+                    return Err("Mixed types in array literal for tape".to_string());
+                };
+                Ok((out_val, ExprTape::Array(tapes)))
+            }
+            MathExpr::Index(base, idx_expr) => {
+                let (base_val, base_tape) = self.eval_tape(base)?;
+                let idx_val = self.eval(idx_expr)? as usize;
+                let out_val = match &base_val {
+                    MathValue::Vector(v) => {
+                        if idx_val < v.len() {
+                            MathValue::Scalar(v[idx_val])
+                        } else {
+                            return Err(format!(
+                                "Index {} out of bounds for vector of len {}",
+                                idx_val,
+                                v.len()
+                            ));
+                        }
+                    }
+                    MathValue::Matrix(m) => {
+                        if idx_val < m.len() {
+                            MathValue::Vector(m[idx_val].clone())
+                        } else {
+                            return Err(format!(
+                                "Row index {} out of bounds for matrix with {} rows",
+                                idx_val,
+                                m.len()
+                            ));
+                        }
+                    }
+                    _ => return Err("Cannot index scalar in tape".to_string()),
+                };
+                Ok((
+                    out_val,
+                    ExprTape::Index {
+                        base_val,
+                        base_tape: Box::new(base_tape),
+                        idx_val,
+                    },
+                ))
+            }
+            MathExpr::Unary(op, inner) => {
+                let (inner_val, inner_tape) = self.eval_tape(inner)?;
+                let res = match op {
+                    MathUnaryOp::Neg => inner_val.map_unary(|x| -x),
+                    MathUnaryOp::Not => {
+                        inner_val.map_unary(|x| if x.abs() < 1e-12 { 1.0 } else { 0.0 })
+                    }
+                };
+                Ok((res, ExprTape::Unary(*op, inner_val, Box::new(inner_tape))))
+            }
+            MathExpr::Binary(lhs, op, rhs) => {
+                let (lhs_val, lhs_tape) = self.eval_tape(lhs)?;
+                let (rhs_val, rhs_tape) = self.eval_tape(rhs)?;
+                let res = self.eval_binary_op(&lhs_val, *op, &rhs_val)?;
+                Ok((
+                    res,
+                    ExprTape::Binary {
+                        op: *op,
+                        lhs_val,
+                        lhs_tape: Box::new(lhs_tape),
+                        rhs_val,
+                        rhs_tape: Box::new(rhs_tape),
+                    },
+                ))
+            }
+            MathExpr::Call(name, args) => {
+                let mut arg_vals = Vec::with_capacity(args.len());
+                let mut arg_tapes = Vec::with_capacity(args.len());
+                for a in args {
+                    let (v, t) = self.eval_tape(a)?;
+                    arg_vals.push(v);
+                    arg_tapes.push(t);
+                }
+                let res = self.eval_value(expr)?;
+                Ok((
+                    res,
+                    ExprTape::Call {
+                        name: name.clone(),
+                        arg_vals,
+                        arg_tapes,
+                    },
+                ))
+            }
+            _ => {
+                let res = self.eval_value(expr)?;
+                Ok((res, ExprTape::Num))
+            }
+        }
+    }
+
+    /// Evaluates exact analytical matrix/vector/scalar gradient using reverse-mode autodiff
+    pub fn eval_analytical_grad(&self, expr: &MathExpr, wrt: &str) -> Result<MathValue, String> {
+        let wrt_val = self.env.get(wrt).ok_or_else(|| {
+            format!(
+                "Variable '{}' not found in environment for analytical gradient",
+                wrt
+            )
+        })?;
+        let (loss_val, tape) = self.eval_tape(expr)?;
+        let mut acc_grad = wrt_val.zeros_like();
+        let incoming_adj = match &loss_val {
+            MathValue::Scalar(_) => MathValue::Scalar(1.0),
+            MathValue::Vector(v) => MathValue::Vector(vec![1.0; v.len()]),
+            MathValue::Matrix(m) => {
+                let rows = m.len();
+                let cols = m.first().map(|r| r.len()).unwrap_or(0);
+                MathValue::Matrix(vec![vec![1.0; cols]; rows])
+            }
+        };
+        tape.backward(&incoming_adj, wrt, &mut acc_grad, self)?;
+        Ok(acc_grad)
     }
 }
 
@@ -3432,6 +4331,44 @@ impl MathProgram {
                         let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
                     }
                     Some(vec![])
+                }
+                "sum_axis" => {
+                    if !args.is_empty() {
+                        let axis = if args.len() > 1 {
+                            if let MathExpr::Num(n) = &args[1] {
+                                *n as usize
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+                        if let Some(s) =
+                            Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx)
+                        {
+                            if s.len() == 2 {
+                                if axis == 0 {
+                                    Some(vec![s[1]])
+                                } else if axis == 1 {
+                                    Some(vec![s[0]])
+                                } else {
+                                    errors.push(format!(
+                                        "{}sum_axis: axis {} out of bounds for 2D matrix",
+                                        prefix, axis
+                                    ));
+                                    None
+                                }
+                            } else if s.len() == 1 {
+                                Some(vec![])
+                            } else {
+                                Some(s)
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
                 }
                 "argmax" | "argmin" => {
                     if let Some(arg) = args.first() {
@@ -6240,5 +7177,63 @@ mod tests {
         assert!(c23_code.contains("(float)Z[_j][_i];"), "Expected 2D transpose indexing");
         // Check 2D RMSNorm
         assert!(c23_code.contains("1.0f / sqrtf((_ss / (float)2) + 1e-5f);"), "Expected RMSNorm row scaling");
+    }
+
+    #[test]
+    fn test_analytical_reverse_mode_matrix_grad() {
+        let code = r#"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            Y = [[1.0, 0.0], [0.0, 1.0]]
+            W = [[0.5, 0.2], [0.1, 0.4]]
+            loss(W) = sum((X @ W - Y)^2)
+            G = grad(loss(W), W)
+        "#;
+        let prog = parse_math_code(code).expect("Parse math failed");
+        assert!(prog.verify_shapes().is_ok(), "Shapes must verify");
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+        let g_val = eval.env.get("G").expect("G should be computed");
+        match g_val {
+            MathValue::Matrix(g_mat) => {
+                assert_eq!(g_mat.len(), 2);
+                assert_eq!(g_mat[0].len(), 2);
+                // Exact analytical: [[10.8, 9.2], [14.0, 13.6]]
+                assert!((g_mat[0][0] - 10.8).abs() < 1e-5, "Expected 10.8, got {}", g_mat[0][0]);
+                assert!((g_mat[0][1] - 9.2).abs() < 1e-5, "Expected 9.2, got {}", g_mat[0][1]);
+                assert!((g_mat[1][0] - 14.0).abs() < 1e-5, "Expected 14.0, got {}", g_mat[1][0]);
+                assert!((g_mat[1][1] - 13.6).abs() < 1e-5, "Expected 13.6, got {}", g_mat[1][1]);
+            }
+            _ => panic!("Expected matrix gradient for G, got {:?}", g_val),
+        }
+    }
+
+    #[test]
+    fn test_sum_axis_operator() {
+        let code = r#"
+            M = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+            col_sums = sum_axis(M, 0)
+            row_sums = sum_axis(M, 1)
+        "#;
+        let prog = parse_math_code(code).expect("Parse sum_axis code failed");
+        assert!(prog.verify_shapes().is_ok(), "Shape verification should succeed");
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+        
+        let col_val = eval.env.get("col_sums").expect("col_sums exists");
+        let row_val = eval.env.get("row_sums").expect("row_sums exists");
+
+        match col_val {
+            MathValue::Vector(v) => {
+                assert_eq!(v, &vec![5.0, 7.0, 9.0]);
+            }
+            _ => panic!("Expected vector for col_sums, got {:?}", col_val),
+        }
+
+        match row_val {
+            MathValue::Vector(v) => {
+                assert_eq!(v, &vec![6.0, 15.0]);
+            }
+            _ => panic!("Expected vector for row_sums, got {:?}", row_val),
+        }
     }
 }
