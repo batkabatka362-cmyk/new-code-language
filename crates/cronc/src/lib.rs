@@ -222,6 +222,9 @@ pub fn parse_unified_cl(source: &str) -> Result<ClV2Document, String> {
     // 1. Check for Standard Mathematical Calculus (f(x) = ..., x -> f -> g)
     if cl_math::is_math_calculus_source(source) {
         let prog = cl_math::parse_math_code(source)?;
+        if let Err(shape_errors) = prog.verify_shapes() {
+            return Err(format!("Shape verification failed: {}", shape_errors.join("; ")));
+        }
         return Ok(prog.to_cl_v2_document());
     }
 
@@ -672,6 +675,9 @@ pub fn compile_source_with_color(source: &str, file_label: Option<&str>, use_col
     // 1. Standard Mathematical Calculus (Zero-Word Algebraic Pipelines)
     if crate::cl_math::is_math_calculus_source(source) {
         let prog = crate::cl_math::parse_math_code(source)?;
+        if let Err(shape_errors) = prog.verify_shapes() {
+            return Err(format!("Shape verification failed: {}", shape_errors.join("; ")));
+        }
         return Ok(prog.to_vliw());
     }
 
@@ -794,7 +800,21 @@ fn extract_line_col_from_err(msg: &str) -> (usize, usize) {
 
 pub fn check_source_diagnostics(source: &str) -> Vec<Diagnostic> {
     if crate::cl_math::is_math_calculus_source(source) {
-        return Vec::new();
+        match crate::cl_math::parse_math_code(source) {
+            Ok(prog) => {
+                if let Err(shape_errors) = prog.verify_shapes() {
+                    return shape_errors
+                        .into_iter()
+                        .map(|err| Diagnostic::new("E_MATH_SHAPE", &err, 1, 1).with_source(source))
+                        .collect();
+                }
+                return Vec::new();
+            }
+            Err(e) => {
+                let (l, c) = extract_line_col_from_err(&e);
+                return vec![Diagnostic::new("E_MATH_PARSE", &e, l, c).with_source(source)];
+            }
+        }
     }
 
     if source.contains("@⌖") || source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {

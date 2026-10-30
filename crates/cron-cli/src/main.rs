@@ -2694,6 +2694,9 @@ fn main() {
 
             let parse_res = cronc::parse_math_code(&source).and_then(|mut prog| {
                 prog.resolve_links(&base_dir)?;
+                if let Err(shape_errors) = prog.verify_shapes() {
+                    return Err(format!("Shape verification failed:\n  {}", shape_errors.join("\n  ")));
+                }
                 Ok(prog)
             });
 

@@ -25,3 +25,4 @@ grad_w = outer(y, [1.0, 2.0])
 // Row 0 of grad_w is [90*1, 90*2] = [90, 180] -> sum = 270
 r0 = slice(grad_w, 0, 1)
 sum(r0)
+

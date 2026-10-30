@@ -2140,6 +2140,584 @@ impl MathProgram {
         fns
     }
 
+    /// Collects full function signatures including typed parameters with tensor dimensions
+    pub fn collect_function_signatures(
+        &self,
+    ) -> HashMap<String, (Vec<MathParam>, Option<MathDtype>, MathExpr)> {
+        let mut sigs = HashMap::new();
+        for item in &self.items {
+            if let MathItem::Function {
+                name,
+                params,
+                ret_type,
+                body,
+            } = item
+            {
+                sigs.insert(name.clone(), (params.clone(), ret_type.clone(), body.clone()));
+            }
+        }
+        sigs
+    }
+
+    /// Infers static shapes for all top-level bindings in the program
+    pub fn infer_shapes_map(&self) -> HashMap<String, Vec<usize>> {
+        let fns = self.collect_function_signatures();
+        let mut env: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut errors = Vec::new();
+
+        for item in &self.items {
+            match item {
+                MathItem::Constant { name, .. } => {
+                    env.insert(name.clone(), vec![]);
+                }
+                MathItem::Binding { name, expr } => {
+                    if let Some(shape) = Self::infer_shape_expr(
+                        expr,
+                        &env,
+                        &fns,
+                        &mut errors,
+                        Some(&format!("binding '{}'", name)),
+                    ) {
+                        env.insert(name.clone(), shape);
+                    }
+                }
+                _ => {}
+            }
+        }
+        env
+    }
+
+    /// Verifies tensor dimension consistency across the entire mathematical program.
+    /// Returns Ok(()) if all matrix operations, tensor shapes, and function calls are dimensionally sound,
+    /// or Err(Vec<String>) with detailed diagnostic error messages describing all shape mismatches.
+    pub fn verify_shapes(&self) -> Result<(), Vec<String>> {
+        let fns = self.collect_function_signatures();
+        let mut errors = Vec::new();
+
+        // 1. Verify function definitions
+        for item in &self.items {
+            if let MathItem::Function {
+                name,
+                params,
+                body,
+                ..
+            } = item
+            {
+                let mut fn_env: HashMap<String, Vec<usize>> = HashMap::new();
+                for param in params {
+                    fn_env.insert(param.name.clone(), param.dims.clone());
+                }
+                let _ = Self::infer_shape_expr(
+                    body,
+                    &fn_env,
+                    &fns,
+                    &mut errors,
+                    Some(&format!("function '{}'", name)),
+                );
+            }
+        }
+
+        // 2. Verify top-level bindings and expressions
+        let mut global_env: HashMap<String, Vec<usize>> = HashMap::new();
+        for item in &self.items {
+            match item {
+                MathItem::Constant { name, .. } => {
+                    global_env.insert(name.clone(), vec![]);
+                }
+                MathItem::Binding { name, expr } => {
+                    let shape_opt = Self::infer_shape_expr(
+                        expr,
+                        &global_env,
+                        &fns,
+                        &mut errors,
+                        Some(&format!("binding '{}'", name)),
+                    );
+                    if let Some(shape) = shape_opt {
+                        global_env.insert(name.clone(), shape);
+                    }
+                }
+                MathItem::Expression(expr) => {
+                    let _ = Self::infer_shape_expr(
+                        expr,
+                        &global_env,
+                        &fns,
+                        &mut errors,
+                        Some("top-level expression"),
+                    );
+                }
+                MathItem::Export { expr, path, key } => {
+                    let _ = Self::infer_shape_expr(
+                        expr,
+                        &global_env,
+                        &fns,
+                        &mut errors,
+                        Some(&format!("export to '{}:{}'", path, key)),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// Recursively infers and checks tensor shape for a mathematical expression AST
+    pub fn infer_shape_expr(
+        expr: &MathExpr,
+        env: &HashMap<String, Vec<usize>>,
+        fn_sigs: &HashMap<String, (Vec<MathParam>, Option<MathDtype>, MathExpr)>,
+        errors: &mut Vec<String>,
+        ctx: Option<&str>,
+    ) -> Option<Vec<usize>> {
+        let prefix = ctx.map(|c| format!("In {}: ", c)).unwrap_or_default();
+        match expr {
+            MathExpr::Num(_) => Some(vec![]),
+            MathExpr::Var(name) => {
+                if let Some(shape) = env.get(name) {
+                    Some(shape.clone())
+                } else {
+                    None
+                }
+            }
+            MathExpr::Array(elems) => {
+                if elems.is_empty() {
+                    return Some(vec![0]);
+                }
+                let s0 = Self::infer_shape_expr(&elems[0], env, fn_sigs, errors, ctx)?;
+                for (i, elem) in elems.iter().enumerate().skip(1) {
+                    if let Some(si) = Self::infer_shape_expr(elem, env, fn_sigs, errors, ctx) {
+                        if si != s0 {
+                            errors.push(format!(
+                                "{}Ragged tensor array literal: row 0 has dimension {:?} but row {} has dimension {:?}",
+                                prefix, s0, i, si
+                            ));
+                            return None;
+                        }
+                    }
+                }
+                let mut full = vec![elems.len()];
+                full.extend(s0);
+                Some(full)
+            }
+            MathExpr::Index(base, idx) => {
+                let _ = Self::infer_shape_expr(idx, env, fn_sigs, errors, ctx);
+                if let Some(b_shape) = Self::infer_shape_expr(base, env, fn_sigs, errors, ctx) {
+                    if b_shape.is_empty() {
+                        errors.push(format!("{}Cannot index into a scalar value", prefix));
+                        None
+                    } else {
+                        Some(b_shape[1..].to_vec())
+                    }
+                } else {
+                    None
+                }
+            }
+            MathExpr::TensorRef { path, key } => {
+                if let Ok(val) = load_tensor_resource(path, key) {
+                    match val {
+                        MathValue::Scalar(_) => Some(vec![]),
+                        MathValue::Vector(v) => Some(vec![v.len()]),
+                        MathValue::Matrix(m) => {
+                            let rows = m.len();
+                            let cols = m.first().map(|r| r.len()).unwrap_or(0);
+                            Some(vec![rows, cols])
+                        }
+                    }
+                } else {
+                    None
+                }
+            }
+            MathExpr::Unary(_, inner) => {
+                Self::infer_shape_expr(inner, env, fn_sigs, errors, ctx)
+            }
+            MathExpr::Binary(lhs, op, rhs) => {
+                // Check for transpose notation: W^T or expr^T
+                if *op == MathBinOp::Pow {
+                    if let MathExpr::Var(v) = &**rhs {
+                        if v == "T" {
+                            if let Some(s) = Self::infer_shape_expr(lhs, env, fn_sigs, errors, ctx) {
+                                if s.len() == 2 {
+                                    return Some(vec![s[1], s[0]]);
+                                } else if s.len() == 1 {
+                                    return Some(vec![s[0], 1]);
+                                } else if s.is_empty() {
+                                    return Some(vec![]);
+                                } else {
+                                    errors.push(format!(
+                                        "{}Transpose (^T) unsupported on tensor of rank {}",
+                                        prefix,
+                                        s.len()
+                                    ));
+                                    return None;
+                                }
+                            }
+                        }
+                    }
+                    let _ = Self::infer_shape_expr(rhs, env, fn_sigs, errors, ctx);
+                    return Self::infer_shape_expr(lhs, env, fn_sigs, errors, ctx);
+                }
+
+                let l_opt = Self::infer_shape_expr(lhs, env, fn_sigs, errors, ctx);
+                let r_opt = Self::infer_shape_expr(rhs, env, fn_sigs, errors, ctx);
+
+                if *op == MathBinOp::MatMul {
+                    match (l_opt, r_opt) {
+                        (Some(l), Some(r)) => match (l.len(), r.len()) {
+                            (2, 2) => {
+                                if l[1] != r[0] {
+                                    errors.push(format!(
+                                        "{}Matrix multiplication shape mismatch (@): left shape {:?} (inner dim {}) cannot multiply right shape {:?} (outer dim {})",
+                                        prefix, l, l[1], r, r[0]
+                                    ));
+                                    None
+                                } else {
+                                    Some(vec![l[0], r[1]])
+                                }
+                            }
+                            (2, 1) => {
+                                if l[1] != r[0] {
+                                    errors.push(format!(
+                                        "{}Matrix-vector multiplication shape mismatch (@): matrix shape {:?} (inner dim {}) cannot multiply vector shape {:?} (dim {})",
+                                        prefix, l, l[1], r, r[0]
+                                    ));
+                                    None
+                                } else {
+                                    Some(vec![l[0]])
+                                }
+                            }
+                            (1, 2) => {
+                                if l[0] != r[0] {
+                                    errors.push(format!(
+                                        "{}Vector-matrix multiplication shape mismatch (@): vector shape {:?} (dim {}) cannot multiply matrix shape {:?} (outer dim {})",
+                                        prefix, l, l[0], r, r[0]
+                                    ));
+                                    None
+                                } else {
+                                    Some(vec![r[1]])
+                                }
+                            }
+                            (1, 1) => {
+                                if l[0] != r[0] {
+                                    errors.push(format!(
+                                        "{}Vector dot product shape mismatch (@): vector shape {:?} (dim {}) != vector shape {:?} (dim {})",
+                                        prefix, l, l[0], r, r[0]
+                                    ));
+                                    None
+                                } else {
+                                    Some(vec![])
+                                }
+                            }
+                            (0, _) => Some(r),
+                            (_, 0) => Some(l),
+                            _ => {
+                                errors.push(format!(
+                                    "{}MatMul (@) unsupported between rank {} and rank {}",
+                                    prefix,
+                                    l.len(),
+                                    r.len()
+                                ));
+                                None
+                            }
+                        },
+                        (Some(l), None) => {
+                            if l.len() >= 2 {
+                                Some(vec![l[0]])
+                            } else {
+                                None
+                            }
+                        }
+                        (None, Some(r)) => {
+                            if r.len() >= 2 {
+                                Some(vec![r[1]])
+                            } else {
+                                None
+                            }
+                        }
+                        (None, None) => None,
+                    }
+                } else {
+                    // Element-wise arithmetic & comparison ops
+                    match (l_opt, r_opt) {
+                        (Some(l), Some(r)) => {
+                            if l.is_empty() {
+                                Some(r)
+                            } else if r.is_empty() {
+                                Some(l)
+                            } else if l == r {
+                                Some(l)
+                            } else {
+                                errors.push(format!(
+                                    "{}Element-wise binary op '{}' shape mismatch: left shape {:?} != right shape {:?}",
+                                    prefix, op, l, r
+                                ));
+                                None
+                            }
+                        }
+                        (Some(l), None) => Some(l),
+                        (None, Some(r)) => Some(r),
+                        (None, None) => None,
+                    }
+                }
+            }
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                let _ = Self::infer_shape_expr(cond, env, fn_sigs, errors, ctx);
+                let t_opt = Self::infer_shape_expr(then_expr, env, fn_sigs, errors, ctx);
+                let e_opt = Self::infer_shape_expr(else_expr, env, fn_sigs, errors, ctx);
+                match (t_opt, e_opt) {
+                    (Some(t), Some(e)) => {
+                        if t == e || e.is_empty() {
+                            Some(t)
+                        } else if t.is_empty() {
+                            Some(e)
+                        } else {
+                            errors.push(format!(
+                                "{}Ternary conditional branch shape mismatch: 'then' branch {:?} != 'else' branch {:?}",
+                                prefix, t, e
+                            ));
+                            None
+                        }
+                    }
+                    (Some(t), None) => Some(t),
+                    (None, Some(e)) => Some(e),
+                    (None, None) => None,
+                }
+            }
+            MathExpr::Call(func, args) => match func.as_str() {
+                "transpose" | "T" => {
+                    if let Some(arg) = args.first() {
+                        if let Some(s) = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx) {
+                            if s.len() == 2 {
+                                Some(vec![s[1], s[0]])
+                            } else if s.len() == 1 {
+                                Some(vec![s[0], 1])
+                            } else {
+                                Some(s)
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                "outer" => {
+                    if args.len() == 2 {
+                        let u = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let v = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        if let (Some(u_s), Some(v_s)) = (u, v) {
+                            if u_s.len() != 1 || v_s.len() != 1 {
+                                errors.push(format!(
+                                    "{}outer() requires two 1D vector arguments, received shapes {:?} and {:?}",
+                                    prefix, u_s, v_s
+                                ));
+                                None
+                            } else {
+                                Some(vec![u_s[0], v_s[0]])
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        errors.push(format!("{}outer() expects exactly 2 arguments", prefix));
+                        None
+                    }
+                }
+                "reshape" => {
+                    if !args.is_empty() {
+                        let in_shape = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let mut target_dims = Vec::new();
+                        if args.len() == 2 {
+                            if let MathExpr::Array(dims_exprs) = &args[1] {
+                                for d in dims_exprs {
+                                    if let MathExpr::Num(n) = d {
+                                        target_dims.push(*n as usize);
+                                    }
+                                }
+                            } else if let MathExpr::Num(n) = &args[1] {
+                                target_dims.push(*n as usize);
+                            }
+                        } else {
+                            for d in &args[1..] {
+                                if let MathExpr::Num(n) = d {
+                                    target_dims.push(*n as usize);
+                                }
+                            }
+                        }
+                        if !target_dims.is_empty() {
+                            if let Some(ref in_s) = in_shape {
+                                let in_total: usize = in_s.iter().product();
+                                let target_total: usize = target_dims.iter().product();
+                                if in_total > 0 && target_total > 0 && in_total != target_total {
+                                    errors.push(format!(
+                                        "{}Cannot reshape tensor with {} elements (shape {:?}) into shape {:?} ({} elements)",
+                                        prefix, in_total, in_s, target_dims, target_total
+                                    ));
+                                }
+                            }
+                            Some(target_dims)
+                        } else {
+                            in_shape
+                        }
+                    } else {
+                        None
+                    }
+                }
+                "slice" => {
+                    if !args.is_empty() {
+                        let in_shape = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let start = if args.len() > 1 {
+                            if let MathExpr::Num(n) = &args[1] {
+                                *n as usize
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+                        let end = if args.len() > 2 {
+                            if let MathExpr::Num(n) = &args[2] {
+                                *n as usize
+                            } else {
+                                usize::MAX
+                            }
+                        } else {
+                            usize::MAX
+                        };
+                        if let Some(s) = in_shape {
+                            if s.is_empty() {
+                                errors.push(format!("{}Cannot slice scalar value", prefix));
+                                None
+                            } else {
+                                let d0 = s[0];
+                                let s_idx = start.min(d0);
+                                let e_idx = end.min(d0);
+                                let new_d0 = if s_idx > e_idx { 0 } else { e_idx - s_idx };
+                                let mut out_s = vec![new_d0];
+                                out_s.extend_from_slice(&s[1..]);
+                                Some(out_s)
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                "sum" | "mean" | "norm" => {
+                    if let Some(arg) = args.first() {
+                        let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
+                    }
+                    Some(vec![])
+                }
+                "exp" | "ln" | "log" | "sqrt" | "sin" | "cos" | "tan" | "tanh" | "abs"
+                | "sigmoid" | "relu" | "gelu" => {
+                    if let Some(arg) = args.first() {
+                        Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
+                    } else {
+                        Some(vec![])
+                    }
+                }
+                user_fn => {
+                    if let Some((params, _ret, body)) = fn_sigs.get(user_fn) {
+                        if params.len() != args.len() {
+                            errors.push(format!(
+                                "{}Function '{}' expects {} arguments, received {}",
+                                prefix,
+                                user_fn,
+                                params.len(),
+                                args.len()
+                            ));
+                        }
+                        let mut fn_env = HashMap::new();
+                        for (p, a) in params.iter().zip(args.iter()) {
+                            let arg_s = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                            if !p.dims.is_empty() {
+                                if let Some(ref ashp) = arg_s {
+                                    if ashp != &p.dims {
+                                        errors.push(format!(
+                                            "{}Argument for parameter '{}' has shape {:?}, expected shape {:?}",
+                                            prefix, p.name, ashp, p.dims
+                                        ));
+                                    }
+                                }
+                                fn_env.insert(p.name.clone(), p.dims.clone());
+                            } else if let Some(ashp) = arg_s {
+                                fn_env.insert(p.name.clone(), ashp);
+                            } else {
+                                fn_env.insert(p.name.clone(), vec![]);
+                            }
+                        }
+                        Self::infer_shape_expr(
+                            body,
+                            &fn_env,
+                            fn_sigs,
+                            errors,
+                            Some(&format!("call to '{}'", user_fn)),
+                        )
+                    } else {
+                        None
+                    }
+                }
+            },
+            MathExpr::Iterate { input, func, count } => {
+                let _ = Self::infer_shape_expr(count, env, fn_sigs, errors, ctx);
+                let in_s = Self::infer_shape_expr(input, env, fn_sigs, errors, ctx);
+                if let MathExpr::Var(fname) = &**func {
+                    if let Some((params, _ret, body)) = fn_sigs.get(fname) {
+                        if let Some(ref s_in) = in_s {
+                            let mut fn_env = HashMap::new();
+                            if let Some(p0) = params.first() {
+                                if !p0.dims.is_empty() && &p0.dims != s_in {
+                                    errors.push(format!(
+                                        "{}Functional iteration initial value has shape {:?}, parameter '{}' expects {:?}",
+                                        prefix, s_in, p0.name, p0.dims
+                                    ));
+                                }
+                                fn_env.insert(p0.name.clone(), s_in.clone());
+                            }
+                            let out_s = Self::infer_shape_expr(
+                                body,
+                                &fn_env,
+                                fn_sigs,
+                                errors,
+                                Some(&format!("iteration step '{}'", fname)),
+                            );
+                            if let Some(ref s_out) = out_s {
+                                if s_in != s_out {
+                                    errors.push(format!(
+                                        "{}Functional iteration loop invariant violated in '{}': input shape {:?} != output shape {:?}",
+                                        prefix, fname, s_in, s_out
+                                    ));
+                                }
+                            }
+                            return out_s;
+                        }
+                    }
+                }
+                in_s
+            }
+            MathExpr::Pipeline(stages) => {
+                if stages.is_empty() {
+                    return None;
+                }
+                let mut curr = stages[0].clone();
+                for st in &stages[1..] {
+                    curr = MathParser::desugar_pipe_step(curr, st.clone());
+                }
+                Self::infer_shape_expr(&curr, env, fn_sigs, errors, ctx)
+            }
+            MathExpr::Placeholder => None,
+        }
+    }
+
     /// Infers function return dtype from explicit annotation or parameter precisions
     fn infer_return_dtype(params: &[MathParam], explicit: &Option<MathDtype>) -> MathDtype {
         if let Some(dt) = explicit {
@@ -2162,7 +2740,7 @@ impl MathProgram {
         out.push_str("// CRON Mathematical Calculus -> ISO C23 Native Source\n");
         out.push_str("// Generated by CRON Sovereign Math Engine (Zero-Word Calculus)\n");
         out.push_str("// ============================================================================\n\n");
-        out.push_str("#include <stdint.h>\n#include <stdbool.h>\n#include <math.h>\n\n");
+        out.push_str("#include <stdint.h>\n#include <stdbool.h>\n#include <math.h>\n#include <stdalign.h>\n\n");
 
         let fns = self.collect_functions();
 
@@ -2381,14 +2959,73 @@ impl MathProgram {
     /// Compiles standard math into standalone executable C23 source code with main() runner
     pub fn to_c23_executable(&self) -> String {
         let mut out = self.to_c23();
+        let shapes = self.infer_shapes_map();
         out.push_str("#include <stdio.h>\n\nint main(void) {\n");
         out.push_str("    printf(\"================================================================================\\n\");\n");
         out.push_str("    printf(\" CRON Mathematical Native Executable (Zero-Word Standard Calculus)\\n\");\n");
         out.push_str("    printf(\"================================================================================\\n\");\n");
         for item in &self.items {
             if let MathItem::Binding { name, expr } = item {
-                out.push_str(&format!("    float {} = {};\n", name, Self::expr_to_c23(expr)));
-                out.push_str(&format!("    printf(\"  [=] {} = %f\\n\", (double){});\n", name, name));
+                let shape = shapes.get(name).cloned().unwrap_or_default();
+                match shape.len() {
+                    0 => {
+                        out.push_str(&format!("    alignas(16) float {} = {};\n", name, Self::expr_to_c23(expr)));
+                        out.push_str(&format!("    printf(\"  [=] {} = %f\\n\", (double){});\n", name, name));
+                    }
+                    1 => {
+                        let n = shape[0];
+                        if let MathExpr::Array(elems) = expr {
+                            let elem_strs: Vec<String> = elems.iter().map(Self::expr_to_c23).collect();
+                            out.push_str(&format!("    alignas(64) float {}[{}] = {{ {} }};\n", name, n, elem_strs.join(", ")));
+                        } else if let MathExpr::Binary(lhs, MathBinOp::MatMul, rhs) = expr {
+                            let l_str = Self::expr_to_c23(lhs);
+                            let r_str = Self::expr_to_c23(rhs);
+                            let l_shape = shapes.get(&l_str).cloned().unwrap_or_else(|| vec![n, n]);
+                            let k = if l_shape.len() == 2 { l_shape[1] } else { n };
+                            out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
+                            out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
+                            out.push_str("        float _acc = 0.0f;\n");
+                            out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", k));
+                            out.push_str(&format!("            _acc += (float){}[_i * {} + _j] * (float){}[_j];\n", l_str, k, r_str));
+                            out.push_str("        }\n");
+                            out.push_str(&format!("        {}[_i] = _acc;\n", name));
+                            out.push_str("    }\n");
+                        } else {
+                            out.push_str(&format!("    alignas(64) float {}[{}] = {{ 0.0f }};\n", name, n));
+                        }
+                        out.push_str(&format!("    printf(\"  [=] {} = [\");\n", name));
+                        out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
+                        out.push_str(&format!("        printf(\"%f%s\", (double){}[_i], (_i + 1 < {}) ? \", \" : \"\");\n", name, n));
+                        out.push_str("    }\n    printf(\"]\\n\");\n");
+                    }
+                    2 => {
+                        let rows = shape[0];
+                        let cols = shape[1];
+                        if let MathExpr::Array(row_exprs) = expr {
+                            let mut row_strs = Vec::new();
+                            for r in row_exprs {
+                                if let MathExpr::Array(elems) = r {
+                                    let e_strs: Vec<String> = elems.iter().map(Self::expr_to_c23).collect();
+                                    row_strs.push(format!("{{ {} }}", e_strs.join(", ")));
+                                }
+                            }
+                            out.push_str(&format!("    alignas(64) float {}[{}][{}] = {{ {} }};\n", name, rows, cols, row_strs.join(", ")));
+                        } else {
+                            out.push_str(&format!("    alignas(64) float {}[{}][{}] = {{ 0.0f }};\n", name, rows, cols));
+                        }
+                        out.push_str(&format!("    printf(\"  [=] {} = [\");\n", name));
+                        out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                        out.push_str("        printf(\"[\");\n");
+                        out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                        out.push_str(&format!("            printf(\"%f%s\", (double){}[_i][_j], (_j + 1 < {}) ? \", \" : \"\");\n", name, cols));
+                        out.push_str("        }\n");
+                        out.push_str(&format!("        printf(\"]%s\", (_i + 1 < {}) ? \", \" : \"\");\n", rows));
+                        out.push_str("    }\n    printf(\"]\\n\");\n");
+                    }
+                    _ => {
+                        out.push_str(&format!("    alignas(16) float {} = {};\n", name, Self::expr_to_c23(expr)));
+                    }
+                }
             } else if let MathItem::Expression(expr) = item {
                 out.push_str(&format!("    printf(\"  [+] Result = %f\\n\", (double)({}));\n", Self::expr_to_c23(expr)));
             }
@@ -3732,5 +4369,82 @@ mod tests {
         let mut eval_outer = MathEvaluator::new();
         let res_outer = eval_outer.execute_program(&prog_outer).expect("Outer product failed");
         assert_eq!(res_outer, Some(15.0));
+    }
+
+    #[test]
+    fn test_static_shape_inference_and_checker() {
+        // 1. Valid shaped tensor operations pass shape verification
+        let valid_code = r#"
+            linear(W: f16[16, 32], x: f16[32]) = W @ x
+            W_mat = [[1.0, 2.0], [3.0, 4.0]]
+            x_vec = [5.0, 6.0]
+            y_vec = W_mat @ x_vec
+            z = sum(y_vec)
+        "#;
+        let valid_prog = parse_math_code(valid_code).expect("Valid code parsing failed");
+        assert!(valid_prog.verify_shapes().is_ok(), "Valid shapes should pass verification");
+
+        // 2. Shape mismatch in matrix-vector GEMV parameter annotations
+        let invalid_gemv = r#"
+            bad_linear(W: f16[16, 32], x: f16[16]) = W @ x
+        "#;
+        let invalid_prog = parse_math_code(invalid_gemv).expect("Parsing bad_linear should succeed");
+        let errs = invalid_prog.verify_shapes().expect_err("Mismatched dimensions must fail");
+        assert!(errs.iter().any(|e| e.contains("Matrix-vector multiplication shape mismatch")), "Expected GEMV mismatch error, found: {:?}", errs);
+
+        // 3. Shape mismatch in matrix-matrix GEMM
+        let invalid_gemm = r#"
+            gemm(A: f32[16, 32], B: f32[16, 64]) = A @ B
+        "#;
+        let prog_gemm = parse_math_code(invalid_gemm).expect("Parsing bad gemm should succeed");
+        let errs_gemm = prog_gemm.verify_shapes().expect_err("Mismatched inner dims must fail");
+        assert!(errs_gemm.iter().any(|e| e.contains("Matrix multiplication shape mismatch")), "Expected GEMM mismatch error, found: {:?}", errs_gemm);
+
+        // 4. Element-wise shape mismatch
+        let invalid_add = r#"
+            bad_add(A: f32[16, 32], B: f32[16, 16]) = A + B
+        "#;
+        let prog_add = parse_math_code(invalid_add).expect("Parsing bad add should succeed");
+        let errs_add = prog_add.verify_shapes().expect_err("Mismatched add dims must fail");
+        assert!(errs_add.iter().any(|e| e.contains("Element-wise binary op '+' shape mismatch")), "Expected element-wise error, found: {:?}", errs_add);
+
+        // 5. Ragged array literal
+        let ragged_code = r#"
+            R = [[1.0, 2.0], [3.0, 4.0, 5.0]]
+        "#;
+        let prog_ragged = parse_math_code(ragged_code).expect("Parsing ragged array should succeed");
+        let errs_ragged = prog_ragged.verify_shapes().expect_err("Ragged array must fail");
+        assert!(errs_ragged.iter().any(|e| e.contains("Ragged tensor array literal")), "Expected ragged error, found: {:?}", errs_ragged);
+
+        // 6. Reshape element count mismatch
+        let bad_reshape = r#"
+            v = [1.0, 2.0, 3.0, 4.0]
+            M = reshape(v, [3, 2])
+        "#;
+        let prog_reshape = parse_math_code(bad_reshape).expect("Parsing bad reshape should succeed");
+        let errs_reshape = prog_reshape.verify_shapes().expect_err("Bad reshape element count must fail");
+        assert!(errs_reshape.iter().any(|e| e.contains("Cannot reshape tensor")), "Expected reshape count error, found: {:?}", errs_reshape);
+
+        // 7. Verify check_source_diagnostics returns E_MATH_SHAPE
+        let diags = crate::check_source_diagnostics(invalid_gemv);
+        assert!(!diags.is_empty(), "Diagnostics should not be empty for invalid shape code");
+        assert_eq!(diags[0].code, "E_MATH_SHAPE");
+    }
+
+    #[test]
+    fn test_c23_static_stack_arena_codegen() {
+        let code = r#"
+            W = [[1.0, 2.0], [3.0, 4.0]]
+            x = [5.0, 6.0]
+            y = W @ x
+        "#;
+        let prog = parse_math_code(code).expect("Parsing tensor pipeline failed");
+        let c23_exec = prog.to_c23_executable();
+        // Check static stack arena 64-byte alignment and zero heap calls
+        assert!(c23_exec.contains("alignas(64) float W[2][2]"), "Expected alignas(64) matrix allocation");
+        assert!(c23_exec.contains("alignas(64) float x[2]"), "Expected alignas(64) vector allocation");
+        assert!(c23_exec.contains("alignas(64) float y[2];"), "Expected alignas(64) output buffer");
+        assert!(!c23_exec.contains("malloc"), "C23 static stack arena must have 0 malloc calls");
+        assert!(!c23_exec.contains("free("), "C23 static stack arena must have 0 free calls");
     }
 }
