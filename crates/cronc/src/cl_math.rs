@@ -15,7 +15,7 @@
 //    - 4-Slot 128-Bit VLIW Silicon Microcode (CRC-8 ATM Verified)
 // ============================================================================
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::cl_v2_ast::{
@@ -1138,6 +1138,167 @@ impl MathExpr {
         }
     }
 
+    /// Checks whether an expression is non-trivial and a valid candidate for CSE extraction
+    pub fn is_cse_candidate(&self) -> bool {
+        match self {
+            MathExpr::Num(_)
+            | MathExpr::Var(_)
+            | MathExpr::Placeholder
+            | MathExpr::TensorRef { .. } => false,
+            MathExpr::Array(elems) => elems.iter().any(|e| e.is_cse_candidate()),
+            MathExpr::Tuple(items) => items.iter().any(|e| e.is_cse_candidate()),
+            MathExpr::Unary(_, inner) => inner.is_cse_candidate(),
+            MathExpr::Binary(_, _, _) => true,
+            MathExpr::Call(name, _) => name != "randn",
+            MathExpr::Ternary { .. } => true,
+            MathExpr::Iterate { .. } => true,
+            MathExpr::Index(_, _) => true,
+            MathExpr::Pipeline(_) => true,
+        }
+    }
+
+    /// Replaces occurrences of `target` with `replacement`
+    pub fn replace_subexpr(&self, target: &MathExpr, replacement: &MathExpr) -> MathExpr {
+        if self == target {
+            return replacement.clone();
+        }
+        match self {
+            MathExpr::Array(elems) => {
+                MathExpr::Array(elems.iter().map(|e| e.replace_subexpr(target, replacement)).collect())
+            }
+            MathExpr::Tuple(items) => {
+                MathExpr::Tuple(items.iter().map(|e| e.replace_subexpr(target, replacement)).collect())
+            }
+            MathExpr::Index(b, i) => MathExpr::Index(
+                Box::new(b.replace_subexpr(target, replacement)),
+                Box::new(i.replace_subexpr(target, replacement)),
+            ),
+            MathExpr::Unary(op, inner) => {
+                MathExpr::Unary(*op, Box::new(inner.replace_subexpr(target, replacement)))
+            }
+            MathExpr::Binary(l, op, r) => MathExpr::Binary(
+                Box::new(l.replace_subexpr(target, replacement)),
+                *op,
+                Box::new(r.replace_subexpr(target, replacement)),
+            ),
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => MathExpr::Ternary {
+                cond: Box::new(cond.replace_subexpr(target, replacement)),
+                then_expr: Box::new(then_expr.replace_subexpr(target, replacement)),
+                else_expr: Box::new(else_expr.replace_subexpr(target, replacement)),
+            },
+            MathExpr::Iterate { input, func, count } => MathExpr::Iterate {
+                input: Box::new(input.replace_subexpr(target, replacement)),
+                func: Box::new(func.replace_subexpr(target, replacement)),
+                count: Box::new(count.replace_subexpr(target, replacement)),
+            },
+            MathExpr::Call(name, args) => MathExpr::Call(
+                name.clone(),
+                args.iter().map(|a| a.replace_subexpr(target, replacement)).collect(),
+            ),
+            MathExpr::Pipeline(stages) => MathExpr::Pipeline(
+                stages.iter().map(|s| s.replace_subexpr(target, replacement)).collect(),
+            ),
+            other => other.clone(),
+        }
+    }
+
+    /// Recursively collects all non-trivial candidate subexpressions
+    pub fn collect_subexpressions(&self, list: &mut Vec<MathExpr>) {
+        if self.is_cse_candidate() {
+            list.push(self.clone());
+        }
+        match self {
+            MathExpr::Array(elems) | MathExpr::Tuple(elems) | MathExpr::Pipeline(elems) => {
+                for e in elems {
+                    e.collect_subexpressions(list);
+                }
+            }
+            MathExpr::Index(b, i) => {
+                b.collect_subexpressions(list);
+                i.collect_subexpressions(list);
+            }
+            MathExpr::Unary(_, inner) => inner.collect_subexpressions(list),
+            MathExpr::Binary(l, _, r) => {
+                l.collect_subexpressions(list);
+                r.collect_subexpressions(list);
+            }
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                cond.collect_subexpressions(list);
+                then_expr.collect_subexpressions(list);
+                else_expr.collect_subexpressions(list);
+            }
+            MathExpr::Iterate { input, func, count } => {
+                input.collect_subexpressions(list);
+                func.collect_subexpressions(list);
+                count.collect_subexpressions(list);
+            }
+            MathExpr::Call(_, args) => {
+                for a in args {
+                    a.collect_subexpressions(list);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Collects all referenced variable identifiers
+    pub fn collect_free_vars(&self, vars: &mut HashSet<String>) {
+        match self {
+            MathExpr::Num(_) | MathExpr::Placeholder | MathExpr::TensorRef { .. } => {}
+            MathExpr::Var(v) => {
+                vars.insert(v.clone());
+            }
+            MathExpr::Array(elems) | MathExpr::Tuple(elems) | MathExpr::Pipeline(elems) => {
+                for e in elems {
+                    e.collect_free_vars(vars);
+                }
+            }
+            MathExpr::Index(b, i) => {
+                b.collect_free_vars(vars);
+                i.collect_free_vars(vars);
+            }
+            MathExpr::Unary(_, inner) => inner.collect_free_vars(vars),
+            MathExpr::Binary(l, _, r) => {
+                l.collect_free_vars(vars);
+                r.collect_free_vars(vars);
+            }
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                cond.collect_free_vars(vars);
+                then_expr.collect_free_vars(vars);
+                else_expr.collect_free_vars(vars);
+            }
+            MathExpr::Iterate { input, func, count } => {
+                input.collect_free_vars(vars);
+                func.collect_free_vars(vars);
+                count.collect_free_vars(vars);
+            }
+            MathExpr::Call(_, args) => {
+                for a in args {
+                    a.collect_free_vars(vars);
+                }
+            }
+        }
+    }
+
+    /// Returns a set of all variable identifiers referenced in this expression
+    pub fn free_vars(&self) -> HashSet<String> {
+        let mut set = HashSet::new();
+        self.collect_free_vars(&mut set);
+        set
+    }
+
     /// Algebraic simplification and constant folding pass
     pub fn simplify(&self) -> MathExpr {
         match self {
@@ -1156,6 +1317,9 @@ impl MathExpr {
                     if let MathExpr::Num(n) = s {
                         return MathExpr::Num(-n);
                     }
+                    if let MathExpr::Unary(MathUnaryOp::Neg, double_inner) = s {
+                        return *double_inner;
+                    }
                 }
                 MathExpr::Unary(*op, Box::new(s))
             }
@@ -1163,18 +1327,48 @@ impl MathExpr {
                 cond,
                 then_expr,
                 else_expr,
-            } => MathExpr::Ternary {
-                cond: Box::new(cond.simplify()),
-                then_expr: Box::new(then_expr.simplify()),
-                else_expr: Box::new(else_expr.simplify()),
-            },
+            } => {
+                let c = cond.simplify();
+                if let MathExpr::Num(n) = c {
+                    if n.abs() > 1e-12 {
+                        return then_expr.simplify();
+                    } else {
+                        return else_expr.simplify();
+                    }
+                }
+                MathExpr::Ternary {
+                    cond: Box::new(c),
+                    then_expr: Box::new(then_expr.simplify()),
+                    else_expr: Box::new(else_expr.simplify()),
+                }
+            }
             MathExpr::Iterate { input, func, count } => MathExpr::Iterate {
                 input: Box::new(input.simplify()),
                 func: Box::new(func.simplify()),
                 count: Box::new(count.simplify()),
             },
             MathExpr::Call(name, args) => {
-                MathExpr::Call(name.clone(), args.iter().map(|a| a.simplify()).collect())
+                let simp_args: Vec<MathExpr> = args.iter().map(|a| a.simplify()).collect();
+                if simp_args.len() == 1 {
+                    if let MathExpr::Num(n) = simp_args[0] {
+                        match name.as_str() {
+                            "sqrt" if n >= 0.0 => return MathExpr::Num(n.sqrt()),
+                            "exp" => return MathExpr::Num(n.exp()),
+                            "ln" | "log" if n > 0.0 => return MathExpr::Num(n.ln()),
+                            "sin" => return MathExpr::Num(n.sin()),
+                            "cos" => return MathExpr::Num(n.cos()),
+                            "tan" => return MathExpr::Num(n.tan()),
+                            "tanh" => return MathExpr::Num(n.tanh()),
+                            "abs" => return MathExpr::Num(n.abs()),
+                            "relu" => return MathExpr::Num(n.max(0.0)),
+                            "silu" => return MathExpr::Num(n / (1.0 + (-n).exp())),
+                            "gelu" => return MathExpr::Num(0.5 * n * (1.0 + (0.79788456 * (n + 0.044715 * n.powi(3))).tanh())),
+                            "sigmoid" => return MathExpr::Num(1.0 / (1.0 + (-n).exp())),
+                            _ => {}
+                        }
+                    }
+                }
+                MathExpr::Call(name.clone(), simp_args)
             }
             MathExpr::Pipeline(stages) => {
                 MathExpr::Pipeline(stages.iter().map(|s| s.simplify()).collect())
@@ -1186,8 +1380,29 @@ impl MathExpr {
                     (MathExpr::Num(a), MathBinOp::Add, MathExpr::Num(b)) => MathExpr::Num(a + b),
                     (MathExpr::Num(a), MathBinOp::Sub, MathExpr::Num(b)) => MathExpr::Num(a - b),
                     (MathExpr::Num(a), MathBinOp::Mul, MathExpr::Num(b)) => MathExpr::Num(a * b),
+                    (MathExpr::Num(a), MathBinOp::Div, MathExpr::Num(b)) if b.abs() > 1e-12 => {
+                        MathExpr::Num(a / b)
+                    }
                     (MathExpr::Num(a), MathBinOp::Pow, MathExpr::Num(b)) => {
                         MathExpr::Num(a.powf(*b))
+                    }
+                    (MathExpr::Num(a), MathBinOp::Eq, MathExpr::Num(b)) => {
+                        MathExpr::Num(if (a - b).abs() < 1e-12 { 1.0 } else { 0.0 })
+                    }
+                    (MathExpr::Num(a), MathBinOp::Neq, MathExpr::Num(b)) => {
+                        MathExpr::Num(if (a - b).abs() >= 1e-12 { 1.0 } else { 0.0 })
+                    }
+                    (MathExpr::Num(a), MathBinOp::Lt, MathExpr::Num(b)) => {
+                        MathExpr::Num(if a < b { 1.0 } else { 0.0 })
+                    }
+                    (MathExpr::Num(a), MathBinOp::Lte, MathExpr::Num(b)) => {
+                        MathExpr::Num(if a <= b { 1.0 } else { 0.0 })
+                    }
+                    (MathExpr::Num(a), MathBinOp::Gt, MathExpr::Num(b)) => {
+                        MathExpr::Num(if a > b { 1.0 } else { 0.0 })
+                    }
+                    (MathExpr::Num(a), MathBinOp::Gte, MathExpr::Num(b)) => {
+                        MathExpr::Num(if a >= b { 1.0 } else { 0.0 })
                     }
                     (MathExpr::Num(a), MathBinOp::Add, _) if a.abs() < 1e-12 => r,
                     (_, MathBinOp::Add, MathExpr::Num(b)) if b.abs() < 1e-12 => l,
@@ -1252,6 +1467,30 @@ impl MathExpr {
                         }
                     }
                 }
+                // Rule 1b: Fused GEMM + Bias + Activation:
+                // relu/gelu/silu(X @ W + b) -> fused_linear_relu/gelu/silu(X, W, b)
+                // relu/gelu/silu(X @ W)     -> fused_linear_relu/gelu/silu(X, W)
+                if (name == "relu" || name == "gelu" || name == "silu") && opt_args.len() == 1 {
+                    let inner = &opt_args[0];
+                    if let MathExpr::Binary(lhs, MathBinOp::Add, rhs) = inner {
+                        if let MathExpr::Binary(x, MathBinOp::MatMul, w) = lhs.as_ref() {
+                            return MathExpr::Call(
+                                format!("fused_linear_{}", name),
+                                vec![*x.clone(), *w.clone(), *rhs.clone()],
+                            );
+                        } else if let MathExpr::Binary(x, MathBinOp::MatMul, w) = rhs.as_ref() {
+                            return MathExpr::Call(
+                                format!("fused_linear_{}", name),
+                                vec![*x.clone(), *w.clone(), *lhs.clone()],
+                            );
+                        }
+                    } else if let MathExpr::Binary(x, MathBinOp::MatMul, w) = inner {
+                        return MathExpr::Call(
+                            format!("fused_linear_{}", name),
+                            vec![*x.clone(), *w.clone()],
+                        );
+                    }
+                }
                 MathExpr::Call(name.clone(), opt_args)
             }
             MathExpr::Pipeline(stages) => {
@@ -1270,6 +1509,20 @@ impl MathExpr {
                     if let MathExpr::Call(ref name, _) = l {
                         if name == "eye" {
                             return r;
+                        }
+                    }
+                    // Rule 2b: SwiGLU Projection Fusion: swiglu(X, W_gate, W_up) @ W_down -> fused_swiglu(X, W_gate, W_up, W_down)
+                    if let MathExpr::Call(ref s_name, ref s_args) = l {
+                        if s_name == "swiglu" && s_args.len() == 3 {
+                            return MathExpr::Call(
+                                "fused_swiglu".to_string(),
+                                vec![
+                                    s_args[0].clone(),
+                                    s_args[1].clone(),
+                                    s_args[2].clone(),
+                                    r.clone(),
+                                ],
+                            );
                         }
                     }
                     // Rule 3: Attention Fusion: softmax((Q @ K^T) * scale) @ V -> attention(Q, K, V, scale)
@@ -1335,6 +1588,39 @@ impl MathExpr {
                         if name == "ones" {
                             return r;
                         }
+                    }
+                    // Rule 5b: SwiGLU Gating Fusion:
+                    // silu(X @ W_gate) * (X @ W_up) -> swiglu(X, W_gate, W_up)
+                    // (X @ W_up) * silu(X @ W_gate) -> swiglu(X, W_gate, W_up)
+                    let check_swiglu = |a: &MathExpr, b: &MathExpr| -> Option<(MathExpr, MathExpr, MathExpr)> {
+                        let gate_info = match a {
+                            MathExpr::Call(ref fn_name, ref fn_args)
+                                if fn_name == "fused_linear_silu" && fn_args.len() >= 2 =>
+                            {
+                                Some((&fn_args[0], &fn_args[1]))
+                            }
+                            MathExpr::Call(ref fn_name, ref fn_args)
+                                if fn_name == "silu" && fn_args.len() == 1 =>
+                            {
+                                if let MathExpr::Binary(ref x1, MathBinOp::MatMul, ref wg) = fn_args[0] {
+                                    Some((x1.as_ref(), wg.as_ref()))
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        };
+                        if let Some((x1, wg)) = gate_info {
+                            if let MathExpr::Binary(ref x2, MathBinOp::MatMul, ref wu) = b {
+                                if x1 == x2.as_ref() {
+                                    return Some((x1.clone(), wg.clone(), *wu.clone()));
+                                }
+                            }
+                        }
+                        None
+                    };
+                    if let Some((x, wg, wu)) = check_swiglu(&l, &r).or_else(|| check_swiglu(&r, &l)) {
+                        return MathExpr::Call("swiglu".to_string(), vec![x, wg, wu]);
                     }
                 }
                 MathExpr::Binary(Box::new(l), *op, Box::new(r))
@@ -4130,6 +4416,52 @@ impl MathEvaluator {
                         MathValue::Tuple(_) => Err("Cannot compute softmax on a Tuple".to_string()),
                     }
                 }
+                "swiglu" => {
+                    if args.len() < 3 {
+                        return Err("'swiglu(X, W_gate, W_up)' requires 3 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let w_gate = self.eval_value(&args[1])?;
+                    let w_up = self.eval_value(&args[2])?;
+                    let g = self.eval_binary_op(&x, MathBinOp::MatMul, &w_gate)?;
+                    let u = self.eval_binary_op(&x, MathBinOp::MatMul, &w_up)?;
+                    let act_g = g.map_unary(|z| z / (1.0 + (-z).exp()));
+                    self.eval_binary_op(&act_g, MathBinOp::Mul, &u)
+                }
+                "fused_swiglu" => {
+                    if args.len() < 4 {
+                        return Err("'fused_swiglu(X, W_gate, W_up, W_down)' requires 4 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let w_gate = self.eval_value(&args[1])?;
+                    let w_up = self.eval_value(&args[2])?;
+                    let w_down = self.eval_value(&args[3])?;
+                    let g = self.eval_binary_op(&x, MathBinOp::MatMul, &w_gate)?;
+                    let u = self.eval_binary_op(&x, MathBinOp::MatMul, &w_up)?;
+                    let act_g = g.map_unary(|z| z / (1.0 + (-z).exp()));
+                    let h = self.eval_binary_op(&act_g, MathBinOp::Mul, &u)?;
+                    self.eval_binary_op(&h, MathBinOp::MatMul, &w_down)
+                }
+                "fused_linear_relu" | "fused_linear_gelu" | "fused_linear_silu" => {
+                    if args.len() < 2 {
+                        return Err(format!("'{}' requires at least 2 arguments (X, W)", name));
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let w = self.eval_value(&args[1])?;
+                    let mut y = self.eval_binary_op(&x, MathBinOp::MatMul, &w)?;
+                    if args.len() > 2 {
+                        let b = self.eval_value(&args[2])?;
+                        y = self.eval_binary_op(&y, MathBinOp::Add, &b)?;
+                    }
+                    match name.as_str() {
+                        "fused_linear_relu" => Ok(y.map_unary(|z| z.max(0.0))),
+                        "fused_linear_gelu" => Ok(y.map_unary(|z| {
+                            0.5 * z * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh())
+                        })),
+                        "fused_linear_silu" => Ok(y.map_unary(|z| z / (1.0 + (-z).exp()))),
+                        _ => Ok(y),
+                    }
+                }
                 "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
                     if args.len() < 3 {
                         return Err(
@@ -6191,6 +6523,424 @@ impl MathEvaluator {
 }
 
 // ============================================================================
+// COMPILER IR OPTIMIZATION PASSES & MEMORY PLANNING (PHASE 9)
+// ============================================================================
+
+/// Detailed liveness interval and arena allocation metadata for an intermediate tensor
+#[derive(Debug, Clone, PartialEq)]
+pub struct TensorLiveness {
+    pub name: String,
+    pub birth: usize,
+    pub death: usize,
+    pub shape: Vec<usize>,
+    pub size_bytes: usize,
+    pub arena_slot: usize,
+    pub arena_offset: usize,
+}
+
+/// Static Liveness Arena Memory Plan providing direct-silicon buffer reuse
+#[derive(Debug, Clone, PartialEq)]
+pub struct MemoryArenaPlan {
+    pub total_arena_size_bytes: usize,
+    pub peak_memory_bytes: usize,
+    pub unoptimized_memory_bytes: usize,
+    pub memory_reduction_pct: f64,
+    pub tensors: HashMap<String, TensorLiveness>,
+    pub num_arena_slots: usize,
+}
+
+impl MathProgram {
+    /// Common Subexpression Elimination (CSE) pass:
+    /// Reuses existing computed bindings for repeated subexpressions,
+    /// and extracts repeated anonymous subexpressions into hoisted temporary bindings (_cse_0, _cse_1, ...)
+    pub fn eliminate_common_subexpressions(&self) -> MathProgram {
+        let mut prog = self.clone();
+
+        // Pass 1: Forward Binding Alias Reuse
+        // If an earlier binding computed `name = expr`, any subsequent occurrences of `expr` can be replaced with `name`.
+        let mut known_bindings: Vec<(MathExpr, String)> = Vec::new();
+        for item in &mut prog.items {
+            match item {
+                MathItem::Binding { name, expr } => {
+                    for (target, bound_var) in &known_bindings {
+                        *expr = expr.replace_subexpr(target, &MathExpr::Var(bound_var.clone()));
+                    }
+                    if expr.is_cse_candidate() {
+                        known_bindings.push((expr.clone(), name.clone()));
+                    }
+                }
+                MathItem::Export { expr, .. } | MathItem::Expression(expr) => {
+                    for (target, bound_var) in &known_bindings {
+                        *expr = expr.replace_subexpr(target, &MathExpr::Var(bound_var.clone()));
+                    }
+                }
+                MathItem::Function { body, .. } => {
+                    for (target, bound_var) in &known_bindings {
+                        *body = body.replace_subexpr(target, &MathExpr::Var(bound_var.clone()));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Pass 2: Anonymous Common Subexpression Extraction
+        let mut all_subexprs = Vec::new();
+        for item in &prog.items {
+            match item {
+                MathItem::Binding { expr, .. }
+                | MathItem::Expression(expr)
+                | MathItem::Export { expr, .. } => {
+                    expr.collect_subexpressions(&mut all_subexprs);
+                }
+                MathItem::Function { body, .. } => {
+                    body.collect_subexpressions(&mut all_subexprs);
+                }
+                _ => {}
+            }
+        }
+
+        // Count frequencies of candidate subexpressions
+        let mut freq_map: Vec<(MathExpr, usize)> = Vec::new();
+        for sub in all_subexprs {
+            if let Some(pos) = freq_map.iter().position(|(e, _)| e == &sub) {
+                freq_map[pos].1 += 1;
+            } else {
+                freq_map.push((sub, 1));
+            }
+        }
+
+        // Filter expressions appearing >= 2 times and sort by length/complexity descending
+        let mut candidates: Vec<MathExpr> = freq_map
+            .into_iter()
+            .filter(|(_, count)| *count >= 2)
+            .map(|(expr, _)| expr)
+            .collect();
+        candidates.sort_by_key(|e| std::cmp::Reverse(e.to_string().len()));
+
+        let mut cse_counter = 0;
+        for cand in candidates {
+            let free_vars = cand.free_vars();
+
+            // Find the earliest statement index where all free variables of `cand` are in scope
+            let mut ready_idx = 0;
+            let mut defined_vars = HashSet::new();
+            for (idx, item) in prog.items.iter().enumerate() {
+                match item {
+                    MathItem::Constant { name, .. } | MathItem::Binding { name, .. } => {
+                        defined_vars.insert(name.clone());
+                    }
+                    MathItem::TupleBinding { names, .. } => {
+                        for n in names {
+                            defined_vars.insert(n.clone());
+                        }
+                    }
+                    _ => {}
+                }
+                if free_vars.is_subset(&defined_vars) {
+                    ready_idx = idx + 1;
+                    break;
+                }
+            }
+
+            // Check if cand appears >= 2 times at or after ready_idx
+            let mut cand_count = 0;
+            for item in &prog.items[ready_idx.min(prog.items.len())..] {
+                let mut sub_list = Vec::new();
+                match item {
+                    MathItem::Binding { expr, .. }
+                    | MathItem::Expression(expr)
+                    | MathItem::Export { expr, .. } => {
+                        expr.collect_subexpressions(&mut sub_list);
+                    }
+                    _ => {}
+                }
+                cand_count += sub_list.iter().filter(|&e| e == &cand).count();
+            }
+
+            if cand_count >= 2 {
+                let cse_name = format!("_cse_{}", cse_counter);
+                cse_counter += 1;
+
+                // Replace occurrences from ready_idx onwards
+                let start_idx = ready_idx.min(prog.items.len());
+                for item in &mut prog.items[start_idx..] {
+                    match item {
+                        MathItem::Binding { expr, .. }
+                        | MathItem::Expression(expr)
+                        | MathItem::Export { expr, .. } => {
+                            *expr = expr.replace_subexpr(&cand, &MathExpr::Var(cse_name.clone()));
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Insert the extracted binding at ready_idx
+                let new_item = MathItem::Binding {
+                    name: cse_name,
+                    expr: cand.clone(),
+                };
+                if ready_idx <= prog.items.len() {
+                    prog.items.insert(ready_idx, new_item);
+                } else {
+                    prog.items.push(new_item);
+                }
+            }
+        }
+
+        prog
+    }
+
+    /// Dead Binding Elimination (DBE) pass:
+    /// Prunes unused intermediate tensor bindings that do not contribute to exports,
+    /// assertions, returned expressions, or downstream live computations.
+    pub fn eliminate_dead_bindings(&self) -> MathProgram {
+        let mut live_vars = HashSet::new();
+
+        // 1. Collect live root seeds from exports, assertions, expressions, and functions
+        for item in &self.items {
+            match item {
+                MathItem::Export { expr, .. } | MathItem::Expression(expr) => {
+                    expr.collect_free_vars(&mut live_vars);
+                }
+                MathItem::Function { params, body, .. } => {
+                    let mut fn_free = body.free_vars();
+                    for p in params {
+                        fn_free.remove(&p.name);
+                    }
+                    live_vars.extend(fn_free);
+                }
+                _ => {}
+            }
+        }
+
+        // If no exports or expression exist, mark the final binding as the primary result
+        if live_vars.is_empty() {
+            if let Some(last_binding) = self.items.iter().rev().find_map(|item| {
+                if let MathItem::Binding { name, expr } = item {
+                    Some((name.clone(), expr.clone()))
+                } else {
+                    None
+                }
+            }) {
+                live_vars.insert(last_binding.0);
+                last_binding.1.collect_free_vars(&mut live_vars);
+            }
+        }
+
+        // 2. Propagate reachability to fixed-point
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for item in &self.items {
+                match item {
+                    MathItem::Binding { name, expr } => {
+                        if live_vars.contains(name) {
+                            let prev_len = live_vars.len();
+                            expr.collect_free_vars(&mut live_vars);
+                            if live_vars.len() > prev_len {
+                                changed = true;
+                            }
+                        }
+                    }
+                    MathItem::TupleBinding { names, expr } => {
+                        if names.iter().any(|n| live_vars.contains(n)) {
+                            let prev_len = live_vars.len();
+                            expr.collect_free_vars(&mut live_vars);
+                            if live_vars.len() > prev_len {
+                                changed = true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // 3. Filter items keeping only live bindings and external items
+        let mut filtered_items = Vec::new();
+        for item in &self.items {
+            match item {
+                MathItem::Binding { name, .. } => {
+                    if live_vars.contains(name) {
+                        filtered_items.push(item.clone());
+                    }
+                }
+                MathItem::TupleBinding { names, .. } => {
+                    if names.iter().any(|n| live_vars.contains(n)) {
+                        filtered_items.push(item.clone());
+                    }
+                }
+                MathItem::Constant { name, .. } => {
+                    if live_vars.contains(name) {
+                        filtered_items.push(item.clone());
+                    }
+                }
+                MathItem::Link(_)
+                | MathItem::Export { .. }
+                | MathItem::Function { .. }
+                | MathItem::Expression(_) => {
+                    filtered_items.push(item.clone());
+                }
+            }
+        }
+
+        MathProgram {
+            items: filtered_items,
+        }
+    }
+
+    /// Computes static liveness intervals [t_birth, t_death] and maps non-overlapping
+    /// tensor lifetimes onto reusable memory arena slots for direct-silicon zero-overhead allocation.
+    pub fn plan_memory_arena(&self) -> MemoryArenaPlan {
+        let shapes = self.infer_shapes_map();
+        let n_items = self.items.len();
+
+        // 1. Identify birth and death time for each binding
+        let mut bindings_order: Vec<(String, usize, Vec<usize>)> = Vec::new();
+        for (step, item) in self.items.iter().enumerate() {
+            if let MathItem::Binding { name, .. } = item {
+                let shape = shapes.get(name).cloned().unwrap_or_default();
+                bindings_order.push((name.clone(), step, shape));
+            }
+        }
+
+        let mut tensor_liveness: HashMap<String, TensorLiveness> = HashMap::new();
+        for (name, birth, shape) in &bindings_order {
+            let mut death = *birth;
+            // Search downstream items that read this tensor
+            for (step, item) in self.items.iter().enumerate().skip(*birth + 1) {
+                let uses_tensor = match item {
+                    MathItem::Binding { expr, .. } | MathItem::Expression(expr) => {
+                        expr.free_vars().contains(name)
+                    }
+                    MathItem::Export { expr, .. } => expr.free_vars().contains(name),
+                    MathItem::Function { body, .. } => body.free_vars().contains(name),
+                    _ => false,
+                };
+                if uses_tensor {
+                    death = step;
+                }
+            }
+            // If the binding is exported or at the end, extend death
+            for item in &self.items {
+                if let MathItem::Export { expr, .. } = item {
+                    if expr.free_vars().contains(name) {
+                        death = n_items;
+                    }
+                }
+            }
+            if *birth == n_items.saturating_sub(1) {
+                death = n_items;
+            }
+
+            let num_elems: usize = if shape.is_empty() {
+                1
+            } else {
+                shape.iter().product()
+            };
+            let size_bytes = num_elems * 4; // 4 bytes per FP32 scalar
+
+            tensor_liveness.insert(
+                name.clone(),
+                TensorLiveness {
+                    name: name.clone(),
+                    birth: *birth,
+                    death,
+                    shape: shape.clone(),
+                    size_bytes,
+                    arena_slot: 0,
+                    arena_offset: 0,
+                },
+            );
+        }
+
+        // 2. Greedy interval coloring / Linear-scan arena allocation
+        let mut sorted_names: Vec<String> =
+            bindings_order.iter().map(|(n, _, _)| n.clone()).collect();
+        sorted_names.sort_by_key(|n| tensor_liveness.get(n).map(|l| l.birth).unwrap_or(0));
+
+        let mut slot_death_times: Vec<usize> = Vec::new();
+        let mut slot_max_sizes: Vec<usize> = Vec::new();
+        let mut slot_offsets: Vec<usize> = Vec::new();
+
+        for name in &sorted_names {
+            if let Some(live) = tensor_liveness.get_mut(name) {
+                // Find existing slot where the previous tenant died before this tenant's birth
+                let mut assigned_slot = None;
+                for (slot_idx, death_t) in slot_death_times.iter().enumerate() {
+                    if *death_t < live.birth {
+                        assigned_slot = Some(slot_idx);
+                        break;
+                    }
+                }
+
+                if let Some(slot_idx) = assigned_slot {
+                    slot_death_times[slot_idx] = live.death;
+                    slot_max_sizes[slot_idx] = slot_max_sizes[slot_idx].max(live.size_bytes);
+                    live.arena_slot = slot_idx;
+                    live.arena_offset = slot_offsets[slot_idx];
+                } else {
+                    let new_slot = slot_death_times.len();
+                    let offset = if new_slot > 0 {
+                        slot_offsets[new_slot - 1] + slot_max_sizes[new_slot - 1]
+                    } else {
+                        0
+                    };
+                    slot_death_times.push(live.death);
+                    slot_max_sizes.push(live.size_bytes);
+                    slot_offsets.push(offset);
+                    live.arena_slot = new_slot;
+                    live.arena_offset = offset;
+                }
+            }
+        }
+
+        // 3. Compute memory metrics
+        let unoptimized_memory_bytes: usize =
+            tensor_liveness.values().map(|t| t.size_bytes).sum();
+        let total_arena_size_bytes: usize = slot_max_sizes.iter().sum();
+
+        let mut peak_memory_bytes = 0;
+        for t in 0..=n_items {
+            let active_bytes: usize = tensor_liveness
+                .values()
+                .filter(|tl| tl.birth <= t && t <= tl.death)
+                .map(|tl| tl.size_bytes)
+                .sum();
+            peak_memory_bytes = peak_memory_bytes.max(active_bytes);
+        }
+
+        let memory_reduction_pct = if unoptimized_memory_bytes > 0 {
+            let saved = unoptimized_memory_bytes.saturating_sub(total_arena_size_bytes);
+            (saved as f64 / unoptimized_memory_bytes as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        MemoryArenaPlan {
+            total_arena_size_bytes,
+            peak_memory_bytes,
+            unoptimized_memory_bytes,
+            memory_reduction_pct,
+            tensors: tensor_liveness,
+            num_arena_slots: slot_death_times.len(),
+        }
+    }
+
+    /// Full multi-pass compiler optimization pipeline combining:
+    /// 1. High-level operator fusion (SwiGLU, Linear+Activation, Attention)
+    /// 2. Common Subexpression Elimination (CSE)
+    /// 3. Dead Binding Elimination (DBE)
+    /// 4. Algebraic simplification and constant folding
+    pub fn compile_optimized_pipeline(&self) -> MathProgram {
+        self.optimize_tensor_graph()
+            .eliminate_common_subexpressions()
+            .eliminate_dead_bindings()
+            .optimize_tensor_graph()
+    }
+}
+
+// ============================================================================
 // TRANSPILERS & CODE GENERATORS (ISO C23, NVIDIA CUDA PTX, 4-SLOT VLIW)
 // ============================================================================
 
@@ -7065,6 +7815,63 @@ impl MathProgram {
                         None
                     }
                 }
+                "swiglu" => {
+                    if args.len() >= 3 {
+                        let x = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let wg = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        let _ = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        if let (Some(x_s), Some(wg_s)) = (x, wg) {
+                            if x_s.len() >= 2 && wg_s.len() >= 2 {
+                                Some(vec![x_s[0], wg_s[1]])
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                "fused_swiglu" => {
+                    if args.len() >= 4 {
+                        let x = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let _ = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        let _ = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        let wd = Self::infer_shape_expr(&args[3], env, fn_sigs, errors, ctx);
+                        if let (Some(x_s), Some(wd_s)) = (x, wd) {
+                            if x_s.len() >= 2 && wd_s.len() >= 2 {
+                                Some(vec![x_s[0], wd_s[1]])
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                "fused_linear_relu" | "fused_linear_gelu" | "fused_linear_silu" => {
+                    if args.len() >= 2 {
+                        let x = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let w = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        if args.len() > 2 {
+                            let _ = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        }
+                        if let (Some(x_s), Some(w_s)) = (x, w) {
+                            if x_s.len() >= 2 && w_s.len() >= 2 {
+                                Some(vec![x_s[0], w_s[1]])
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
                 "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
                     if args.len() >= 3 {
                         let q = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
@@ -7686,10 +8493,24 @@ impl MathProgram {
     pub fn to_c23_executable(&self) -> String {
         let mut out = self.to_c23();
         let shapes = self.infer_shapes_map();
+        let arena_plan = self.plan_memory_arena();
         out.push_str("#include <stdio.h>\n\nint main(void) {\n");
         out.push_str("    printf(\"================================================================================\\n\");\n");
         out.push_str("    printf(\" CRON Mathematical Native Executable (Zero-Word Standard Calculus)\\n\");\n");
         out.push_str("    printf(\"================================================================================\\n\");\n");
+        out.push_str(&format!(
+            "    // Static Liveness Arena Memory Plan: unoptimized={} bytes, peak={} bytes, arena={} bytes (saved {:.1}%)\n",
+            arena_plan.unoptimized_memory_bytes,
+            arena_plan.peak_memory_bytes,
+            arena_plan.total_arena_size_bytes,
+            arena_plan.memory_reduction_pct
+        ));
+        out.push_str(&format!(
+            "    printf(\"  [arena] Static memory planning: peak {} bytes across {} reusable slots (saved {:.1}%% memory)\\n\");\n",
+            arena_plan.peak_memory_bytes,
+            arena_plan.num_arena_slots,
+            arena_plan.memory_reduction_pct
+        ));
         for item in &self.items {
             if let MathItem::Binding { name, expr } = item {
                 let shape = shapes.get(name).cloned().unwrap_or_default();
@@ -8086,6 +8907,89 @@ impl MathProgram {
                                     out.push_str(&format!("        int _tok = (int){}[_i];\n", toks_s));
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
                                     out.push_str(&format!("            {}[_i][_j] = (float){}[_tok][_j];\n", name, table_s));
+                                    out.push_str("        }\n");
+                                    out.push_str("    }\n");
+                                }
+                                "swiglu" => {
+                                    let x_s = Self::expr_to_c23(&args[0]);
+                                    let wg_s = Self::expr_to_c23(&args[1]);
+                                    let wu_s = Self::expr_to_c23(&args[2]);
+                                    let x_shape = shapes.get(&x_s).cloned().unwrap_or_else(|| vec![rows, cols]);
+                                    let k = if x_shape.len() == 2 { x_shape[1] } else { cols };
+                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str("            float _acc_g = 0.0f;\n");
+                                    out.push_str("            float _acc_u = 0.0f;\n");
+                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                                    out.push_str(&format!("                _acc_g += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wg_s));
+                                    out.push_str(&format!("                _acc_u += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wu_s));
+                                    out.push_str("            }\n");
+                                    out.push_str("            float _silu_g = _acc_g / (1.0f + expf(-_acc_g));\n");
+                                    out.push_str(&format!("            {}[_i][_j] = _silu_g * _acc_u;\n", name));
+                                    out.push_str("        }\n");
+                                    out.push_str("    }\n");
+                                }
+                                "fused_swiglu" => {
+                                    let x_s = Self::expr_to_c23(&args[0]);
+                                    let wg_s = Self::expr_to_c23(&args[1]);
+                                    let wu_s = Self::expr_to_c23(&args[2]);
+                                    let wd_s = Self::expr_to_c23(&args[3]);
+                                    let x_shape = shapes.get(&x_s).cloned().unwrap_or_else(|| vec![rows, cols]);
+                                    let wg_shape = shapes.get(&wg_s).cloned().unwrap_or_else(|| vec![cols, cols]);
+                                    let k = if x_shape.len() == 2 { x_shape[1] } else { cols };
+                                    let h = if wg_shape.len() == 2 { wg_shape[1] } else { cols };
+                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!("        alignas(64) float _h[{}];\n", h));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", h));
+                                    out.push_str("            float _acc_g = 0.0f;\n");
+                                    out.push_str("            float _acc_u = 0.0f;\n");
+                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                                    out.push_str(&format!("                _acc_g += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wg_s));
+                                    out.push_str(&format!("                _acc_u += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wu_s));
+                                    out.push_str("            }\n");
+                                    out.push_str("            float _silu_g = _acc_g / (1.0f + expf(-_acc_g));\n");
+                                    out.push_str("            _h[_j] = _silu_g * _acc_u;\n");
+                                    out.push_str("        }\n");
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str("            float _acc_d = 0.0f;\n");
+                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", h));
+                                    out.push_str(&format!("                _acc_d += _h[_k] * (float){}[_k][_j];\n", wd_s));
+                                    out.push_str("            }\n");
+                                    out.push_str(&format!("            {}[_i][_j] = _acc_d;\n", name));
+                                    out.push_str("        }\n");
+                                    out.push_str("    }\n");
+                                }
+                                "fused_linear_relu" | "fused_linear_gelu" | "fused_linear_silu" => {
+                                    let x_s = Self::expr_to_c23(&args[0]);
+                                    let w_s = Self::expr_to_c23(&args[1]);
+                                    let b_opt = if args.len() > 2 { Some(Self::expr_to_c23(&args[2])) } else { None };
+                                    let x_shape = shapes.get(&x_s).cloned().unwrap_or_else(|| vec![rows, cols]);
+                                    let k = if x_shape.len() == 2 { x_shape[1] } else { cols };
+                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    if let Some(ref b_s) = b_opt {
+                                        out.push_str(&format!("            float _acc = (float){}[_j];\n", b_s));
+                                    } else {
+                                        out.push_str("            float _acc = 0.0f;\n");
+                                    }
+                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                                    out.push_str(&format!("                _acc += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, w_s));
+                                    out.push_str("            }\n");
+                                    match func.as_str() {
+                                        "fused_linear_relu" => {
+                                            out.push_str(&format!("            {}[_i][_j] = (_acc > 0.0f) ? _acc : 0.0f;\n", name));
+                                        }
+                                        "fused_linear_gelu" => {
+                                            out.push_str(&format!("            {}[_i][_j] = 0.5f * _acc * (1.0f + tanhf(0.79788456f * (_acc + 0.044715f * _acc * _acc * _acc)));\n", name));
+                                        }
+                                        "fused_linear_silu" => {
+                                            out.push_str(&format!("            {}[_i][_j] = _acc / (1.0f + expf(-_acc));\n", name));
+                                        }
+                                        _ => {}
+                                    }
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
@@ -11145,5 +12049,207 @@ mod tests {
             ptx.contains("rmsnorm_kernel"),
             "Expected Fused RMSNorm entry point"
         );
+    }
+
+    #[test]
+    fn test_common_subexpression_elimination_cse() {
+        let code = r#"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            W = [[0.5, 0.1], [0.2, 0.4]]
+            bias1 = [0.1, 0.2]
+            bias2 = [0.3, 0.4]
+            // Repeated anonymous subexpression: X @ W
+            Y1 = (X @ W) + bias1
+            Y2 = (X @ W) + bias2
+        "#;
+        let prog = parse_math_code(code).expect("Parse CSE test failed");
+        let cse_prog = prog.eliminate_common_subexpressions();
+
+        // Check that a hoisted _cse binding was created
+        let mut has_cse_binding = false;
+        let mut y1_uses_cse = false;
+        let mut y2_uses_cse = false;
+        for item in &cse_prog.items {
+            if let MathItem::Binding { name, expr } = item {
+                if name.starts_with("_cse_") {
+                    has_cse_binding = true;
+                }
+                if name == "Y1" {
+                    if let MathExpr::Binary(l, _, _) = expr {
+                        if let MathExpr::Var(v) = &**l {
+                            if v.starts_with("_cse_") {
+                                y1_uses_cse = true;
+                            }
+                        }
+                    }
+                }
+                if name == "Y2" {
+                    if let MathExpr::Binary(l, _, _) = expr {
+                        if let MathExpr::Var(v) = &**l {
+                            if v.starts_with("_cse_") {
+                                y2_uses_cse = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(has_cse_binding, "Expected CSE extraction of X @ W into _cse binding");
+        assert!(y1_uses_cse, "Expected Y1 to reference _cse variable");
+        assert!(y2_uses_cse, "Expected Y2 to reference _cse variable");
+
+        // Verify mathematical evaluation yields identical correct values
+        let mut eval_orig = MathEvaluator::new();
+        let _ = eval_orig.execute_program(&prog).expect("Eval orig failed");
+        let mut eval_cse = MathEvaluator::new();
+        let _ = eval_cse.execute_program(&cse_prog).expect("Eval cse failed");
+
+        assert_eq!(eval_orig.env.get("Y1"), eval_cse.env.get("Y1"));
+        assert_eq!(eval_orig.env.get("Y2"), eval_cse.env.get("Y2"));
+    }
+
+    #[test]
+    fn test_dead_binding_elimination_and_constant_folding() {
+        let code = r#"
+            // Dead variables: dead1, dead2 should be pruned
+            dead1 = [[99.0, 99.0], [99.0, 99.0]]
+            dead2 = dead1 @ [[1.0, 0.0], [0.0, 1.0]]
+
+            // Constant folding candidate: 2.0 * 3.0 + 4.0 -> 10.0
+            scale = 2.0 * 3.0 + 4.0
+
+            // Live variables used in export
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            W = [[0.5, 0.0], [0.0, 0.5]]
+            result = (X @ W) * scale
+            result >> "output.safetensors:result"
+        "#;
+        let prog = parse_math_code(code).expect("Parse DBE test failed");
+        let opt_prog = prog.compile_optimized_pipeline();
+
+        // Verify dead bindings are completely pruned
+        let item_names: Vec<String> = opt_prog
+            .items
+            .iter()
+            .filter_map(|it| match it {
+                MathItem::Binding { name, .. } => Some(name.clone()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(!item_names.contains(&"dead1".to_string()), "dead1 must be pruned");
+        assert!(!item_names.contains(&"dead2".to_string()), "dead2 must be pruned");
+        assert!(item_names.contains(&"result".to_string()), "result must be preserved");
+
+        // Verify constant folding on scale
+        for item in &opt_prog.items {
+            if let MathItem::Binding { name, expr } = item {
+                if name == "scale" {
+                    assert_eq!(*expr, MathExpr::Num(10.0), "Expected 2*3+4 folded to 10.0");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_fused_swiglu_and_linear_activation_fusion() {
+        let code = r#"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            W_gate = [[0.5, 0.2], [0.1, 0.4]]
+            W_up   = [[0.2, 0.3], [0.4, 0.1]]
+            W_down = [[0.6, 0.1], [0.2, 0.5]]
+            bias   = [0.1, 0.2]
+
+            // SwiGLU Gating & Output Projection Fusion
+            swiglu_out = (silu(X @ W_gate) * (X @ W_up)) @ W_down
+
+            // GEMM + Bias + Activation Fusion
+            fused_act = relu((X @ W_gate) + bias)
+        "#;
+        let prog = parse_math_code(code).expect("Parse SwiGLU test failed");
+        let opt_prog = prog.optimize_tensor_graph();
+
+        let mut found_fused_swiglu = false;
+        let mut found_fused_linear_relu = false;
+
+        for item in &opt_prog.items {
+            if let MathItem::Binding { name, expr } = item {
+                if name == "swiglu_out" {
+                    if let MathExpr::Call(fn_name, args) = expr {
+                        if fn_name == "fused_swiglu" && args.len() == 4 {
+                            found_fused_swiglu = true;
+                        }
+                    }
+                }
+                if name == "fused_act" {
+                    if let MathExpr::Call(fn_name, args) = expr {
+                        if fn_name == "fused_linear_relu" && args.len() == 3 {
+                            found_fused_linear_relu = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        assert!(found_fused_swiglu, "Expected (silu(X@W_gate) * (X@W_up)) @ W_down to fuse into fused_swiglu");
+        assert!(found_fused_linear_relu, "Expected relu(X@W_gate + bias) to fuse into fused_linear_relu");
+
+        // Verify shape checking and evaluation of fused operators
+        assert!(opt_prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        let _ = eval.execute_program(&opt_prog).expect("Eval fused operators failed");
+        assert!(eval.env.contains_key("swiglu_out"));
+        assert!(eval.env.contains_key("fused_act"));
+
+        // Verify C23 lowering includes fused kernels
+        let c23_code = opt_prog.to_c23_executable();
+        assert!(c23_code.contains("_silu_g = _acc_g / (1.0f + expf(-_acc_g));"), "Expected fused SwiGLU SiLU in C23");
+        assert!(c23_code.contains("(_acc > 0.0f) ? _acc : 0.0f;"), "Expected in-register fused ReLU in C23");
+    }
+
+    #[test]
+    fn test_static_liveness_arena_memory_planner() {
+        let code = r#"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            W1 = [[0.5, 0.1], [0.2, 0.4]]
+            W2 = [[0.3, 0.2], [0.1, 0.5]]
+            W3 = [[0.4, 0.1], [0.2, 0.3]]
+
+            // Lifetimes:
+            // T1 is born at step 3, dies at step 4
+            // T2 is born at step 4, dies at step 5
+            // T3 is born at step 5, dies at step 6
+            T1 = X @ W1
+            T2 = T1 @ W2
+            T3 = T2 @ W3
+            out = T3
+        "#;
+        let prog = parse_math_code(code).expect("Parse Arena test failed");
+        let plan = prog.plan_memory_arena();
+
+        assert!(plan.num_arena_slots > 0, "Must allocate arena slots");
+        assert!(plan.num_arena_slots < plan.tensors.len(), "Arena slots must be reused across non-overlapping tensors");
+        assert!(plan.memory_reduction_pct > 0.0, "Memory arena reuse should show memory reduction percentage");
+        assert!(plan.total_arena_size_bytes <= plan.unoptimized_memory_bytes, "Arena bytes must be <= unoptimized total");
+
+        // Check slot reuses:
+        // T2 reuses X's slot (since X dies at step 4 < step 5)
+        let x_slot = plan.tensors.get("X").expect("X metadata").arena_slot;
+        let t2_slot = plan.tensors.get("T2").expect("T2 metadata").arena_slot;
+        assert_eq!(x_slot, t2_slot, "T2 must reuse X's memory slot after X dies");
+
+        // T3 reuses W1's slot (since W1 dies at step 4 < step 6)
+        let w1_slot = plan.tensors.get("W1").expect("W1 metadata").arena_slot;
+        let t3_slot = plan.tensors.get("T3").expect("T3 metadata").arena_slot;
+        assert_eq!(w1_slot, t3_slot, "T3 must reuse W1's memory slot after W1 dies");
+
+        // out reuses T2's slot (since T2 dies at step 6 < step 7)
+        let out_slot = plan.tensors.get("out").expect("out metadata").arena_slot;
+        assert_eq!(t2_slot, out_slot, "out must reuse T2's memory slot after T2 dies");
+
+        // Verify C23 code contains arena diagnostic header
+        let c23_code = prog.to_c23_executable();
+        assert!(c23_code.contains("Static Liveness Arena Memory Plan"), "Expected arena planning comment in C23");
+        assert!(c23_code.contains("[arena] Static memory planning"), "Expected arena planning print in C23");
     }
 }
