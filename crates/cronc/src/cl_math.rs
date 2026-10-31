@@ -1487,6 +1487,54 @@ impl MathExpr {
         }
     }
 
+    /// Extracts epsilon from RMSNorm denominator pattern: √(μ(X * X) + eps) or (μ(X^2) + eps)^0.5
+    fn extract_rms_denom(x: &MathExpr, denom: &MathExpr) -> Option<MathExpr> {
+        let inner = match denom {
+            MathExpr::Call(fn_name, args)
+                if (fn_name == "√" || fn_name == "sqrt") && args.len() == 1 =>
+            {
+                &args[0]
+            }
+            MathExpr::Binary(base, MathBinOp::Pow, exp) => {
+                if let MathExpr::Num(n) = exp.as_ref() {
+                    if (*n - 0.5).abs() < 1e-9 {
+                        base.as_ref()
+                    } else {
+                        return None;
+                    }
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        };
+        if let MathExpr::Binary(lhs, MathBinOp::Add, rhs) = inner {
+            let check_mean_sq = |m_expr: &MathExpr, eps_expr: &MathExpr| -> Option<MathExpr> {
+                if let MathExpr::Call(m_name, m_args) = m_expr {
+                    if (m_name == "μ" || m_name == "mean") && m_args.len() == 1 {
+                        let is_sq = match &m_args[0] {
+                            MathExpr::Binary(a, MathBinOp::Mul, b) => {
+                                a.as_ref() == x && b.as_ref() == x
+                            }
+                            MathExpr::Binary(a, MathBinOp::Pow, b) => {
+                                a.as_ref() == x
+                                    && matches!(b.as_ref(), MathExpr::Num(n) if (*n - 2.0).abs() < 1e-9)
+                            }
+                            _ => false,
+                        };
+                        if is_sq {
+                            return Some(eps_expr.clone());
+                        }
+                    }
+                }
+                None
+            };
+            check_mean_sq(lhs, rhs).or_else(|| check_mean_sq(rhs, lhs))
+        } else {
+            None
+        }
+    }
+
     /// High-level Tensor Graph Optimization & Kernel Fusion pass
     pub fn optimize_tensor_graph(&self) -> MathExpr {
         let simplified = match self {
@@ -1574,6 +1622,33 @@ impl MathExpr {
                             return r;
                         }
                     }
+                    // Rule 2a: Zero-Word BitLinear MatMul Fusion: X @ τ(W)^T or X @ τ(W) -> bitlinear(X, W)
+                    let extract_ternary_w = |expr: &MathExpr| -> Option<MathExpr> {
+                        let inner_q = match expr {
+                            MathExpr::Call(t_name, t_args)
+                                if (t_name == "transpose" || t_name == "T") && t_args.len() == 1 =>
+                            {
+                                &t_args[0]
+                            }
+                            MathExpr::Binary(base, MathBinOp::Pow, exp)
+                                if matches!(exp.as_ref(), MathExpr::Var(v) if v == "T") =>
+                            {
+                                base.as_ref()
+                            }
+                            other => other,
+                        };
+                        if let MathExpr::Call(q_name, q_args) = inner_q {
+                            if (q_name == "τ" || q_name == "quantize_t2" || q_name == "t2_quant")
+                                && q_args.len() == 1
+                            {
+                                return Some(q_args[0].clone());
+                            }
+                        }
+                        None
+                    };
+                    if let Some(w_expr) = extract_ternary_w(&r) {
+                        return MathExpr::Call("bitlinear".to_string(), vec![l.clone(), w_expr]);
+                    }
                     // Rule 2b: SwiGLU Projection Fusion: swiglu(X, W_gate, W_up) @ W_down -> fused_swiglu(X, W_gate, W_up, W_down)
                     if let MathExpr::Call(ref s_name, ref s_args) = l {
                         if s_name == "swiglu" && s_args.len() == 3 {
@@ -1588,9 +1663,9 @@ impl MathExpr {
                             );
                         }
                     }
-                    // Rule 3: Attention Fusion: softmax((Q @ K^T) * scale) @ V -> attention(Q, K, V, scale)
+                    // Rule 3: Attention Fusion: softmax/ρ((Q @ K^T) * scale) @ V -> attention(Q, K, V, scale)
                     if let MathExpr::Call(ref s_name, ref s_args) = l {
-                        if s_name == "softmax" && s_args.len() == 1 {
+                        if (s_name == "softmax" || s_name == "ρ") && s_args.len() == 1 {
                             let inner_score = &s_args[0];
                             let mut scale_val = None;
                             let qk_expr = match inner_score {
@@ -1609,22 +1684,40 @@ impl MathExpr {
                                 other => other,
                             };
                             if let MathExpr::Binary(q_box, MathBinOp::MatMul, kt_box) = qk_expr {
-                                if let MathExpr::Call(kt_name, kt_args) = kt_box.as_ref() {
-                                    if (kt_name == "transpose" || kt_name == "T")
-                                        && kt_args.len() == 1
+                                let k_extracted = match kt_box.as_ref() {
+                                    MathExpr::Call(kt_name, kt_args)
+                                        if (kt_name == "transpose" || kt_name == "T")
+                                            && kt_args.len() == 1 =>
                                     {
-                                        let q = *q_box.clone();
-                                        let k = kt_args[0].clone();
-                                        let v = r.clone();
-                                        let mut call_args = vec![q, k, v];
-                                        if let Some(s) = scale_val {
-                                            call_args.push(s);
-                                        }
-                                        return MathExpr::Call("attention".to_string(), call_args);
+                                        Some(kt_args[0].clone())
                                     }
+                                    MathExpr::Binary(k_base, MathBinOp::Pow, exp)
+                                        if matches!(exp.as_ref(), MathExpr::Var(v) if v == "T") =>
+                                    {
+                                        Some(*k_base.clone())
+                                    }
+                                    _ => None,
+                                };
+                                if let Some(k) = k_extracted {
+                                    let q = *q_box.clone();
+                                    let v = r.clone();
+                                    let mut call_args = vec![q, k, v];
+                                    if let Some(s) = scale_val {
+                                        call_args.push(s);
+                                    }
+                                    return MathExpr::Call("attention".to_string(), call_args);
                                 }
                             }
                         }
+                    }
+                }
+                // Rule 3b: Zero-Word RMSNorm Division Pattern: X / √(μ(X * X) + eps) -> rmsnorm(X, 1.0, eps)
+                if *op == MathBinOp::Div {
+                    if let Some(eps_expr) = Self::extract_rms_denom(&l, &r) {
+                        return MathExpr::Call(
+                            "rmsnorm".to_string(),
+                            vec![l.clone(), MathExpr::Num(1.0), eps_expr],
+                        );
                     }
                 }
                 // Rule 4: Zero Tensor Addition: X + zeros(...) -> X, zeros(...) + X -> X
@@ -1651,6 +1744,65 @@ impl MathExpr {
                         if name == "ones" {
                             return r;
                         }
+                    }
+                    // Rule 5a: RMSNorm Scale Fusion: rmsnorm(X, 1.0, eps) * γ -> rmsnorm(X, γ, eps)
+                    let check_rms_scale = |a: &MathExpr, b: &MathExpr| -> Option<MathExpr> {
+                        if let MathExpr::Call(ref fn_name, ref fn_args) = a {
+                            if fn_name == "rmsnorm" && fn_args.len() == 3 {
+                                if matches!(fn_args[1], MathExpr::Num(n) if (n - 1.0).abs() < 1e-9) {
+                                    return Some(MathExpr::Call(
+                                        "rmsnorm".to_string(),
+                                        vec![fn_args[0].clone(), b.clone(), fn_args[2].clone()],
+                                    ));
+                                }
+                            }
+                        }
+                        None
+                    };
+                    if let Some(rms_scaled) =
+                        check_rms_scale(&l, &r).or_else(|| check_rms_scale(&r, &l))
+                    {
+                        return rms_scaled;
+                    }
+                    // Rule 5a-bit: BitLinear Scale Fusion: bitlinear(X, W) * γ -> bitlinear(X, W, γ)
+                    let check_bitlinear_scale = |a: &MathExpr, b: &MathExpr| -> Option<MathExpr> {
+                        if let MathExpr::Call(ref fn_name, ref fn_args) = a {
+                            if fn_name == "bitlinear" && fn_args.len() == 2 {
+                                return Some(MathExpr::Call(
+                                    "bitlinear".to_string(),
+                                    vec![fn_args[0].clone(), fn_args[1].clone(), b.clone()],
+                                ));
+                            }
+                        }
+                        None
+                    };
+                    if let Some(bl_scaled) =
+                        check_bitlinear_scale(&l, &r).or_else(|| check_bitlinear_scale(&r, &l))
+                    {
+                        return bl_scaled;
+                    }
+                    // Rule 5a-silu: Zero-Word SiLU Pattern: Z * σ(Z) -> fused_linear_silu(X, W) or silu(Z)
+                    let check_zero_word_silu = |a: &MathExpr, b: &MathExpr| -> Option<MathExpr> {
+                        if let MathExpr::Call(ref fn_name, ref fn_args) = b {
+                            if (fn_name == "σ" || fn_name == "sigmoid")
+                                && fn_args.len() == 1
+                                && &fn_args[0] == a
+                            {
+                                if let MathExpr::Binary(ref x, MathBinOp::MatMul, ref w) = a {
+                                    return Some(MathExpr::Call(
+                                        "fused_linear_silu".to_string(),
+                                        vec![*x.clone(), *w.clone()],
+                                    ));
+                                }
+                                return Some(MathExpr::Call("silu".to_string(), vec![a.clone()]));
+                            }
+                        }
+                        None
+                    };
+                    if let Some(silu_expr) =
+                        check_zero_word_silu(&l, &r).or_else(|| check_zero_word_silu(&r, &l))
+                    {
+                        return silu_expr;
                     }
                     // Rule 5b: SwiGLU Gating Fusion:
                     // silu(X @ W_gate) * (X @ W_up) -> swiglu(X, W_gate, W_up)
@@ -3034,7 +3186,7 @@ impl ExprTape {
                         _ => Err("log_softmax shape mismatch in backward".to_string()),
                     }
                 }
-                "softmax" => {
+                "softmax" | "ρ" => {
                     let calc_softmax_vjp = |x: &[f64], adj_row: &[f64]| -> Vec<f64> {
                         let max_v = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
                         let exps: Vec<f64> = x.iter().map(|&xi| (xi - max_v).exp()).collect();
@@ -3476,7 +3628,8 @@ impl MathEvaluator {
                     name, params, body, ..
                 } => {
                     let p_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                    self.functions.insert(name.clone(), (p_names, body.clone()));
+                    self.functions
+                        .insert(name.clone(), (p_names, body.optimize_tensor_graph()));
                 }
                 MathItem::Expression(expr) => {
                     let res = self.eval_value(expr)?;
@@ -4506,7 +4659,7 @@ impl MathEvaluator {
                 "gelu" => Ok(self.eval_single_val(args, "gelu")?.map_unary(|z| {
                     0.5 * z * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh())
                 })),
-                "softmax" => {
+                "softmax" | "ρ" => {
                     let val = self.eval_single_val(args, "softmax")?;
                     match val {
                         MathValue::Scalar(_) => Ok(MathValue::Scalar(1.0)),
@@ -4604,13 +4757,13 @@ impl MathEvaluator {
                         _ => Ok(y),
                     }
                 }
-                "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
+                "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" | "Ψ" => {
                     if args.len() < 3 {
                         return Err(
                             "'attention(Q, K, V)' requires at least 3 arguments".to_string()
                         );
                     }
-                    let is_causal = name == "causal_attn" || name == "masked_attn";
+                    let is_causal = name == "causal_attn" || name == "masked_attn" || name == "Ψ";
                     let q = self.eval_value(&args[0])?;
                     let k = self.eval_value(&args[1])?;
                     let v = self.eval_value(&args[2])?;
@@ -4714,7 +4867,7 @@ impl MathEvaluator {
                     };
                     self.eval_mla_attn(&x, &w_dkv, &w_uk, &w_uv, &w_q, w_o.as_ref(), is_causal)
                 }
-                "ssd_scan" | "mamba_ssd" => {
+                "ssd_scan" | "mamba_ssd" | "Ξ" => {
                     if args.len() < 2 {
                         return Err(
                             "'ssd_scan(X, decay_dt)' requires at least 2 arguments".to_string()
@@ -4722,7 +4875,36 @@ impl MathEvaluator {
                     }
                     let x = self.eval_value(&args[0])?;
                     let d = self.eval_value(&args[1])?;
-                    self.eval_ssd_scan(&x, &d)
+                    let scanned = self.eval_ssd_scan(&x, &d)?;
+                    if args.len() >= 5 {
+                        let b = self.eval_value(&args[2])?;
+                        let c = self.eval_value(&args[3])?;
+                        if let Ok(xb) = self.eval_binary_op(&scanned, MathBinOp::MatMul, &b) {
+                            if let Ok(ct) = c.transpose() {
+                                if let Ok(y) = self.eval_binary_op(&xb, MathBinOp::MatMul, &ct) {
+                                    return Ok(y);
+                                }
+                            }
+                        }
+                    }
+                    Ok(scanned)
+                }
+                "τ" => {
+                    let val = self.eval_single_val(args, "τ")?;
+                    let elems = val.flatten_elements();
+                    if elems.is_empty() {
+                        return Ok(val);
+                    }
+                    let already_ternary = elems.iter().all(|&x| {
+                        (x - (-1.0)).abs() < 1e-6 || x.abs() < 1e-6 || (x - 1.0).abs() < 1e-6
+                    });
+                    if already_ternary {
+                        return Ok(val);
+                    }
+                    let gamma =
+                        (elems.iter().map(|x| x.abs()).sum::<f64>() / elems.len() as f64).max(1e-12);
+                    let quant_fn = |x: f64| -> f64 { (x / gamma).clamp(-1.0, 1.0).round() };
+                    Ok(val.map_unary_dyn(&quant_fn))
                 }
                 "permute" => {
                     if args.is_empty() {
@@ -4826,7 +5008,10 @@ impl MathEvaluator {
                             if let Some(g_val) = gamma_opt {
                                 let g_elems = g_val.flatten_elements();
                                 for (i, v) in norm_v.iter_mut().enumerate() {
-                                    let g = g_elems.get(i).copied().unwrap_or(1.0);
+                                    let g = g_elems
+                                        .get(i % g_elems.len().max(1))
+                                        .copied()
+                                        .unwrap_or(1.0);
                                     *v *= g;
                                 }
                             }
@@ -4834,15 +5019,16 @@ impl MathEvaluator {
                         }
                         MathValue::Matrix(mat) => {
                             let g_elems_opt = gamma_opt.map(|g| g.flatten_elements());
-                            let mut res = Vec::new();
+                            let mut res = Vec::with_capacity(mat.len());
                             for row in mat {
                                 let mean_sq = row.iter().map(|&v| v * v).sum::<f64>()
                                     / row.len().max(1) as f64;
-                                let rms = (mean_sq + eps).sqrt();
-                                let mut norm_r: Vec<f64> = row.iter().map(|&v| v / rms).collect();
+                                let inv_rms = 1.0 / (mean_sq + eps).sqrt();
+                                let mut norm_r: Vec<f64> = row.iter().map(|&v| v * inv_rms).collect();
                                 if let Some(ref g_elems) = g_elems_opt {
+                                    let glen = g_elems.len().max(1);
                                     for (i, v) in norm_r.iter_mut().enumerate() {
-                                        let g = g_elems.get(i).copied().unwrap_or(1.0);
+                                        let g = g_elems.get(i % glen).copied().unwrap_or(1.0);
                                         *v *= g;
                                     }
                                 }
@@ -4886,7 +5072,7 @@ impl MathEvaluator {
                         }
                     }
                 }
-                "rope" => {
+                "rope" | "Φ" => {
                     if args.is_empty() {
                         return Err("'rope(x, [pos])' requires at least 1 argument".to_string());
                     }
@@ -6247,10 +6433,12 @@ impl MathEvaluator {
                     let k = b.len();
                     let n = b[0].len();
                     let mut out = vec![vec![0.0; n]; m];
-                    for i in 0..m {
-                        for p in 0..k {
-                            for j in 0..n {
-                                out[i][j] += a[i][p] * b[p][j];
+                    for (out_row, a_row) in out.iter_mut().zip(a.iter()) {
+                        for (&a_ip, b_row) in a_row.iter().zip(b.iter().take(k)) {
+                            if a_ip != 0.0 {
+                                for (o, &b_pj) in out_row.iter_mut().zip(b_row.iter()) {
+                                    *o += a_ip * b_pj;
+                                }
                             }
                         }
                     }
@@ -7997,7 +8185,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "sum" | "mean" | "norm" | "max" | "min" | "prod" => {
+                "sum" | "mean" | "norm" | "max" | "min" | "prod" | "∑" | "μ" | "∥" => {
                     if let Some(arg) = args.first() {
                         let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
                     }
@@ -8205,7 +8393,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "grad" | "diff" => {
+                "grad" | "diff" | "∇" => {
                     if args.len() == 2 {
                         let _ = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx)
@@ -8219,7 +8407,7 @@ impl MathProgram {
                 }
                 "exp" | "ln" | "log" | "sqrt" | "sin" | "cos" | "tan" | "tanh" | "abs"
                 | "sigmoid" | "relu" | "gelu" | "softmax" | "silu" | "rmsnorm" | "rope"
-                | "log_softmax" => {
+                | "log_softmax" | "√" | "σ" | "ρ" | "Φ" | "τ" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
@@ -8384,7 +8572,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" => {
+                "attention" | "flash_attn" | "attn" | "causal_attn" | "masked_attn" | "Ψ" => {
                     if args.len() >= 3 {
                         let q = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let k = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -8512,10 +8700,12 @@ impl MathProgram {
                         None
                     }
                 }
-                "ssd_scan" => {
+                "ssd_scan" | "mamba_ssd" | "Ξ" => {
                     if args.len() >= 2 {
                         let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
-                        let _dt_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        for a in &args[1..] {
+                            let _ = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                        }
                         x_s
                     } else {
                         errors.push(format!(
@@ -8663,19 +8853,26 @@ impl MathProgram {
                                 args.len()
                             ));
                         }
-                        let mut fn_env = HashMap::new();
+                        let mut fn_env = env.clone();
                         for (p, a) in params.iter().zip(args.iter()) {
                             let arg_s = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
                             if !p.dims.is_empty() {
                                 if let Some(ref ashp) = arg_s {
-                                    if ashp != &p.dims {
+                                    let dims_match = ashp.len() == p.dims.len()
+                                        && ashp
+                                            .iter()
+                                            .zip(p.dims.iter())
+                                            .all(|(&actual, &expected)| expected == 0 || actual == expected);
+                                    if !dims_match {
                                         errors.push(format!(
                                             "{}Argument for parameter '{}' has shape {:?}, expected shape {:?}",
                                             prefix, p.name, ashp, p.dims
                                         ));
                                     }
+                                    fn_env.insert(p.name.clone(), ashp.clone());
+                                } else {
+                                    fn_env.insert(p.name.clone(), p.dims.clone());
                                 }
-                                fn_env.insert(p.name.clone(), p.dims.clone());
                             } else if let Some(ashp) = arg_s {
                                 fn_env.insert(p.name.clone(), ashp);
                             } else {
@@ -13131,8 +13328,8 @@ mod tests {
         let rms_code = r#"
             << "libcl/math/rms_norm.cl"
             X = [[1.0, 2.0], [3.0, 4.0]]
-            gamma = [1.0, 1.0]
-            y = rms_norm(X, gamma)
+            γ = [1.0, 1.0]
+            y = N(X, γ)
         "#;
         let mut prog_rms = parse_math_code(rms_code).expect("Parse rms_norm link");
         prog_rms.resolve_links(&cwd).expect("Resolve rms_norm link");
@@ -13150,10 +13347,10 @@ mod tests {
         let swiglu_code = r#"
             << "libcl/math/swiglu_mlp.cl"
             X = [[1.0, 0.5]]
-            W_gate = [[0.2, 0.4], [0.1, 0.3]]
-            W_up = [[0.5, 0.1], [0.2, 0.8]]
-            W_down = [[0.3], [0.7]]
-            out_mlp = swiglu(X, W_gate, W_up, W_down)
+            W1 = [[0.2, 0.4], [0.1, 0.3]]
+            W2 = [[0.5, 0.1], [0.2, 0.8]]
+            W3 = [[0.3, 0.6], [0.7, 0.2]]
+            out_mlp = S(X, W1, W2, W3)
         "#;
         let mut prog_swiglu = parse_math_code(swiglu_code).expect("Parse swiglu link");
         prog_swiglu.resolve_links(&cwd).expect("Resolve swiglu link");
@@ -13173,8 +13370,8 @@ mod tests {
             << "libcl/math/bitnet_layer.cl"
             X = [[1.0, 2.0]]
             W = [[-1.0, 1.0], [0.0, -1.0]]
-            gamma = 0.5
-            b_out = bitnet_raw(X, W, gamma)
+            γ = 0.5
+            b_out = B0(X, W, γ)
         "#;
         let mut prog_bitnet = parse_math_code(bitnet_code).expect("Parse bitnet link");
         prog_bitnet.resolve_links(&cwd).expect("Resolve bitnet link");
@@ -13306,5 +13503,149 @@ mod tests {
         eval_link.execute_program(&prog_link).expect("Execute module links");
         assert!(eval_link.env.contains_key("out_n"));
         assert!(eval_link.env.contains_key("out_b"));
+    }
+
+    #[test]
+    fn test_phase14_algebraic_pattern_recognition_and_zero_english_stdlib() {
+        let cwd = std::env::current_dir().unwrap_or_default();
+
+        // 1. Audit all 9 standard library files in libcl/math/: ZERO English words allowed!
+        let std_files = [
+            "libcl/math/rms_norm.cl",
+            "libcl/math/swiglu_mlp.cl",
+            "libcl/math/bitnet_layer.cl",
+            "libcl/math/causal_transformer.cl",
+            "libcl/math/mamba2_ssd.cl",
+            "libcl/math/adam.cl",
+            "libcl/math/attention.cl",
+            "libcl/math/rotary.cl",
+            "libcl/math/ssm.cl",
+        ];
+        let banned_english = [
+            "rmsnorm",
+            "rms_norm",
+            "fused_swiglu",
+            "swiglu",
+            "bitlinear",
+            "bitnet",
+            "causal_attn",
+            "causal_mha",
+            "rope",
+            "ssd_scan",
+            "mamba",
+            "softmax",
+            "adam",
+            "attention",
+            "scale",
+            "gamma",
+            "beta",
+        ];
+        for rel in &std_files {
+            let candidates = [
+                cwd.join(rel),
+                cwd.join("../../").join(rel),
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel),
+            ];
+            let path = candidates
+                .iter()
+                .find(|p| p.exists())
+                .unwrap_or_else(|| panic!("Missing stdlib file {}", rel));
+            let content = std::fs::read_to_string(path).unwrap().to_lowercase();
+            for word in &banned_english {
+                assert!(
+                    !content.contains(word),
+                    "Stdlib file '{}' still contains banned English word '{}'",
+                    rel,
+                    word
+                );
+            }
+        }
+
+        // 2. Verify Algebraic Pattern Lowering: Pure Math -> Fused Kernels
+        let alg_code = r#"
+            ε = 1e-5
+            r = (X / √(μ(X * X) + ε)) * γ
+            s = ((X @ W1 * σ(X @ W1)) * (X @ W2)) @ W3
+            b = (X @ τ(W)^T) * γ
+            a = ρ((Q @ K^T) * 0.5) @ V
+        "#;
+        let prog_alg = parse_math_code(alg_code).expect("Parse pure algebraic code");
+        let opt_alg = prog_alg.optimize_tensor_graph();
+
+        let mut fused_rms = false;
+        let mut fused_swi = false;
+        let mut fused_bit = false;
+        let mut fused_att = false;
+        for item in &opt_alg.items {
+            if let MathItem::Binding { name, expr } = item {
+                match (name.as_str(), expr) {
+                    ("r", MathExpr::Call(f, args)) if f == "rmsnorm" && args.len() == 3 => {
+                        fused_rms = true;
+                    }
+                    ("s", MathExpr::Call(f, args)) if f == "fused_swiglu" && args.len() == 4 => {
+                        fused_swi = true;
+                    }
+                    ("b", MathExpr::Call(f, args)) if f == "bitlinear" && args.len() == 3 => {
+                        fused_bit = true;
+                    }
+                    ("a", MathExpr::Call(f, args)) if f == "attention" && args.len() == 4 => {
+                        fused_att = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        assert!(fused_rms, "Pure math RMSNorm did not lower to fused rmsnorm(X, γ, ε)");
+        assert!(fused_swi, "Pure math SwiGLU did not lower to fused_swiglu(X, W1, W2, W3)");
+        assert!(fused_bit, "Pure math BitNet did not lower to bitlinear(X, W, γ)");
+        assert!(fused_att, "Pure math Attention did not lower to attention(Q, K, V, s)");
+
+        // 3. Execute full end-to-end 0-word hybrid LLM pipeline
+        let e2e_code = r#"
+            << "libcl/math/rms_norm.cl"
+            << "libcl/math/causal_transformer.cl"
+            << "libcl/math/swiglu_mlp.cl"
+            << "libcl/math/bitnet_layer.cl"
+            << "libcl/math/mamba2_ssd.cl"
+            << "libcl/math/adam.cl"
+
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            γ = [1.0, 1.0]
+            Wq = [[0.5, 0.1], [0.2, 0.6]]
+            Wk = [[0.4, 0.2], [0.1, 0.5]]
+            Wv = [[0.7, 0.3], [0.2, 0.8]]
+            Wo = [[0.6, 0.4], [0.3, 0.7]]
+            W1 = [[0.3, 0.5], [0.2, 0.4]]
+            W2 = [[0.6, 0.1], [0.3, 0.7]]
+            W3 = [[0.4, 0.2], [0.5, 0.8]]
+            Wt = [[1.0, -1.0], [0.0, 1.0]]
+            A_m = [0.9, 0.8]
+            B_m = [[0.5, 0.1], [0.2, 0.6]]
+            C_m = [[0.4, 0.3], [0.1, 0.7]]
+            Δ_m = [0.1, 0.1]
+
+            H0 = X + A_Φ(N(X, γ), Wq, Wk, Wv, Wo, 0.70710678)
+            H1 = H0 + S(N(H0, γ), W1, W2, W3)
+            H2 = H1 + B(H1, Wt, 0.5)
+            H3 = H2 + M(N(H2, γ), A_m, B_m, C_m, Δ_m)
+            P = ρ(H3)
+            w_next = Δθ(1.0, 0.1, 0.01)
+        "#;
+        let mut prog_e2e = parse_math_code(e2e_code).expect("Parse E2E 0-word pipeline");
+        prog_e2e.resolve_links(&cwd).expect("Resolve E2E links");
+        let mut eval_e2e = MathEvaluator::new();
+        eval_e2e.execute_program(&prog_e2e).expect("Execute E2E 0-word pipeline");
+
+        if let Some(MathValue::Matrix(p)) = eval_e2e.env.get("P") {
+            assert_eq!(p.len(), 2);
+            assert_eq!(p[0].len(), 2);
+            let row0_sum: f64 = p[0].iter().sum();
+            let row1_sum: f64 = p[1].iter().sum();
+            assert!((row0_sum - 1.0).abs() < 1e-6);
+            assert!((row1_sum - 1.0).abs() < 1e-6);
+        } else {
+            panic!("Expected probability matrix P");
+        }
+        assert!(eval_e2e.env.contains_key("w_next"));
     }
 }
