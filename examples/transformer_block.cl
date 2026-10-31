@@ -1,39 +1,39 @@
-// ============================================================================
-// CRON Sovereign Modern Transformer Block (LLaMA-3 / DeepSeek-V3 Standard)
+// ════════════════════════════════════════════════════════════════════════════
+// CRON MODERN TRANSFORMER BLOCK (LLaMA-3 / DeepSeek-V3 Standard)
 // Zero-Word Mathematical Calculus: Pre-RMSNorm + RoPE + Self-Attn + SwiGLU MLP
-// ============================================================================
+// ════════════════════════════════════════════════════════════════════════════
 
-// 1. Attention Projection Weights
+<< "libcl/math/rms_norm.cl"
+<< "libcl/math/swiglu_mlp.cl"
+
+// 1. Attention Жингийн Матрицууд
 W_q = [[1.0, 0.0], [0.0, 1.0]]
 W_k = [[1.0, 0.0], [0.0, 1.0]]
 W_v = [[1.0, 2.0], [3.0, 4.0]]
-gamma1 = [1.0, 1.0]
+γ_1 = [1.0, 1.0]
 
-// 2. SwiGLU MLP Projection Weights
-W_gate = [[1.0, 0.5], [0.5, 1.0]]
-W_up   = [[0.5, 1.0], [1.0, 0.5]]
-W_down = [[1.0, 0.0], [0.0, 1.0]]
-gamma2 = [1.0, 1.0]
+// 2. SwiGLU MLP Жингийн Матрицууд
+W_1 = [[1.0, 0.5], [0.5, 1.0]]
+W_2 = [[0.5, 1.0], [1.0, 0.5]]
+W_3 = [[1.0, 0.0], [0.0, 1.0]]
+γ_2 = [1.0, 1.0]
 
-// 3. Input Hidden States (Batch of 2 tokens, 2 hidden dimensions)
-x = [[1.0, 2.0], [3.0, 4.0]]
+// 3. Оролтын төлөв (X ∈ ℝ^(2×2))
+X = [[1.0, 2.0], [3.0, 4.0]]
 
-// 4. Pre-RMSNorm & Rotary Position Embeddings (RoPE)
-x_norm1 = rmsnorm(x, gamma1)
-q = rope(x_norm1 @ W_q, 0)
-k = rope(x_norm1 @ W_k, 0)
-v = x_norm1 @ W_v
+// 4. Pre-RMSNorm ба Rotary Position Embeddings (RoPE)
+X_norm1 = N(X, γ_1)
+Q = Φ(X_norm1 @ W_q, 0.0)
+K = Φ(X_norm1 @ W_k, 0.0)
+V = X_norm1 @ W_v
 
-// 5. Scaled Dot-Product Attention with Residual Connection
-attn_out = attention(q, k, v)
-x_mid = x + attn_out
+// 5. Causal Masked FlashAttention & Residual холболт
+H_attn = Ψ(Q, K, V)
+X_mid = X + H_attn
 
-// 6. SwiGLU MLP Block with Residual Connection
-x_norm2 = rmsnorm(x_mid, gamma2)
-h_gate = silu(x_norm2 @ W_gate)
-h_up = x_norm2 @ W_up
-mlp_out = (h_gate * h_up) @ W_down
-x_out = x_mid + mlp_out
+// 6. SwiGLU MLP Блок & Residual холболт
+H_mlp = S(N(X_mid, γ_2), W_1, W_2, W_3)
+X_out = X_mid + H_mlp
 
-// Output sum reduction
-sum(x_out)
+// Гаралтын Нийлбэр
+∑(X_out)
