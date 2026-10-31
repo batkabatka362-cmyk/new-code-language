@@ -1,10 +1,11 @@
 // ============================================================================
-// CRON STANDARD MATHEMATICAL LIBRARY: MAMBA-2 SSD CORE
+// CRON STANDARD MATHEMATICAL CALCULUS: MAMBA-2 SSD CORE
 // libcl/math/mamba2_ssd.cl
-// Structured State Space Duality (SSD) 1-D Recurrent Linear Attention
+// True Zero-Word Formulation: M(X, A, B, C, dt) = ssd_scan(X, A, B, C, dt)
 // ============================================================================
 
-// 1. Mamba-2 State Space Duality Associative Scan:
-// ssd_scan(X, A, B, C, dt)
-mamba2_ssd_layer(X: f32[T, D], A: f32[D], B_proj: f32[D, N], C_proj: f32[D, N], dt: f32[D]) =
-    ssd_scan(X, A, B_proj, C_proj, dt)
+// 1. True Zero-Word Mamba-2 Structured State Space Duality
+M(X[T, D], A[D], B[D, N], C[D, N], dt[D]) = ssd_scan(X, A, B, C, dt)
+
+// 2. Compatibility Aliases
+mamba2_ssd_layer(X, A, B_proj, C_proj, dt) = M(X, A, B_proj, C_proj, dt)

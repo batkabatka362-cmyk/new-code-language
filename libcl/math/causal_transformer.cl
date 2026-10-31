@@ -1,14 +1,17 @@
 // ============================================================================
-// CRON STANDARD MATHEMATICAL LIBRARY: CAUSAL TRANSFORMER ATTENTION
+// CRON STANDARD MATHEMATICAL CALCULUS: CAUSAL TRANSFORMER ATTENTION
 // libcl/math/causal_transformer.cl
-// Autoregressive Masked Multi-Head Attention Block
+// True Zero-Word Formulation: A(X, Wq, Wk, Wv, Wo, s) = (causal_attn(X @ Wq, X @ Wk, X @ Wv, s)) @ Wo
 // ============================================================================
 
-// 1. Causal Self-Attention with projection matrices:
-causal_mha(X: f32[T, D], W_q: f32[D, D], W_k: f32[D, D], W_v: f32[D, D], W_o: f32[D, D], scale: f32) =
-    (causal_attn(X @ W_q, X @ W_k, X @ W_v, scale)) @ W_o
+// 1. True Zero-Word Causal Masked Multi-Head Attention
+A(X[T, D], Wq[D, D], Wk[D, D], Wv[D, D], Wo[D, D], s) =
+    (causal_attn(X @ Wq, X @ Wk, X @ Wv, s)) @ Wo
 
-// 2. Rotary Position Embedding Augmented Causal Attention:
-causal_rope_mha(X: f32[T, D], W_q: f32[D, D], W_k: f32[D, D], W_v: f32[D, D], W_o: f32[D, D], scale: f32) =
-    (causal_attn(rope(X @ W_q, 10000.0), rope(X @ W_k, 10000.0), X @ W_v, scale)) @ W_o
+// 2. Rotary Augmented Causal Attention
+A_rope(X[T, D], Wq[D, D], Wk[D, D], Wv[D, D], Wo[D, D], s) =
+    (causal_attn(rope(X @ Wq, 10000.0), rope(X @ Wk, 10000.0), X @ Wv, s)) @ Wo
 
+// 3. Compatibility Aliases
+causal_mha(X, W_q, W_k, W_v, W_o, scale) = A(X, W_q, W_k, W_v, W_o, scale)
+causal_rope_mha(X, W_q, W_k, W_v, W_o, scale) = A_rope(X, W_q, W_k, W_v, W_o, scale)

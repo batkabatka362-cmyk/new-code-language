@@ -1,22 +1,30 @@
 // ============================================================================
-// CRON STANDARD MATHEMATICAL LIBRARY: OPTIMIZER (AdamW)
+// CRON STANDARD MATHEMATICAL CALCULUS: OPTIMIZER (AdamW)
 // libcl/math/adam.cl
-// First/Second Moment Estimator & Weight Decay Step in Zero Verbal Keywords
+// True Zero-Word Formulation: θ' = θ - η * (m / (√(v) + ε) + λ * θ)
 // ============================================================================
 
-beta1 = 0.9
-beta2 = 0.999
-eps = 1e-8
-lr = 0.001
-wd = 0.01
+β1 = 0.9
+β2 = 0.999
+ε = 1e-8
+η = 0.001
+λ = 0.01
 
-// 1. First Moment Exponential Moving Average (Mean)
-adam_m(m: f32, g: f32) = beta1 * m + (1.0 - beta1) * g
+// 1. First Moment EMA: m' = β1 * m + (1 - β1) * g
+m_(m, g) = β1 * m + (1.0 - β1) * g
 
-// 2. Second Moment Exponential Moving Average (Variance)
-adam_v(v: f32, g: f32) = beta2 * v + (1.0 - beta2) * (g^2)
+// 2. Second Moment EMA: v' = β2 * v + (1 - β2) * (g^2)
+v_(v, g) = β2 * v + (1.0 - β2) * (g^2)
 
-// 3. AdamW Parameter Step: w - lr * (m / (sqrt(v) + eps) + wd * w)
-adam_step(w: f32, m: f32, v: f32) =
-    w - lr * (m / (sqrt(v) + eps) + wd * w)
+// 3. AdamW Parameter Step
+θ_(w, m, v) = w - η * (m / (√(v) + ε) + λ * w)
 
+// Compatibility Aliases
+beta1 = β1
+beta2 = β2
+eps = ε
+lr = η
+wd = λ
+adam_m(m, g) = m_(m, g)
+adam_v(v, g) = v_(v, g)
+adam_step(w, m, v) = θ_(w, m, v)

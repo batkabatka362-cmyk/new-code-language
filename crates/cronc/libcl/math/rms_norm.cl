@@ -1,14 +1,17 @@
 // ============================================================================
-// CRON STANDARD MATHEMATICAL LIBRARY: RMSNORM
+// CRON STANDARD MATHEMATICAL CALCULUS: RMSNORM
 // libcl/math/rms_norm.cl
-// Root Mean Square Layer Normalization (Zero-Verbal)
+// True Zero-Word Formulation: N(X, γ) = (X / √(μ(X * X) + ε)) * γ
 // ============================================================================
 
-eps = 1e-5
+ε = 1e-5
 
-// Standard RMSNorm for 1D / 2D activation tensors:
-// rms_norm(X, gamma) = (X / sqrt(mean(X * X) + eps)) * gamma
-rms_norm(X: f32[B, D], gamma: f32[D]) = rmsnorm(X, gamma)
+// 1. True Zero-Word Root Mean Square Layer Normalization
+N(X[B, D], γ[D]) = rmsnorm(X, γ, ε)
 
-// Scaled RMSNorm with custom epsilon parameter:
-rms_norm_eps(X: f32[B, D], gamma: f32[D], e: f32) = (X / sqrt((X * X) + e)) * gamma
+// 2. Pure Mathematical Formulation
+N_pure(X[B, D], γ[D]) = (X / (μ(X * X) + ε)^0.5) * γ
+
+// 3. Compatibility Aliases
+rms_norm(X, gamma) = rmsnorm(X, gamma, ε)
+rms_norm_eps(X, gamma, e) = rmsnorm(X, gamma, e)

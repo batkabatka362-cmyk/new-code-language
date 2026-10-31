@@ -2001,11 +2001,11 @@ impl<'a> MathLexer<'a> {
                     }
                     tokens.push(Token::Str(s));
                 }
-                'a'..='z' | 'A'..='Z' => {
+                'a'..='z' | 'A'..='Z' | 'α'..='ω' | 'Α'..='Ω' | '∇' | '∑' | '√' | '∥' => {
                     let start = i;
                     let mut end = i;
                     while let Some(&(curr_i, c)) = self.chars.peek() {
-                        if c.is_alphanumeric() || c == '_' {
+                        if c.is_alphanumeric() || c == '_' || matches!(c, 'α'..='ω' | 'Α'..='Ω' | '∇' | '∑' | '√' | '∥') {
                             end = curr_i + c.len_utf8();
                             self.chars.next();
                         } else {
@@ -2272,6 +2272,31 @@ impl MathParser {
                         } else {
                             return Err("Expected ',' or ']' in tensor dimension".to_string());
                         }
+                    }
+                }
+            } else if self.match_tok(&Token::LBracket) {
+                // Direct tensor dimensions without colon: X[B, D] defaults to ~32 (F32)
+                loop {
+                    match self.next_tok() {
+                        Some(Token::Num(n)) => {
+                            dims.push(n as usize);
+                            symbolic_dims.push(MathDim::Fixed(n as usize));
+                        }
+                        Some(Token::Ident(s)) => {
+                            dims.push(0);
+                            symbolic_dims.push(MathDim::Symbolic(s));
+                        }
+                        other => {
+                            return Err(format!("Expected dimension size or symbol in tensor brackets, found {:?}", other));
+                        }
+                    }
+
+                    if self.match_tok(&Token::Comma) {
+                        continue;
+                    } else if self.match_tok(&Token::RBracket) {
+                        break;
+                    } else {
+                        return Err("Expected ',' or ']' in tensor dimension".to_string());
                     }
                 }
             }
@@ -4232,11 +4257,17 @@ impl MathEvaluator {
             MathExpr::Num(n) => Ok(MathValue::Scalar(*n)),
             MathExpr::Str(s) => Ok(MathValue::Str(s.clone())),
             MathExpr::TensorRef { path, key } => load_tensor_resource(path, key),
-            MathExpr::Var(name) => self
-                .env
-                .get(name)
-                .cloned()
-                .ok_or_else(|| format!("Undefined mathematical variable '{}'", name)),
+            MathExpr::Var(name) => {
+                if let Some(val) = self.env.get(name) {
+                    Ok(val.clone())
+                } else if name == "e" {
+                    Ok(MathValue::Scalar(std::f64::consts::E))
+                } else if name == "π" || name == "pi" {
+                    Ok(MathValue::Scalar(std::f64::consts::PI))
+                } else {
+                    Err(format!("Undefined mathematical variable '{}'", name))
+                }
+            }
             MathExpr::Array(elems) => {
                 let mut evaluated = Vec::with_capacity(elems.len());
                 for e in elems {
@@ -4427,6 +4458,34 @@ impl MathEvaluator {
                 self.eval_binary_op(&l, *op, &r)
             }
             MathExpr::Call(name, args) => match name.as_str() {
+                "√" => Ok(self.eval_single_val(args, "√")?.map_unary(|x| x.sqrt())),
+                "∑" => {
+                    let mut all_elems = Vec::new();
+                    for a in args {
+                        all_elems.extend(self.eval_value(a)?.flatten_elements());
+                    }
+                    Ok(MathValue::Scalar(all_elems.iter().sum()))
+                }
+                "μ" => {
+                    let mut all_elems = Vec::new();
+                    for a in args {
+                        all_elems.extend(self.eval_value(a)?.flatten_elements());
+                    }
+                    Ok(MathValue::Scalar(all_elems.iter().sum::<f64>() / all_elems.len().max(1) as f64))
+                }
+                "σ" => Ok(self.eval_single_val(args, "σ")?.map_unary(|z| 1.0 / (1.0 + (-z).exp()))),
+                "∥" => {
+                    let val = self.eval_single_val(args, "∥")?;
+                    let elems = val.flatten_elements();
+                    let sq_sum: f64 = elems.iter().map(|x| x * x).sum();
+                    Ok(MathValue::Scalar(sq_sum.sqrt()))
+                }
+                "∇" => {
+                    if args.len() != 2 {
+                        return Err("'∇' expects (expr, var)".to_string());
+                    }
+                    return self.eval_value(&MathExpr::Call("grad".to_string(), args.clone()));
+                }
                 "sqrt" => Ok(self.eval_single_val(args, "sqrt")?.map_unary(|x| x.sqrt())),
                 "exp" => Ok(self.eval_single_val(args, "exp")?.map_unary(|x| x.exp())),
                 "ln" | "log" => Ok(self.eval_single_val(args, "log")?.map_unary(|x| x.ln())),
@@ -13154,5 +13213,98 @@ mod tests {
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("mermaid.initialize"));
         assert!(html.contains("CRON Model Architecture"));
+    }
+
+    #[test]
+    fn test_phase13_true_zero_word_mathematical_calculus() {
+        let cwd = std::env::current_dir().unwrap_or_default();
+
+        // 1. Unicode Greek parameters, zero-word function and mathematical operators
+        let code = r#"
+            ε = 1e-5
+            N(X[B, D], γ[D]) = (X / √(μ(X * X) + ε)) * γ
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            γ = [1.0, 1.0]
+            y = N(X, γ)
+            
+            euler = e
+            circ = π
+            s = ∑([1.0, 2.0, 3.0, 4.0])
+            mag = ∥([3.0, 4.0])
+        "#;
+        let prog = parse_math_code(code).expect("Parse true zero-word math calculus");
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execute true zero-word math calculus");
+
+        // Assert constant resolution: e and π
+        if let Some(MathValue::Scalar(v)) = eval.env.get("euler") {
+            assert!((v - std::f64::consts::E).abs() < 1e-6);
+        } else {
+            panic!("Expected scalar for euler");
+        }
+        if let Some(MathValue::Scalar(v)) = eval.env.get("circ") {
+            assert!((v - std::f64::consts::PI).abs() < 1e-6);
+        } else {
+            panic!("Expected scalar for circ");
+        }
+
+        // Assert sum ∑ and norm ∥
+        if let Some(MathValue::Scalar(v)) = eval.env.get("s") {
+            assert_eq!(*v, 10.0);
+        } else {
+            panic!("Expected scalar for sum");
+        }
+        if let Some(MathValue::Scalar(v)) = eval.env.get("mag") {
+            assert_eq!(*v, 5.0);
+        } else {
+            panic!("Expected scalar for norm");
+        }
+
+        // Assert RMSNorm result
+        if let Some(MathValue::Matrix(m)) = eval.env.get("y") {
+            assert_eq!(m.len(), 2);
+            assert_eq!(m[0].len(), 2);
+            assert!(m[0][0] > 0.0);
+            assert!(m[1][1] > 0.0);
+        } else {
+            panic!("Expected matrix for y");
+        }
+
+        // 2. SwiGLU pure formulation with σ activation
+        let swiglu_pure = r#"
+            S(X[B, D], W1[D, H], W2[D, H], W3[H, D]) = ((X @ W1 * σ(X @ W1)) * (X @ W2)) @ W3
+            X = [[1.0, 0.5]]
+            W1 = [[0.2, 0.4], [0.1, 0.3]]
+            W2 = [[0.5, 0.1], [0.2, 0.8]]
+            W3 = [[0.3], [0.7]]
+            out = S(X, W1, W2, W3)
+        "#;
+        let prog_swiglu = parse_math_code(swiglu_pure).expect("Parse SwiGLU pure math");
+        let mut eval_swiglu = MathEvaluator::new();
+        eval_swiglu.execute_program(&prog_swiglu).expect("Execute SwiGLU pure math");
+        if let Some(MathValue::Matrix(m)) = eval_swiglu.env.get("out") {
+            assert_eq!(m.len(), 1);
+            assert_eq!(m[0].len(), 1);
+            assert!(m[0][0] > 0.0);
+        } else {
+            panic!("Expected matrix for out");
+        }
+
+        // 3. Verify Standard Library Module Links with True Zero-Word
+        let link_code = r#"
+            << "libcl/math/rms_norm.cl"
+            << "libcl/math/bitnet_layer.cl"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            γ = [1.0, 1.0]
+            out_n = N(X, γ)
+            W_t = [[-1.0, 1.0], [0.0, -1.0]]
+            out_b = B(X, W_t, 0.5)
+        "#;
+        let mut prog_link = parse_math_code(link_code).expect("Parse module links");
+        prog_link.resolve_links(&cwd).expect("Resolve module links");
+        let mut eval_link = MathEvaluator::new();
+        eval_link.execute_program(&prog_link).expect("Execute module links");
+        assert!(eval_link.env.contains_key("out_n"));
+        assert!(eval_link.env.contains_key("out_b"));
     }
 }

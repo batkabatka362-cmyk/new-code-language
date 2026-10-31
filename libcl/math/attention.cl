@@ -1,21 +1,22 @@
 // ============================================================================
-// CRON STANDARD MATHEMATICAL LIBRARY: ATTENTION
+// CRON STANDARD MATHEMATICAL CALCULUS: ATTENTION
 // libcl/math/attention.cl
-// Scaled Dot-Product & Flash-Attention Calculus in Zero Verbal Keywords
+// True Zero-Word Formulation: A(Q, K, V, s) = softmax((Q @ K) * s) @ V
 // ============================================================================
 
-scale = 0.125
-eps = 1e-6
+s = 0.125
+ε = 1e-6
 
-// 1. Scaled Query-Key Matrix Product
-qk_score(Q: f16, K: f16) = (Q @ K) * scale
+// 1. Scaled Query-Key Product: (Q @ K) * s
+Ω(Q, K, s) = (Q @ K) * s
 
-// 2. Scaled Dot-Product Attention: Softmax(Q @ K * scale) @ V
-attention(Q: f16, K: f16, V: f16) = softmax((Q @ K) * scale) @ V
+// 2. Scaled Dot-Product Attention: Softmax(Ω(Q, K, s)) @ V
+A(Q, K, V, s) = softmax((Q @ K) * s) @ V
 
-// 3. Multi-Head Projection with Bias
-mha_proj(x: f16, Wq: f16, Wk: f16, Wv: f16, Wo: f16) =
-    (attention(Wq @ x, Wk @ x, Wv @ x)) -> linear_out(Wo)
-
-linear_out(A: f16, Wo: f16) = Wo @ A
-
+// Compatibility Aliases
+scale = s
+eps = ε
+qk_score(Q, K) = (Q @ K) * scale
+attention(Q, K, V) = softmax((Q @ K) * scale) @ V
+linear_out(A, Wo) = Wo @ A
+mha_proj(x, Wq, Wk, Wv, Wo) = (attention(Wq @ x, Wk @ x, Wv @ x)) -> linear_out(Wo)
