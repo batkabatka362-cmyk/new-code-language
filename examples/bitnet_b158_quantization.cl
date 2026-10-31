@@ -38,3 +38,4 @@ Output = qmatmul(H_bit, W_proj, scales_s)
 
 // 7. Direct Hardware Weight Streaming Export
 Output >> "bitnet_quant_output.safetensors:quant_output"
+
