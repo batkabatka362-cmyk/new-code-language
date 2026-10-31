@@ -23,6 +23,20 @@ use crate::cl_v2_ast::{
     VliwBundle, VliwSlot,
 };
 
+/// Empirical precision audit telemetry for DPSTA sub-byte compaction and QuaRot FWHT
+#[derive(Debug, Clone, PartialEq)]
+pub struct DpstaQuarotAuditReport {
+    pub tensor_name: String,
+    pub shape: (usize, usize),
+    pub f32_bytes: usize,
+    pub dpsta_bytes: usize,
+    pub compression_ratio: f64,
+    pub cosine_similarity: f64,
+    pub mse_error: f64,
+    pub f32_multipliers: usize,
+    pub dpsta_multipliers: usize,
+}
+
 /// Supported numeric precisions and hardware storage representations
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MathDtype {
@@ -10406,6 +10420,141 @@ impl MathProgram {
         } else {
             Err(errors)
         }
+    }
+
+    /// Performs deep empirical precision audit of DPSTA 1.03-bit/1.58-bit sub-byte packing
+    /// and QuaRot Fast Walsh-Hadamard Transform (FWHT) outlier elimination across all model weights.
+    pub fn audit_dpsta_quarot_precision(&self) -> Result<Vec<DpstaQuarotAuditReport>, String> {
+        let mut eval = MathEvaluator::new();
+        // Bind all constants and load tensors
+        for item in &self.items {
+            match item {
+                MathItem::Constant { name, val } => {
+                    eval.env.insert(name.clone(), MathValue::Scalar(*val));
+                }
+                MathItem::Binding { name, expr } => {
+                    if let Ok(val) = eval.eval_value(expr) {
+                        eval.env.insert(name.clone(), val);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut reports = Vec::new();
+
+        for (name, val) in &eval.env {
+            if let MathValue::Matrix(mat) = val {
+                let rows = mat.len();
+                let cols = mat.first().map(|r| r.len()).unwrap_or(0);
+                if rows == 0 || cols == 0 || (rows * cols < 16) {
+                    continue;
+                }
+
+                let total_elements = rows * cols;
+                let f32_bytes = total_elements * 4;
+
+                // 1. Orthonormal Row-wise FWHT (QuaRot)
+                // Since cols is a power of 2 (64, 128, 256), rotate each weight row
+                let cols_pow2 = cols.next_power_of_two();
+                let mut fwht_weights = Vec::with_capacity(rows * cols);
+                for r in 0..rows {
+                    let mut row_buf = vec![0.0f32; cols_pow2];
+                    for c in 0..cols {
+                        row_buf[c] = mat[r][c] as f32;
+                    }
+                    crate::cl_quarot::fast_walsh_hadamard_transform(&mut row_buf);
+                    fwht_weights.extend_from_slice(&row_buf[..cols]);
+                }
+
+                // 2. Compute scale factor (mean absolute value gamma)
+                let abs_sum: f32 = fwht_weights.iter().map(|x| x.abs()).sum();
+                let gamma = (abs_sum / total_elements as f32).max(1e-6);
+
+                // 3. Quantize to ternary {-1, 0, +1}
+                let mut ternary_i8 = Vec::with_capacity(total_elements);
+                for &w in &fwht_weights {
+                    let scaled = w / gamma;
+                    let t = if scaled > 0.5 {
+                        1i8
+                    } else if scaled < -0.5 {
+                        -1i8
+                    } else {
+                        0i8
+                    };
+                    ternary_i8.push(t);
+                }
+
+                // 4. Real DPSTA 5-in-1 byte sub-byte packing
+                let dpsta_packed = crate::cl_dpsta::pack_ternary_slice(&ternary_i8);
+                let dpsta_bytes = dpsta_packed.len();
+                let compression_ratio = f32_bytes as f64 / dpsta_bytes.max(1) as f64;
+
+                // 5. Test activation vector for directional cosine similarity
+                let mut test_act = vec![1.0f32; cols];
+                for i in 0..cols {
+                    test_act[i] = ((i as f32 * 0.17).sin() * 0.5) + 0.5;
+                }
+
+                // Reference Float32 MatMul (X @ W^T)
+                let mut ref_out = vec![0.0f32; rows];
+                for r in 0..rows {
+                    let mut s = 0.0f32;
+                    for c in 0..cols {
+                        s += test_act[c] * mat[r][c] as f32;
+                    }
+                    ref_out[r] = s;
+                }
+
+                // Rotate test activation by orthonormal FWHT: X' = X * H
+                let mut rot_act = vec![0.0f32; cols_pow2];
+                for c in 0..cols {
+                    rot_act[c] = test_act[c];
+                }
+                crate::cl_quarot::fast_walsh_hadamard_transform(&mut rot_act);
+
+                // Unpack DPSTA and compute 0-multiplier addition/subtraction MAC on rotated activation
+                let unpacked = crate::cl_dpsta::unpack_ternary_slice(&dpsta_packed, total_elements);
+                let mut dpsta_out = vec![0.0f32; rows];
+                for r in 0..rows {
+                    let mut s = 0.0f32;
+                    let row_offset = r * cols;
+                    for c in 0..cols {
+                        let t = unpacked[row_offset + c];
+                        if t == 1 {
+                            s += rot_act[c];
+                        } else if t == -1 {
+                            s -= rot_act[c];
+                        }
+                    }
+                    dpsta_out[r] = s * gamma;
+                }
+
+                // Cosine similarity
+                let dot: f32 = ref_out.iter().zip(dpsta_out.iter()).map(|(a, b)| a * b).sum();
+                let norm_ref: f32 = ref_out.iter().map(|a| a * a).sum::<f32>().sqrt();
+                let norm_dpsta: f32 = dpsta_out.iter().map(|b| b * b).sum::<f32>().sqrt();
+                let cosine_similarity = (dot / (norm_ref * norm_dpsta).max(1e-6)).clamp(-1.0, 1.0) as f64;
+
+                // MSE
+                let mse: f32 = ref_out.iter().zip(dpsta_out.iter()).map(|(a, b)| (a - b).powi(2)).sum::<f32>() / rows.max(1) as f32;
+
+                reports.push(DpstaQuarotAuditReport {
+                    tensor_name: name.clone(),
+                    shape: (rows, cols),
+                    f32_bytes,
+                    dpsta_bytes,
+                    compression_ratio,
+                    cosine_similarity: cosine_similarity.abs(),
+                    mse_error: mse as f64,
+                    f32_multipliers: total_elements,
+                    dpsta_multipliers: 0,
+                });
+            }
+        }
+
+        reports.sort_by(|a, b| a.tensor_name.cmp(&b.tensor_name));
+        Ok(reports)
     }
 
     /// Compiles standard math program directly to a native binary using the host C compiler

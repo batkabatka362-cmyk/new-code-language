@@ -54,5 +54,19 @@ fn test_cli_dual_profile_max_quality_and_min_resource() {
     assert!(stdout_comp.contains("Peak Tensor Memory"));
     assert!(stdout_comp.contains("Less Memory"));
     assert!(stdout_comp.contains("100% PARITY PASSED"));
+
+    // 4. Test Empirical Precision Audit of QuaRot FWHT + DPSTA Sub-Byte Packing (--audit-precision)
+    let out_audit = Command::new(cron_bin)
+        .current_dir(&root)
+        .args(["math", example_path, "--audit-precision"])
+        .output()
+        .expect("Failed to execute cron math --audit-precision");
+
+    assert!(out_audit.status.success(), "Audit-precision failed: {:?}", String::from_utf8_lossy(&out_audit.stderr));
+    let stdout_audit = String::from_utf8_lossy(&out_audit.stdout);
+    assert!(stdout_audit.contains("CRON EMPIRICAL PRECISION AUDIT: QUA-ROT (FWHT) + DPSTA 1.03-BIT SUB-BYTE PACKING"), "stdout: {}", stdout_audit);
+    assert!(stdout_audit.contains("Mean Directional Cosine Similarity"));
+    assert!(stdout_audit.contains("20.0x RAM reduction"));
+    assert!(stdout_audit.contains("100% Multiplier-Free"));
 }
 

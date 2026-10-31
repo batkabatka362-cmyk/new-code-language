@@ -235,7 +235,7 @@ pub use cl_v2_parser::parse_cl_v2;
 pub use cl_v2_lowering::{V2LoweringEngine, V2FormalVerificationReport, V2TensorRuntime};
 pub use cl_math::{
     is_math_calculus_source, load_tensor_resource, save_tensor_resource, parse_math_code, parse_math_file, run_math_repl, MathBinOp, MathDtype, MathEvaluator, MathItem,
-    MathLexer, MathParam, MathParser, MathProgram, MathValue, CompilationProfile,
+    MathLexer, MathParam, MathParser, MathProgram, MathValue, CompilationProfile, DpstaQuarotAuditReport,
 };
 pub use cl_syntax_spec::{verify_sovereign_pure_cipher_syntax, SovereignSyntaxReport, SyntaxViolation, SOVEREIGN_SYNTAX_EBNF};
 
