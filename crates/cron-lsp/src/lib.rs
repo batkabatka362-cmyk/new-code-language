@@ -378,6 +378,55 @@ pub fn is_cl_document(uri: &str, text: &str) -> bool {
 // === Machine Code (.cl) Real-Time Diagnostics ===
 
 pub fn check_cl_diagnostics(source: &str) -> Vec<Diagnostic> {
+    // CRON Mathematical Calculus (.cl) support
+    if cronc::is_math_calculus_source(source) {
+        let mut diagnostics = Vec::new();
+        match cronc::parse_math_code(source) {
+            Ok(prog) => {
+                if let Err(shape_errors) = prog.verify_shapes() {
+                    for err in shape_errors {
+                        diagnostics.push(Diagnostic {
+                            range: Range {
+                                start: Position { line: 0, character: 0 },
+                                end: Position { line: 0, character: 20 },
+                            },
+                            severity: 1, // Error
+                            code: Some("CRON_MATH_SHAPE".to_string()),
+                            source: Some("cron-lsp".to_string()),
+                            message: format!("Shape Mismatch: {}", err),
+                        });
+                    }
+                }
+                if let Err(sym_errors) = prog.verify_symbolic_shapes() {
+                    for err in sym_errors {
+                        diagnostics.push(Diagnostic {
+                            range: Range {
+                                start: Position { line: 0, character: 0 },
+                                end: Position { line: 0, character: 20 },
+                            },
+                            severity: 1, // Error
+                            code: Some("CRON_SYMBOLIC_SHAPE".to_string()),
+                            source: Some("cron-lsp".to_string()),
+                            message: format!("Symbolic Dimension Mismatch: {}", err),
+                        });
+                    }
+                }
+            }
+            Err(parse_err) => {
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position { line: 0, character: 0 },
+                        end: Position { line: 0, character: 10 },
+                    },
+                    severity: 1, // Error
+                    code: Some("CRON_MATH_SYNTAX".to_string()),
+                    source: Some("cron-lsp".to_string()),
+                    message: format!("Mathematical Calculus Syntax Error: {}", parse_err),
+                });
+            }
+        }
+        return diagnostics;
+    }
     // Sovereign CL v2.0 Support: Pure Mathematical Morphisms and Silicon Control Flow
     if source.contains('§') || source.contains('↦') || source.contains('⟳') || source.contains("!Δ") {
         let mut diagnostics = Vec::new();
@@ -773,6 +822,166 @@ fn validate_vliw_pipe_slots(
 }
 
 // === Silicon Micro-Architecture Hover Tooltips (.cl & .cr) ===
+
+
+/// Computes rich LSP Markdown Hover documentation for CRON Mathematical Calculus variables,
+/// functions, tensor shapes, memory footprints, and built-in operators.
+pub fn get_math_hover_documentation(doc: &str, word: &str) -> Option<String> {
+    // 1. Built-in Mathematical Operators and Functions
+    match word {
+        "norm" => return Some(
+            "### CRON Operator: `norm(X)`\n\n\
+            - **Operation**: L2 Frobenius Norm $\\|X\\|_2 = \\sqrt{\\sum X_i^2}$\n\
+            - **Input**: Tensor or Vector\n\
+            - **Output**: Scalar `f32`\n\
+            - **Silicon Implementation**: Fused parallel reduction kernel".to_string()
+        ),
+        "relu" => return Some(
+            "### CRON Operator: `relu(X)`\n\n\
+            - **Operation**: Rectified Linear Unit $\\max(0, X)$\n\
+            - **Silicon Implementation**: Zero-cost SIMD vectorized clamp".to_string()
+        ),
+        "softmax" => return Some(
+            "### CRON Operator: `softmax(X)`\n\n\
+            - **Operation**: Numerically stable row-wise softmax $\\frac{e^{X_i - \\max(X)}}{\\sum e^{X_j - \\max(X)}}$\n\
+            - **Silicon Implementation**: Online FlashAttention 3-pass fused register reduction".to_string()
+        ),
+        "gelu" => return Some(
+            "### CRON Operator: `gelu(X)`\n\n\
+            - **Operation**: Gaussian Error Linear Unit $0.5 X (1 + \\tanh(\\sqrt{2/\\pi} (X + 0.044715 X^3)))$\n\
+            - **Silicon Implementation**: Fused polynomial SIMD approximation".to_string()
+        ),
+        "silu" | "swish" => return Some(
+            "### CRON Operator: `silu(X)` (Swish)\n\n\
+            - **Operation**: $X \\cdot \\sigma(X) = \\frac{X}{1 + e^{-X}}$\n\
+            - **Silicon Implementation**: Fused exponential SIMD evaluation".to_string()
+        ),
+        "top_k" => return Some(
+            "### CRON Operator: `top_k(logits, k)`\n\n\
+            - **Operation**: Filters logits keeping only top-$k$ highest probabilities, setting others to $-\\infty$\n\
+            - **Silicon Implementation**: Fast in-register partial sorting network".to_string()
+        ),
+        "top_p" => return Some(
+            "### CRON Operator: `top_p(logits, p)`\n\n\
+            - **Operation**: Nucleus sampling filter over cumulative probability distribution $p \\in (0, 1]$\n\
+            - **Silicon Implementation**: Fused cumulative sum reduction".to_string()
+        ),
+        "sample" => return Some(
+            "### CRON Operator: `sample(logits, temp, top_p, seed)`\n\n\
+            - **Operation**: Zero-verbal in-silicon autoregressive token sampling\n\
+            - **Determinism**: 100% reproducible LCG PRNG across all hardware architectures\n\
+            - **Output**: Discrete token index (Scalar `f32`)".to_string()
+        ),
+        "encode" => return Some(
+            "### CRON Tokenizer: `encode(text)`\n\n\
+            - **Operation**: Tokenizes UTF-8 string literal into 1D integer token tensor\n\
+            - **Zero-Verbal Constitution**: Native in-silicon tokenizer".to_string()
+        ),
+        "decode" => return Some(
+            "### CRON Tokenizer: `decode(tokens)`\n\n\
+            - **Operation**: Decodes 1D integer token tensor back into UTF-8 text literal".to_string()
+        ),
+        "kv_cache_attn" => return Some(
+            "### CRON Operator: `kv_cache_attn(q_t, k_t, v_t, K_cache, V_cache, [scale])`\n\n\
+            - **Signature**: `(out_t, K_next, V_next) = kv_cache_attn(...)`\n\
+            - **Streaming Attention**: Appends step token into history ring-buffer cache and evaluates attention\n\
+            - **Complexity**: $O(T \\cdot D)$ per token generation step instead of $O(T^2)$\n\
+            - **Silicon Target**: Direct SRAM-tiled KV cache bypass".to_string()
+        ),
+        "grad" => return Some(
+            "### CRON Calculus: `grad(loss, W)`\n\n\
+            - **Operation**: Reverse-mode analytical automatic differentiation $\\frac{\\partial \\text{loss}}{\\partial W}$\n\
+            - **Silicon Target**: Ahead-of-Time fused backward tape".to_string()
+        ),
+        "adam_step" => return Some(
+            "### CRON Optimizer: `adam_step(param, grad, m, v, t, [lr, beta1, beta2, eps])`\n\n\
+            - **Operation**: Fused AdamW weight update step\n\
+            - **Silicon Target**: In-place SIMD fused multiply-add update".to_string()
+        ),
+        _ => {}
+    }
+
+    // 2. Program-level inspection (Constants, Inferred Shapes, Functions)
+    if let Ok(prog) = cronc::parse_math_code(doc) {
+        // Check functions
+        for item in &prog.items {
+            if let cronc::MathItem::Function { name, params, ret_type: _, body } = item {
+                if name == word {
+                    let param_strs: Vec<String> = params.iter().map(|p| {
+                        let dim_str = if !p.symbolic_dims.is_empty() {
+                            format!("[{}]", p.symbolic_dims.iter().map(|d| match d {
+                                cronc::cl_math::MathDim::Fixed(n) => n.to_string(),
+                                cronc::cl_math::MathDim::Symbolic(s) => s.clone(),
+                            }).collect::<Vec<_>>().join(", "))
+                        } else if !p.dims.is_empty() {
+                            format!("[{}]", p.dims.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(", "))
+                        } else {
+                            String::new()
+                        };
+                        format!("{}: {}{}", p.name, p.dtype.as_str(), dim_str)
+                    }).collect();
+
+                    let has_sym = params.iter().any(|p| !p.symbolic_dims.is_empty());
+                    let sym_note = if has_sym {
+                        "\n- **Symbolic Contract**: Verified algebraic contraction polymorphism"
+                    } else {
+                        ""
+                    };
+
+                    return Some(format!(
+                        "### CRON Mathematical Function: `{}`\n\n\
+                        - **Signature**: `{}({})`{}\n\
+                        - **Definition**: `{}`\n\
+                        - **Lowered C23**: `void cron_{}(...);`",
+                        name, name, param_strs.join(", "), sym_note, body, name
+                    ));
+                }
+            }
+        }
+
+        // Check constants
+        for item in &prog.items {
+            if let cronc::MathItem::Constant { name, val } = item {
+                if name == word {
+                    return Some(format!(
+                        "### CRON Scalar Constant: `{}`\n\n\
+                        - **Type**: `Scalar (f32)`\n\
+                        - **Value**: `{}`\n\
+                        - **Memory Footprint**: 4 bytes\n\
+                        - **Silicon Storage**: Immediate Constant / Dedicated Register",
+                        name, val
+                    ));
+                }
+            }
+        }
+
+        // Check inferred tensor shapes
+        let shapes = prog.infer_shapes_map();
+        if let Some(shape) = shapes.get(word) {
+            let total_elems: usize = if shape.is_empty() { 1 } else { shape.iter().product() };
+            let bytes = total_elems * 4;
+            let mem_str = if bytes < 1024 {
+                format!("{} bytes", bytes)
+            } else if bytes < 1024 * 1024 {
+                format!("{:.2} KB ({} bytes)", bytes as f64 / 1024.0, bytes)
+            } else {
+                format!("{:.2} MB ({} bytes)", bytes as f64 / (1024.0 * 1024.0), bytes)
+            };
+
+            return Some(format!(
+                "### CRON Tensor Variable: `{}`\n\n\
+                - **Tensor Shape**: `{:?}`\n\
+                - **Total Elements**: `{}`\n\
+                - **Memory Footprint (FP32)**: {}\n\
+                - **Silicon Layout**: Contiguous Row-Major C-order Array Buffer\n\
+                - **Hardware Alignment**: 64-byte AVX-512 / Tensor Core cache-line aligned",
+                word, shape, total_elems, mem_str
+            ));
+        }
+    }
+
+    None
+}
 
 pub fn get_cl_hover_documentation(word: &str) -> Option<String> {
     let upper = word.to_ascii_uppercase();
@@ -1808,9 +2017,13 @@ impl LspServer {
                 if let Some(line_str) = doc.lines().nth(line) {
                     if let Some((word, word_start, word_end)) = extract_word_at_pos(line_str, character) {
                         let doc_md = if is_cl {
-                            get_cl_hover_documentation(&word).or_else(|| get_hover_documentation(&word))
+                            get_math_hover_documentation(doc, &word)
+                                .or_else(|| get_cl_hover_documentation(&word))
+                                .or_else(|| get_hover_documentation(&word))
                         } else {
-                            get_hover_documentation(&word).or_else(|| get_cl_hover_documentation(&word))
+                            get_hover_documentation(&word)
+                                .or_else(|| get_math_hover_documentation(doc, &word))
+                                .or_else(|| get_cl_hover_documentation(&word))
                         };
 
                         if let Some(md) = doc_md {
@@ -3464,6 +3677,49 @@ mod tests {
 "#;
         let diags = server.compute_diagnostics_for_source("file:///frontier.cl", v2_source);
         assert!(diags.is_empty(), "Sovereign CL v2 should produce 0 false diagnostic errors, found: {:?}", diags);
+    }
+
+    #[test]
+    fn test_phase11_lsp_math_hover_and_diagnostics() {
+        let math_code = r#"
+            W = [[1.0, 2.0], [3.0, 4.0]]
+            forward(X: f32[B, D], W: f32[D, M]) = X @ W
+        "#;
+
+        // 1. Test Hover on Tensor Variable W
+        let w_hover = get_math_hover_documentation(math_code, "W").expect("Hover for W");
+        assert!(w_hover.contains("CRON Tensor Variable: `W`"));
+        assert!(w_hover.contains("[2, 2]"));
+        assert!(w_hover.contains("16 bytes"));
+
+        // 2. Test Hover on Function forward
+        let fn_hover = get_math_hover_documentation(math_code, "forward").expect("Hover for forward");
+        assert!(fn_hover.contains("CRON Mathematical Function: `forward`"));
+        assert!(fn_hover.contains("X: f32[B, D]"));
+        assert!(fn_hover.contains("Symbolic Contract"));
+        assert!(fn_hover.contains("void cron_forward"));
+
+        // 3. Test Hover on Built-in Operators
+        let kv_hover = get_math_hover_documentation(math_code, "kv_cache_attn").expect("Hover for kv_cache_attn");
+        assert!(kv_hover.contains("Streaming Attention"));
+        assert!(kv_hover.contains("O(T"));
+
+        let norm_hover = get_math_hover_documentation(math_code, "norm").expect("Hover for norm");
+        assert!(norm_hover.contains("Frobenius Norm"));
+
+        // 4. Test Valid Diagnostics
+        let valid_diags = check_cl_diagnostics(math_code);
+        assert!(valid_diags.is_empty(), "Valid math code should produce 0 diagnostics, found: {:?}", valid_diags);
+
+        // 5. Test Invalid Symbolic Dimension Mismatch Diagnostics
+        let invalid_sym_code = r#"
+            bad_forward(X: f32[B, D1], W: f32[D2, M]) = X @ W
+        "#;
+        let sym_diags = check_cl_diagnostics(invalid_sym_code);
+        assert!(!sym_diags.is_empty(), "Expected symbolic mismatch diagnostic");
+        assert!(sym_diags[0].message.contains("Symbolic Dimension Mismatch"));
+        assert!(sym_diags[0].message.contains("D1"));
+        assert!(sym_diags[0].message.contains("D2"));
     }
 }
 

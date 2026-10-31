@@ -49,6 +49,18 @@ impl MathDtype {
         }
     }
 
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MathDtype::F16 => "f16",
+            MathDtype::F32 => "f32",
+            MathDtype::F64 => "f64",
+            MathDtype::Bf16 => "bf16",
+            MathDtype::I32 => "i32",
+            MathDtype::I64 => "i64",
+            MathDtype::T2 => "t2",
+        }
+    }
+
     pub fn to_c23_type(&self) -> &'static str {
         match self {
             MathDtype::F16 => "_Float16",
@@ -739,11 +751,27 @@ impl fmt::Display for MathValue {
 }
 
 /// Function parameter with optional mathematical type and tensor dimensions
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MathDim {
+    Fixed(usize),
+    Symbolic(String),
+}
+
+impl fmt::Display for MathDim {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MathDim::Fixed(n) => write!(f, "{}", n),
+            MathDim::Symbolic(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MathParam {
     pub name: String,
     pub dtype: MathDtype,
     pub dims: Vec<usize>,
+    pub symbolic_dims: Vec<MathDim>,
 }
 
 /// Binary mathematical operators with standard precedence
@@ -2216,16 +2244,25 @@ impl MathParser {
 
             let mut dtype = MathDtype::F32;
             let mut dims = Vec::new();
+            let mut symbolic_dims = Vec::new();
 
             if self.match_tok(&Token::Colon) {
                 dtype = self.parse_dtype()?;
 
                 if self.match_tok(&Token::LBracket) {
                     loop {
-                        if let Some(Token::Num(n)) = self.next_tok() {
-                            dims.push(n as usize);
-                        } else {
-                            return Err("Expected dimension size in tensor brackets".to_string());
+                        match self.next_tok() {
+                            Some(Token::Num(n)) => {
+                                dims.push(n as usize);
+                                symbolic_dims.push(MathDim::Fixed(n as usize));
+                            }
+                            Some(Token::Ident(s)) => {
+                                dims.push(0);
+                                symbolic_dims.push(MathDim::Symbolic(s));
+                            }
+                            other => {
+                                return Err(format!("Expected dimension size or symbol in tensor brackets, found {:?}", other));
+                            }
                         }
 
                         if self.match_tok(&Token::Comma) {
@@ -2239,7 +2276,7 @@ impl MathParser {
                 }
             }
 
-            params.push(MathParam { name, dtype, dims });
+            params.push(MathParam { name, dtype, dims, symbolic_dims });
 
             if self.match_tok(&Token::Comma) {
                 continue;
@@ -9462,6 +9499,202 @@ impl MathProgram {
         out
     }
 
+    /// Exports the mathematical computation pipeline as a standard Mermaid flowchart
+    pub fn to_mermaid(&self) -> String {
+        let mut out = String::from("graph TD\n");
+        let shapes = self.infer_shapes_map();
+
+        let mut node_idx = 0;
+        let mut var_nodes: HashMap<String, String> = HashMap::new();
+
+        for item in &self.items {
+            match item {
+                MathItem::Constant { name, val } => {
+                    let id = format!("N{}", node_idx);
+                    node_idx += 1;
+                    out.push_str(&format!("    {}[\"{}: const = {}\"]\n", id, name, val));
+                    var_nodes.insert(name.clone(), id);
+                }
+                MathItem::Binding { name, expr } => {
+                    let id = format!("N{}", node_idx);
+                    node_idx += 1;
+                    let shape_desc = shapes.get(name).map(|s| format!("{:?}", s)).unwrap_or_else(|| "scalar".to_string());
+                    let expr_desc = expr.to_string().replace('"', "'");
+                    let expr_short = if expr_desc.len() > 30 {
+                        format!("{}...", &expr_desc[..27])
+                    } else {
+                        expr_desc
+                    };
+                    out.push_str(&format!("    {}[\"{}: {} = {}\"]\n", id, name, shape_desc, expr_short));
+
+                    let mut free_vars = HashSet::new();
+                    expr.collect_free_vars(&mut free_vars);
+                    for fv in free_vars {
+                        if let Some(src_id) = var_nodes.get(&fv) {
+                            out.push_str(&format!("    {} --> {}\n", src_id, id));
+                        }
+                    }
+                    var_nodes.insert(name.clone(), id);
+                }
+                MathItem::TupleBinding { names, expr } => {
+                    let id = format!("N{}", node_idx);
+                    node_idx += 1;
+                    let expr_clean = expr.to_string().replace('"', "'");
+                    out.push_str(&format!("    {}[\"({}) = {}\"]\n", id, names.join(", "), expr_clean));
+                    let mut free_vars = HashSet::new();
+                    expr.collect_free_vars(&mut free_vars);
+                    for fv in free_vars {
+                        if let Some(src_id) = var_nodes.get(&fv) {
+                            out.push_str(&format!("    {} --> {}\n", src_id, id));
+                        }
+                    }
+                    for n in names {
+                        var_nodes.insert(n.clone(), id.clone());
+                    }
+                }
+                MathItem::Export { expr, path, key } => {
+                    let id = format!("N{}", node_idx);
+                    node_idx += 1;
+                    let target_desc = if key.is_empty() { path.clone() } else { format!("{}:{}", path, key) };
+                    out.push_str(&format!("    {}[\"Export: {} >> {}\"]\n", id, expr, target_desc));
+                    let mut free_vars = HashSet::new();
+                    expr.collect_free_vars(&mut free_vars);
+                    for fv in free_vars {
+                        if let Some(src_id) = var_nodes.get(&fv) {
+                            out.push_str(&format!("    {} --> {}\n", src_id, id));
+                        }
+                    }
+                }
+
+                MathItem::Function { name, params, ret_type: _, body } => {
+                    let id = format!("N{}", node_idx);
+                    node_idx += 1;
+                    let param_strs: Vec<String> = params.iter().map(|p| {
+                        let dim_str = if !p.symbolic_dims.is_empty() {
+                            format!("[{}]", p.symbolic_dims.iter().map(|d| match d {
+                                MathDim::Fixed(n) => n.to_string(),
+                                MathDim::Symbolic(s) => s.clone(),
+                            }).collect::<Vec<_>>().join(", "))
+                        } else if !p.dims.is_empty() {
+                            format!("[{}]", p.dims.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(", "))
+                        } else {
+                            String::new()
+                        };
+                        format!("{}: {}{}", p.name, p.dtype.as_str(), dim_str)
+                    }).collect();
+                    let fn_sig = format!("{}({})", name, param_strs.join(", "));
+                    let body_clean = body.to_string().replace('"', "'");
+                    out.push_str(&format!("    {}[(\"{}: {}\")]\n", id, fn_sig, body_clean));
+
+                    let mut free_vars = HashSet::new();
+                    body.collect_free_vars(&mut free_vars);
+                    for p in params {
+                        free_vars.remove(&p.name);
+                    }
+                    for fv in free_vars {
+                        if let Some(src_id) = var_nodes.get(&fv) {
+                            out.push_str(&format!("    {} --> {}\n", src_id, id));
+                        }
+                    }
+                    var_nodes.insert(name.clone(), id);
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// Exports the mathematical pipeline as a standalone interactive HTML visualizer with Mermaid renderer
+    pub fn to_html_graph(&self, title: &str) -> String {
+        let mermaid_src = self.to_mermaid();
+        format!(r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{}</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #0d1117;
+            color: #c9d1d9;
+        }}
+        h1 {{
+            color: #58a6ff;
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 12px;
+        }}
+        .card {{
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 16px;
+            overflow-x: auto;
+        }}
+        .mermaid {{
+            display: flex;
+            justify-content: center;
+        }}
+    </style>
+</head>
+<body>
+    <h1>CRON Mathematical Execution Graph Visualizer</h1>
+    <div class="card">
+        <div class="mermaid">
+{}
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({{ startOnLoad: true, theme: 'dark' }});
+    </script>
+</body>
+</html>"#, title, mermaid_src)
+    }
+
+    /// Verifies symbolic dimensional polymorphism and algebraic matrix consistency
+    pub fn verify_symbolic_shapes(&self) -> Result<(), Vec<String>> {
+        let mut errors = Vec::new();
+        for item in &self.items {
+            if let MathItem::Function { name, params, body, .. } = item {
+                let mut sym_env: HashMap<String, Vec<MathDim>> = HashMap::new();
+                for p in params {
+                    if !p.symbolic_dims.is_empty() {
+                        sym_env.insert(p.name.clone(), p.symbolic_dims.clone());
+                    }
+                }
+
+                if !sym_env.is_empty() {
+                    let mut check_expr = |expr: &MathExpr| {
+                        if let MathExpr::Binary(ref lhs, MathBinOp::MatMul, ref rhs) = expr {
+                            if let (MathExpr::Var(ref l_name), MathExpr::Var(ref r_name)) = (lhs.as_ref(), rhs.as_ref()) {
+                                if let (Some(l_dims), Some(r_dims)) = (sym_env.get(l_name), sym_env.get(r_name)) {
+                                    if l_dims.len() == 2 && r_dims.len() == 2 {
+                                        if l_dims[1] != r_dims[0] {
+                                            errors.push(format!(
+                                                "In function '{}': Symbolic dimension mismatch in '{} @ {}': left contracted dim '{}' != right outer dim '{}'",
+                                                name, l_name, r_name, l_dims[1], r_dims[0]
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    check_expr(body);
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     /// Compiles standard math program directly to a native binary using the host C compiler
     pub fn compile_to_native(&self, output_path: &str, opt_level: &str) -> Result<(), String> {
         let is_lib = output_path.ends_with(".dll")
@@ -12791,5 +13024,49 @@ mod tests {
         } else {
             panic!("Expected Vector for out_t");
         }
+     }
+
+    #[test]
+    fn test_phase11_symbolic_shape_polymorphism() {
+        // Valid symbolic contraction: D matches D
+        let valid_code = r#"
+            forward(X: f32[B, D], W: f32[D, M]) = X @ W
+        "#;
+        let prog_valid = parse_math_code(valid_code).expect("Parse valid symbolic code");
+        assert!(prog_valid.verify_symbolic_shapes().is_ok());
+
+        // Invalid symbolic contraction: D1 != D2
+        let invalid_code = r#"
+            bad_forward(X: f32[B, D1], W: f32[D2, M]) = X @ W
+        "#;
+        let prog_invalid = parse_math_code(invalid_code).expect("Parse invalid symbolic code");
+        let res = prog_invalid.verify_symbolic_shapes();
+        assert!(res.is_err(), "Expected symbolic dimension mismatch error");
+        let err_msg = res.unwrap_err().join("; ");
+        assert!(err_msg.contains("Symbolic dimension mismatch"));
+        assert!(err_msg.contains("D1"));
+        assert!(err_msg.contains("D2"));
+    }
+
+    #[test]
+    fn test_phase11_mermaid_graph_generation() {
+        let code = r#"
+            c = 0.5
+            W = [[1.0, 2.0], [3.0, 4.0]]
+            b = [0.1, 0.2]
+            f(X: f32[2, 2]) = relu(X @ W + b)
+            res = f([[1.0, 0.0], [0.0, 1.0]])
+        "#;
+        let prog = parse_math_code(code).expect("Parse code for graph");
+        let mermaid = prog.to_mermaid();
+        assert!(mermaid.contains("graph TD"));
+        assert!(mermaid.contains("c: const = 0.5"));
+        assert!(mermaid.contains("W: [2, 2] ="));
+        assert!(mermaid.contains("f(X: f32[2, 2])"));
+
+        let html = prog.to_html_graph("CRON Model Architecture");
+        assert!(html.contains("<!DOCTYPE html>"));
+        assert!(html.contains("mermaid.initialize"));
+        assert!(html.contains("CRON Model Architecture"));
     }
 }
