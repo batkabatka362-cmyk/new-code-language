@@ -3336,6 +3336,46 @@ impl ExprTape {
                         ),
                     }
                 }
+                "grpo_loss" | "Λ_g" => {
+                    let s = adj.as_scalar().unwrap_or(1.0);
+                    let logp_elems = arg_vals[0].flatten_elements();
+                    let ref_elems = arg_vals[1].flatten_elements();
+                    let adv_elems = arg_vals[2].flatten_elements();
+                    let eps = if arg_vals.len() > 3 { arg_vals[3].as_scalar().unwrap_or(0.2) } else { 0.2 };
+                    let beta = if arg_vals.len() > 4 { arg_vals[4].as_scalar().unwrap_or(0.04) } else { 0.04 };
+
+                    let n = logp_elems.len();
+                    let scale = s / n.max(1) as f64;
+                    let mut grad_logp = Vec::with_capacity(n);
+                    for i in 0..n {
+                        let diff = logp_elems[i] - ref_elems[i];
+                        let r_i = diff.exp();
+                        let a_i = adv_elems[i];
+                        let surr1 = r_i * a_i;
+                        let surr2 = r_i.clamp(1.0 - eps, 1.0 + eps) * a_i;
+                        let grad_surr = if surr1 <= surr2 {
+                            r_i * a_i
+                        } else {
+                            0.0 // Clipped
+                        };
+                        let grad_kl = r_i - 1.0;
+                        let g_i = scale * (-grad_surr + beta * grad_kl);
+                        grad_logp.push(g_i);
+                    }
+                    let logp_adj = match &arg_vals[0] {
+                        MathValue::Matrix(m) => {
+                            let cols = m.first().map(|r| r.len()).unwrap_or(1);
+                            let rows = m.len();
+                            let mut mat = Vec::with_capacity(rows);
+                            for r in 0..rows {
+                                mat.push(grad_logp[r * cols..(r + 1) * cols].to_vec());
+                            }
+                            MathValue::Matrix(mat)
+                        }
+                        _ => MathValue::Vector(grad_logp),
+                    };
+                    arg_tapes[0].backward(&logp_adj, wrt, acc_grad, evaluator)
+                }
                 "log_softmax" => {
                     let calc_log_softmax_vjp = |x: &[f64], adj_row: &[f64]| -> Vec<f64> {
                         let max_v = x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
@@ -6359,7 +6399,7 @@ impl MathEvaluator {
                     };
                     Ok(MathValue::Scalar(lr))
                 }
-                "adamw_step" | "adamw" => {
+                "adamw_step" | "adamw" | "Ω" | "Ω_a" => {
                     if args.len() < 6 {
                         return Err("'adamw_step(W, g, m, v, t, lr, [beta1, beta2, eps, wd])' requires at least 6 arguments".to_string());
                     }
@@ -6437,7 +6477,7 @@ impl MathEvaluator {
 
                     Ok(MathValue::Tuple(vec![w_out, m_out, v_out]))
                 }
-                "lion_step" | "lion" => {
+                "lion_step" | "lion" | "Ω_l" => {
                     if args.len() < 4 {
                         return Err("'lion_step(W, g, m, lr, [beta1, beta2, wd])' requires at least 4 arguments".to_string());
                     }
@@ -6501,6 +6541,41 @@ impl MathEvaluator {
                     let m_out = reconstruct(m_new, &shape)?;
 
                     Ok(MathValue::Tuple(vec![w_out, m_out]))
+                }
+                "grpo_loss" | "Λ_g" => {
+                    if args.len() < 3 {
+                        return Err("'grpo_loss(logp, logp_ref, advantages, [clip_eps, beta])' requires at least 3 arguments".to_string());
+                    }
+                    let logp_val = self.eval_value(&args[0])?;
+                    let ref_val = self.eval_value(&args[1])?;
+                    let adv_val = self.eval_value(&args[2])?;
+                    let eps = if args.len() > 3 { self.eval_value(&args[3])?.as_scalar().unwrap_or(0.2) } else { 0.2 };
+                    let beta = if args.len() > 4 { self.eval_value(&args[4])?.as_scalar().unwrap_or(0.04) } else { 0.04 };
+
+                    let logp_elems = logp_val.flatten_elements();
+                    let ref_elems = ref_val.flatten_elements();
+                    let adv_elems = adv_val.flatten_elements();
+
+                    if logp_elems.len() != ref_elems.len() || logp_elems.len() != adv_elems.len() {
+                        return Err(format!(
+                            "Dimension mismatch in grpo_loss: logp len {}, ref len {}, adv len {}",
+                            logp_elems.len(), ref_elems.len(), adv_elems.len()
+                        ));
+                    }
+
+                    let n = logp_elems.len();
+                    let mut total_loss = 0.0;
+                    for i in 0..n {
+                        let diff = logp_elems[i] - ref_elems[i];
+                        let r_i = diff.exp();
+                        let a_i = adv_elems[i];
+                        let surr1 = r_i * a_i;
+                        let surr2 = r_i.clamp(1.0 - eps, 1.0 + eps) * a_i;
+                        let policy_loss = surr1.min(surr2);
+                        let approx_kl = r_i - 1.0 - diff;
+                        total_loss += -policy_loss + beta * approx_kl;
+                    }
+                    Ok(MathValue::Scalar(total_loss / n.max(1) as f64))
                 }
                 "grad" | "diff" => {
                     if args.len() != 2 {
@@ -8746,11 +8821,17 @@ impl MathProgram {
                     }
                 }
                 "cosine_lr" => Some(vec![]),
-                "adamw_step" | "adamw" | "lion_step" | "lion" => {
+                "adamw_step" | "adamw" | "Ω" | "Ω_a" | "lion_step" | "lion" | "Ω_l" => {
                     for a in args {
                         let _ = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
                     }
                     None
+                }
+                "grpo_loss" | "Λ_g" => {
+                    for a in args {
+                        let _ = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                    }
+                    Some(vec![])
                 }
                 "zeros" | "ones" | "O" => {
                     if args.len() == 1 {
@@ -12212,8 +12293,13 @@ pub fn expand_ascii_math_symbols(input: &str) -> String {
         ("\\Phi", "Φ"),
         ("\\rho", "ρ"),
         ("\\Rho", "ρ"),
+        ("\\lambda_g", "Λ_g"),
+        ("\\Lambda_g", "Λ_g"),
         ("\\lambda", "Λ"),
         ("\\Lambda", "Λ"),
+        ("\\Omega_a", "Ω_a"),
+        ("\\Omega_l", "Ω_l"),
+        ("\\Omega", "Ω"),
         ("\\grad", "∇"),
         ("\\nabla", "∇"),
         ("\\delta", "Δ"),
@@ -12364,6 +12450,40 @@ pub fn run_math_repl() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_omega_adamw_and_grpo_reasoning_loss() {
+        let code = r#"
+            W = [[1.0, 2.0], [3.0, 4.0]]
+            G = [[0.1, 0.2], [0.3, 0.4]]
+            M = [[0.0, 0.0], [0.0, 0.0]]
+            V = [[0.0, 0.0], [0.0, 0.0]]
+            (W_next, M_next, V_next) = Ω(W, G, M, V, 1.0, 0.01)
+
+            logp = [-1.2, -0.8, -2.1]
+            ref_logp = [-1.0, -1.0, -2.0]
+            adv = [1.5, -0.5, 0.2]
+            loss = Λ_g(logp, ref_logp, adv, 0.2, 0.04)
+            loss
+        "#;
+        let prog = parse_math_code(code).expect("Failed to parse Ω and Λ_g");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program_value(&prog).expect("Evaluation failed");
+        assert!(res.is_some());
+        if let Some(MathValue::Scalar(l)) = res {
+            assert!(!l.is_nan());
+            assert!(!l.is_infinite());
+        } else {
+            panic!("Expected scalar GRPO loss");
+        }
+
+        let w_next = eval.env.get("W_next").unwrap();
+        if let MathValue::Matrix(mat) = w_next {
+            assert!((mat[0][0] - 0.99).abs() < 0.02);
+        } else {
+            panic!("Expected matrix W_next");
+        }
+    }
 
     #[test]
     fn test_neumaier_kahan_compensated_summation() {
