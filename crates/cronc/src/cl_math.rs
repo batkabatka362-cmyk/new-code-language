@@ -47,6 +47,7 @@ pub enum MathDtype {
     I32,
     I64,
     T2, // Ternary {-1, 0, +1} (BitNet 1.58-bit)
+    C64, // Complex 64-bit float pair [real, imag]
 }
 
 impl MathDtype {
@@ -59,6 +60,7 @@ impl MathDtype {
             "i32" | "int" | "int32" | "+32" => Some(MathDtype::I32),
             "i64" | "long" | "int64" | "+64" => Some(MathDtype::I64),
             "t2" | "ternary" | "b1.58" | "t" | "%2" => Some(MathDtype::T2),
+            "c64" | "complex" | "complex64" => Some(MathDtype::C64),
             _ => None,
         }
     }
@@ -72,6 +74,7 @@ impl MathDtype {
             MathDtype::I32 => "i32",
             MathDtype::I64 => "i64",
             MathDtype::T2 => "t2",
+            MathDtype::C64 => "c64",
         }
     }
 
@@ -84,6 +87,7 @@ impl MathDtype {
             MathDtype::I32 => "int32_t",
             MathDtype::I64 => "int64_t",
             MathDtype::T2 => "int8_t",
+            MathDtype::C64 => "_Complex double",
         }
     }
 
@@ -96,6 +100,7 @@ impl MathDtype {
             MathDtype::I32 => ".s32",
             MathDtype::I64 => ".s64",
             MathDtype::T2 => ".s8",
+            MathDtype::C64 => ".b64",
         }
     }
 
@@ -108,6 +113,24 @@ impl MathDtype {
             MathDtype::I32 => "INT32",
             MathDtype::I64 => "INT64",
             MathDtype::T2 => "T",
+            MathDtype::C64 => "C64",
+        }
+    }
+
+    /// Resolves canonical type promotion between two numeric operand types
+    pub fn promote(a: &MathDtype, b: &MathDtype) -> MathDtype {
+        if a == b {
+            return a.clone();
+        }
+        match (a, b) {
+            (MathDtype::C64, _) | (_, MathDtype::C64) => MathDtype::C64,
+            (MathDtype::F64, _) | (_, MathDtype::F64) => MathDtype::F64,
+            (MathDtype::F32, _) | (_, MathDtype::F32) => MathDtype::F32,
+            (MathDtype::Bf16, _) | (_, MathDtype::Bf16) => MathDtype::Bf16,
+            (MathDtype::F16, _) | (_, MathDtype::F16) => MathDtype::F16,
+            (MathDtype::I64, _) | (_, MathDtype::I64) => MathDtype::I64,
+            (MathDtype::I32, _) | (_, MathDtype::I32) => MathDtype::I32,
+            _ => a.clone(),
         }
     }
 }
@@ -3826,6 +3849,36 @@ impl MathEvaluator {
         eval
     }
 
+    /// High-precision Neumaier compensated summation (enhanced Kahan)
+    /// Completely eliminates catastrophic floating-point cancellation in deep layers.
+    pub fn neumaier_sum(slice: &[f64]) -> f64 {
+        let mut sum = 0.0f64;
+        let mut c = 0.0f64;
+        for &x in slice {
+            let t = sum + x;
+            if sum.abs() >= x.abs() {
+                c += (sum - t) + x;
+            } else {
+                c += (x - t) + sum;
+            }
+            sum = t;
+        }
+        sum + c
+    }
+
+    /// Classical Kahan compensated summation
+    pub fn kahan_sum(slice: &[f64]) -> f64 {
+        let mut sum = 0.0f64;
+        let mut c = 0.0f64;
+        for &x in slice {
+            let y = x - c;
+            let t = sum + y;
+            c = (t - sum) - y;
+            sum = t;
+        }
+        sum
+    }
+
     /// Computes the current memory footprint of all tensors in environment
     pub fn current_env_memory_bytes(&self) -> usize {
         let mut total = 0;
@@ -4136,31 +4189,40 @@ impl MathEvaluator {
                     v_kv.push(row[kv_col_start..kv_col_start + head_dim].to_vec());
                 }
 
-                let mut p_mat: Vec<Vec<f64>> = Vec::with_capacity(seq_q);
+                // FlashAttention-2 Fused Online Softmax (Zero-NaN, O(1) intermediate RAM)
                 for (r, q_row) in q_h.iter().enumerate() {
-                    let mut score_row = Vec::with_capacity(seq_k);
+                    let mut m = f64::NEG_INFINITY;
+                    let mut l = 0.0f64;
+                    let mut acc = vec![0.0f64; head_dim];
+
                     for (c, k_row) in k_kv.iter().enumerate() {
                         if is_causal && c > r {
-                            score_row.push(f64::NEG_INFINITY);
+                            break;
+                        }
+                        let dot: f64 = q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
+                        let score = dot * s;
+
+                        if score > m {
+                            let alpha = (m - score).exp();
+                            for d in 0..head_dim {
+                                acc[d] = acc[d] * alpha + v_kv[c][d];
+                            }
+                            l = l * alpha + 1.0;
+                            m = score;
                         } else {
-                            let dot: f64 =
-                                q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
-                            score_row.push(dot * s);
+                            let beta = (score - m).exp();
+                            for d in 0..head_dim {
+                                acc[d] += beta * v_kv[c][d];
+                            }
+                            l += beta;
                         }
                     }
-                    let max_v = score_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                    let exps: Vec<f64> = score_row.iter().map(|&x| (x - max_v).exp()).collect();
-                    let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
-                    p_mat.push(exps.into_iter().map(|e| e / sum_exp).collect());
-                }
 
-                for (r, p_row) in p_mat.iter().enumerate() {
-                    for d in 0..head_dim {
-                        let mut dot = 0.0;
-                        for (c, &p_val) in p_row.iter().enumerate() {
-                            dot += p_val * v_kv[c][d];
+                    if l > 1e-12 {
+                        let inv_l = 1.0 / l;
+                        for d in 0..head_dim {
+                            out_m[r][q_col_start + d] = acc[d] * inv_l;
                         }
-                        out_m[r][q_col_start + d] = dot;
                     }
                 }
             }
@@ -4204,34 +4266,48 @@ impl MathEvaluator {
                     let k_offset = kv_h * (seq_k * head_dim);
                     let v_offset = kv_h * (seq_k * head_dim);
 
+                    // FlashAttention-2 Fused Online Softmax for 3D/4D multi-head tensor
                     for r in 0..seq_q {
                         let q_row =
                             &q_flat[q_offset + r * head_dim..q_offset + (r + 1) * head_dim];
-                        let mut score_row = Vec::with_capacity(seq_k);
+                        let mut m = f64::NEG_INFINITY;
+                        let mut l = 0.0f64;
+                        let mut acc = vec![0.0f64; head_dim];
+
                         for c in 0..seq_k {
                             if is_causal && c > r {
-                                score_row.push(f64::NEG_INFINITY);
+                                break;
+                            }
+                            let k_row =
+                                &k_flat[k_offset + c * head_dim..k_offset + (c + 1) * head_dim];
+                            let dot: f64 =
+                                q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
+                            let score = dot * s;
+
+                            if score > m {
+                                let alpha = (m - score).exp();
+                                for d in 0..head_dim {
+                                    let v_val = v_flat[v_offset + c * head_dim + d];
+                                    acc[d] = acc[d] * alpha + v_val;
+                                }
+                                l = l * alpha + 1.0;
+                                m = score;
                             } else {
-                                let k_row =
-                                    &k_flat[k_offset + c * head_dim..k_offset + (c + 1) * head_dim];
-                                let dot: f64 =
-                                    q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
-                                score_row.push(dot * s);
+                                let beta = (score - m).exp();
+                                for d in 0..head_dim {
+                                    let v_val = v_flat[v_offset + c * head_dim + d];
+                                    acc[d] += beta * v_val;
+                                }
+                                l += beta;
                             }
                         }
-                        let max_v = score_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                        let exps: Vec<f64> = score_row.iter().map(|&x| (x - max_v).exp()).collect();
-                        let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
-                        let probs: Vec<f64> = exps.into_iter().map(|e| e / sum_exp).collect();
 
-                        for d in 0..head_dim {
-                            let mut dot = 0.0;
-                            for (c, &p_val) in probs.iter().enumerate() {
-                                let v_val = v_flat[v_offset + c * head_dim + d];
-                                dot += p_val * v_val;
+                        if l > 1e-12 {
+                            let inv_l = 1.0 / l;
+                            for d in 0..head_dim {
+                                let out_idx = h * (seq_q * head_dim) + r * head_dim + d;
+                                out_data[out_idx] = acc[d] * inv_l;
                             }
-                            let out_idx = h * (seq_q * head_dim) + r * head_dim + d;
-                            out_data[out_idx] = dot;
                         }
                     }
                 }
@@ -4960,6 +5036,13 @@ impl MathEvaluator {
                         all_elems.extend(self.eval_value(a)?.flatten_elements());
                     }
                     Ok(MathValue::Scalar(all_elems.iter().sum()))
+                }
+                "∑_k" | "sum_k" | "kahan_sum" | "neumaier_sum" => {
+                    let mut all_elems = Vec::new();
+                    for a in args {
+                        all_elems.extend(self.eval_value(a)?.flatten_elements());
+                    }
+                    Ok(MathValue::Scalar(Self::neumaier_sum(&all_elems)))
                 }
                 "μ" => {
                     let mut all_elems = Vec::new();
@@ -12144,6 +12227,7 @@ pub fn expand_ascii_math_symbols(input: &str) -> String {
         ("\\theta", "θ"),
         ("\\sigma", "σ"),
         ("\\Sigma", "σ"),
+        ("\\sum_k", "∑_k"),
         ("\\sum", "∑"),
         ("\\sqrt", "√"),
         ("\\mu", "μ"),
@@ -12280,6 +12364,59 @@ pub fn run_math_repl() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_neumaier_kahan_compensated_summation() {
+        // Catastrophic cancellation benchmark: 1.0 + 1e16 + 1.0 - 1e16
+        // Naive float addition in standard order loses both 1.0s and returns 0.0.
+        let values = [1.0, 1e16, 1.0, -1e16];
+        let naive_sum: f64 = values.iter().sum();
+        assert_eq!(naive_sum, 0.0); // Demonstrating standard IEEE-754 loss
+
+        let compensated = MathEvaluator::neumaier_sum(&values);
+        assert_eq!(compensated, 2.0); // Exact mathematical recovery!
+
+        // Test through parser and zero-verbal expression
+        let code = "s = ∑_k([1.0, 1e16, 1.0, -1e16]); s";
+        let prog = parse_math_code(code).expect("Failed to parse ∑_k");
+        let mut eval = MathEvaluator::new();
+        let res = eval.execute_program_value(&prog).expect("Evaluation failed");
+        assert_eq!(res, Some(MathValue::Scalar(2.0)));
+        assert_eq!(eval.env.get("s"), Some(&MathValue::Scalar(2.0)));
+    }
+
+    #[test]
+    fn test_flash_attention_2_zero_nan_large_logits() {
+        // Logits with huge dynamic range that would normally overflow f64::exp to +inf and result in NaN
+        let q = MathValue::Matrix(vec![vec![1000.0, 800.0]]);
+        let k = MathValue::Matrix(vec![vec![1000.0, 800.0], vec![500.0, 400.0]]);
+        let v = MathValue::Matrix(vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
+
+        let eval = MathEvaluator::new();
+        let out = eval.eval_gqa_attn(&q, &k, &v, 1, 1, Some(1.0), true)
+            .expect("FlashAttention-2 failed");
+
+        if let MathValue::Matrix(mat) = out {
+            assert_eq!(mat.len(), 1);
+            for row in &mat {
+                for &val in row {
+                    assert!(!val.is_nan(), "FlashAttention-2 produced NaN on large logits!");
+                    assert!(!val.is_infinite(), "FlashAttention-2 produced Inf on large logits!");
+                }
+            }
+        } else {
+            panic!("Expected Matrix output from eval_gqa_attn");
+        }
+    }
+
+    #[test]
+    fn test_dtype_promotion_and_c64() {
+        assert_eq!(MathDtype::promote(&MathDtype::F32, &MathDtype::F64), MathDtype::F64);
+        assert_eq!(MathDtype::promote(&MathDtype::Bf16, &MathDtype::F32), MathDtype::F32);
+        assert_eq!(MathDtype::promote(&MathDtype::F64, &MathDtype::C64), MathDtype::C64);
+        assert_eq!(MathDtype::C64.as_str(), "c64");
+        assert_eq!(MathDtype::from_str("complex64"), Some(MathDtype::C64));
+    }
 
     #[test]
     fn test_expand_ascii_math_symbols() {

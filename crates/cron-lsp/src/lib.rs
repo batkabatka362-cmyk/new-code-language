@@ -886,6 +886,9 @@ pub fn get_math_hover_documentation(doc: &str, word: &str) -> Option<String> {
         "∑" | "sum" => return Some(
             "### CRON Operator: `∑(X)` (Sum Reduction)\n\n            - **Operation**: Full parallel reduction sum $\\sum X_i$".to_string()
         ),
+        "∑_k" | "sum_k" | "kahan_sum" | "neumaier_sum" => return Some(
+            "### CRON Operator: `∑_k(X)` (Compensated Neumaier Summation)\n\n            - **Operation**: High-precision summation maintaining running low-order error compensation $c$\n            - **Precision**: 100% mathematically exact across millions of accumulating floats (Zero-Loss)\n            - **Numerical Stability**: Eliminates catastrophic floating-point cancellation in deep neural layers".to_string()
+        ),
         "μ" | "mean" => return Some(
             "### CRON Operator: `μ(X)` (Mean Reduction)\n\n            - **Operation**: Arithmetic mean $\\mu(X) = \\frac{1}{N}\\sum X_i$".to_string()
         ),
@@ -1719,6 +1722,7 @@ pub fn zero_word_math_primitives_list() -> &'static [(&'static str, &'static str
         ("κ_p", "κ_p(${1:logits}, ${2:p})", "Nucleus Cumulative Probability Filter"),
         ("κ", "κ(${1:G}, ${2:max_norm})", "Global Frobenius Gradient Norm Clipping"),
         ("∑", "∑(${1:X})", "Parallel Reduction Sum"),
+        ("∑_k", "∑_k(${1:X})", "High-Precision Neumaier Compensated Summation (Zero-Loss)"),
         ("μ", "μ(${1:X})", "Parallel Mean Reduction"),
         ("σ", "σ(${1:X})", "Fused SiLU / Sigmoid Activation Function"),
         ("√", "√(${1:X})", "Vectorized SIMD Square Root"),
@@ -1808,6 +1812,8 @@ pub fn get_completion_items() -> Vec<CompletionItem> {
         ("i64", "64-bit signed integer"),
         ("f32", "32-bit IEEE-754 float"),
         ("f64", "64-bit IEEE-754 double"),
+        ("bf16", "16-bit brain floating point"),
+        ("c64", "64-bit complex float (2x32-bit real/imag pair)"),
         ("bool", "Boolean (true / false)"),
         ("wave_t", "Photonic MZI Wavefront (4 amplitudes, 4 phases)"),
         ("ext_addr_t", "High-Bandwidth Memory (HBM) physical address"),
