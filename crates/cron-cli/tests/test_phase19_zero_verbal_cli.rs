@@ -69,4 +69,17 @@ fn test_cli_zero_verbal_math_pipeline_and_codegen() {
     assert!(out_graph.status.success());
     let stdout_graph = String::from_utf8_lossy(&out_graph.stdout);
     assert!(stdout_graph.contains("flowchart TD") || stdout_graph.contains("-->"));
+
+    // 6. Test Real Safetensors GQA Transformer Inference
+    let out_infer = Command::new(cron_bin)
+        .current_dir(&root)
+        .args(["math", "examples/safetensors_transformer_inference.cl"])
+        .output()
+        .expect("Failed to execute cron math examples/safetensors_transformer_inference.cl");
+
+    assert!(out_infer.status.success(), "Safetensors inference failed: {:?}", String::from_utf8_lossy(&out_infer.stderr));
+    let stdout_infer = String::from_utf8_lossy(&out_infer.stdout);
+    assert!(stdout_infer.contains("CRON MATHEMATICAL CALCULUS ENGINE"));
+    assert!(stdout_infer.contains("Constants Bound"));
+    assert!(stdout_infer.contains("Evaluation Result"));
 }
