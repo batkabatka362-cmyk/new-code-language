@@ -98,6 +98,7 @@ pub enum MathValue {
         strides: Vec<usize>,
         data: Vec<f64>,
     },
+    Str(String),
 }
 
 impl MathValue {
@@ -249,6 +250,13 @@ impl MathValue {
         }
     }
 
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            MathValue::Str(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
     pub fn map_unary<F: Fn(f64) -> f64>(&self, f: F) -> MathValue {
         self.map_unary_dyn(&f)
     }
@@ -270,6 +278,7 @@ impl MathValue {
                 strides: strides.clone(),
                 data: data.iter().map(|&x| f(x)).collect(),
             },
+            MathValue::Str(_) => self.clone(),
         }
     }
 
@@ -282,12 +291,14 @@ impl MathValue {
             MathValue::Tensor { shape, strides, data } => {
                 Self::get_flattened_strided(shape, strides, data)
             }
+            MathValue::Str(s) => s.as_bytes().iter().map(|&b| b as f64).collect(),
         }
     }
 
     pub fn transpose(&self) -> Result<MathValue, String> {
         match self {
             MathValue::Scalar(s) => Ok(MathValue::Scalar(*s)),
+            MathValue::Str(_) => Ok(self.clone()),
             MathValue::Vector(v) => {
                 let mat: Vec<Vec<f64>> = v.iter().map(|&x| vec![x]).collect();
                 Ok(MathValue::Matrix(mat))
@@ -422,6 +433,15 @@ impl MathValue {
                     Ok(MathValue::Tensor { shape: new_shape, strides: new_strides, data: new_data })
                 }
             }
+            MathValue::Str(s) => {
+                let s_idx = start.min(s.len());
+                let e_idx = end.min(s.len());
+                if s_idx > e_idx {
+                    Ok(MathValue::Str(String::new()))
+                } else {
+                    Ok(MathValue::Str(s[s_idx..e_idx].to_string()))
+                }
+            }
         }
     }
 
@@ -432,6 +452,7 @@ impl MathValue {
             MathValue::Matrix(m) => vec![m.len(), m.first().map(|r| r.len()).unwrap_or(0)],
             MathValue::Tuple(items) => vec![items.len()],
             MathValue::Tensor { shape, .. } => shape.clone(),
+            MathValue::Str(s) => vec![s.len()],
         }
     }
 
@@ -450,11 +471,16 @@ impl MathValue {
                 strides: strides.clone(),
                 data: vec![0.0; data.len()],
             },
+            MathValue::Str(_) => MathValue::Str(String::new()),
         }
     }
 
     pub fn add_accumulate(&mut self, other: &MathValue) -> Result<(), String> {
         match (self, other) {
+            (MathValue::Str(s1), MathValue::Str(s2)) => {
+                s1.push_str(s2);
+                return Ok(());
+            }
             (MathValue::Tuple(t1), MathValue::Tuple(t2)) => {
                 if t1.len() != t2.len() {
                     return Err(format!(
@@ -648,6 +674,7 @@ impl MathValue {
                     })
                 }
             }
+            MathValue::Str(_) => Err("Cannot sum_axis on String value".to_string()),
         }
     }
 }
@@ -689,6 +716,7 @@ impl fmt::Display for MathValue {
                 let parts: Vec<String> = items.iter().map(|i| format!("{}", i)).collect();
                 write!(f, "({})", parts.join(", "))
             }
+            MathValue::Str(s) => write!(f, "\"{}\"", s),
             MathValue::Tensor {
                 shape,
                 strides,
@@ -766,6 +794,7 @@ pub enum MathUnaryOp {
 pub enum MathExpr {
     Num(f64),
     Var(String),
+    Str(String),
     Array(Vec<MathExpr>), // Vector or Matrix literal: [1, 2, 3] or [[1, 2], [3, 4]]
     Tuple(Vec<MathExpr>), // Multi-Weight / Optimizer State Tuple: (W1, b1, W2, b2)
     Index(Box<MathExpr>, Box<MathExpr>), // Tensor / Vector indexing: x[i], W[i][j]
@@ -795,6 +824,7 @@ impl fmt::Display for MathExpr {
         match self {
             MathExpr::Num(n) => write!(f, "{}", n),
             MathExpr::Var(v) => write!(f, "{}", v),
+            MathExpr::Str(s) => write!(f, "\"{}\"", s),
             MathExpr::Array(elems) => {
                 let s: Vec<String> = elems.iter().map(|e| e.to_string()).collect();
                 write!(f, "[{}]", s.join(", "))
@@ -834,6 +864,7 @@ impl MathExpr {
     pub fn substitute(&self, subst: &HashMap<String, MathExpr>) -> MathExpr {
         match self {
             MathExpr::Num(n) => MathExpr::Num(*n),
+            MathExpr::Str(s) => MathExpr::Str(s.clone()),
             MathExpr::Var(v) => subst
                 .get(v)
                 .cloned()
@@ -895,6 +926,7 @@ impl MathExpr {
         match self {
             MathExpr::Num(_)
             | MathExpr::Var(_)
+            | MathExpr::Str(_)
             | MathExpr::Placeholder
             | MathExpr::TensorRef { .. } => self.clone(),
             MathExpr::Array(elems) => MathExpr::Array(
@@ -975,6 +1007,7 @@ impl MathExpr {
     pub fn differentiate(&self, var: &str) -> MathExpr {
         match self {
             MathExpr::Num(_)
+            | MathExpr::Str(_)
             | MathExpr::Placeholder
             | MathExpr::Index(_, _)
             | MathExpr::TensorRef { .. } => MathExpr::Num(0.0),
@@ -1143,6 +1176,7 @@ impl MathExpr {
         match self {
             MathExpr::Num(_)
             | MathExpr::Var(_)
+            | MathExpr::Str(_)
             | MathExpr::Placeholder
             | MathExpr::TensorRef { .. } => false,
             MathExpr::Array(elems) => elems.iter().any(|e| e.is_cse_candidate()),
@@ -1252,7 +1286,7 @@ impl MathExpr {
     /// Collects all referenced variable identifiers
     pub fn collect_free_vars(&self, vars: &mut HashSet<String>) {
         match self {
-            MathExpr::Num(_) | MathExpr::Placeholder | MathExpr::TensorRef { .. } => {}
+            MathExpr::Num(_) | MathExpr::Str(_) | MathExpr::Placeholder | MathExpr::TensorRef { .. } => {}
             MathExpr::Var(v) => {
                 vars.insert(v.clone());
             }
@@ -1304,6 +1338,7 @@ impl MathExpr {
         match self {
             MathExpr::Num(_)
             | MathExpr::Var(_)
+            | MathExpr::Str(_)
             | MathExpr::Placeholder
             | MathExpr::TensorRef { .. } => self.clone(),
             MathExpr::Array(elems) => MathExpr::Array(elems.iter().map(|e| e.simplify()).collect()),
@@ -2386,6 +2421,7 @@ impl MathParser {
     fn parse_primary(&mut self) -> Result<MathExpr, String> {
         let mut base = match self.next_tok() {
             Some(Token::Num(n)) => MathExpr::Num(n),
+            Some(Token::Str(s)) => MathExpr::Str(s),
             Some(Token::Underscore) => MathExpr::Placeholder,
             Some(Token::At) => {
                 if let Some(Token::Str(s)) = self.next_tok() {
@@ -4157,6 +4193,7 @@ impl MathEvaluator {
     pub fn eval_value(&self, expr: &MathExpr) -> Result<MathValue, String> {
         match expr {
             MathExpr::Num(n) => Ok(MathValue::Scalar(*n)),
+            MathExpr::Str(s) => Ok(MathValue::Str(s.clone())),
             MathExpr::TensorRef { path, key } => load_tensor_resource(path, key),
             MathExpr::Var(name) => self
                 .env
@@ -4303,6 +4340,14 @@ impl MathEvaluator {
                             Err("Cannot index into a scalar with index > 0".to_string())
                         }
                     }
+                    MathValue::Str(s) => {
+                        let bytes = s.as_bytes();
+                        if i_num < bytes.len() {
+                            Ok(MathValue::Scalar(bytes[i_num] as f64))
+                        } else {
+                            Err(format!("String index {} out of bounds (len {})", i_num, bytes.len()))
+                        }
+                    }
                 }
             }
             MathExpr::Placeholder => {
@@ -4414,6 +4459,7 @@ impl MathEvaluator {
                             MathValue::new_tensor(shape, out)
                         }
                         MathValue::Tuple(_) => Err("Cannot compute softmax on a Tuple".to_string()),
+                        MathValue::Str(_) => Err("Cannot compute softmax on a String".to_string()),
                     }
                 }
                 "swiglu" => {
@@ -4739,6 +4785,9 @@ impl MathEvaluator {
                         MathValue::Tuple(_) => {
                             Err("Cannot compute rmsnorm on a Tuple".to_string())
                         }
+                        MathValue::Str(_) => {
+                            Err("Cannot compute rmsnorm on a String".to_string())
+                        }
                     }
                 }
                 "rope" => {
@@ -4799,6 +4848,7 @@ impl MathEvaluator {
                             MathValue::new_tensor(shape, out)
                         }
                         MathValue::Tuple(_) => Err("Cannot compute rope on a Tuple".to_string()),
+                        MathValue::Str(_) => Err("Cannot compute rope on a String".to_string()),
                     }
                 }
                 "mean" | "sum" => {
@@ -5120,6 +5170,9 @@ impl MathEvaluator {
                         MathValue::Tuple(_) => {
                             Err("Cannot compute argmax/argmin on a Tuple".to_string())
                         }
+                        MathValue::Str(_) => {
+                            Err("Cannot compute argmax/argmin on a String".to_string())
+                        }
                     }
                 }
                 "concat" => {
@@ -5167,6 +5220,269 @@ impl MathEvaluator {
                         }
                         _ => Err("Unsupported operand types for 'concat'".to_string()),
                     }
+                }
+                "encode" => {
+                    if args.is_empty() {
+                        return Err("'encode(text)' expects 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    match val {
+                        MathValue::Str(s) => {
+                            let bytes: Vec<f64> = s.as_bytes().iter().map(|&b| b as f64).collect();
+                            Ok(MathValue::Vector(bytes))
+                        }
+                        _ => Err("'encode' expects a string argument".to_string()),
+                    }
+                }
+                "decode" => {
+                    if args.is_empty() {
+                        return Err("'decode(tokens)' expects 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let bytes: Vec<u8> = val
+                        .flatten_elements()
+                        .iter()
+                        .map(|&x| x as u8)
+                        .collect();
+                    let s = String::from_utf8_lossy(&bytes).into_owned();
+                    Ok(MathValue::Str(s))
+                }
+                "top_k" => {
+                    if args.len() < 2 {
+                        return Err("'top_k(logits, k)' expects 2 arguments".to_string());
+                    }
+                    let logits = self.eval_value(&args[0])?;
+                    let k = self.eval_value(&args[1])?.as_scalar().ok_or_else(|| "k must be a scalar number".to_string())? as usize;
+                    let k = k.max(1);
+                    let filter_top_k = |row: &[f64]| -> Vec<f64> {
+                        if k >= row.len() {
+                            return row.to_vec();
+                        }
+                        let mut indexed: Vec<(usize, f64)> = row.iter().copied().enumerate().collect();
+                        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                        let cutoff = indexed[k - 1].1;
+                        row.iter().map(|&v| if v >= cutoff { v } else { f64::NEG_INFINITY }).collect()
+                    };
+                    match logits {
+                        MathValue::Vector(v) => Ok(MathValue::Vector(filter_top_k(&v))),
+                        MathValue::Matrix(m) => {
+                            let res = m.iter().map(|row| filter_top_k(row)).collect();
+                            Ok(MathValue::Matrix(res))
+                        }
+                        _ => Err("'top_k' expects a Vector or Matrix of logits".to_string()),
+                    }
+                }
+                "top_p" => {
+                    if args.len() < 2 {
+                        return Err("'top_p(logits, p)' expects 2 arguments".to_string());
+                    }
+                    let logits = self.eval_value(&args[0])?;
+                    let p = self.eval_value(&args[1])?.as_scalar().ok_or_else(|| "p must be a scalar number".to_string())?;
+                    let filter_top_p = |row: &[f64]| -> Vec<f64> {
+                        let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let exps: Vec<f64> = row.iter().map(|&x| (x - max_v).exp()).collect();
+                        let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                        let probs: Vec<f64> = exps.iter().map(|&e| e / sum_exp).collect();
+
+                        let mut indexed: Vec<(usize, f64, f64)> = (0..row.len()).map(|i| (i, row[i], probs[i])).collect();
+                        indexed.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+                        let mut cum_p = 0.0;
+                        let mut keep_indices = std::collections::HashSet::new();
+                        for &(idx, _, prob) in &indexed {
+                            keep_indices.insert(idx);
+                            cum_p += prob;
+                            if cum_p >= p && !keep_indices.is_empty() {
+                                break;
+                            }
+                        }
+                        row.iter().enumerate().map(|(i, &v)| if keep_indices.contains(&i) { v } else { f64::NEG_INFINITY }).collect()
+                    };
+                    match logits {
+                        MathValue::Vector(v) => Ok(MathValue::Vector(filter_top_p(&v))),
+                        MathValue::Matrix(m) => {
+                            let res = m.iter().map(|row| filter_top_p(row)).collect();
+                            Ok(MathValue::Matrix(res))
+                        }
+                        _ => Err("'top_p' expects a Vector or Matrix of logits".to_string()),
+                    }
+                }
+                "sample" => {
+                    if args.is_empty() {
+                        return Err("'sample(logits, [temp, top_p, seed])' expects at least 1 argument".to_string());
+                    }
+                    let logits_val = self.eval_value(&args[0])?;
+                    let temp = if args.len() > 1 {
+                        self.eval_value(&args[1])?.as_scalar().unwrap_or(1.0)
+                    } else {
+                        1.0
+                    };
+                    let top_p_thresh = if args.len() > 2 {
+                        self.eval_value(&args[2])?.as_scalar().unwrap_or(1.0)
+                    } else {
+                        1.0
+                    };
+                    let seed = if args.len() > 3 {
+                        self.eval_value(&args[3])?.as_scalar().unwrap_or(42.0) as u64
+                    } else {
+                        42u64
+                    };
+
+                    let sample_row = |row: &[f64], s_seed: u64| -> f64 {
+                        let t = temp.max(1e-5);
+                        let scaled: Vec<f64> = row.iter().map(|&x| x / t).collect();
+                        let max_v = scaled.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let exps: Vec<f64> = scaled.iter().map(|&x| (x - max_v).exp()).collect();
+                        let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                        let probs: Vec<f64> = exps.iter().map(|&e| e / sum_exp).collect();
+
+                        let mut indexed: Vec<(usize, f64)> = probs.iter().copied().enumerate().collect();
+                        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                        let mut cum_p = 0.0;
+                        let mut filtered_indices = Vec::new();
+                        let mut filtered_probs = Vec::new();
+                        for &(idx, prob) in &indexed {
+                            filtered_indices.push(idx);
+                            filtered_probs.push(prob);
+                            cum_p += prob;
+                            if cum_p >= top_p_thresh && !filtered_indices.is_empty() {
+                                break;
+                            }
+                        }
+
+                        let p_sum: f64 = filtered_probs.iter().sum::<f64>().max(1e-12);
+                        let rng_state = s_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                        let u = ((rng_state >> 11) as f64) / (9007199254740992.0_f64);
+                        let target = u * p_sum;
+
+                        let mut acc = 0.0;
+                        for (&idx, &prob) in filtered_indices.iter().zip(filtered_probs.iter()) {
+                            acc += prob;
+                            if acc >= target {
+                                return idx as f64;
+                            }
+                        }
+                        filtered_indices.last().copied().unwrap_or(0) as f64
+                    };
+
+                    match logits_val {
+                        MathValue::Vector(v) => Ok(MathValue::Scalar(sample_row(&v, seed))),
+                        MathValue::Matrix(m) => {
+                            let mut samples = Vec::with_capacity(m.len());
+                            for (r_idx, row) in m.iter().enumerate() {
+                                samples.push(sample_row(row, seed.wrapping_add(r_idx as u64 * 31)));
+                            }
+                            Ok(MathValue::Vector(samples))
+                        }
+                        _ => Err("'sample' expects a Vector or Matrix of logits".to_string()),
+                    }
+                }
+                "kv_cache_attn" => {
+                    if args.len() < 5 {
+                        return Err("'kv_cache_attn(q, k_new, v_new, k_cache, v_cache, [scale])' expects at least 5 arguments".to_string());
+                    }
+                    let q_val = self.eval_value(&args[0])?;
+                    let k_new_val = self.eval_value(&args[1])?;
+                    let v_new_val = self.eval_value(&args[2])?;
+                    let k_cache_val = self.eval_value(&args[3])?;
+                    let v_cache_val = self.eval_value(&args[4])?;
+                    let scale_opt = if args.len() > 5 {
+                        Some(self.eval_value(&args[5])?.as_scalar().unwrap_or(1.0))
+                    } else {
+                        None
+                    };
+
+                    let append_cache = |new_val: &MathValue, cache_val: &MathValue| -> Result<MathValue, String> {
+                        match (cache_val, new_val) {
+                            (MathValue::Matrix(c), MathValue::Matrix(n)) => {
+                                let mut updated = c.clone();
+                                updated.extend(n.clone());
+                                Ok(MathValue::Matrix(updated))
+                            }
+                            (MathValue::Matrix(c), MathValue::Vector(v)) => {
+                                let mut updated = c.clone();
+                                updated.push(v.clone());
+                                Ok(MathValue::Matrix(updated))
+                            }
+                            (MathValue::Vector(c), MathValue::Vector(n)) => {
+                                if c.is_empty() {
+                                    Ok(MathValue::Matrix(vec![n.clone()]))
+                                } else {
+                                    Ok(MathValue::Matrix(vec![c.clone(), n.clone()]))
+                                }
+                            }
+                            (MathValue::Vector(c), MathValue::Scalar(s)) => {
+                                let mut updated = c.clone();
+                                updated.push(*s);
+                                Ok(MathValue::Vector(updated))
+                            }
+                            _ => Err(format!(
+                                "Incompatible KV cache and new token tensor types: cache {:?}, new {:?}",
+                                cache_val.shape(),
+                                new_val.shape()
+                            )),
+                        }
+                    };
+
+                    let updated_k = append_cache(&k_new_val, &k_cache_val)?;
+                    let updated_v = append_cache(&v_new_val, &v_cache_val)?;
+
+                    let (q_rows, head_dim) = match &q_val {
+                        MathValue::Vector(v) => (vec![v.clone()], v.len()),
+                        MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+                        _ => return Err("Q in kv_cache_attn must be Vector or Matrix".to_string()),
+                    };
+
+                    let (k_rows, k_dim) = match &updated_k {
+                        MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+                        MathValue::Vector(v) => (vec![v.clone()], v.len()),
+                        _ => return Err("K_cache in kv_cache_attn must be Matrix or Vector".to_string()),
+                    };
+
+                    let (v_rows, v_dim) = match &updated_v {
+                        MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+                        MathValue::Vector(v) => (vec![v.clone()], v.len()),
+                        _ => return Err("V_cache in kv_cache_attn must be Matrix or Vector".to_string()),
+                    };
+
+                    if head_dim != k_dim || k_rows.len() != v_rows.len() {
+                        return Err(format!(
+                            "Dimension mismatch in kv_cache_attn: Q dim {}, K dim {}, K rows {}, V rows {}",
+                            head_dim, k_dim, k_rows.len(), v_rows.len()
+                        ));
+                    }
+
+                    let s = scale_opt.unwrap_or(1.0 / (head_dim as f64).sqrt().max(1e-6));
+                    let mut out_rows = Vec::with_capacity(q_rows.len());
+
+                    for q_row in &q_rows {
+                        let mut score_row = Vec::with_capacity(k_rows.len());
+                        for k_row in &k_rows {
+                            let dot: f64 = q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
+                            score_row.push(dot * s);
+                        }
+                        let max_v = score_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let exps: Vec<f64> = score_row.iter().map(|&x| (x - max_v).exp()).collect();
+                        let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
+                        let probs: Vec<f64> = exps.into_iter().map(|e| e / sum_exp).collect();
+
+                        let mut out_vec = vec![0.0; v_dim];
+                        for (c, &p_val) in probs.iter().enumerate() {
+                            for d in 0..v_dim {
+                                out_vec[d] += p_val * v_rows[c][d];
+                            }
+                        }
+                        out_rows.push(out_vec);
+                    }
+
+                    let out_val = if matches!(q_val, MathValue::Vector(_)) && out_rows.len() == 1 {
+                        MathValue::Vector(out_rows.pop().unwrap())
+                    } else {
+                        MathValue::Matrix(out_rows)
+                    };
+
+                    Ok(MathValue::Tuple(vec![out_val, updated_k, updated_v]))
                 }
                 "embed" => {
                     if args.len() < 2 {
@@ -5243,6 +5559,9 @@ impl MathEvaluator {
                         }
                         MathValue::Tuple(_) => {
                             Err("Cannot compute log_softmax on a Tuple".to_string())
+                        }
+                        MathValue::Str(_) => {
+                            Err("Cannot compute log_softmax on a String".to_string())
                         }
                     }
                 }
@@ -5620,6 +5939,9 @@ impl MathEvaluator {
                             }
                             MathValue::Tuple(_) => {
                                 return Err("Cannot compute scalar grad directly wrt a Tuple variable".to_string());
+                            }
+                            MathValue::Str(_) => {
+                                return Err("Cannot compute grad wrt a String variable".to_string());
                             }
                         }
                     } else {
@@ -6508,6 +6830,7 @@ impl MathEvaluator {
             MathValue::Tuple(items) => {
                 MathValue::Tuple(items.iter().map(|_| MathValue::Scalar(1.0)).collect())
             }
+            MathValue::Str(_) => MathValue::Scalar(1.0),
             MathValue::Tensor { shape, .. } => {
                 let total: usize = shape.iter().product();
                 MathValue::Tensor {
@@ -7037,6 +7360,27 @@ impl MathProgram {
                                 env.insert(name.clone(), shape);
                             }
                         }
+                    } else if let MathExpr::Call(ref fn_name, ref args) = expr {
+                        if fn_name == "kv_cache_attn" && args.len() >= 5 {
+                            let q_s = Self::infer_shape_expr(&args[0], &env, &fns, &mut errors, Some("kv_cache_attn"));
+                            let k_s = Self::infer_shape_expr(&args[3], &env, &fns, &mut errors, Some("kv_cache_attn"));
+                            let v_s = Self::infer_shape_expr(&args[4], &env, &fns, &mut errors, Some("kv_cache_attn"));
+                            if let Some(ref name0) = names.get(0) {
+                                if let Some(ref s) = q_s {
+                                    env.insert((*name0).clone(), s.clone());
+                                }
+                            }
+                            if let Some(ref name1) = names.get(1) {
+                                if let Some(ref s) = k_s {
+                                    env.insert((*name1).clone(), s.clone());
+                                }
+                            }
+                            if let Some(ref name2) = names.get(2) {
+                                if let Some(ref s) = v_s {
+                                    env.insert((*name2).clone(), s.clone());
+                                }
+                            }
+                        }
                     }
                 }
                 _ => {}
@@ -7103,6 +7447,27 @@ impl MathProgram {
                             );
                             if let Some(shape) = shape_opt {
                                 global_env.insert(name.clone(), shape);
+                            }
+                        }
+                    } else if let MathExpr::Call(ref fn_name, ref args) = expr {
+                        if fn_name == "kv_cache_attn" && args.len() >= 5 {
+                            let q_s = Self::infer_shape_expr(&args[0], &global_env, &fns, &mut errors, Some("kv_cache_attn"));
+                            let k_s = Self::infer_shape_expr(&args[3], &global_env, &fns, &mut errors, Some("kv_cache_attn"));
+                            let v_s = Self::infer_shape_expr(&args[4], &global_env, &fns, &mut errors, Some("kv_cache_attn"));
+                            if let Some(ref name0) = names.get(0) {
+                                if let Some(ref s) = q_s {
+                                    global_env.insert((*name0).clone(), s.clone());
+                                }
+                            }
+                            if let Some(ref name1) = names.get(1) {
+                                if let Some(ref s) = k_s {
+                                    global_env.insert((*name1).clone(), s.clone());
+                                }
+                            }
+                            if let Some(ref name2) = names.get(2) {
+                                if let Some(ref s) = v_s {
+                                    global_env.insert((*name2).clone(), s.clone());
+                                }
                             }
                         }
                     } else {
@@ -7213,6 +7578,7 @@ impl MathProgram {
                         }
                         MathValue::Tensor { shape, .. } => Some(shape),
                         MathValue::Tuple(_) => None,
+                        MathValue::Str(s) => Some(vec![s.len()]),
                     }
                 } else {
                     None
@@ -7764,6 +8130,56 @@ impl MathProgram {
                         Some(vec![])
                     }
                 }
+                "encode" => {
+                    if let Some(arg) = args.first() {
+                        Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
+                    } else {
+                        None
+                    }
+                }
+                "decode" => {
+                    if let Some(arg) = args.first() {
+                        Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
+                    } else {
+                        None
+                    }
+                }
+                "top_k" | "top_p" => {
+                    if let Some(arg) = args.first() {
+                        Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
+                    } else {
+                        None
+                    }
+                }
+                "sample" => {
+                    if let Some(arg) = args.first() {
+                        if let Some(s) = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx) {
+                            if s.len() == 1 {
+                                Some(vec![])
+                            } else if s.len() == 2 {
+                                Some(vec![s[0]])
+                            } else {
+                                Some(vec![])
+                            }
+                        } else {
+                            Some(vec![])
+                        }
+                    } else {
+                        None
+                    }
+                }
+                "kv_cache_attn" => {
+                    if args.len() >= 5 {
+                        let q_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let _k_new_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        let _v_new_s = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        let _k_cache_s = Self::infer_shape_expr(&args[3], env, fn_sigs, errors, ctx);
+                        let _v_cache_s = Self::infer_shape_expr(&args[4], env, fn_sigs, errors, ctx);
+                        q_s
+                    } else {
+                        None
+                    }
+                }
                 "embed" => {
                     if args.len() >= 2 {
                         let table_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
@@ -8230,6 +8646,7 @@ impl MathProgram {
                 Self::infer_shape_expr(&curr, env, fn_sigs, errors, ctx)
             }
             MathExpr::Placeholder => None,
+            MathExpr::Str(s) => Some(vec![s.len()]),
         }
     }
 
@@ -8357,6 +8774,7 @@ impl MathProgram {
     fn expr_to_c23(expr: &MathExpr) -> String {
         match expr {
             MathExpr::Num(n) => format!("{:.6}f", n),
+            MathExpr::Str(s) => format!("\"{}\"", s),
             MathExpr::Var(v) => v.clone(),
             MathExpr::Array(elems) => {
                 let s: Vec<String> = elems.iter().map(Self::expr_to_c23).collect();
@@ -10056,6 +10474,15 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                     .flat_map(|&x| (x as f32).to_le_bytes())
                     .collect();
                 new_tensors.push((name, shape.clone(), bytes));
+            }
+            MathValue::Str(s) => {
+                let name = if key.is_empty() {
+                    "text".to_string()
+                } else {
+                    key.to_string()
+                };
+                let bytes: Vec<u8> = s.as_bytes().iter().flat_map(|&b| (b as f32).to_le_bytes()).collect();
+                new_tensors.push((name, vec![s.len()], bytes));
             }
         }
 
@@ -12251,5 +12678,118 @@ mod tests {
         let c23_code = prog.to_c23_executable();
         assert!(c23_code.contains("Static Liveness Arena Memory Plan"), "Expected arena planning comment in C23");
         assert!(c23_code.contains("[arena] Static memory planning"), "Expected arena planning print in C23");
+    }
+
+    #[test]
+    fn test_phase10_tokenizer_encode_decode() {
+        let code = r#"
+            text = "CRON AI SILICON"
+            tokens = encode(text)
+            reconstructed = decode(tokens)
+        "#;
+        let prog = parse_math_code(code).expect("Parse tokenizer test failed");
+        assert!(prog.verify_shapes().is_ok());
+
+        let mut eval = MathEvaluator::new();
+        let _ = eval.execute_program(&prog).expect("Eval tokenizer failed");
+
+        let tok_val = eval.env.get("tokens").expect("tokens");
+        if let MathValue::Vector(v) = tok_val {
+            assert_eq!(v.len(), 15);
+            assert_eq!(v[0], 'C' as u8 as f64);
+            assert_eq!(v[1], 'R' as u8 as f64);
+        } else {
+            panic!("Expected Vector of token IDs");
+        }
+
+        let rec_val = eval.env.get("reconstructed").expect("reconstructed");
+        if let MathValue::Str(s) = rec_val {
+            assert_eq!(s, "CRON AI SILICON");
+        } else {
+            panic!("Expected String value for reconstructed");
+        }
+    }
+
+    #[test]
+    fn test_phase10_sampling_top_k_top_p_sample() {
+        let code = r#"
+            logits = [2.0, 10.0, 1.0, 8.0, 0.5]
+            filtered_k = top_k(logits, 2)
+            filtered_p = top_p(logits, 0.9)
+            sampled_token = sample(logits, 0.8, 0.9, 12345)
+        "#;
+        let prog = parse_math_code(code).expect("Parse sampling test failed");
+        assert!(prog.verify_shapes().is_ok());
+
+        let mut eval = MathEvaluator::new();
+        let _ = eval.execute_program(&prog).expect("Eval sampling failed");
+
+        // top_k with k=2: only 10.0 and 8.0 remain, others NEG_INFINITY
+        if let MathValue::Vector(v) = eval.env.get("filtered_k").expect("filtered_k") {
+            assert_eq!(v[1], 10.0);
+            assert_eq!(v[3], 8.0);
+            assert!(v[0].is_infinite() && v[0].is_sign_negative());
+            assert!(v[2].is_infinite() && v[2].is_sign_negative());
+        } else {
+            panic!("Expected Vector for filtered_k");
+        }
+
+        // sample returns scalar token index (most likely index 1 since logits[1] is 10.0)
+        if let MathValue::Scalar(tok) = eval.env.get("sampled_token").expect("sampled_token") {
+            assert_eq!(*tok, 1.0);
+        } else {
+            panic!("Expected Scalar for sampled_token");
+        }
+    }
+
+    #[test]
+    fn test_phase10_streaming_kv_cache_attention() {
+        let code = r#"
+            // Initial cached history: 2 tokens, head_dim = 4
+            K_cache = [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 1.0, 0.0]]
+            V_cache = [[0.5, 0.2, 0.1, 0.9], [0.1, 0.8, 0.4, 0.3]]
+
+            // New incoming streaming token (step t):
+            q_t = [1.0, 0.0, 0.0, 1.0]
+            k_t = [0.0, 0.0, 1.0, 1.0]
+            v_t = [0.7, 0.3, 0.2, 0.6]
+
+            // KV-Cache Attention with Tuple Unpacking
+            (out_t, K_cache_next, V_cache_next) = kv_cache_attn(q_t, k_t, v_t, K_cache, V_cache, 0.5)
+        "#;
+        let prog = parse_math_code(code).expect("Parse KV-cache attention failed");
+        assert!(prog.verify_shapes().is_ok());
+
+        let mut eval = MathEvaluator::new();
+        let _ = eval.execute_program(&prog).expect("Eval KV-cache attention failed");
+
+        // K_cache_next must now contain 3 tokens (2 old + 1 new)
+        let k_next = eval.env.get("K_cache_next").expect("K_cache_next");
+        if let MathValue::Matrix(m) = k_next {
+            assert_eq!(m.len(), 3);
+            assert_eq!(m[2], vec![0.0, 0.0, 1.0, 1.0]);
+        } else {
+            panic!("Expected Matrix for K_cache_next");
+        }
+
+        // V_cache_next must now contain 3 tokens
+        let v_next = eval.env.get("V_cache_next").expect("V_cache_next");
+        if let MathValue::Matrix(m) = v_next {
+            assert_eq!(m.len(), 3);
+            assert_eq!(m[2], vec![0.7, 0.3, 0.2, 0.6]);
+        } else {
+            panic!("Expected Matrix for V_cache_next");
+        }
+
+        // out_t must be a 1D vector of length 4 (head_dim)
+        let out_t = eval.env.get("out_t").expect("out_t");
+        if let MathValue::Vector(v) = out_t {
+            assert_eq!(v.len(), 4);
+            for val in v {
+                assert!(val.is_finite());
+            }
+        } else {
+            panic!("Expected Vector for out_t");
+        }
     }
 }
