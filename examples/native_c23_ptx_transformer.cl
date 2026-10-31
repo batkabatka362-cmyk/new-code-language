@@ -43,4 +43,4 @@ Output = H1 + FFN
 W_trained = I(4) -> Δ^50
 
 // 6. Safetensors экспорт
-Output >> "c23_ptx_output.safetensors:final_output"
+Output >> "examples/artifacts/c23_ptx_output.safetensors:final_output"

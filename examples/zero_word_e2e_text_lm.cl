@@ -81,10 +81,10 @@ out_tokens = [next_token]
 s_generated = δ(out_tokens)
 
 // [10] Safetensors Checkpoint Экспорт
-W_head_opt >> "zero_word_e2e_lm.safetensors:W_head"
-K_stream >> "zero_word_e2e_lm.safetensors:K_cache"
-V_stream >> "zero_word_e2e_lm.safetensors:V_cache"
-out_tokens >> "zero_word_e2e_lm.safetensors:tokens"
+W_head_opt >> "examples/artifacts/zero_word_e2e_lm.safetensors:W_head"
+K_stream >> "examples/artifacts/zero_word_e2e_lm.safetensors:K_cache"
+V_stream >> "examples/artifacts/zero_word_e2e_lm.safetensors:V_cache"
+out_tokens >> "examples/artifacts/zero_word_e2e_lm.safetensors:tokens"
 
 s_generated
 

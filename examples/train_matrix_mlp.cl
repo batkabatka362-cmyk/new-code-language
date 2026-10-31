@@ -22,7 +22,7 @@ W_0 = O(2, 2)
 W_opt = W_0 -> Δ^150
 
 // 6. Сургагдсан матрицын жинг Safetensors руу шууд хадгалах
-W_opt >> "trained_matrix_mlp.safetensors:W"
+W_opt >> "examples/artifacts/trained_matrix_mlp.safetensors:W"
 
 // Эцсийн Loss утгыг буцаах
 L(W_opt)

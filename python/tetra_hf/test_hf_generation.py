@@ -40,8 +40,8 @@ def main():
         vocab_size=131072,
         d_model=8192,
         num_hidden_layers=80,
-        lib_path="./libtetra_engine.dll" if sys.platform == "win32" else "./libtetra_engine.so",
-        model_bin_path="tetra_1t_foundation.bin"
+        lib_path="./bin/tetra/libtetra_engine.dll" if sys.platform == "win32" else "./bin/tetra/libtetra_engine.so",
+        model_bin_path="models/tetra/tetra_1t_foundation.bin"
     )
 
     # 2. Tokenizer болон Model үүсгэх

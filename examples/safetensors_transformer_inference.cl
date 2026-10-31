@@ -57,9 +57,9 @@ out_seq = [next_tok]
 s_out = δ(out_seq)
 
 // [10] Загварын төлөвийг экспортлох
-H_final >> "safetensors_inference_state.safetensors:H_final"
-Z_logits >> "safetensors_inference_state.safetensors:Z_logits"
-out_seq >> "safetensors_inference_state.safetensors:next_token"
+H_final >> "examples/artifacts/safetensors_inference_state.safetensors:H_final"
+Z_logits >> "examples/artifacts/safetensors_inference_state.safetensors:Z_logits"
+out_seq >> "examples/artifacts/safetensors_inference_state.safetensors:next_token"
 
 s_out
 

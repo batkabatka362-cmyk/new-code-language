@@ -48,6 +48,10 @@ class TextStreamer:
 class AutoModelForCausalLM:
     """Hugging Face API нийцтэй Тетраэдр 1.03-бит инференс загвар"""
     def __init__(self, model_bin_path: str = "tetra_1t_foundation.bin"):
+        if not os.path.exists(model_bin_path):
+            alt = os.path.join("models", "tetra", os.path.basename(model_bin_path))
+            if os.path.exists(alt):
+                model_bin_path = alt
         self.engine = TetraLLM(model_path=model_bin_path)
 
     @classmethod

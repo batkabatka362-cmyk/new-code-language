@@ -29,11 +29,18 @@ class TetraForCausalLM(PreTrainedModel, GenerationMixin):
         lib_path = self.config.lib_path
         abs_lib_path = os.path.abspath(lib_path)
         if not os.path.exists(abs_lib_path):
-            # Fallback check in current directory
-            alt = os.path.abspath("libtetra_engine.dll" if sys.platform == "win32" else "libtetra_engine.so")
-            if os.path.exists(alt):
-                abs_lib_path = alt
-            else:
+            candidates = [
+                os.path.abspath("libtetra_engine.dll" if sys.platform == "win32" else "libtetra_engine.so"),
+                os.path.abspath(os.path.join("bin", "tetra", "libtetra_engine.dll" if sys.platform == "win32" else "libtetra_engine.so")),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin", "tetra", "libtetra_engine.dll" if sys.platform == "win32" else "libtetra_engine.so")),
+            ]
+            found = False
+            for cand in candidates:
+                if os.path.exists(cand):
+                    abs_lib_path = cand
+                    found = True
+                    break
+            if not found:
                 raise FileNotFoundError(f"[!] Динамик сан олдсонгүй: {abs_lib_path}")
 
         if sys.platform == "win32":
@@ -50,7 +57,19 @@ class TetraForCausalLM(PreTrainedModel, GenerationMixin):
         self._lib.tetra_destroy_engine.argtypes = [ctypes.POINTER(TetraEngineHandle)]
         self._lib.tetra_destroy_engine.restype = None
 
-        model_path_bytes = self.config.model_bin_path.encode('utf-8')
+        m_path = self.config.model_bin_path
+        if not os.path.exists(m_path):
+            m_candidates = [
+                os.path.abspath(m_path),
+                os.path.abspath(os.path.join("models", "tetra", os.path.basename(m_path))),
+                os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "tetra", os.path.basename(m_path))),
+            ]
+            for cand in m_candidates:
+                if os.path.exists(cand):
+                    m_path = cand
+                    break
+
+        model_path_bytes = m_path.encode('utf-8')
         self._handle = self._lib.tetra_create_engine(model_path_bytes)
         if not self._handle:
             raise RuntimeError("[!] 1T Тетраэдр загварыг санах ойд холбоход алдаа гарлаа!")
