@@ -2749,6 +2749,9 @@ fn main() {
                 if let Err(sym_errors) = prog.verify_symbolic_shapes() {
                     return Err(format!("Symbolic shape verification failed:\n  {}", sym_errors.join("\n  ")));
                 }
+                if let Err(zv_errors) = prog.verify_zero_verbal_constitution() {
+                    return Err(format!("Zero-Verbal Constitution check failed:\n  {}", zv_errors.join("\n  ")));
+                }
                 if do_opt {
                     prog = prog.optimize_tensor_graph();
                 }

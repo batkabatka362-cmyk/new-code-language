@@ -10377,6 +10377,37 @@ impl MathProgram {
         }
     }
 
+    /// Verifies strict compliance with the Zero-Verbal Constitution:
+    /// Rejects non-canonical procedural variable soups (e.g. H_0, H_norm, Attn_out, Z_logits, etc.)
+    /// enforcing pure mathematical functional composition form.
+    pub fn verify_zero_verbal_constitution(&self) -> Result<(), Vec<String>> {
+        let banned_procedural = [
+            "H_0", "H_norm", "H_norm1", "H_norm2", "Attn_out", "Q_proj", "K_proj", "V_proj",
+            "H_attn", "H_mlp", "H_bit", "H_layer", "Z_logits", "Z_last", "tok", "out",
+            "prompt", "tokens", "s_prompt", "t_prompt", "s_out", "out_seq", "s_generated", "next_tok", "next_token"
+        ];
+
+        let mut errors = Vec::new();
+        for item in &self.items {
+            if let MathItem::Binding { name, .. } = item {
+                for banned in &banned_procedural {
+                    if name.eq_ignore_ascii_case(banned) {
+                        errors.push(format!(
+                            "Zero-Verbal Constitution violation [E0042]: Procedural variable '{}' is rejected. Express transformations using canonical functional composition L(X) = F(X) + S(...).",
+                            name
+                        ));
+                    }
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     /// Compiles standard math program directly to a native binary using the host C compiler
     pub fn compile_to_native(&self, output_path: &str, opt_level: &str) -> Result<(), String> {
         let is_lib = output_path.ends_with(".dll")
