@@ -2782,19 +2782,29 @@ fn main() {
                     } else if emit_vliw {
                         println!("{}", prog.to_vliw());
                     } else if compare_profiles {
-                        let prog_max = prog.transform_for_profile(cronc::CompilationProfile::MaxQuality);
-                        let mut eval_max = cronc::MathEvaluator::with_profile(cronc::CompilationProfile::MaxQuality);
-                        let t0 = std::time::Instant::now();
-                        let res_max = eval_max.execute_program_value(&prog_max);
-                        let max_dur = t0.elapsed();
-                        let max_mem = eval_max.peak_memory_bytes.max(eval_max.current_env_memory_bytes());
+                        let runner = std::thread::Builder::new()
+                            .name("cron-math-compare".to_string())
+                            .stack_size(32 * 1024 * 1024)
+                            .spawn(move || {
+                                let prog_max = prog.transform_for_profile(cronc::CompilationProfile::MaxQuality);
+                                let mut eval_max = cronc::MathEvaluator::with_profile(cronc::CompilationProfile::MaxQuality);
+                                let t0 = std::time::Instant::now();
+                                let res_max = eval_max.execute_program_value(&prog_max);
+                                let max_dur = t0.elapsed();
+                                let max_mem = eval_max.peak_memory_bytes.max(eval_max.current_env_memory_bytes());
 
-                        let prog_min = prog.transform_for_profile(cronc::CompilationProfile::MinResource);
-                        let mut eval_min = cronc::MathEvaluator::with_profile(cronc::CompilationProfile::MinResource);
-                        let t1 = std::time::Instant::now();
-                        let res_min = eval_min.execute_program_value(&prog_min);
-                        let min_dur = t1.elapsed();
-                        let min_mem = eval_min.peak_memory_bytes.max(eval_min.current_env_memory_bytes());
+                                let prog_min = prog.transform_for_profile(cronc::CompilationProfile::MinResource);
+                                let mut eval_min = cronc::MathEvaluator::with_profile(cronc::CompilationProfile::MinResource);
+                                let t1 = std::time::Instant::now();
+                                let res_min = eval_min.execute_program_value(&prog_min);
+                                let min_dur = t1.elapsed();
+                                let min_mem = eval_min.peak_memory_bytes.max(eval_min.current_env_memory_bytes());
+
+                                (res_max, max_dur, max_mem, res_min, min_dur, min_mem)
+                            })
+                            .expect("Failed to spawn math compare thread");
+
+                        let (res_max, max_dur, max_mem, res_min, min_dur, min_mem) = runner.join().expect("Math compare thread panicked");
 
                         let max_dur_us = max_dur.as_micros().max(1);
                         let min_dur_us = min_dur.as_micros().max(1);
@@ -2820,12 +2830,23 @@ fn main() {
                         }
                     } else {
                         let target_prog = prog.transform_for_profile(profile);
-                        let mut eval = cronc::MathEvaluator::with_profile(profile);
-                        match eval.execute_program_value(&target_prog) {
+                        let runner = std::thread::Builder::new()
+                            .name("cron-math-runner".to_string())
+                            .stack_size(32 * 1024 * 1024)
+                            .spawn(move || {
+                                let mut eval = cronc::MathEvaluator::with_profile(profile);
+                                let res = eval.execute_program_value(&target_prog);
+                                (res, eval.peak_memory_bytes.max(eval.current_env_memory_bytes()), eval.functions.len(), eval.env.len())
+                            })
+                            .expect("Failed to spawn math execution thread");
+
+                        let (eval_res, peak_mem, n_funcs, n_consts) = runner.join().expect("Math thread panicked");
+
+                        match eval_res {
                             Ok(res) => {
                                 if is_json {
                                     println!("{{\"success\":true,\"profile\":{:?},\"result\":{:?},\"memory_bytes\":{},\"functions\":{}}}",
-                                        profile, res, eval.peak_memory_bytes.max(eval.current_env_memory_bytes()), eval.functions.len());
+                                        profile, res, peak_mem, n_funcs);
                                 } else {
                                     println!("================================================================================");
                                     println!(" CRON MATHEMATICAL CALCULUS ENGINE (Zero-Word Algebraic Pipeline)");
@@ -2835,9 +2856,9 @@ fn main() {
                                         cronc::CompilationProfile::Balanced => "Balanced (Standard BF16 / Fused Tensor Graph)",
                                     };
                                     println!("  [+] Active Profile    : {}", prof_name);
-                                    println!("  [+] Functions Defined : {}", eval.functions.len());
-                                    println!("  [+] Constants Bound   : {}", eval.env.len());
-                                    println!("  [+] Peak Tensor RAM   : {} bytes", eval.peak_memory_bytes.max(eval.current_env_memory_bytes()));
+                                    println!("  [+] Functions Defined : {}", n_funcs);
+                                    println!("  [+] Constants Bound   : {}", n_consts);
+                                    println!("  [+] Peak Tensor RAM   : {} bytes", peak_mem);
                                     if let Some(val) = res {
                                         println!("  [+] Evaluation Result : {}", val);
                                     }
