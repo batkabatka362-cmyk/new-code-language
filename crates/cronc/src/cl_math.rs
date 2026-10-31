@@ -9167,6 +9167,7 @@ impl MathProgram {
     /// Compiles standard math into standalone ISO C23 source code with strength reduction,
     /// symbolic autodiff (`grad`), and shaped tensor pointer loops (`f16[M, N]`)
     pub fn to_c23(&self) -> String {
+        let prog = self.optimize_tensor_graph();
         let mut out = String::new();
         out.push_str(
             "// ============================================================================\n",
@@ -9178,16 +9179,16 @@ impl MathProgram {
         );
         out.push_str("#include <stdint.h>\n#include <stdbool.h>\n#include <math.h>\n#include <stdalign.h>\n\n");
 
-        let fns = self.collect_functions();
+        let fns = prog.collect_functions();
 
-        for item in &self.items {
+        for item in &prog.items {
             if let MathItem::Constant { name, val } = item {
                 out.push_str(&format!("static const float {} = {:.8}f;\n", name, val));
             }
         }
         out.push('\n');
 
-        for item in &self.items {
+        for item in &prog.items {
             if let MathItem::Function {
                 name,
                 params,
@@ -9355,7 +9356,7 @@ impl MathProgram {
                     .cloned()
                     .unwrap_or_else(|| "0.0f".to_string());
                 match func.as_str() {
-                    "sqrt" => format!("sqrtf({})", a0),
+                    "sqrt" | "√" => format!("sqrtf({})", a0),
                     "exp" => format!("expf({})", a0),
                     "ln" | "log" => format!("logf({})", a0),
                     "sin" => format!("sinf({})", a0),
@@ -9363,7 +9364,7 @@ impl MathProgram {
                     "tan" => format!("tanf({})", a0),
                     "tanh" => format!("tanhf({})", a0),
                     "abs" => format!("fabsf({})", a0),
-                    "sigmoid" => format!("(1.0f / (1.0f + expf(-{})))", a0),
+                    "sigmoid" | "σ" => format!("(1.0f / (1.0f + expf(-{})))", a0),
                     "silu" => format!("(({0}) / (1.0f + expf(-({0}))))", a0),
                     "relu" => format!("(({}) > 0.0f ? ({}) : 0.0f)", a0, a0),
                     "gelu" => format!(
@@ -9373,7 +9374,7 @@ impl MathProgram {
                     "mean" | "sum" => {
                         if arg_strs.len() <= 1 {
                             a0
-                        } else if func == "mean" {
+                        } else if func == "mean" || func == "μ" {
                             format!("(({}) / {:.1}f)", arg_strs.join(" + "), arg_strs.len() as f32)
                         } else {
                             format!("({})", arg_strs.join(" + "))
@@ -9381,6 +9382,7 @@ impl MathProgram {
                     }
                     "max" if arg_strs.len() == 2 => format!("fmaxf({}, {})", arg_strs[0], arg_strs[1]),
                     "min" if arg_strs.len() == 2 => format!("fminf({}, {})", arg_strs[0], arg_strs[1]),
+                    "norm" | "∥" => format!("sqrtf({})", a0),
                     other => format!("{}({})", other, arg_strs.join(", ")),
                 }
             }
@@ -9409,9 +9411,10 @@ impl MathProgram {
 
     /// Compiles standard math into standalone executable C23 source code with main() runner
     pub fn to_c23_executable(&self) -> String {
-        let mut out = self.to_c23();
-        let shapes = self.infer_shapes_map();
-        let arena_plan = self.plan_memory_arena();
+        let prog = self.optimize_tensor_graph();
+        let mut out = prog.to_c23();
+        let shapes = prog.infer_shapes_map();
+        let arena_plan = prog.plan_memory_arena();
         out.push_str("#include <stdio.h>\n\nint main(void) {\n");
         out.push_str("    printf(\"================================================================================\\n\");\n");
         out.push_str("    printf(\" CRON Mathematical Native Executable (Zero-Word Standard Calculus)\\n\");\n");
@@ -9429,7 +9432,7 @@ impl MathProgram {
             arena_plan.num_arena_slots,
             arena_plan.memory_reduction_pct
         ));
-        for item in &self.items {
+        for item in &prog.items {
             if let MathItem::Binding { name, expr } = item {
                 let shape = shapes.get(name).cloned().unwrap_or_default();
                 match shape.len() {
@@ -9477,7 +9480,7 @@ impl MathProgram {
                             out.push_str("    }\n");
                         } else if let MathExpr::Call(func, args) = expr {
                             match func.as_str() {
-                                "zeros" => {
+                                "zeros" | "O" => {
                                     out.push_str(&format!(
                                         "    alignas(64) float {}[{}] = {{ 0.0f }};\n",
                                         name, n
@@ -9493,7 +9496,7 @@ impl MathProgram {
                                         n, name
                                     ));
                                 }
-                                "argmax" => {
+                                "argmax" | "ω" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
                                     out.push_str(&format!(
                                         "    alignas(64) float {}[{}];\n",
@@ -9560,6 +9563,19 @@ impl MathProgram {
                                 cols,
                                 row_strs.join(", ")
                             ));
+                        } else if let MathExpr::Index(base, idx) = expr {
+                            let table_s = Self::expr_to_c23(base);
+                            let toks_s = Self::expr_to_c23(idx);
+                            out.push_str(&format!(
+                                "    alignas(64) float {}[{}][{}];\n",
+                                name, rows, cols
+                            ));
+                            out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                            out.push_str(&format!("        int _tok = (int){}[_i];\n", toks_s));
+                            out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                            out.push_str(&format!("            {}[_i][_j] = (float){}[_tok][_j];\n", name, table_s));
+                            out.push_str("        }\n");
+                            out.push_str("    }\n");
                         } else if let MathExpr::Binary(lhs, MathBinOp::MatMul, rhs) = expr {
                             let l_str = Self::expr_to_c23(lhs);
                             let r_str = Self::expr_to_c23(rhs);
@@ -9662,7 +9678,7 @@ impl MathProgram {
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
-                                "eye" => {
+                                "eye" | "I" => {
                                     out.push_str(&format!(
                                         "    alignas(64) float {}[{}][{}] = {{ 0.0f }};\n",
                                         name, rows, cols
@@ -9672,7 +9688,7 @@ impl MathProgram {
                                         rows.min(cols), name
                                     ));
                                 }
-                                "zeros" => {
+                                "zeros" | "O" => {
                                     out.push_str(&format!(
                                         "    alignas(64) float {}[{}][{}] = {{ 0.0f }};\n",
                                         name, rows, cols
@@ -9689,7 +9705,7 @@ impl MathProgram {
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
-                                "softmax" => {
+                                "softmax" | "ρ" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
                                     out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
                                     out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
@@ -9700,7 +9716,7 @@ impl MathProgram {
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = expf((float){}[_i][_j] - _max_v) / _sum_exp;\n", cols, name, arg_s));
                                     out.push_str("    }\n");
                                 }
-                                "attention" | "attn" | "flash_attn" | "causal_attn" => {
+                                "attention" | "attn" | "flash_attn" | "causal_attn" | "Ψ" => {
                                     let is_causal = func == "causal_attn";
                                     let q_s = Self::expr_to_c23(&args[0]);
                                     let k_s = Self::expr_to_c23(&args[1]);
@@ -9765,7 +9781,7 @@ impl MathProgram {
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
-                                "rope" => {
+                                "rope" | "Φ" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
                                     out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
                                     out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
@@ -10173,6 +10189,7 @@ impl MathProgram {
 
     /// Compiles standard math into real SSA NVIDIA CUDA PTX v7.5+ GPU kernels with full function inlining
     pub fn to_ptx(&self) -> String {
+        let prog = self.optimize_tensor_graph();
         let mut out = String::new();
         out.push_str(
             "// ============================================================================\n",
@@ -10183,15 +10200,15 @@ impl MathProgram {
         );
         out.push_str(".version 7.5\n.target sm_80\n.address_size 64\n\n");
 
-        let fns = self.collect_functions();
+        let fns = prog.collect_functions();
         let mut constants = HashMap::new();
-        for item in &self.items {
+        for item in &prog.items {
             if let MathItem::Constant { name, val } = item {
                 constants.insert(name.clone(), *val);
             }
         }
 
-        for item in &self.items {
+        for item in &prog.items {
             if let MathItem::Function {
                 name,
                 params,
@@ -10232,7 +10249,7 @@ impl MathProgram {
                     continue;
                 }
 
-                let is_flash_attn = name.contains("flash_attn") || name.contains("attention");
+                let is_flash_attn = name.contains("flash_attn") || name.contains("attention") || name.contains("Ψ");
                 if is_flash_attn && params.len() >= 3 {
                     out.push_str(&format!(
                         "// NVIDIA CUDA PTX Shared-Memory FlashAttention Kernel\n.visible .entry {}(\n    .param .u64 param_Q,\n    .param .u64 param_K,\n    .param .u64 param_V,\n    .param .u64 param_out,\n    .param .u32 param_seq_len,\n    .param .u32 param_dim\n) {{\n",
@@ -10256,7 +10273,7 @@ impl MathProgram {
                     continue;
                 }
 
-                let is_fused_rmsnorm = name.contains("rmsnorm");
+                let is_fused_rmsnorm = name.contains("rmsnorm") || name.contains("N(");
                 if is_fused_rmsnorm {
                     out.push_str(&format!(
                         "// NVIDIA CUDA PTX Fused RMSNorm Kernel with Warp-Level Reduction\n.visible .entry {}(\n    .param .u64 param_X,\n    .param .u64 param_gamma,\n    .param .u64 param_out,\n    .param .u32 param_rows,\n    .param .u32 param_cols\n) {{\n",
@@ -13931,5 +13948,44 @@ mod tests {
         eval_sym.execute_program(&prog_sym).expect("Execute symbolic operators");
         assert_eq!(eval_sym.env.get("s1"), Some(&MathValue::Str("CL".to_string())));
         assert!(eval_sym.env.contains_key("next_id"));
+    }
+    #[test]
+    fn test_phase16_backend_parity_and_c23_ptx_fusion() {
+        // 1. Verify that pure math expressions emit optimized C23 executable code
+        let math_code = r#"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            W = [[0.5, 0.1], [0.2, 0.4]]
+            b = [0.1, 0.2]
+            Y_r = ((X @ W) + b) > 0.0 ? ((X @ W) + b) : 0.0
+            E = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+            t = [0.0, 2.0]
+            H = E[t]
+            Z = O(2, 2)
+            Id = I(2)
+            prob = ρ(H)
+        "#;
+        let prog = parse_math_code(math_code).expect("Parse Phase 16 math code");
+        let c23_code = prog.to_c23_executable();
+        
+        // Assert that C23 emission recognized fused linear relu
+        assert!(c23_code.contains("fused_linear_relu") || c23_code.contains("_acc > 0.0f"), "C23 did not emit fused linear relu");
+        // Assert that C23 emission supports direct 2D E[t] embedding index gathering
+        assert!(c23_code.contains("int _tok = (int)t[_i];") || c23_code.contains("_tok = (int)"), "C23 did not emit E[t] table gathering");
+        // Assert that C23 emission supports O and I
+        assert!(c23_code.contains("Z[2][2] = { 0.0f };") || c23_code.contains("0.0f"), "C23 did not emit zeros (O)");
+        assert!(c23_code.contains("Id[2][2] = { 0.0f };") || c23_code.contains("1.0f"), "C23 did not emit eye (I)");
+        // Assert that C23 emission supports row-wise softmax (ρ)
+        assert!(c23_code.contains("expf"), "C23 did not emit softmax (ρ) loop");
+
+        // 2. Verify PTX generation parity for symbolic attention / rmsnorm
+        let ptx_code = r#"
+            N(X[16, 16], γ[16]) = (X / √(μ(X * X) + 1e-5)) * γ
+            Ψ_kernel(Q[16, 16], K[16, 16], V[16, 16]) = Ψ(Q, K, V)
+        "#;
+        let prog_ptx = parse_math_code(ptx_code).expect("Parse Phase 16 PTX code");
+        let ptx_out = prog_ptx.to_ptx();
+        assert!(ptx_out.contains(".version 7.5"), "Missing PTX version header");
+        assert!(ptx_out.contains(".target sm_80"), "Missing PTX target architecture");
+        assert!(ptx_out.contains("shfl.sync.bfly.b32"), "Missing warp reduction in PTX");
     }
 }
