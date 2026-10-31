@@ -1557,11 +1557,32 @@ impl MathExpr {
                 cond,
                 then_expr,
                 else_expr,
-            } => MathExpr::Ternary {
-                cond: Box::new(cond.optimize_tensor_graph()),
-                then_expr: Box::new(then_expr.optimize_tensor_graph()),
-                else_expr: Box::new(else_expr.optimize_tensor_graph()),
-            },
+            } => {
+                let c_opt = cond.optimize_tensor_graph();
+                let t_opt = then_expr.optimize_tensor_graph();
+                let e_opt = else_expr.optimize_tensor_graph();
+                let is_zero = |e: &MathExpr| matches!(e, MathExpr::Num(n) if n.abs() < 1e-12);
+                if is_zero(&e_opt) {
+                    let is_relu_cond = match &c_opt {
+                        MathExpr::Binary(lhs, MathBinOp::Gt | MathBinOp::Gte, rhs) => {
+                            lhs.as_ref() == &t_opt && is_zero(rhs)
+                        }
+                        MathExpr::Binary(lhs, MathBinOp::Lt | MathBinOp::Lte, rhs) => {
+                            rhs.as_ref() == &t_opt && is_zero(lhs)
+                        }
+                        _ => false,
+                    };
+                    if is_relu_cond {
+                        return MathExpr::Call("relu".to_string(), vec![t_opt])
+                            .optimize_tensor_graph();
+                    }
+                }
+                MathExpr::Ternary {
+                    cond: Box::new(c_opt),
+                    then_expr: Box::new(t_opt),
+                    else_expr: Box::new(e_opt),
+                }
+            }
             MathExpr::Iterate { input, func, count } => MathExpr::Iterate {
                 input: Box::new(input.optimize_tensor_graph()),
                 func: Box::new(func.optimize_tensor_graph()),
@@ -3057,12 +3078,12 @@ impl ExprTape {
                 arg_vals,
                 arg_tapes,
             } => match name.as_str() {
-                "sum" => {
+                "sum" | "∑" => {
                     let s = adj.as_scalar().unwrap_or(1.0);
                     let in_adj = arg_vals[0].map_unary(|_| s);
                     arg_tapes[0].backward(&in_adj, wrt, acc_grad, evaluator)
                 }
-                "mean" => {
+                "mean" | "μ" => {
                     let s = adj.as_scalar().unwrap_or(1.0);
                     let count = arg_vals[0].flatten_elements().len().max(1) as f64;
                     let in_adj = arg_vals[0].map_unary(|_| s / count);
@@ -3115,7 +3136,7 @@ impl ExprTape {
                         _ => Err("Unsupported tensor type for sum_axis backward".to_string()),
                     }
                 }
-                "cross_entropy" => {
+                "cross_entropy" | "Λ" => {
                     let s = adj.as_scalar().unwrap_or(1.0);
                     let logits = &arg_vals[0];
                     let targets = &arg_vals[1];
@@ -3317,6 +3338,90 @@ impl ExprTape {
                         _ => Err("relu shape mismatch in backward".to_string()),
                     }
                 }
+                "sigmoid" | "σ" => {
+                    let calc_sig_vjp = |x: f64, a: f64| -> f64 {
+                        let s = 1.0 / (1.0 + (-x).exp());
+                        a * s * (1.0 - s)
+                    };
+                    match (&arg_vals[0], adj) {
+                        (MathValue::Scalar(s), MathValue::Scalar(a)) => arg_tapes[0].backward(
+                            &MathValue::Scalar(calc_sig_vjp(*s, *a)),
+                            wrt,
+                            acc_grad,
+                            evaluator,
+                        ),
+                        (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
+                            let out: Vec<f64> = v.iter().zip(adj_v.iter()).map(|(&x, &a)| calc_sig_vjp(x, a)).collect();
+                            arg_tapes[0].backward(&MathValue::Vector(out), wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
+                            let out: Vec<Vec<f64>> = m.iter().zip(adj_m.iter()).map(|(r, ar)| r.iter().zip(ar.iter()).map(|(&x, &a)| calc_sig_vjp(x, a)).collect()).collect();
+                            arg_tapes[0].backward(&MathValue::Matrix(out), wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("sigmoid shape mismatch in backward".to_string()),
+                    }
+                }
+                "sqrt" | "√" => {
+                    let calc_sqrt_vjp = |x: f64, a: f64| -> f64 { a / (2.0 * x.max(1e-12).sqrt()) };
+                    match (&arg_vals[0], adj) {
+                        (MathValue::Scalar(s), MathValue::Scalar(a)) => arg_tapes[0].backward(
+                            &MathValue::Scalar(calc_sqrt_vjp(*s, *a)),
+                            wrt,
+                            acc_grad,
+                            evaluator,
+                        ),
+                        (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
+                            let out: Vec<f64> = v.iter().zip(adj_v.iter()).map(|(&x, &a)| calc_sqrt_vjp(x, a)).collect();
+                            arg_tapes[0].backward(&MathValue::Vector(out), wrt, acc_grad, evaluator)
+                        }
+                        (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
+                            let out: Vec<Vec<f64>> = m.iter().zip(adj_m.iter()).map(|(r, ar)| r.iter().zip(ar.iter()).map(|(&x, &a)| calc_sqrt_vjp(x, a)).collect()).collect();
+                            arg_tapes[0].backward(&MathValue::Matrix(out), wrt, acc_grad, evaluator)
+                        }
+                        _ => Err("sqrt shape mismatch in backward".to_string()),
+                    }
+                }
+                "fused_linear_relu" | "fused_linear_silu" | "fused_linear_gelu" => {
+                    let x_val = &arg_vals[0];
+                    let w_val = &arg_vals[1];
+                    let mut z_val = evaluator.eval_binary_op(x_val, MathBinOp::MatMul, w_val)?;
+                    if arg_vals.len() > 2 {
+                        z_val = evaluator.eval_binary_op(&z_val, MathBinOp::Add, &arg_vals[2])?;
+                    }
+                    let act_deriv = |z: f64, a: f64| -> f64 {
+                        if name == "fused_linear_relu" {
+                            if z > 0.0 { a } else { 0.0 }
+                        } else if name == "fused_linear_silu" {
+                            let s = 1.0 / (1.0 + (-z).exp());
+                            a * s * (1.0 + z * (1.0 - s))
+                        } else {
+                            let cdf = 0.5 * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh());
+                            a * cdf
+                        }
+                    };
+                    let adj_z = match (&z_val, adj) {
+                        (MathValue::Matrix(zm), MathValue::Matrix(am)) => MathValue::Matrix(
+                            zm.iter().zip(am.iter()).map(|(zr, ar)| zr.iter().zip(ar.iter()).map(|(&z, &a)| act_deriv(z, a)).collect()).collect()
+                        ),
+                        (MathValue::Vector(zv), MathValue::Vector(av)) => MathValue::Vector(
+                            zv.iter().zip(av.iter()).map(|(&z, &a)| act_deriv(z, a)).collect()
+                        ),
+                        _ => adj.clone(),
+                    };
+                    let w_t = w_val.transpose()?;
+                    let raw_adj_x = evaluator.eval_binary_op(&adj_z, MathBinOp::MatMul, &w_t)?;
+                    let adj_x = reduce_adjoint_to_shape(&raw_adj_x, &x_val.shape())?;
+                    let x_t = x_val.transpose()?;
+                    let raw_adj_w = evaluator.eval_binary_op(&x_t, MathBinOp::MatMul, &adj_z)?;
+                    let adj_w = reduce_adjoint_to_shape(&raw_adj_w, &w_val.shape())?;
+                    arg_tapes[0].backward(&adj_x, wrt, acc_grad, evaluator)?;
+                    arg_tapes[1].backward(&adj_w, wrt, acc_grad, evaluator)?;
+                    if arg_tapes.len() > 2 {
+                        let adj_b = reduce_adjoint_to_shape(&adj_z, &arg_vals[2].shape())?;
+                        arg_tapes[2].backward(&adj_b, wrt, acc_grad, evaluator)?;
+                    }
+                    Ok(())
+                }
                 "transpose" | "T" => {
                     let adj_t = adj.transpose()?;
                     arg_tapes[0].backward(&adj_t, wrt, acc_grad, evaluator)
@@ -3367,7 +3472,7 @@ impl ExprTape {
                         Err("embed table is not a matrix".to_string())
                     }
                 }
-                "clip_grad" | "grad_clip" => {
+                "clip_grad" | "grad_clip" | "κ" => {
                     let elems = arg_vals[0].flatten_elements();
                     let norm = elems.iter().map(|&x| x * x).sum::<f64>().sqrt();
                     let max_norm = arg_vals[1].as_scalar().unwrap_or(1.0);
@@ -3408,7 +3513,7 @@ impl ExprTape {
                     let adj_reshaped = adj.reshape(&in_shape)?;
                     arg_tapes[0].backward(&adj_reshaped, wrt, acc_grad, evaluator)
                 }
-                "ssd_scan" | "mamba_ssd" => {
+                "ssd_scan" | "mamba_ssd" | "Ξ" => {
                     let d_elems = arg_vals[1].flatten_elements();
                     let adj_flat = adj.flatten_elements();
                     let x_shape = arg_vals[0].shape();
@@ -3505,7 +3610,7 @@ impl ExprTape {
                         Ok(())
                     }
                 }
-                "qmatmul" => {
+                "qmatmul" | "Π_q" => {
                     let x_val = &arg_vals[0];
                     let w_val = &arg_vals[1];
                     let scales = &arg_vals[2];
@@ -4494,6 +4599,22 @@ impl MathEvaluator {
             MathExpr::Index(base, idx) => {
                 let b_val = self.eval_value(base)?;
                 let i_val = self.eval_value(idx)?;
+                if let (MathValue::Matrix(vocab_mat), MathValue::Vector(toks)) = (&b_val, &i_val) {
+                    let mut res = Vec::with_capacity(toks.len());
+                    for &t in toks {
+                        let row_idx = t as usize;
+                        if row_idx < vocab_mat.len() {
+                            res.push(vocab_mat[row_idx].clone());
+                        } else {
+                            return Err(format!(
+                                "Matrix row index {} out of bounds (rows {})",
+                                row_idx,
+                                vocab_mat.len()
+                            ));
+                        }
+                    }
+                    return Ok(MathValue::Matrix(res));
+                }
                 let i_num = i_val
                     .as_scalar()
                     .ok_or_else(|| "Index must evaluate to a scalar integer".to_string())?
@@ -4587,14 +4708,53 @@ impl MathEvaluator {
                 else_expr,
             } => {
                 let c = self.eval_value(cond)?;
-                if let Some(s) = c.as_scalar() {
-                    if s != 0.0 {
-                        self.eval_value(then_expr)
-                    } else {
-                        self.eval_value(else_expr)
+                match c {
+                    MathValue::Scalar(s) => {
+                        if s != 0.0 {
+                            self.eval_value(then_expr)
+                        } else {
+                            self.eval_value(else_expr)
+                        }
                     }
-                } else {
-                    Err("Ternary condition must evaluate to a scalar".to_string())
+                    MathValue::Vector(cv) => {
+                        let tv = self.eval_value(then_expr)?;
+                        let ev = self.eval_value(else_expr)?;
+                        let t_elems = tv.flatten_elements();
+                        let e_elems = ev.flatten_elements();
+                        let mut out = Vec::with_capacity(cv.len());
+                        for (i, &cond_v) in cv.iter().enumerate() {
+                            let v = if cond_v != 0.0 {
+                                t_elems.get(i % t_elems.len().max(1)).copied().unwrap_or(0.0)
+                            } else {
+                                e_elems.get(i % e_elems.len().max(1)).copied().unwrap_or(0.0)
+                            };
+                            out.push(v);
+                        }
+                        Ok(MathValue::Vector(out))
+                    }
+                    MathValue::Matrix(cm) => {
+                        let tv = self.eval_value(then_expr)?;
+                        let ev = self.eval_value(else_expr)?;
+                        let t_elems = tv.flatten_elements();
+                        let e_elems = ev.flatten_elements();
+                        let mut out = Vec::with_capacity(cm.len());
+                        let mut flat_idx = 0usize;
+                        for row in cm {
+                            let mut out_row = Vec::with_capacity(row.len());
+                            for cond_v in row {
+                                let v = if cond_v != 0.0 {
+                                    t_elems.get(flat_idx % t_elems.len().max(1)).copied().unwrap_or(0.0)
+                                } else {
+                                    e_elems.get(flat_idx % e_elems.len().max(1)).copied().unwrap_or(0.0)
+                                };
+                                out_row.push(v);
+                                flat_idx += 1;
+                            }
+                            out.push(out_row);
+                        }
+                        Ok(MathValue::Matrix(out))
+                    }
+                    _ => Err("Ternary condition must evaluate to a scalar, vector, or matrix".to_string()),
                 }
             }
             MathExpr::Binary(lhs, op, rhs) => {
@@ -4827,7 +4987,7 @@ impl MathEvaluator {
                     let x = self.eval_single_val(args, "merge_heads")?;
                     self.merge_heads(&x)
                 }
-                "gqa_attn" | "gqa" | "causal_gqa" => {
+                "gqa_attn" | "gqa" | "causal_gqa" | "Ψ_g" => {
                     if args.len() < 5 {
                         return Err(
                             "'gqa_attn(Q, K, V, n_heads, n_kv_heads, [scale])' requires at least 5 arguments"
@@ -4926,7 +5086,7 @@ impl MathEvaluator {
                     };
                     x.permute(&dims)
                 }
-                "quantize_t2" | "t2_quant" => {
+                "quantize_t2" | "t2_quant" | "τ_2" => {
                     let val = self.eval_single_val(args, "quantize_t2")?;
                     self.eval_quantize_t2(&val)
                 }
@@ -4945,7 +5105,7 @@ impl MathEvaluator {
                     };
                     self.eval_bitlinear(&x, &w, gamma)
                 }
-                "quantize_i8" | "i8_quant" => {
+                "quantize_i8" | "i8_quant" | "τ_8" => {
                     if args.is_empty() {
                         return Err(
                             "'quantize_i8(W, [group_size])' requires at least 1 argument".to_string(),
@@ -4959,7 +5119,7 @@ impl MathEvaluator {
                     };
                     self.eval_quantize_i8(&w, group_size)
                 }
-                "qmatmul" => {
+                "qmatmul" | "Π_q" => {
                     if args.len() < 3 {
                         return Err("'qmatmul(X, W_q, scales)' requires 3 arguments".to_string());
                     }
@@ -5312,7 +5472,7 @@ impl MathEvaluator {
                     let vec: Vec<f64> = (start..end).map(|i| i as f64).collect();
                     Ok(MathValue::Vector(vec))
                 }
-                "zeros" | "ones" => {
+                "zeros" | "ones" | "O" => {
                     let fill = if name == "ones" { 1.0 } else { 0.0 };
                     let dims: Vec<usize> = if args.len() == 1 {
                         match self.eval_value(&args[0])? {
@@ -5337,7 +5497,7 @@ impl MathEvaluator {
                         }
                     }
                 }
-                "eye" => {
+                "eye" | "I" => {
                     if args.len() != 1 {
                         return Err("'eye(N)' expects exactly 1 argument".to_string());
                     }
@@ -5404,9 +5564,9 @@ impl MathEvaluator {
                         _ => MathValue::new_tensor(dims, samples),
                     }
                 }
-                "argmax" | "argmin" => {
+                "argmax" | "argmin" | "ω" => {
                     let val = self.eval_single_val(args, name)?;
-                    let is_max = name == "argmax";
+                    let is_max = name == "argmax" || name == "ω";
                     let find_idx = |slice: &[f64]| -> f64 {
                         if slice.is_empty() {
                             return 0.0;
@@ -5457,7 +5617,7 @@ impl MathEvaluator {
                         }
                     }
                 }
-                "concat" => {
+                "concat" | "ξ" => {
                     if args.len() < 2 {
                         return Err(
                             "'concat(A, B, [axis])' expects at least 2 arguments".to_string()
@@ -5503,7 +5663,7 @@ impl MathEvaluator {
                         _ => Err("Unsupported operand types for 'concat'".to_string()),
                     }
                 }
-                "encode" => {
+                "encode" | "ι" => {
                     if args.is_empty() {
                         return Err("'encode(text)' expects 1 argument".to_string());
                     }
@@ -5516,7 +5676,7 @@ impl MathEvaluator {
                         _ => Err("'encode' expects a string argument".to_string()),
                     }
                 }
-                "decode" => {
+                "decode" | "δ" => {
                     if args.is_empty() {
                         return Err("'decode(tokens)' expects 1 argument".to_string());
                     }
@@ -5529,7 +5689,7 @@ impl MathEvaluator {
                     let s = String::from_utf8_lossy(&bytes).into_owned();
                     Ok(MathValue::Str(s))
                 }
-                "top_k" => {
+                "top_k" | "κ_k" => {
                     if args.len() < 2 {
                         return Err("'top_k(logits, k)' expects 2 arguments".to_string());
                     }
@@ -5554,7 +5714,7 @@ impl MathEvaluator {
                         _ => Err("'top_k' expects a Vector or Matrix of logits".to_string()),
                     }
                 }
-                "top_p" => {
+                "top_p" | "κ_p" => {
                     if args.len() < 2 {
                         return Err("'top_p(logits, p)' expects 2 arguments".to_string());
                     }
@@ -5589,7 +5749,7 @@ impl MathEvaluator {
                         _ => Err("'top_p' expects a Vector or Matrix of logits".to_string()),
                     }
                 }
-                "sample" => {
+                "sample" | "χ" => {
                     if args.is_empty() {
                         return Err("'sample(logits, [temp, top_p, seed])' expects at least 1 argument".to_string());
                     }
@@ -5660,7 +5820,7 @@ impl MathEvaluator {
                         _ => Err("'sample' expects a Vector or Matrix of logits".to_string()),
                     }
                 }
-                "kv_cache_attn" => {
+                "kv_cache_attn" | "Ψ_c" => {
                     if args.len() < 5 {
                         return Err("'kv_cache_attn(q, k_new, v_new, k_cache, v_cache, [scale])' expects at least 5 arguments".to_string());
                     }
@@ -5847,7 +6007,7 @@ impl MathEvaluator {
                         }
                     }
                 }
-                "cross_entropy" => {
+                "cross_entropy" | "Λ" => {
                     if args.len() < 2 {
                         return Err(
                             "'cross_entropy(logits, targets)' expects 2 arguments".to_string()
@@ -5897,7 +6057,7 @@ impl MathEvaluator {
                         ),
                     }
                 }
-                "clip_grad" | "grad_clip" => {
+                "clip_grad" | "grad_clip" | "κ" => {
                     if args.len() < 2 {
                         return Err("'clip_grad(G, max_norm)' requires 2 arguments".to_string());
                     }
@@ -6966,7 +7126,34 @@ impl MathEvaluator {
             }
             MathExpr::Index(base, idx_expr) => {
                 let (base_val, base_tape) = self.eval_tape(base)?;
-                let idx_val = self.eval(idx_expr)? as usize;
+                let idx_math = self.eval_value(idx_expr)?;
+                if let (MathValue::Matrix(vocab_mat), MathValue::Vector(toks)) = (&base_val, &idx_math) {
+                    let mut res = Vec::with_capacity(toks.len());
+                    for &t in toks {
+                        let row_idx = t as usize;
+                        if row_idx < vocab_mat.len() {
+                            res.push(vocab_mat[row_idx].clone());
+                        } else {
+                            return Err(format!(
+                                "Row index {} out of bounds for matrix with {} rows",
+                                row_idx,
+                                vocab_mat.len()
+                            ));
+                        }
+                    }
+                    return Ok((
+                        MathValue::Matrix(res),
+                        ExprTape::Call {
+                            name: "embed".to_string(),
+                            arg_vals: vec![base_val, idx_math],
+                            arg_tapes: vec![base_tape, ExprTape::Num],
+                        },
+                    ));
+                }
+                let idx_val = idx_math
+                    .as_scalar()
+                    .ok_or_else(|| "Index must evaluate to a scalar integer".to_string())?
+                    as usize;
                 let out_val = match &base_val {
                     MathValue::Tuple(vals) => {
                         if idx_val < vals.len() {
@@ -7054,6 +7241,22 @@ impl MathEvaluator {
                 Ok((res, ExprTape::Unary(*op, inner_val, Box::new(inner_tape))))
             }
             MathExpr::Binary(lhs, op, rhs) => {
+                if *op == MathBinOp::Pow {
+                    if let MathExpr::Var(v) = &**rhs {
+                        if v == "T" {
+                            let (lhs_val, lhs_tape) = self.eval_tape(lhs)?;
+                            let res = lhs_val.transpose()?;
+                            return Ok((
+                                res,
+                                ExprTape::Call {
+                                    name: "transpose".to_string(),
+                                    arg_vals: vec![lhs_val],
+                                    arg_tapes: vec![lhs_tape],
+                                },
+                            ));
+                        }
+                    }
+                }
                 let (lhs_val, lhs_tape) = self.eval_tape(lhs)?;
                 let (rhs_val, rhs_tape) = self.eval_tape(rhs)?;
                 let res = self.eval_binary_op(&lhs_val, *op, &rhs_val)?;
@@ -7645,7 +7848,7 @@ impl MathProgram {
                             }
                         }
                     } else if let MathExpr::Call(ref fn_name, ref args) = expr {
-                        if fn_name == "kv_cache_attn" && args.len() >= 5 {
+                        if (fn_name == "kv_cache_attn" || fn_name == "Ψ_c") && args.len() >= 5 {
                             let q_s = Self::infer_shape_expr(&args[0], &env, &fns, &mut errors, Some("kv_cache_attn"));
                             let k_s = Self::infer_shape_expr(&args[3], &env, &fns, &mut errors, Some("kv_cache_attn"));
                             let v_s = Self::infer_shape_expr(&args[4], &env, &fns, &mut errors, Some("kv_cache_attn"));
@@ -7688,7 +7891,9 @@ impl MathProgram {
             {
                 let mut fn_env: HashMap<String, Vec<usize>> = HashMap::new();
                 for param in params {
-                    fn_env.insert(param.name.clone(), param.dims.clone());
+                    if !param.dims.is_empty() {
+                        fn_env.insert(param.name.clone(), param.dims.clone());
+                    }
                 }
                 let _ = Self::infer_shape_expr(
                     body,
@@ -7838,11 +8043,13 @@ impl MathProgram {
                 None
             }
             MathExpr::Index(base, idx) => {
-                let _ = Self::infer_shape_expr(idx, env, fn_sigs, errors, ctx);
+                let i_shape = Self::infer_shape_expr(idx, env, fn_sigs, errors, ctx);
                 if let Some(b_shape) = Self::infer_shape_expr(base, env, fn_sigs, errors, ctx) {
                     if b_shape.is_empty() {
                         errors.push(format!("{}Cannot index into a scalar value", prefix));
                         None
+                    } else if b_shape.len() == 2 && matches!(i_shape, Some(ref is) if is.len() == 1) {
+                        Some(vec![i_shape.unwrap()[0], b_shape[1]])
                     } else {
                         Some(b_shape[1..].to_vec())
                     }
@@ -8229,7 +8436,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "argmax" | "argmin" => {
+                "argmax" | "argmin" | "ω" => {
                     if let Some(arg) = args.first() {
                         if let Some(s) = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx) {
                             if s.len() == 2 {
@@ -8244,7 +8451,7 @@ impl MathProgram {
                         Some(vec![])
                     }
                 }
-                "clip_grad" | "grad_clip" => {
+                "clip_grad" | "grad_clip" | "κ" => {
                     if !args.is_empty() {
                         Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx)
                     } else {
@@ -8258,7 +8465,7 @@ impl MathProgram {
                     }
                     None
                 }
-                "zeros" | "ones" => {
+                "zeros" | "ones" | "O" => {
                     if args.len() == 1 {
                         match &args[0] {
                             MathExpr::Num(n) => Some(vec![*n as usize]),
@@ -8289,7 +8496,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "eye" => {
+                "eye" | "I" => {
                     if args.len() == 1 {
                         if let MathExpr::Num(n) = &args[0] {
                             let d = *n as usize;
@@ -8334,7 +8541,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "concat" => {
+                "concat" | "ξ" => {
                     if args.len() >= 2 {
                         let a_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let b_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -8414,28 +8621,28 @@ impl MathProgram {
                         Some(vec![])
                     }
                 }
-                "encode" => {
+                "encode" | "ι" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
                         None
                     }
                 }
-                "decode" => {
+                "decode" | "δ" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
                         None
                     }
                 }
-                "top_k" | "top_p" => {
+                "top_k" | "top_p" | "κ_k" | "κ_p" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
                         None
                     }
                 }
-                "sample" => {
+                "sample" | "χ" => {
                     if let Some(arg) = args.first() {
                         if let Some(s) = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx) {
                             if s.len() == 1 {
@@ -8452,7 +8659,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "kv_cache_attn" => {
+                "kv_cache_attn" | "Ψ_c" => {
                     if args.len() >= 5 {
                         let q_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let _k_new_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -8502,7 +8709,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "cross_entropy" => {
+                "cross_entropy" | "Λ" => {
                     if args.len() >= 2 {
                         let _ = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let _ = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -8671,7 +8878,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "gqa_attn" => {
+                "gqa_attn" | "Ψ_g" => {
                     if args.len() >= 5 {
                         let q = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let _k = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -8757,7 +8964,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "quantize_t2" | "t2_quant" => {
+                "quantize_t2" | "t2_quant" | "τ_2" => {
                     if let Some(arg) = args.first() {
                         let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
                     }
@@ -8807,7 +9014,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "quantize_i8" | "i8_quant" => {
+                "quantize_i8" | "i8_quant" | "τ_8" => {
                     if let Some(arg) = args.first() {
                         let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
                     }
@@ -13647,5 +13854,82 @@ mod tests {
             panic!("Expected probability matrix P");
         }
         assert!(eval_e2e.env.contains_key("w_next"));
+    }
+
+    #[test]
+    fn test_phase15_vector_index_embedding_ternary_relu_and_zero_word_examples() {
+        // 1. Verify Ternary Conditional ReLU Fusion:
+        // ((X @ W) + b) > 0.0 ? ((X @ W) + b) : 0.0 -> fused_linear_relu(X, W, b)
+        let relu_code = r#"
+            Y = ((X @ W) + b) > 0.0 ? ((X @ W) + b) : 0.0
+        "#;
+        let prog_r = parse_math_code(relu_code).expect("Parse ternary ReLU");
+        let opt_r = prog_r.optimize_tensor_graph();
+        let mut fused_relu = false;
+        for item in &opt_r.items {
+            if let MathItem::Binding { name, expr } = item {
+                if name == "Y" {
+                    if let MathExpr::Call(f, args) = expr {
+                        if f == "fused_linear_relu" && args.len() == 3 {
+                            fused_relu = true;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            fused_relu,
+            "Ternary conditional ((X @ W) + b) > 0 ? ((X @ W) + b) : 0 did not lower to fused_linear_relu"
+        );
+
+        // 2. Verify Direct Vector-Indexed Matrix Embedding E[t] + Analytical ∇(Λ(E[t] @ W, y), E)
+        let emb_code = r#"
+            E = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+            t = [0.0, 2.0]
+            y = [1.0, 0.0]
+            W = O(2, 3)
+            H = E[t]
+            L(E, W) = Λ(E[t] @ W, y)
+            gE = ∇(L(E, W), E)
+            gW = ∇(L(E, W), W)
+        "#;
+        let prog_emb = parse_math_code(emb_code).expect("Parse E[t] embedding program");
+        let shape_errs = prog_emb.verify_shapes();
+        assert!(
+            shape_errs.is_ok(),
+            "Unexpected shape errors in E[t] program: {:?}",
+            shape_errs
+        );
+        let mut eval_emb = MathEvaluator::new();
+        eval_emb.execute_program(&prog_emb).expect("Execute E[t] program");
+        if let Some(MathValue::Matrix(h)) = eval_emb.env.get("H") {
+            assert_eq!(h, &vec![vec![1.0, 0.0], vec![1.0, 1.0]]);
+        } else {
+            panic!("Expected 2x2 matrix H from E[t]");
+        }
+        if let Some(MathValue::Matrix(ge)) = eval_emb.env.get("gE") {
+            assert_eq!(ge.len(), 3);
+            assert_eq!(ge[0].len(), 2);
+        } else {
+            panic!("Expected 3x2 gradient matrix gE");
+        }
+
+        // 3. Verify Symbolic Streaming / Sampling / Quantization Operators (ι, δ, O, I, Ψ_c, κ_k, κ_p, χ)
+        let sym_code = r#"
+            s0 = "CL"
+            toks = ι(s0)
+            s1 = δ(toks)
+            I2 = I(2)
+            Z2 = O(2, 2)
+            (y_c, K_c, V_c) = Ψ_c([1.0, 0.0], [1.0, 0.0], [0.5, 0.5], [[0.0, 1.0]], [[0.2, 0.8]], 0.7071)
+            zk = κ_k([0.1, 2.5, -1.0, 1.2], 2)
+            zp = κ_p([0.1, 2.5, -1.0, 1.2], 0.9)
+            next_id = χ([0.1, 2.5, -1.0, 1.2], 0.8, 0.9, 42)
+        "#;
+        let prog_sym = parse_math_code(sym_code).expect("Parse symbolic operators");
+        let mut eval_sym = MathEvaluator::new();
+        eval_sym.execute_program(&prog_sym).expect("Execute symbolic operators");
+        assert_eq!(eval_sym.env.get("s1"), Some(&MathValue::Str("CL".to_string())));
+        assert!(eval_sym.env.contains_key("next_id"));
     }
 }
