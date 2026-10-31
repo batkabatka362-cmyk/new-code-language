@@ -10467,12 +10467,28 @@ impl MathProgram {
                         if alt.exists() {
                             candidate = alt.to_path_buf();
                         } else {
-                            return Err(format!(
-                                "Cannot resolve link '<< \"{}\"': file not found (tried '{}' and '{}')",
-                                rel_path,
-                                candidate.display(),
-                                alt.display()
-                            ));
+                            let cwd_cand = std::env::current_dir().unwrap_or_default().join(&rel_path);
+                            let manifest_cand = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(&rel_path);
+                            let manifest_parent_cand = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                                .parent()
+                                .and_then(|p| p.parent())
+                                .map(|p| p.join(&rel_path))
+                                .unwrap_or_default();
+
+                            if cwd_cand.exists() {
+                                candidate = cwd_cand;
+                            } else if manifest_cand.exists() {
+                                candidate = manifest_cand;
+                            } else if manifest_parent_cand.exists() {
+                                candidate = manifest_parent_cand;
+                            } else {
+                                return Err(format!(
+                                    "Cannot resolve link '<< \"{}\"': file not found (tried '{}' and '{}')",
+                                    rel_path,
+                                    candidate.display(),
+                                    alt.display()
+                                ));
+                            }
                         }
                     }
 
@@ -13046,6 +13062,76 @@ mod tests {
         assert!(err_msg.contains("Symbolic dimension mismatch"));
         assert!(err_msg.contains("D1"));
         assert!(err_msg.contains("D2"));
+    }
+
+    #[test]
+    fn test_phase12_standard_math_library_modules() {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        
+        // 1. RMSNorm module from libcl/math/rms_norm.cl
+        let rms_code = r#"
+            << "libcl/math/rms_norm.cl"
+            X = [[1.0, 2.0], [3.0, 4.0]]
+            gamma = [1.0, 1.0]
+            y = rms_norm(X, gamma)
+        "#;
+        let mut prog_rms = parse_math_code(rms_code).expect("Parse rms_norm link");
+        prog_rms.resolve_links(&cwd).expect("Resolve rms_norm link");
+        let mut eval_rms = MathEvaluator::new();
+        eval_rms.execute_program(&prog_rms).expect("Execute rms_norm");
+        if let MathValue::Matrix(m) = eval_rms.env.get("y").expect("y") {
+            assert_eq!(m.len(), 2);
+            assert_eq!(m[0].len(), 2);
+            assert!(m[0][0] > 0.0);
+        } else {
+            panic!("Expected Matrix for y");
+        }
+
+        // 2. SwiGLU MLP from libcl/math/swiglu_mlp.cl
+        let swiglu_code = r#"
+            << "libcl/math/swiglu_mlp.cl"
+            X = [[1.0, 0.5]]
+            W_gate = [[0.2, 0.4], [0.1, 0.3]]
+            W_up = [[0.5, 0.1], [0.2, 0.8]]
+            W_down = [[0.3], [0.7]]
+            out_mlp = swiglu(X, W_gate, W_up, W_down)
+        "#;
+        let mut prog_swiglu = parse_math_code(swiglu_code).expect("Parse swiglu link");
+        prog_swiglu.resolve_links(&cwd).expect("Resolve swiglu link");
+        let mut eval_swiglu = MathEvaluator::new();
+        eval_swiglu.execute_program(&prog_swiglu).expect("Execute swiglu");
+        if let MathValue::Matrix(m) = eval_swiglu.env.get("out_mlp").expect("out_mlp") {
+            assert_eq!(m.len(), 1);
+            assert_eq!(m[0].len(), 2);
+            assert!(m[0][0] > 0.0);
+            assert!(m[0][1] > 0.0);
+        } else {
+            panic!("Expected Matrix for out_mlp");
+        }
+
+        // 3. BitNet from libcl/math/bitnet_layer.cl
+        let bitnet_code = r#"
+            << "libcl/math/bitnet_layer.cl"
+            X = [[1.0, 2.0]]
+            W = [[-1.0, 1.0], [0.0, -1.0]]
+            gamma = 0.5
+            b_out = bitnet_raw(X, W, gamma)
+        "#;
+        let mut prog_bitnet = parse_math_code(bitnet_code).expect("Parse bitnet link");
+        prog_bitnet.resolve_links(&cwd).expect("Resolve bitnet link");
+        let mut eval_bitnet = MathEvaluator::new();
+        eval_bitnet.execute_program(&prog_bitnet).expect("Execute bitnet");
+        if let MathValue::Matrix(m) = eval_bitnet.env.get("b_out").expect("b_out") {
+            assert_eq!(m.len(), 1);
+            assert_eq!(m[0].len(), 2);
+            // bitlinear performs X @ W^T:
+            // row 0: 1.0 * -1.0 + 2.0 * 1.0 = 1.0 * gamma(0.5) = 0.5
+            // row 1: 1.0 * 0.0 + 2.0 * -1.0 = -2.0 * gamma(0.5) = -1.0
+            assert_eq!(m[0][0], 0.5);
+            assert_eq!(m[0][1], -1.0);
+        } else {
+            panic!("Expected Matrix for b_out");
+        }
     }
 
     #[test]

@@ -18,3 +18,5 @@ cron-vm = { path = "../cron-vm" }
 cron-decompile = { path = "../cron-decompile" }
 cron-lsp = { path = "../cron-lsp" }
 cron-rt = { path = "../cron-rt" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

@@ -11,6 +11,8 @@ dependencies = [
  "cron-rt",
  "cron-vm",
  "cronc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
