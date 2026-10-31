@@ -9407,23 +9407,22 @@ impl MathProgram {
                 // Check if function operates on shaped tensor tiles (e.g., W: f16[16, 16], x: f16[16])
                 let has_shaped_params = params.iter().any(|p| !p.dims.is_empty());
                 if has_shaped_params {
-                    let mut p_decls: Vec<String> = params
-                        .iter()
-                        .map(|p| {
-                            if p.dims.is_empty() {
-                                format!("{} {}", p.dtype.to_c23_type(), p.name)
-                            } else {
-                                format!("const {}* restrict {}", p.dtype.to_c23_type(), p.name)
-                            }
-                        })
-                        .collect();
-                    p_decls.push(format!("{}* restrict out", r_type));
-                    out.push_str(&format!("void {}({}) {{\n", name, p_decls.join(", ")));
-
                     // Detect 2D Matrix-Vector Linear Layer pattern: W[M, N] @ x[N] (+ b[M])
                     let mat_param = params.iter().find(|p| p.dims.len() == 2);
                     let vec_param = params.iter().find(|p| p.dims.len() == 1);
                     if let (Some(w_p), Some(x_p)) = (mat_param, vec_param) {
+                        let mut p_decls: Vec<String> = params
+                            .iter()
+                            .map(|p| {
+                                if p.dims.is_empty() {
+                                    format!("{} {}", p.dtype.to_c23_type(), p.name)
+                                } else {
+                                    format!("const {}* restrict {}", p.dtype.to_c23_type(), p.name)
+                                }
+                            })
+                            .collect();
+                        p_decls.push(format!("{}* restrict out", r_type));
+                        out.push_str(&format!("void {}({}) {{\n", name, p_decls.join(", ")));
                         let m = w_p.dims[0];
                         let n = w_p.dims[1];
                         let bias_param = params
@@ -9445,6 +9444,18 @@ impl MathProgram {
                         out.push_str("    }\n}\n\n");
                         continue;
                     } else if let Some(v_p) = vec_param {
+                        let mut p_decls: Vec<String> = params
+                            .iter()
+                            .map(|p| {
+                                if p.dims.is_empty() {
+                                    format!("{} {}", p.dtype.to_c23_type(), p.name)
+                                } else {
+                                    format!("const {}* restrict {}", p.dtype.to_c23_type(), p.name)
+                                }
+                            })
+                            .collect();
+                        p_decls.push(format!("{}* restrict out", r_type));
+                        out.push_str(&format!("void {}({}) {{\n", name, p_decls.join(", ")));
                         let n = v_p.dims[0];
                         out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", n));
                         out.push_str(&format!(
