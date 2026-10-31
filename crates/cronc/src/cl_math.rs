@@ -12115,13 +12115,59 @@ pub fn parse_math_code(src: &str) -> Result<MathProgram, String> {
     parser.parse_program()
 }
 
+/// Expands LaTeX/ASCII shorthand aliases to canonical Unicode math symbols for REPL ergonomics.
+pub fn expand_ascii_math_symbols(input: &str) -> String {
+    let mut s = input.to_string();
+    let table = [
+        ("\\psi_g", "Ψ_g"),
+        ("\\Psi_g", "Ψ_g"),
+        ("\\psi_c", "Ψ_c"),
+        ("\\Psi_c", "Ψ_c"),
+        ("\\psi", "Ψ"),
+        ("\\Psi", "Ψ"),
+        ("\\phi", "Φ"),
+        ("\\Phi", "Φ"),
+        ("\\rho", "ρ"),
+        ("\\Rho", "ρ"),
+        ("\\lambda", "Λ"),
+        ("\\Lambda", "Λ"),
+        ("\\grad", "∇"),
+        ("\\nabla", "∇"),
+        ("\\delta", "Δ"),
+        ("\\Delta", "Δ"),
+        ("\\gamma", "γ"),
+        ("\\Gamma", "γ"),
+        ("\\eta", "η"),
+        ("\\Eta", "η"),
+        ("\\alpha", "α"),
+        ("\\beta", "β"),
+        ("\\theta", "θ"),
+        ("\\sigma", "σ"),
+        ("\\Sigma", "σ"),
+        ("\\sum", "∑"),
+        ("\\sqrt", "√"),
+        ("\\mu", "μ"),
+        ("\\tau", "τ"),
+        ("\\kappa", "κ"),
+        ("\\chi", "χ"),
+        ("\\iota", "ι"),
+        ("\\otimes", "⊗"),
+        ("\\eps", "ε"),
+        ("\\epsilon", "ε"),
+    ];
+    for (ascii, uni) in table {
+        s = s.replace(ascii, uni);
+    }
+    s
+}
+
 /// Runs the interactive Mathematical REPL in the terminal
 pub fn run_math_repl() -> Result<(), String> {
     use std::io::{self, BufRead, Write};
 
     println!("================================================================================");
     println!(" CRON SOVEREIGN MATHEMATICAL REPL (Zero-Word Calculus)");
-    println!(" Commands: :c23 (View C23) | :ptx (View PTX) | :vliw (View VLIW) | :reset | :quit");
+    println!(" Commands: :c23 | :ptx | :vliw | :sym (Symbols) | :reset | :help | :quit");
     println!("================================================================================");
 
     let mut session_prog = MathProgram::default();
@@ -12148,8 +12194,11 @@ pub fn run_math_repl() -> Result<(), String> {
             continue;
         }
 
-        if trimmed.starts_with(':') {
-            match trimmed {
+        let expanded = expand_ascii_math_symbols(trimmed);
+        let trimmed_exp = expanded.trim();
+
+        if trimmed_exp.starts_with(':') {
+            match trimmed_exp {
                 ":q" | ":quit" | ":exit" => {
                     println!("Exiting CRON Math REPL.");
                     break;
@@ -12168,8 +12217,30 @@ pub fn run_math_repl() -> Result<(), String> {
                 ":vliw" => {
                     println!("{}", session_prog.to_vliw());
                 }
+                ":sym" | ":symbols" => {
+                    println!("================================================================================");
+                    println!(" CANONICAL ZERO-WORD MATHEMATICAL SYMBOLS & SHORTCUTS");
+                    println!("================================================================================");
+                    println!("  Symbol   | ASCII Alias     | Functionality");
+                    println!("  ---------+-----------------+--------------------------------------------------");
+                    println!("  Ψ_g      | \\psi_g          | Grouped-Query Causal FlashAttention (GQA)");
+                    println!("  Ψ        | \\psi            | Causal Multi-Head FlashAttention");
+                    println!("  Ψ_c      | \\psi_c          | Streaming KV-Cache Causal Attention");
+                    println!("  N(X, γ)  | N(X, \\gamma)    | Fused RMS Normalization");
+                    println!("  S(...)   | S(...)          | Fused SwiGLU Gated Feed-Forward Network");
+                    println!("  B(...)   | B(...)          | BitNet 1.03b / 1.58b Sub-Byte Quantized Layer");
+                    println!("  ρ(Z)     | \\rho(Z)         | Row-Wise Softmax Probability Distribution");
+                    println!("  Φ(X)     | \\phi(X)         | Continuous Rotary Position Embedding (RoPE)");
+                    println!("  Λ(Z, y)  | \\lambda(Z, y)   | Cross-Entropy Loss with Exact Pullback");
+                    println!("  ∇_W(L)   | \\grad           | Reverse-Mode Analytic Backpropagation Gradient");
+                    println!("  Δ(W,G,η) | \\delta          | Discrete Weight Optimizer Step (W - η*G)");
+                    println!("  ι(\"...\") | \\iota           | Zero-Verbal Subword/Byte Token Embedding Lookup");
+                    println!("  <<       | << \"path.cl\"    | Pure AST Module Import");
+                    println!("  @        | @\"model.st:w\"   | Zero-Copy Direct SafeTensors Weight Binding");
+                    println!("================================================================================");
+                }
                 ":help" => {
-                    println!("Commands:\n  :c23   - View generated C23 code\n  :ptx   - View generated PTX kernel\n  :vliw  - View generated VLIW microcode\n  :reset - Reset variables and functions\n  :quit  - Exit REPL");
+                    println!("Commands:\n  :c23     - View generated C23 code\n  :ptx     - View generated PTX kernel\n  :vliw    - View generated VLIW microcode\n  :sym     - Show canonical mathematical symbols & ASCII shortcuts\n  :reset   - Reset variables and functions\n  :quit    - Exit REPL");
                 }
                 other => {
                     println!("Unknown command '{}'. Type :help for commands.", other);
@@ -12178,7 +12249,7 @@ pub fn run_math_repl() -> Result<(), String> {
             continue;
         }
 
-        match parse_math_code(trimmed) {
+        match parse_math_code(trimmed_exp) {
             Ok(prog) => {
                 match eval.execute_program_value(&prog) {
                     Ok(Some(val)) => {
@@ -12209,6 +12280,16 @@ pub fn run_math_repl() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_expand_ascii_math_symbols() {
+        let raw = r#"\psi_g(N(X, \gamma) @ W_q^T, \dots) + S(X, W_1, W_2, W_3) + \grad_W(L) + \delta(W, G, \eta)"#;
+        let expanded = expand_ascii_math_symbols(raw);
+        assert!(expanded.contains("Ψ_g("));
+        assert!(expanded.contains("γ"));
+        assert!(expanded.contains("∇_W(L)"));
+        assert!(expanded.contains("Δ(W, G, η)"));
+    }
 
     #[test]
     fn test_standard_math_evaluation() {

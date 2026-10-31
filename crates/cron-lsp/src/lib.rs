@@ -1527,6 +1527,18 @@ pub fn get_cl_completion_items(line_str: &str, character: usize) -> Vec<Completi
                 insert_text: Some(insert.to_string()),
             });
         }
+        for (sym, insert, doc) in zero_word_math_primitives_list() {
+            items.push(CompletionItem {
+                label: sym.to_string(),
+                kind: 3, // Function / Math Operator
+                detail: Some(format!("CRON Math Calculus: {}", doc)),
+                documentation: Some(MarkupContent {
+                    kind: "markdown".to_string(),
+                    value: format!("**`{}`**\n\n{}", sym, doc),
+                }),
+                insert_text: Some(insert.to_string()),
+            });
+        }
         return items;
     }
 
@@ -1686,6 +1698,37 @@ pub fn sovereign_primitives_list() -> &'static [(&'static str, &'static str, &'s
     ]
 }
 
+pub fn zero_word_math_primitives_list() -> &'static [(&'static str, &'static str, &'static str)] {
+    &[
+        ("Ψ_g", "Ψ_g(${1:Q}, ${2:K}, ${3:V}, ${4:H_q}, ${5:H_kv}, ${6:τ})", "Grouped-Query Causal FlashAttention (GQA)"),
+        ("Ψ", "Ψ(${1:Q}, ${2:K}, ${3:V}, ${4:τ})", "Causal Multi-Head FlashAttention"),
+        ("Ψ_c", "Ψ_c(${1:q}, ${2:k}, ${3:v}, ${4:K_cache}, ${5:V_cache}, ${6:τ})", "Streaming KV-Cache Causal Attention"),
+        ("N", "N(${1:X}, ${2:γ})", "Fused Root Mean Square Normalization (RMSNorm)"),
+        ("N_ε", "N_ε(${1:X}, ${2:γ}, ${3:ε})", "RMSNorm with custom epsilon tolerance"),
+        ("S", "S(${1:X}, ${2:W_g}, ${3:W_u}, ${4:W_d})", "Fused SwiGLU Gated Feed-Forward Network"),
+        ("B", "B(${1:X}, ${2:W}, ${3:γ})", "BitNet 1.03b / 1.58b Sub-Byte Quantized Linear Layer"),
+        ("ρ", "ρ(${1:Z})", "Row-wise Softmax Probability Distribution"),
+        ("Φ", "Φ(${1:X})", "Continuous Rotary Position Embedding (RoPE)"),
+        ("Λ", "Λ(${1:Z}, ${2:y})", "Cross-Entropy Loss with Exact Pullback"),
+        ("∇", "∇_${1:W}(${2:L})", "Analytic Reverse-Mode Backpropagation Gradient"),
+        ("Δ", "Δ(${1:W}, ${2:G}, ${3:η})", "Discrete Weight Optimizer Step (W - η * G)"),
+        ("ι", "ι(\"${1:text}\")", "Zero-verbal Subword/Byte Token Embedding Lookup"),
+        ("δ", "δ(${1:tokens})", "UTF-8 Token Detokenizer to Text"),
+        ("χ", "χ(${1:logits}, ${2:temp}, ${3:top_p}, ${4:seed})", "Deterministic Autoregressive In-Silicon Token Sampler"),
+        ("κ_k", "κ_k(${1:logits}, ${2:k})", "Bitonic Top-K Logit Selection Filter"),
+        ("κ_p", "κ_p(${1:logits}, ${2:p})", "Nucleus Cumulative Probability Filter"),
+        ("κ", "κ(${1:G}, ${2:max_norm})", "Global Frobenius Gradient Norm Clipping"),
+        ("∑", "∑(${1:X})", "Parallel Reduction Sum"),
+        ("μ", "μ(${1:X})", "Parallel Mean Reduction"),
+        ("σ", "σ(${1:X})", "Fused SiLU / Sigmoid Activation Function"),
+        ("√", "√(${1:X})", "Vectorized SIMD Square Root"),
+        ("∥", "∥${1:X}∥", "L2 Frobenius Norm"),
+        ("⊗", "${1:u} ⊗ ${2:v}", "Tensor Outer Product Matrix Construction"),
+        ("<<", "<< \"${1:libcl/math/module.cl}\"", "Pure AST Zero-Verbal Module Import"),
+        ("@", "@\"${1:model.safetensors}:${2:tensor_name}\"", "Zero-Copy Direct SafeTensors Weight Binding"),
+    ]
+}
+
 // === High-Level Language & Sovereign CL Completions ===
 
 pub fn get_completion_items() -> Vec<CompletionItem> {
@@ -1697,6 +1740,20 @@ pub fn get_completion_items() -> Vec<CompletionItem> {
             label: sym.to_string(),
             kind: 14, // Keyword / Operator
             detail: Some(format!("Sovereign CL v2: {}", doc)),
+            documentation: Some(MarkupContent {
+                kind: "markdown".to_string(),
+                value: format!("**`{}`**\n\n{}", sym, doc),
+            }),
+            insert_text: Some(insert.to_string()),
+        });
+    }
+
+    // 1b. Zero-Word Mathematical Calculus Operators (Primary)
+    for (sym, insert, doc) in zero_word_math_primitives_list() {
+        items.push(CompletionItem {
+            label: sym.to_string(),
+            kind: 3, // Function / Math Operator
+            detail: Some(format!("CRON Math Calculus: {}", doc)),
             documentation: Some(MarkupContent {
                 kind: "markdown".to_string(),
                 value: format!("**`{}`**\n\n{}", sym, doc),
@@ -3318,6 +3375,40 @@ mod tests {
         let noc_items = resp_noc["result"]["items"].as_array().unwrap();
         assert!(noc_items.iter().any(|i| i["label"] == "ROUTE_DOR"));
         assert!(noc_items.iter().any(|i| i["label"] == "COLLECTIVE"));
+    }
+
+    #[test]
+    fn test_lsp_cl_zero_word_math_completions() {
+        let mut server = LspServer::new();
+        let math_line = "F(X[B, D]) = ";
+        server.documents.insert("file:///math_model.cl".to_string(), math_line.to_string());
+
+        let comp_math = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 25,
+            "method": "textDocument/completion",
+            "params": {
+                "textDocument": { "uri": "file:///math_model.cl" },
+                "position": { "line": 0, "character": 13 }
+            }
+        });
+        let resp_str = server.handle_message(&comp_math.to_string()).unwrap();
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).unwrap();
+        let items = resp["result"]["items"].as_array().unwrap();
+
+        // Verify Zero-Word Canonical Math Operators are present
+        assert!(items.iter().any(|i| i["label"] == "Ψ_g"));
+        assert!(items.iter().any(|i| i["label"] == "Ψ"));
+        assert!(items.iter().any(|i| i["label"] == "N"));
+        assert!(items.iter().any(|i| i["label"] == "S"));
+        assert!(items.iter().any(|i| i["label"] == "B"));
+        assert!(items.iter().any(|i| i["label"] == "ρ"));
+        assert!(items.iter().any(|i| i["label"] == "Φ"));
+        assert!(items.iter().any(|i| i["label"] == "∇"));
+        assert!(items.iter().any(|i| i["label"] == "Δ"));
+        assert!(items.iter().any(|i| i["label"] == "ι"));
+        assert!(items.iter().any(|i| i["label"] == "<<"));
+        assert!(items.iter().any(|i| i["label"] == "@"));
     }
 
     #[test]
