@@ -1921,6 +1921,8 @@ pub enum Token {
     Star,        // *
     Slash,       // /
     At,          // @ (MatMul)
+    Otimes,      // (Tensor Outer Product)
+
     Caret,       // ^ (Power)
     Question,    // ? (Conditional ternary)
     EqEq,        // ==
@@ -2030,6 +2032,14 @@ impl<'a> MathLexer<'a> {
                     self.chars.next();
                     tokens.push(Token::At);
                 }
+                '⊗' => {
+
+                    self.chars.next();
+
+                    tokens.push(Token::Otimes);
+
+                }
+
                 '^' => {
                     self.chars.next();
                     tokens.push(Token::Caret);
@@ -2619,6 +2629,18 @@ impl MathParser {
                 Token::Star => MathBinOp::Mul,
                 Token::Slash => MathBinOp::Div,
                 Token::At => MathBinOp::MatMul,
+                Token::Otimes => {
+
+                    self.pos += 1;
+
+                    let rhs = self.parse_power()?;
+
+                    lhs = MathExpr::Call("⊗".to_string(), vec![lhs, rhs]);
+
+                    continue;
+
+                }
+
                 _ => break,
             };
             self.pos += 1;
@@ -2658,6 +2680,26 @@ impl MathParser {
             Some(Token::Num(n)) => MathExpr::Num(n),
             Some(Token::Str(s)) => MathExpr::Str(s),
             Some(Token::Underscore) => MathExpr::Placeholder,
+            Some(Token::Otimes) => {
+                if self.match_tok(&Token::LParen) {
+                    let mut args = Vec::new();
+                    if !self.match_tok(&Token::RParen) {
+                        loop {
+                            args.push(self.parse_expr()?);
+                            if self.match_tok(&Token::Comma) {
+                                continue;
+                            } else if self.match_tok(&Token::RParen) {
+                                break;
+                            } else {
+                                return Err("Expected ',' or ')' in argument list".to_string());
+                            }
+                        }
+                    }
+                    MathExpr::Call("⊗".to_string(), args)
+                } else {
+                    return Err("Unexpected '⊗'".to_string());
+                }
+            }
             Some(Token::At) => {
                 if let Some(Token::Str(s)) = self.next_tok() {
                     let (path, key) = if let Some((p, k)) = s.rsplit_once(':') {
@@ -5392,7 +5434,8 @@ impl MathEvaluator {
                         val.transpose()
                     }
                 }
-                "outer" => {
+                "outer" | "⊗" => {
+
                     if args.len() == 2 {
                         let u_val = self.eval_value(&args[0])?;
                         let v_val = self.eval_value(&args[1])?;
@@ -8289,7 +8332,8 @@ impl MathProgram {
                         None
                     }
                 }
-                "outer" => {
+                "outer" | "⊗" => {
+
                     if args.len() == 2 {
                         let u = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let v = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -9828,6 +9872,19 @@ impl MathProgram {
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) _ss += (float){}[_i][_j] * (float){}[_i][_j];\n", cols, arg_s, arg_s));
                                     out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + 1e-5f);\n", cols));
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j] * _scale;\n", cols, name, arg_s));
+                                    out.push_str("    }\n");
+                                }
+                                "outer" | "⊗" => {
+                                    let u_s = Self::expr_to_c23(&args[0]);
+                                    let v_s = Self::expr_to_c23(&args[1]);
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!("            {}[_i][_j] = (float){}[_i] * (float){}[_j];\n", name, u_s, v_s));
+                                    out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "embed" => {

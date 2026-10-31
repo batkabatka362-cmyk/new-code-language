@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════════════
-// CRON N-D TENSOR CALCULUS: W^T, Outer, and Direct Tensor Indexing
+// CRON N-D TENSOR CALCULUS: W^T, Outer ⊗, and Direct Tensor Indexing
 // Zero-Word High-Performance Matrix Engine
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -13,8 +13,8 @@ Wt = W^T
 x = [10.0, 20.0]
 y = Wt @ x
 
-// 4. Гадаад үржвэр (Outer Product): [3] ⊗ [2] -> [3, 2]
-grad_w = outer(y, [1.0, 2.0])
+// 4. Тензор гадаад үржвэр (Tensor Outer Product): [3] ⊗ [2] -> [3, 2]
+grad_w = y ⊗ [1.0, 2.0]
 
 // 5. 0-р мөрийг шууд индекслэн авч нийлбэрийг бодох:
 r0 = grad_w[0]

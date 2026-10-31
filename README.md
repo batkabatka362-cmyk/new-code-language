@@ -138,6 +138,22 @@ cargo run --bin cron -- cl-opt examples/cl/mini_transformer_attention.cl -o opti
 
 # 12. .cl машинаас шууд SSA LLVM IR болон Verilog RTL синтезлэх
 cargo run --bin cron -- cl-llvm examples/cl/mini_transformer_attention.cl -o kernel.ll
+
+# 13. Zero-Word Математик AI Пайплайн Ажиллуулах (0-Verbal Calculus)
+cargo run --bin cron -- math examples/zero_word_e2e_text_lm.cl
+
+# 14. ISO C23 0-Malloc Native Код Үүсгэх
+cargo run --bin cron -- math examples/zero_word_e2e_text_lm.cl --c23
+
+# 15. NVIDIA CUDA PTX v7.5 (sm_80) Код Үүсгэх
+cargo run --bin cron -- math examples/zero_word_e2e_text_lm.cl --ptx
+
+# 16. Математик Пайплайны Граф Диаграм (Mermaid / Interactive HTML) Үүсгэх
+cargo run --bin cron -- math examples/zero_word_e2e_text_lm.cl --graph
+cargo run --bin cron -- math examples/zero_word_e2e_text_lm.cl --html-graph graph.html
+
+# 17. Бүрэн Гүйцэтгэлийн Бенчмарк (Causal FlashAttn, RMSNorm, SwiGLU, BitNet)
+cargo run --bin cron -- bench-math
 cargo run --bin cron -- cl-verilog examples/cl/mini_transformer_attention.cl -o core.v
 
 # 13. Интерактив .cl Live Vibe-Coding REPL Силикон Консол

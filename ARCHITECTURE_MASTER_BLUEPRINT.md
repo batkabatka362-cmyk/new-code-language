@@ -70,12 +70,29 @@ The **CRON CL Ecosystem** is a unified, sovereign hardware-software co-designed 
 - **Hardware Co-Simulation Bridge (`cron cl-cosim`):** Lockstep execution verifying every clock cycle of the JIT against IEEE 1364 Verilog RTL with **0 divergence**.
 - **Memory Conflict Verifier (`cron cl-memcheck`):** Analyzes SRAM bank distribution across cycles to formally verify zero bank collisions.
 
-### Layer 3: High-Level Sovereign CL v2.1 (Mathematical Calculus & Silicon Morphisms)
-- **Level 1A — Zero-Word Standard Mathematical Algebra & Pipeline Composition (`cl_math.rs`):**
-  - **Zero Verbal Keywords:** Eliminates `fn`, `def`, `let`, `return`, `if`, `for`. Uses universal mathematical notation: `norm(x: f32) = x / sqrt(mean(x^2) + eps)`, `linear(x: f16, W: f16, b: f16) = W @ x + b`.
-  - **Lego-like Pipeline Chaining (`->`):** `forward(x: f16, W1: f16, b1: f16, W2: f16, b2: f16) = x -> norm -> linear(W1, b1) -> activate -> linear(W2, b2)`.
-  - **First-Class Tensor & Conditional Calculus:** Native Vectors (`[3.0, 4.0]`), Matrices (`[[1.0, 2.0], [3.0, 4.0]]`), `@` matrix multiplication, and `? :` conditional expressions across `f16`, `f32`, `f64`, `bf16`, `i32`, `i64`, and `t2` (1.58-bit ternary).
-  - **Multi-Target Lowering (`cron math`):** Compiles directly to **4-Slot 128-Bit VLIW Microcode (`--vliw`)**, **ISO C23 Native (`--c23`)**, and **NVIDIA CUDA PTX v7.5 SSA (`--ptx`)**.
+### Layer 3: High-Level Sovereign CL v3.0 (Zero-Verbal Mathematical Calculus & Silicon Morphisms)
+- **Level 1A — Zero-Verbal Mathematical AI Constitution (`cl_math.rs`):**
+  - **Zero Verbal Keywords:** Strictly eliminates `fn`, `def`, `let`, `return`, `if`, `for`, `import`. Uses pure mathematical notation, Greek calculus, tensor operators, and functional flow:
+    - $\Psi(Q, K, V)$: Causal FlashAttention
+    - $\Psi_c(q, k, v, K, V, s)$: Streaming $O(T \cdot D)$ Autoregressive KV-Attention
+    - $\Psi_g(Q, K, V, nh, nkv, s)$: Grouped-Query Attention (LLaMA-3 / Qwen-2.5)
+    - $\Phi(X, \theta)$: Rotary Position Embedding (RoPE)
+    - $\rho(Z)$: Numerically stable row-wise Softmax
+    - $\Lambda(Z, y)$: Cross-Entropy Loss Functional
+    - $\nabla(L, W)$: Ahead-of-Time Reverse-Mode Analytical Matrix Derivative (Tape Autodiff)
+    - $E[t]$: Direct Vector-Indexed Embedding Lookup ($[V, D] \times [T] \to [T, D]$)
+    - $u \otimes v$: Tensor Outer Product ($[M] \otimes [N] \to [M, N]$)
+    - $\tau(W)$: BitNet b1.58 Ternary Quantization ($\{-1, 0, +1\}$ absmean threshold)
+    - $\tau_8(W) / \Pi_q(X, W_q, s)$: INT8 Quantization and Quantized Matrix Multiply
+    - $\mathbf{O}(M, N) / \mathbf{I}(N)$: Zero and Identity Tensor Constructors
+    - $W_0 \to \Delta^N$: Functional Fixpoint Power Training Loops (no verbal `for`/`while`)
+    - $\iota(s) / \delta(t) / \chi(z)$: In-Silicon Text Tokenizer, Detokenizer, and Stochastic Sampler
+    - `<< "module.cl"` / `>> "model.safetensors:key"`: Zero-Verbal Module Link and Weight Stream
+  - **Single-Source Multi-Target Generation (`cron math`):**
+    - **ISO C23 Executable (`--c23`, `--c23-exe`)**: 64-byte AVX-512 aligned stack arena, zero dynamic memory allocation (`0 malloc`).
+    - **NVIDIA CUDA PTX v7.5 (`--ptx`)**: SM_80+ Tensor Core WMMA, warp shuffle butterfly reductions (`shfl.sync.bfly.b32`).
+    - **4-Slot 128-Bit VLIW Microcode (`--vliw`)**: Direct lowering into 256-Core 4D-Torus silicon bundles.
+    - **Mermaid & Interactive DAG (`--graph`, `--html-graph`)**: Direct algebraic dependency visualization.
 - **Level 1B — 5-Pillar Silicon Topology Morphisms (`cl_v2_parser.rs`):**
   - `@⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)`: 4D-Torus spatial binding.
   - `@io { in: X[16×16:NVFP4], out: Y[16×16:NVFP4], wt: W[16×16:NVFP4] }`: Typed memory layout.

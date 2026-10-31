@@ -827,76 +827,97 @@ fn validate_vliw_pipe_slots(
 /// Computes rich LSP Markdown Hover documentation for CRON Mathematical Calculus variables,
 /// functions, tensor shapes, memory footprints, and built-in operators.
 pub fn get_math_hover_documentation(doc: &str, word: &str) -> Option<String> {
-    // 1. Built-in Mathematical Operators and Functions
+    // 1. Built-in Mathematical Operators and Functions (Zero-Verbal & Unicode Parity)
     match word {
-        "norm" => return Some(
-            "### CRON Operator: `norm(X)`\n\n\
-            - **Operation**: L2 Frobenius Norm $\\|X\\|_2 = \\sqrt{\\sum X_i^2}$\n\
-            - **Input**: Tensor or Vector\n\
-            - **Output**: Scalar `f32`\n\
-            - **Silicon Implementation**: Fused parallel reduction kernel".to_string()
+        "Ψ" | "attention" | "attn" | "flash_attn" => return Some(
+            "### CRON Operator: `Ψ(Q, K, V, [scale])` (FlashAttention)\n\n            - **Operation**: Causal Masked Scaled Dot-Product Attention $\\rho(Q K^T / \\sqrt{d}) V$\n            - **Zero-Verbal Constitution**: Native single-character attention morphism\n            - **Silicon Implementation**: Fused online softmax register tile (0 intermediate DRAM writes)".to_string()
         ),
-        "relu" => return Some(
-            "### CRON Operator: `relu(X)`\n\n\
-            - **Operation**: Rectified Linear Unit $\\max(0, X)$\n\
-            - **Silicon Implementation**: Zero-cost SIMD vectorized clamp".to_string()
+                "Ψ_c" | "kv_cache_attn" => return Some(
+            "### CRON Operator: `Ψ_c(q, k, v, K_cache, V_cache, [scale])` (Streaming KV-Attention)\n\n            - **Signature**: `(out_t, K_next, V_next) = Ψ_c(...)`\n            - **Streaming Attention**: Appends step token into history ring-buffer cache and evaluates attention\n            - **Complexity**: $O(T \\cdot D)$ per autoregressive step instead of $O(T^2)$\n            - **Silicon Target**: Direct SRAM-tiled KV cache bypass".to_string()
         ),
-        "softmax" => return Some(
-            "### CRON Operator: `softmax(X)`\n\n\
-            - **Operation**: Numerically stable row-wise softmax $\\frac{e^{X_i - \\max(X)}}{\\sum e^{X_j - \\max(X)}}$\n\
-            - **Silicon Implementation**: Online FlashAttention 3-pass fused register reduction".to_string()
+        "Ψ_g" | "gqa_attn" => return Some(
+            "### CRON Operator: `Ψ_g(Q, K, V, n_heads, n_kv_heads, [scale])` (Grouped-Query Attention)\n\n            - **Architecture**: LLaMA-3 / Qwen-2.5 multi-query head group projection\n            - **Silicon Implementation**: Zero-overhead broadcast head indexing".to_string()
         ),
-        "gelu" => return Some(
-            "### CRON Operator: `gelu(X)`\n\n\
-            - **Operation**: Gaussian Error Linear Unit $0.5 X (1 + \\tanh(\\sqrt{2/\\pi} (X + 0.044715 X^3)))$\n\
-            - **Silicon Implementation**: Fused polynomial SIMD approximation".to_string()
+        "Φ" | "rope" => return Some(
+            "### CRON Operator: `Φ(X, [base_pos])` (Rotary Position Embedding)\n\n            - **Operation**: 2D complex plane phase rotation $\\Phi(X)_i = X_i e^{j \\theta_i}$\n            - **Silicon Target**: Direct SIMD complex multiply-add lane".to_string()
         ),
-        "silu" | "swish" => return Some(
-            "### CRON Operator: `silu(X)` (Swish)\n\n\
-            - **Operation**: $X \\cdot \\sigma(X) = \\frac{X}{1 + e^{-X}}$\n\
-            - **Silicon Implementation**: Fused exponential SIMD evaluation".to_string()
+        "ρ" | "softmax" => return Some(
+            "### CRON Operator: `ρ(Z)` (Row-Wise Softmax)\n\n            - **Operation**: Numerically stable row-wise probability distribution $\\rho(Z)_i = \\frac{e^{Z_i - \\max(Z)}}{\\sum e^{Z_j - \\max(Z)}}$\n            - **Silicon Target**: Online 3-pass fused register reduction".to_string()
         ),
-        "top_k" => return Some(
-            "### CRON Operator: `top_k(logits, k)`\n\n\
-            - **Operation**: Filters logits keeping only top-$k$ highest probabilities, setting others to $-\\infty$\n\
-            - **Silicon Implementation**: Fast in-register partial sorting network".to_string()
+        "Λ" | "cross_entropy" => return Some(
+            "### CRON Functional: `Λ(Z, y)` (Cross-Entropy Loss)\n\n            - **Operation**: $\\Lambda(Z, y) = -\\frac{1}{T} \\sum_t \\log \\rho(Z)_{t, y_t}$\n            - **Autodiff Adjoint**: Exact fused analytical pullback $\\nabla_Z \\Lambda = \\frac{1}{T}(\\rho(Z) - \\mathbf{1}_y)$".to_string()
         ),
-        "top_p" => return Some(
-            "### CRON Operator: `top_p(logits, p)`\n\n\
-            - **Operation**: Nucleus sampling filter over cumulative probability distribution $p \\in (0, 1]$\n\
-            - **Silicon Implementation**: Fused cumulative sum reduction".to_string()
+        "∇" | "grad" | "diff" => return Some(
+            "### CRON Calculus: `∇(L, W)` (Analytical Matrix Derivative)\n\n            - **Operation**: Reverse-mode analytical automatic differentiation $\\nabla_W \\mathcal{L}$\n            - **Silicon Target**: Ahead-of-Time static adjoint tape (0 finite-difference overhead)".to_string()
         ),
-        "sample" => return Some(
-            "### CRON Operator: `sample(logits, temp, top_p, seed)`\n\n\
-            - **Operation**: Zero-verbal in-silicon autoregressive token sampling\n\
-            - **Determinism**: 100% reproducible LCG PRNG across all hardware architectures\n\
-            - **Output**: Discrete token index (Scalar `f32`)".to_string()
+        "ι" | "encode" => return Some(
+            "### CRON Tokenizer: `ι(text)`\n\n            - **Operation**: Encodes UTF-8 string literal into 1D integer token vector\n            - **Zero-Verbal Constitution**: In-silicon native subword/byte tokenizer".to_string()
         ),
-        "encode" => return Some(
-            "### CRON Tokenizer: `encode(text)`\n\n\
-            - **Operation**: Tokenizes UTF-8 string literal into 1D integer token tensor\n\
-            - **Zero-Verbal Constitution**: Native in-silicon tokenizer".to_string()
+        "δ" | "decode" => return Some(
+            "### CRON Tokenizer: `δ(tokens)`\n\n            - **Operation**: Decodes 1D integer token vector back into UTF-8 text string".to_string()
         ),
-        "decode" => return Some(
-            "### CRON Tokenizer: `decode(tokens)`\n\n\
-            - **Operation**: Decodes 1D integer token tensor back into UTF-8 text literal".to_string()
+        "χ" | "sample" => return Some(
+            "### CRON Operator: `χ(logits, temp, top_p, seed)` (Stochastic Sampler)\n\n            - **Operation**: Zero-verbal in-silicon autoregressive token sampling with temperature and nucleus gating\n            - **Determinism**: 100% reproducible across CPU, C23, and GPU PTX".to_string()
         ),
-        "kv_cache_attn" => return Some(
-            "### CRON Operator: `kv_cache_attn(q_t, k_t, v_t, K_cache, V_cache, [scale])`\n\n\
-            - **Signature**: `(out_t, K_next, V_next) = kv_cache_attn(...)`\n\
-            - **Streaming Attention**: Appends step token into history ring-buffer cache and evaluates attention\n\
-            - **Complexity**: $O(T \\cdot D)$ per token generation step instead of $O(T^2)$\n\
-            - **Silicon Target**: Direct SRAM-tiled KV cache bypass".to_string()
+        "κ_k" | "top_k" => return Some(
+            "### CRON Operator: `κ_k(logits, k)` (Top-K Filter)\n\n            - **Operation**: In-register partial bitonic sorting keeping only top-$k$ logits".to_string()
         ),
-        "grad" => return Some(
-            "### CRON Calculus: `grad(loss, W)`\n\n\
-            - **Operation**: Reverse-mode analytical automatic differentiation $\\frac{\\partial \\text{loss}}{\\partial W}$\n\
-            - **Silicon Target**: Ahead-of-Time fused backward tape".to_string()
+        "κ_p" | "top_p" => return Some(
+            "### CRON Operator: `κ_p(logits, p)` (Nucleus Threshold)\n\n            - **Operation**: Cumulative sum probability threshold filter over $(0, 1]$".to_string()
         ),
-        "adam_step" => return Some(
-            "### CRON Optimizer: `adam_step(param, grad, m, v, t, [lr, beta1, beta2, eps])`\n\n\
-            - **Operation**: Fused AdamW weight update step\n\
-            - **Silicon Target**: In-place SIMD fused multiply-add update".to_string()
+        "κ" | "clip_grad" => return Some(
+            "### CRON Operator: `κ(G, max_norm)` (Gradient Norm Clipping)\n\n            - **Operation**: $G \\cdot \\min(1.0, \\frac{\\text{max_norm}}{\\|G\\|_F})$ preventing exploding gradients".to_string()
+        ),
+        "O" | "zeros" => return Some(
+            "### CRON Constructor: `O(M, N)` (Zero Tensor)\n\n            - **Operation**: Zero-initializes an $M \\times N$ matrix $\\mathbf{O}$\n            - **Silicon Target**: 64-byte aligned SIMD zero-memset".to_string()
+        ),
+        "I" | "eye" => return Some(
+            "### CRON Constructor: `I(N)` (Identity Matrix)\n\n            - **Operation**: $N \\times N$ identity matrix $\\mathbf{I}_N$ with diagonal 1.0f".to_string()
+        ),
+        "τ" | "τ_2" | "bitlinear" | "quantize_t2" => return Some(
+            "### CRON Operator: `τ(W)` (BitNet b1.58 Quantizer)\n\n            - **Operation**: Ternary $\\{-1, 0, +1\\}$ quantization with scale $\\gamma = \\text{mean}(|W|)$\n            - **Silicon Target**: Zero-Multiply integer addition/subtraction engine".to_string()
+        ),
+        "τ_8" | "quantize_i8" => return Some(
+            "### CRON Operator: `τ_8(W)` (INT8 Quantizer)\n\n            - **Operation**: Row-wise symmetric INT8 quantization for $4\\times$ memory bandwidth compression".to_string()
+        ),
+        "Π_q" | "qmatmul" => return Some(
+            "### CRON Operator: `Π_q(X, W_q, scales)` (Quantized MatMul)\n\n            - **Operation**: INT8 integer matrix multiplication with row scale vector".to_string()
+        ),
+        "∑" | "sum" => return Some(
+            "### CRON Operator: `∑(X)` (Sum Reduction)\n\n            - **Operation**: Full parallel reduction sum $\\sum X_i$".to_string()
+        ),
+        "μ" | "mean" => return Some(
+            "### CRON Operator: `μ(X)` (Mean Reduction)\n\n            - **Operation**: Arithmetic mean $\\mu(X) = \\frac{1}{N}\\sum X_i$".to_string()
+        ),
+        "σ" | "silu" | "sigmoid" | "swish" => return Some(
+            "### CRON Operator: `σ(X)` (Activation)\n\n            - **Operation**: Sigmoid $\\frac{1}{1 + e^{-X}}$ or SiLU $X \\cdot \\sigma(X)$".to_string()
+        ),
+        "√" | "sqrt" => return Some(
+            "### CRON Operator: `√(X)` (Square Root)\n\n            - **Operation**: Vectorized SIMD square root $\\sqrt{X}$".to_string()
+        ),
+        "∥" | "norm" => return Some(
+            "### CRON Operator: `∥X∥` (Frobenius Norm)\n\n            - **Operation**: L2 Frobenius norm $\\|X\\|_2 = \\sqrt{\\sum X_i^2}$".to_string()
+        ),
+        "⊗" | "outer" => return Some(
+            "### CRON Operator: `u ⊗ v` (Tensor Outer Product)\n\n            - **Operation**: Outer product between two 1D vectors $M_{i, j} = u_i \\cdot v_j$\n            - **Output**: 2D Matrix $[|u|, |v|]$".to_string()
+        ),
+        "N" | "rmsnorm" => return Some(
+            "### CRON Module: `N(X, γ)` (RMSNorm)\n\n            - **Operation**: $N(X, \\gamma) = \\frac{X}{\\sqrt{\\mu(X^2) + \\epsilon}} \\cdot \\gamma$\n            - **Standard Library**: `<< \"libcl/math/rms_norm.cl\"`".to_string()
+        ),
+        "S" | "swiglu" | "fused_swiglu" => return Some(
+            "### CRON Module: `S(X, W_1, W_2, W_3)` (SwiGLU MLP)\n\n            - **Operation**: $S(X) = (\\sigma(X W_1) \\odot (X W_2)) W_3$\n            - **Standard Library**: `<< \"libcl/math/swiglu_mlp.cl\"`".to_string()
+        ),
+        "B" | "bitnet" => return Some(
+            "### CRON Module: `B(X, W, γ)` (BitNet b1.58 Layer)\n\n            - **Operation**: $B(X) = (X @ \\tau(W)^T) \\cdot \\gamma$\n            - **Standard Library**: `<< \"libcl/math/bitnet_layer.cl\"`".to_string()
+        ),
+        "M" | "Ξ" | "ssd_scan" => return Some(
+            "### CRON Module: `M(X, A, B, C, Δ)` (Mamba-2 SSD Block)\n\n            - **Operation**: Associative linear recurrent state space scan\n            - **Standard Library**: `<< \"libcl/math/mamba2_ssd.cl\"`".to_string()
+        ),
+        "ω" | "argmax" => return Some(
+            "### CRON Operator: `ω(v)` (Argmax)\n\n            - **Operation**: Returns the integer index of the maximum element in vector $v$".to_string()
+        ),
+        "ξ" | "concat" => return Some(
+            "### CRON Operator: `ξ(a, b)` (Concat)\n\n            - **Operation**: Concatenates vectors or matrices along leading dimension".to_string()
         ),
         _ => {}
     }
@@ -2897,27 +2918,77 @@ pub fn uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
     }
 }
 
+pub fn is_math_ident_char(c: char) -> bool {
+    c.is_alphanumeric()
+        || c == '_'
+        || matches!(
+            c,
+            'α'..='ω'
+                | 'Α'..='Ω'
+                | '∇'
+                | '∑'
+                | '√'
+                | '∥'
+                | '⊗'
+        )
+}
+
 pub fn extract_word_at_pos(line: &str, character: usize) -> Option<(String, usize, usize)> {
-    if character > line.len() {
+    if line.is_empty() {
+        return None;
+    }
+    let char_indices: Vec<(usize, char)> = line.char_indices().collect();
+    if char_indices.is_empty() {
         return None;
     }
 
-    let bytes = line.as_bytes();
-    let is_ident_char = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut target_idx = None;
+    for (i, &(byte_offset, c)) in char_indices.iter().enumerate() {
+        let char_len = c.len_utf8();
+        if character >= byte_offset && character < byte_offset + char_len {
+            target_idx = Some(i);
+            break;
+        }
+    }
 
-    let mut start = character;
-    while start > 0 && is_ident_char(bytes[start - 1]) {
+    let pos = match target_idx {
+        Some(i) => {
+            if is_math_ident_char(char_indices[i].1) {
+                i
+            } else if i > 0 && is_math_ident_char(char_indices[i - 1].1) && character == char_indices[i].0 {
+                i - 1
+            } else {
+                return None;
+            }
+        }
+        None => {
+            if character >= line.len() && !char_indices.is_empty() && is_math_ident_char(char_indices.last().unwrap().1) {
+                char_indices.len() - 1
+            } else {
+                return None;
+            }
+        }
+    };
+
+    let mut start = pos;
+    while start > 0 && is_math_ident_char(char_indices[start - 1].1) {
         start -= 1;
     }
 
-    let mut end = character;
-    while end < bytes.len() && is_ident_char(bytes[end]) {
+    let mut end = pos + 1;
+    while end < char_indices.len() && is_math_ident_char(char_indices[end].1) {
         end += 1;
     }
 
-    if start < end {
-        let word = std::str::from_utf8(&bytes[start..end]).ok()?.to_string();
-        Some((word, start, end))
+    let start_byte = char_indices[start].0;
+    let end_byte = if end < char_indices.len() {
+        char_indices[end].0
+    } else {
+        line.len()
+    };
+
+    if start_byte < end_byte {
+        Some((line[start_byte..end_byte].to_string(), start_byte, end_byte))
     } else {
         None
     }
@@ -3721,5 +3792,56 @@ mod tests {
         assert!(sym_diags[0].message.contains("D1"));
         assert!(sym_diags[0].message.contains("D2"));
     }
-}
 
+    #[test]
+    fn test_phase19_greek_unicode_math_hover_and_word_extraction() {
+        let code = r#"
+            s0 = "AI"
+            t = ι(s0)
+            H0 = E[t]
+            γ_1 = [1.0, 1.0]
+            H_norm = N(H0, γ_1)
+            H_rope = Φ(H_norm, 0.0)
+            H_attn = Ψ(Q, K, V)
+            (y_s, K_s, V_s) = Ψ_c(q, k, v, K, V, 0.5)
+            L = Λ(H_attn, y)
+            gW = ∇(L, W)
+            M_out = a ⊗ b
+            s1 = δ(toks)
+            tok = χ(logits, 0.8, 0.95, 42)
+            W0 = O(4, 4)
+            Id = I(4)
+        "#;
+        // Verify word extraction on Greek/Unicode characters
+        let line_attn = "            H_attn = Ψ(Q, K, V)";
+        let char_pos = line_attn.find('Ψ').expect("Find Psi");
+        let (word, _, _) = extract_word_at_pos(line_attn, char_pos).expect("Extract Psi");
+        assert_eq!(word, "Ψ");
+
+        let line_kv = "            (y_s, K_s, V_s) = Ψ_c(q, k, v, K, V, 0.5)";
+        let char_pos_kv = line_kv.find('Ψ').expect("Find Psi_c");
+        let (word_kv, _, _) = extract_word_at_pos(line_kv, char_pos_kv).expect("Extract Psi_c");
+        assert_eq!(word_kv, "Ψ_c");
+
+        let line_grad = "            gW = ∇(L, W)";
+        let char_pos_grad = line_grad.find('∇').expect("Find Nabla");
+        let (word_grad, _, _) = extract_word_at_pos(line_grad, char_pos_grad).expect("Extract Nabla");
+        assert_eq!(word_grad, "∇");
+
+        // Verify Hover documentation
+        let hover_psi = get_math_hover_documentation(code, "Ψ").expect("Hover for Ψ");
+        assert!(hover_psi.contains("FlashAttention"));
+
+        let hover_psic = get_math_hover_documentation(code, "Ψ_c").expect("Hover for Ψ_c");
+        assert!(hover_psic.contains("Streaming KV-Attention"));
+
+        let hover_grad = get_math_hover_documentation(code, "∇").expect("Hover for ∇");
+        assert!(hover_grad.contains("Analytical Matrix Derivative"));
+
+        let hover_otimes = get_math_hover_documentation(code, "⊗").expect("Hover for ⊗");
+        assert!(hover_otimes.contains("Tensor Outer Product"));
+
+        let hover_lambda = get_math_hover_documentation(code, "Λ").expect("Hover for Λ");
+        assert!(hover_lambda.contains("Cross-Entropy Loss"));
+    }
+}
