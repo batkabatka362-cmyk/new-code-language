@@ -2910,6 +2910,96 @@ impl ExprTape {
                     let adj_x = reconstruct(grad_x, &x_shape)?;
                     arg_tapes[0].backward(&adj_x, wrt, acc_grad, evaluator)
                 }
+                "bitlinear" => {
+                    let x_val = &arg_vals[0];
+                    let w_val = &arg_vals[1];
+                    let gamma = if arg_vals.len() > 2 {
+                        arg_vals[2].as_scalar().unwrap_or(1.0)
+                    } else {
+                        1.0
+                    };
+                    if let (MathValue::Matrix(_), MathValue::Matrix(w_m)) = (x_val, w_val) {
+                        let adj_scaled = adj.map_unary(|a| a * gamma);
+                        let grad_x = match adj_scaled {
+                            MathValue::Matrix(ref am) => {
+                                let m = am.len();
+                                let n = am.first().map(|r| r.len()).unwrap_or(0);
+                                let k = w_m.first().map(|r| r.len()).unwrap_or(0);
+                                let mut gx = vec![vec![0.0; k]; m];
+                                for i in 0..m {
+                                    for col in 0..k {
+                                        let mut dot = 0.0;
+                                        for j in 0..n {
+                                            dot += am[i][j] * w_m[j][col];
+                                        }
+                                        gx[i][col] = dot;
+                                    }
+                                }
+                                MathValue::Matrix(gx)
+                            }
+                            _ => x_val.zeros_like(),
+                        };
+                        arg_tapes[0].backward(&grad_x, wrt, acc_grad, evaluator)?;
+
+                        let grad_w = match adj {
+                            MathValue::Matrix(ref am) => {
+                                let m = am.len();
+                                let n = am.first().map(|r| r.len()).unwrap_or(0);
+                                if let MathValue::Matrix(ref xm) = x_val {
+                                    let k = xm.first().map(|r| r.len()).unwrap_or(0);
+                                    let mut gw = vec![vec![0.0; k]; n];
+                                    for j in 0..n {
+                                        for col in 0..k {
+                                            let mut dot = 0.0;
+                                            for i in 0..m {
+                                                dot += am[i][j] * xm[i][col];
+                                            }
+                                            gw[j][col] = dot * gamma;
+                                        }
+                                    }
+                                    MathValue::Matrix(gw)
+                                } else {
+                                    w_val.zeros_like()
+                                }
+                            }
+                            _ => w_val.zeros_like(),
+                        };
+                        arg_tapes[1].backward(&grad_w, wrt, acc_grad, evaluator)
+                    } else {
+                        Ok(())
+                    }
+                }
+                "qmatmul" => {
+                    let x_val = &arg_vals[0];
+                    let w_val = &arg_vals[1];
+                    let scales = &arg_vals[2];
+                    let scales_vec = scales.flatten_elements();
+                    if let (MathValue::Matrix(_), MathValue::Matrix(w_m)) = (x_val, w_val) {
+                        let grad_x = match adj {
+                            MathValue::Matrix(ref am) => {
+                                let m = am.len();
+                                let n = am.first().map(|r| r.len()).unwrap_or(0);
+                                let k = w_m.first().map(|r| r.len()).unwrap_or(0);
+                                let mut gx = vec![vec![0.0; k]; m];
+                                for i in 0..m {
+                                    for col in 0..k {
+                                        let mut dot = 0.0;
+                                        for j in 0..n {
+                                            let s = scales_vec.get(j).copied().unwrap_or(1.0);
+                                            dot += am[i][j] * (w_m[j][col] * s);
+                                        }
+                                        gx[i][col] = dot;
+                                    }
+                                }
+                                MathValue::Matrix(gx)
+                            }
+                            _ => x_val.zeros_like(),
+                        };
+                        arg_tapes[0].backward(&grad_x, wrt, acc_grad, evaluator)
+                    } else {
+                        Ok(())
+                    }
+                }
                 _ => Err(format!(
                     "Unsupported function call '{}' in analytical backward",
                     name
@@ -3462,6 +3552,316 @@ impl MathEvaluator {
         }
     }
 
+    pub fn eval_quantize_t2(&self, val: &MathValue) -> Result<MathValue, String> {
+        let elems = val.flatten_elements();
+        if elems.is_empty() {
+            return Ok(MathValue::Tuple(vec![val.clone(), MathValue::Scalar(1.0)]));
+        }
+        let gamma = (elems.iter().map(|x| x.abs()).sum::<f64>() / elems.len() as f64).max(1e-12);
+        let quant_fn = |x: f64| -> f64 {
+            (x / gamma).clamp(-1.0, 1.0).round()
+        };
+        let quantized = val.map_unary_dyn(&quant_fn);
+        Ok(MathValue::Tuple(vec![quantized, MathValue::Scalar(gamma)]))
+    }
+
+    pub fn eval_bitlinear(
+        &self,
+        x: &MathValue,
+        w: &MathValue,
+        gamma: Option<f64>,
+    ) -> Result<MathValue, String> {
+        let scale = gamma.unwrap_or(1.0);
+        match (x, w) {
+            (MathValue::Matrix(x_m), MathValue::Matrix(w_m)) => {
+                let m = x_m.len();
+                let k_x = x_m.first().map(|r| r.len()).unwrap_or(0);
+                let w_rows = w_m.len();
+                let w_cols = w_m.first().map(|r| r.len()).unwrap_or(0);
+
+                if k_x == w_cols {
+                    // Y = X @ W^T, where W is [N, K], output is [M, N]
+                    let n = w_rows;
+                    let mut out = vec![vec![0.0; n]; m];
+                    for i in 0..m {
+                        for j in 0..n {
+                            let mut acc = 0.0;
+                            let x_row = &x_m[i];
+                            let w_row = &w_m[j];
+                            for (&xv, &wv) in x_row.iter().zip(w_row.iter()) {
+                                if wv > 0.5 {
+                                    acc += xv;
+                                } else if wv < -0.5 {
+                                    acc -= xv;
+                                }
+                            }
+                            out[i][j] = acc * scale;
+                        }
+                    }
+                    Ok(MathValue::Matrix(out))
+                } else if k_x == w_rows {
+                    // Standard GEMM: Y = X @ W, where W is [K, N], output is [M, N]
+                    let n = w_cols;
+                    let mut out = vec![vec![0.0; n]; m];
+                    for i in 0..m {
+                        for j in 0..n {
+                            let mut acc = 0.0;
+                            let x_row = &x_m[i];
+                            for (k, x_val) in x_row.iter().enumerate() {
+                                let wv = w_m[k][j];
+                                if wv > 0.5 {
+                                    acc += x_val;
+                                } else if wv < -0.5 {
+                                    acc -= x_val;
+                                }
+                            }
+                            out[i][j] = acc * scale;
+                        }
+                    }
+                    Ok(MathValue::Matrix(out))
+                } else {
+                    Err(format!(
+                        "bitlinear dimension mismatch: X is [{}, {}], W is [{}, {}]",
+                        m, k_x, w_rows, w_cols
+                    ))
+                }
+            }
+            (MathValue::Vector(x_v), MathValue::Matrix(w_m)) => {
+                let k_x = x_v.len();
+                let w_rows = w_m.len();
+                let w_cols = w_m.first().map(|r| r.len()).unwrap_or(0);
+                if k_x == w_cols {
+                    let mut out = Vec::with_capacity(w_rows);
+                    for w_row in w_m {
+                        let mut acc = 0.0;
+                        for (&xv, &wv) in x_v.iter().zip(w_row.iter()) {
+                            if wv > 0.5 {
+                                acc += xv;
+                            } else if wv < -0.5 {
+                                acc -= xv;
+                            }
+                        }
+                        out.push(acc * scale);
+                    }
+                    Ok(MathValue::Vector(out))
+                } else if k_x == w_rows {
+                    let mut out = vec![0.0; w_cols];
+                    for (k, &xv) in x_v.iter().enumerate() {
+                        for j in 0..w_cols {
+                            let wv = w_m[k][j];
+                            if wv > 0.5 {
+                                out[j] += xv;
+                            } else if wv < -0.5 {
+                                out[j] -= xv;
+                            }
+                        }
+                    }
+                    for v in &mut out {
+                        *v *= scale;
+                    }
+                    Ok(MathValue::Vector(out))
+                } else {
+                    Err(format!(
+                        "bitlinear vector-matrix dimension mismatch: X [{}] vs W [{}, {}]",
+                        k_x, w_rows, w_cols
+                    ))
+                }
+            }
+            (MathValue::Tensor { shape, strides, data }, MathValue::Matrix(w_m)) => {
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let k_x = *shape.last().unwrap_or(&1);
+                let w_rows = w_m.len();
+                let w_cols = w_m.first().map(|r| r.len()).unwrap_or(0);
+                let (n, transposed) = if k_x == w_cols {
+                    (w_rows, true)
+                } else if k_x == w_rows {
+                    (w_cols, false)
+                } else {
+                    return Err(format!(
+                        "bitlinear tensor dimension mismatch: X inner dim {} vs W [{}, {}]",
+                        k_x, w_rows, w_cols
+                    ));
+                };
+                let num_rows = flat.len() / k_x.max(1);
+                let mut out = vec![0.0; num_rows * n];
+                for r in 0..num_rows {
+                    let x_start = r * k_x;
+                    let x_row = &flat[x_start..x_start + k_x];
+                    for j in 0..n {
+                        let mut acc = 0.0;
+                        if transposed {
+                            let w_row = &w_m[j];
+                            for (&xv, &wv) in x_row.iter().zip(w_row.iter()) {
+                                if wv > 0.5 {
+                                    acc += xv;
+                                } else if wv < -0.5 {
+                                    acc -= xv;
+                                }
+                            }
+                        } else {
+                            for (k, &xv) in x_row.iter().enumerate() {
+                                let wv = w_m[k][j];
+                                if wv > 0.5 {
+                                    acc += xv;
+                                } else if wv < -0.5 {
+                                    acc -= xv;
+                                }
+                            }
+                        }
+                        out[r * n + j] = acc * scale;
+                    }
+                }
+                let mut out_shape = shape.clone();
+                *out_shape.last_mut().unwrap() = n;
+                MathValue::new_tensor(out_shape, out)
+            }
+            _ => Err("bitlinear requires Matrix or Tensor operands".to_string()),
+        }
+    }
+
+    pub fn eval_quantize_i8(
+        &self,
+        val: &MathValue,
+        _group_size: Option<usize>,
+    ) -> Result<MathValue, String> {
+        match val {
+            MathValue::Matrix(m) => {
+                let rows = m.len();
+                let cols = m.first().map(|r| r.len()).unwrap_or(0);
+                let mut q_mat = vec![vec![0.0; cols]; rows];
+                let mut scales = Vec::with_capacity(rows);
+                for r in 0..rows {
+                    let max_v = m[r].iter().copied().fold(0.0f64, |acc, x| acc.max(x.abs()));
+                    let s = if max_v > 1e-12 { max_v / 127.0 } else { 1.0 };
+                    scales.push(s);
+                    for c in 0..cols {
+                        q_mat[r][c] = (m[r][c] / s).clamp(-128.0, 127.0).round();
+                    }
+                }
+                Ok(MathValue::Tuple(vec![
+                    MathValue::Matrix(q_mat),
+                    MathValue::Vector(scales),
+                ]))
+            }
+            MathValue::Vector(v) => {
+                let max_v = v.iter().copied().fold(0.0f64, |acc, x| acc.max(x.abs()));
+                let s = if max_v > 1e-12 { max_v / 127.0 } else { 1.0 };
+                let q_vec = v
+                    .iter()
+                    .map(|&x| (x / s).clamp(-128.0, 127.0).round())
+                    .collect();
+                Ok(MathValue::Tuple(vec![
+                    MathValue::Vector(q_vec),
+                    MathValue::Scalar(s),
+                ]))
+            }
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let last_dim = *shape.last().unwrap_or(&1);
+                let num_rows = flat.len() / last_dim.max(1);
+                let mut q_flat = vec![0.0; flat.len()];
+                let mut scales = Vec::with_capacity(num_rows);
+                for r in 0..num_rows {
+                    let start = r * last_dim;
+                    let end = start + last_dim;
+                    let row = &flat[start..end];
+                    let max_v = row.iter().copied().fold(0.0f64, |acc, x| acc.max(x.abs()));
+                    let s = if max_v > 1e-12 { max_v / 127.0 } else { 1.0 };
+                    scales.push(s);
+                    for (i, &v) in row.iter().enumerate() {
+                        q_flat[start + i] = (v / s).clamp(-128.0, 127.0).round();
+                    }
+                }
+                let q_tensor = MathValue::new_tensor(shape.clone(), q_flat)?;
+                Ok(MathValue::Tuple(vec![
+                    q_tensor,
+                    MathValue::Vector(scales),
+                ]))
+            }
+            _ => Err("quantize_i8 requires Matrix, Vector, or Tensor".to_string()),
+        }
+    }
+
+    pub fn eval_qmatmul(
+        &self,
+        x: &MathValue,
+        w_q: &MathValue,
+        scales: &MathValue,
+    ) -> Result<MathValue, String> {
+        let scales_vec = scales.flatten_elements();
+        match (x, w_q) {
+            (MathValue::Matrix(x_m), MathValue::Matrix(w_m)) => {
+                let m = x_m.len();
+                let k_x = x_m.first().map(|r| r.len()).unwrap_or(0);
+                let w_rows = w_m.len();
+                let w_cols = w_m.first().map(|r| r.len()).unwrap_or(0);
+                if k_x == w_cols {
+                    let n = w_rows;
+                    let mut out = vec![vec![0.0; n]; m];
+                    for i in 0..m {
+                        for j in 0..n {
+                            let s = scales_vec.get(j).copied().unwrap_or(1.0);
+                            let dot: f64 = x_m[i]
+                                .iter()
+                                .zip(w_m[j].iter())
+                                .map(|(&a, &b)| a * b)
+                                .sum();
+                            out[i][j] = dot * s;
+                        }
+                    }
+                    Ok(MathValue::Matrix(out))
+                } else if k_x == w_rows {
+                    let n = w_cols;
+                    let mut out = vec![vec![0.0; n]; m];
+                    for i in 0..m {
+                        for j in 0..n {
+                            let s = scales_vec.get(j).copied().unwrap_or(1.0);
+                            let dot: f64 = (0..k_x).map(|k| x_m[i][k] * w_m[k][j]).sum();
+                            out[i][j] = dot * s;
+                        }
+                    }
+                    Ok(MathValue::Matrix(out))
+                } else {
+                    Err(format!(
+                        "qmatmul shape mismatch: X [{}, {}] vs W_q [{}, {}]",
+                        m, k_x, w_rows, w_cols
+                    ))
+                }
+            }
+            (MathValue::Vector(x_v), MathValue::Matrix(w_m)) => {
+                let k_x = x_v.len();
+                let w_rows = w_m.len();
+                let w_cols = w_m.first().map(|r| r.len()).unwrap_or(0);
+                if k_x == w_cols {
+                    let mut out = Vec::with_capacity(w_rows);
+                    for j in 0..w_rows {
+                        let s = scales_vec.get(j).copied().unwrap_or(1.0);
+                        let dot: f64 = x_v
+                            .iter()
+                            .zip(w_m[j].iter())
+                            .map(|(&a, &b)| a * b)
+                            .sum();
+                        out.push(dot * s);
+                    }
+                    Ok(MathValue::Vector(out))
+                } else {
+                    let mut out = vec![0.0; w_cols];
+                    for j in 0..w_cols {
+                        let s = scales_vec.get(j).copied().unwrap_or(1.0);
+                        let dot: f64 = (0..k_x).map(|k| x_v[k] * w_m[k][j]).sum();
+                        out[j] = dot * s;
+                    }
+                    Ok(MathValue::Vector(out))
+                }
+            }
+            _ => Err("qmatmul requires Matrix or Vector operands".to_string()),
+        }
+    }
+
     pub fn eval(&self, expr: &MathExpr) -> Result<f64, String> {
         let val = self.eval_value(expr)?;
         val.as_scalar()
@@ -3869,6 +4269,48 @@ impl MathEvaluator {
                         ds
                     };
                     x.permute(&dims)
+                }
+                "quantize_t2" | "t2_quant" => {
+                    let val = self.eval_single_val(args, "quantize_t2")?;
+                    self.eval_quantize_t2(&val)
+                }
+                "bitlinear" => {
+                    if args.len() < 2 {
+                        return Err(
+                            "'bitlinear(X, W, [gamma])' requires at least 2 arguments".to_string(),
+                        );
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let w = self.eval_value(&args[1])?;
+                    let gamma = if args.len() > 2 {
+                        Some(self.eval(&args[2])?)
+                    } else {
+                        None
+                    };
+                    self.eval_bitlinear(&x, &w, gamma)
+                }
+                "quantize_i8" | "i8_quant" => {
+                    if args.is_empty() {
+                        return Err(
+                            "'quantize_i8(W, [group_size])' requires at least 1 argument".to_string(),
+                        );
+                    }
+                    let w = self.eval_value(&args[0])?;
+                    let group_size = if args.len() > 1 {
+                        Some(self.eval(&args[1])? as usize)
+                    } else {
+                        None
+                    };
+                    self.eval_quantize_i8(&w, group_size)
+                }
+                "qmatmul" => {
+                    if args.len() < 3 {
+                        return Err("'qmatmul(X, W_q, scales)' requires 3 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let w_q = self.eval_value(&args[1])?;
+                    let scales = self.eval_value(&args[2])?;
+                    self.eval_qmatmul(&x, &w_q, &scales)
                 }
                 "norm" => {
                     let val = self.eval_single_val(args, "norm")?;
@@ -6806,6 +7248,91 @@ impl MathProgram {
                         None
                     }
                 }
+                "quantize_t2" | "t2_quant" => {
+                    if let Some(arg) = args.first() {
+                        let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
+                    }
+                    None
+                }
+                "bitlinear" => {
+                    if args.len() >= 2 {
+                        let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let w_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        if args.len() > 2 {
+                            let _ = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        }
+                        match (x_s, w_s) {
+                            (Some(x), Some(w)) => {
+                                if x.len() == 2 && w.len() == 2 {
+                                    if x[1] == w[1] {
+                                        Some(vec![x[0], w[0]])
+                                    } else if x[1] == w[0] {
+                                        Some(vec![x[0], w[1]])
+                                    } else {
+                                        errors.push(format!(
+                                            "{}bitlinear dimension mismatch: X {:?} vs W {:?}",
+                                            prefix, x, w
+                                        ));
+                                        None
+                                    }
+                                } else if x.len() == 1 && w.len() == 2 {
+                                    if x[0] == w[1] {
+                                        Some(vec![w[0]])
+                                    } else {
+                                        Some(vec![w[1]])
+                                    }
+                                } else if x.len() == 3 && w.len() == 2 {
+                                    let n = if x[2] == w[1] { w[0] } else { w[1] };
+                                    Some(vec![x[0], x[1], n])
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        errors.push(format!(
+                            "{}bitlinear(X, W, [gamma]) expects at least 2 arguments",
+                            prefix
+                        ));
+                        None
+                    }
+                }
+                "quantize_i8" | "i8_quant" => {
+                    if let Some(arg) = args.first() {
+                        let _ = Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx);
+                    }
+                    None
+                }
+                "qmatmul" => {
+                    if args.len() >= 3 {
+                        let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
+                        let w_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
+                        let _ = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
+                        match (x_s, w_s) {
+                            (Some(x), Some(w)) => {
+                                if x.len() == 2 && w.len() == 2 {
+                                    if x[1] == w[1] {
+                                        Some(vec![x[0], w[0]])
+                                    } else {
+                                        Some(vec![x[0], w[1]])
+                                    }
+                                } else if x.len() == 1 && w.len() == 2 {
+                                    Some(vec![w[0]])
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        errors.push(format!(
+                            "{}qmatmul(X, W_q, scales) expects 3 arguments",
+                            prefix
+                        ));
+                        None
+                    }
+                }
                 user_fn => {
                     if let Some((params, _ret, body)) = fn_sigs.get(user_fn) {
                         if params.len() != args.len() {
@@ -8489,7 +9016,242 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
     Ok(())
 }
 
-/// Loads tensor weights from Safetensors or plain text / CLL tensor files
+/// Decodes IEEE 754 half-precision float (16-bit) to f64
+pub fn decode_f16(u: u16) -> f64 {
+    let sign = if (u >> 15) != 0 { -1.0 } else { 1.0 };
+    let exp = (u >> 10) & 0x1F;
+    let mant = u & 0x3FF;
+    if exp == 0 {
+        sign * (mant as f64 / 1024.0) * (2.0f64.powi(-14))
+    } else if exp == 31 {
+        if mant == 0 {
+            sign * f64::INFINITY
+        } else {
+            f64::NAN
+        }
+    } else {
+        sign * (1.0 + (mant as f64 / 1024.0)) * (2.0f64.powi(exp as i32 - 15))
+    }
+}
+
+/// Parses and loads a tensor from a binary GGUF v2/v3 file
+fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, String> {
+    if bytes.len() < 24 {
+        return Err(format!("GGUF file '{}' too short (len: {})", path, bytes.len()));
+    }
+    if &bytes[0..4] != b"GGUF" {
+        return Err(format!("File '{}' is not a valid GGUF file (bad magic)", path));
+    }
+    let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+    if version < 2 || version > 3 {
+        return Err(format!("Unsupported GGUF version {} in '{}' (expected 2 or 3)", version, path));
+    }
+    let tensor_count = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+    let metadata_kv_count = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
+
+    let mut cursor = 24;
+
+    fn read_str<'a>(bytes: &'a [u8], cursor: &mut usize) -> Result<&'a str, String> {
+        if *cursor + 8 > bytes.len() {
+            return Err("Unexpected EOF while reading string length in GGUF".to_string());
+        }
+        let len = u64::from_le_bytes(bytes[*cursor..*cursor + 8].try_into().unwrap()) as usize;
+        *cursor += 8;
+        if *cursor + len > bytes.len() {
+            return Err("Unexpected EOF while reading string bytes in GGUF".to_string());
+        }
+        let s = std::str::from_utf8(&bytes[*cursor..*cursor + len])
+            .map_err(|e| format!("Invalid UTF-8 in GGUF string: {}", e))?;
+        *cursor += len;
+        Ok(s)
+    }
+
+    fn skip_val(bytes: &[u8], cursor: &mut usize, val_type: u32) -> Result<(), String> {
+        match val_type {
+            0 | 1 | 7 => {
+                if *cursor + 1 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                *cursor += 1;
+            }
+            2 | 3 => {
+                if *cursor + 2 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                *cursor += 2;
+            }
+            4 | 5 | 6 => {
+                if *cursor + 4 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                *cursor += 4;
+            }
+            10 | 11 | 12 => {
+                if *cursor + 8 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                *cursor += 8;
+            }
+            8 => {
+                let _ = read_str(bytes, cursor)?;
+            }
+            9 => {
+                if *cursor + 12 > bytes.len() { return Err("Unexpected EOF in GGUF array header".to_string()); }
+                let elem_type = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap());
+                let count = u64::from_le_bytes(bytes[*cursor + 4..*cursor + 12].try_into().unwrap()) as usize;
+                *cursor += 12;
+                for _ in 0..count {
+                    skip_val(bytes, cursor, elem_type)?;
+                }
+            }
+            _ => return Err(format!("Unknown GGUF metadata type ID: {}", val_type)),
+        }
+        Ok(())
+    }
+
+    let mut alignment = 32usize;
+    for _ in 0..metadata_kv_count {
+        let k = read_str(bytes, &mut cursor)?;
+        if cursor + 4 > bytes.len() {
+            return Err("Unexpected EOF reading GGUF metadata type".to_string());
+        }
+        let val_type = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        cursor += 4;
+        if k == "general.alignment" && (val_type == 4 || val_type == 10) {
+            alignment = if val_type == 4 {
+                u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize
+            } else {
+                u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap()) as usize
+            };
+        }
+        skip_val(bytes, &mut cursor, val_type)?;
+    }
+
+    struct GgufTensorInfo {
+        name: String,
+        dims: Vec<usize>,
+        ggml_type: u32,
+        offset: u64,
+    }
+    let mut tensors = Vec::with_capacity(tensor_count);
+    for _ in 0..tensor_count {
+        let name = read_str(bytes, &mut cursor)?.to_string();
+        if cursor + 4 > bytes.len() {
+            return Err("Unexpected EOF reading GGUF tensor dimensions count".to_string());
+        }
+        let n_dims = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap()) as usize;
+        cursor += 4;
+        if cursor + n_dims * 8 > bytes.len() {
+            return Err("Unexpected EOF reading GGUF tensor dimensions".to_string());
+        }
+        let mut dims = Vec::with_capacity(n_dims);
+        for _ in 0..n_dims {
+            dims.push(u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap()) as usize);
+            cursor += 8;
+        }
+        if cursor + 12 > bytes.len() {
+            return Err("Unexpected EOF reading GGUF tensor type/offset".to_string());
+        }
+        let ggml_type = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
+        cursor += 4;
+        let offset = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
+        cursor += 8;
+        tensors.push(GgufTensorInfo { name, dims, ggml_type, offset });
+    }
+
+    let data_start = (cursor + alignment - 1) & !(alignment - 1);
+
+    let target = if key.is_empty() {
+        tensors.first().ok_or_else(|| format!("No tensors found in GGUF file '{}'", path))?
+    } else {
+        tensors.iter().find(|t| t.name == key).ok_or_else(|| {
+            format!("Tensor '{}' not found in GGUF file '{}'", key, path)
+        })?
+    };
+
+    let shape: Vec<usize> = target.dims.iter().copied().rev().collect();
+    let total_elements: usize = if shape.is_empty() { 1 } else { shape.iter().product() };
+    let tensor_raw_offset = data_start + target.offset as usize;
+    if tensor_raw_offset > bytes.len() {
+        return Err(format!("GGUF tensor offset out of bounds: {}", tensor_raw_offset));
+    }
+    let raw_data = &bytes[tensor_raw_offset..];
+
+    let mut floats = Vec::with_capacity(total_elements);
+    match target.ggml_type {
+        0 => { // GGML_TYPE_F32
+            if raw_data.len() < total_elements * 4 {
+                return Err(format!("Truncated F32 tensor '{}' in GGUF", target.name));
+            }
+            for chunk in raw_data[..total_elements * 4].chunks_exact(4) {
+                floats.push(f32::from_le_bytes(chunk.try_into().unwrap()) as f64);
+            }
+        }
+        1 => { // GGML_TYPE_F16
+            if raw_data.len() < total_elements * 2 {
+                return Err(format!("Truncated F16 tensor '{}' in GGUF", target.name));
+            }
+            for chunk in raw_data[..total_elements * 2].chunks_exact(2) {
+                let u = u16::from_le_bytes(chunk.try_into().unwrap());
+                floats.push(decode_f16(u));
+            }
+        }
+        8 => { // GGML_TYPE_Q8_0
+            let num_blocks = (total_elements + 31) / 32;
+            if raw_data.len() < num_blocks * 34 {
+                return Err(format!("Truncated Q8_0 tensor '{}' in GGUF", target.name));
+            }
+            for block in raw_data[..num_blocks * 34].chunks_exact(34) {
+                let delta_u = u16::from_le_bytes(block[0..2].try_into().unwrap());
+                let delta = decode_f16(delta_u);
+                for &b in &block[2..34] {
+                    if floats.len() < total_elements {
+                        floats.push((b as i8) as f64 * delta);
+                    }
+                }
+            }
+        }
+        2 => { // GGML_TYPE_Q4_0
+            let num_blocks = (total_elements + 31) / 32;
+            if raw_data.len() < num_blocks * 18 {
+                return Err(format!("Truncated Q4_0 tensor '{}' in GGUF", target.name));
+            }
+            for block in raw_data[..num_blocks * 18].chunks_exact(18) {
+                let delta_u = u16::from_le_bytes(block[0..2].try_into().unwrap());
+                let delta = decode_f16(delta_u);
+                for &b in &block[2..18] {
+                    let v0 = (b & 0x0F) as i8 - 8;
+                    let v1 = ((b >> 4) & 0x0F) as i8 - 8;
+                    if floats.len() < total_elements {
+                        floats.push(v0 as f64 * delta);
+                    }
+                    if floats.len() < total_elements {
+                        floats.push(v1 as f64 * delta);
+                    }
+                }
+            }
+        }
+        other => {
+            return Err(format!("Unsupported GGML tensor type {} in GGUF file '{}'", other, path));
+        }
+    }
+
+    if shape.is_empty() {
+        Ok(MathValue::Scalar(floats.first().copied().unwrap_or(0.0)))
+    } else if shape.len() == 1 {
+        Ok(MathValue::Vector(floats))
+    } else if shape.len() == 2 {
+        let rows = shape[0];
+        let cols = shape[1];
+        let mut mat = Vec::with_capacity(rows);
+        for r in 0..rows {
+            let start = r * cols;
+            let end = (start + cols).min(floats.len());
+            if start < floats.len() {
+                mat.push(floats[start..end].to_vec());
+            } else {
+                mat.push(vec![0.0; cols]);
+            }
+        }
+        Ok(MathValue::Matrix(mat))
+    } else {
+        MathValue::new_tensor(shape, floats)
+    }
+}
+
+/// Loads tensor weights from Safetensors, GGUF, or plain text / CLL tensor files
 pub fn load_tensor_resource(path: &str, key: &str) -> Result<MathValue, String> {
     let p = std::path::Path::new(path);
     if !p.exists() {
@@ -8622,21 +9384,7 @@ pub fn load_tensor_resource(path: &str, key: &str) -> Result<MathValue, String> 
             "F16" => {
                 for chunk in tensor_raw.chunks_exact(2) {
                     let u = u16::from_le_bytes(chunk.try_into().unwrap());
-                    let sign = if (u >> 15) != 0 { -1.0 } else { 1.0 };
-                    let exp = (u >> 10) & 0x1F;
-                    let mant = u & 0x3FF;
-                    let val = if exp == 0 {
-                        sign * (mant as f64 / 1024.0) * (2.0f64.powi(-14))
-                    } else if exp == 31 {
-                        if mant == 0 {
-                            sign * f64::INFINITY
-                        } else {
-                            f64::NAN
-                        }
-                    } else {
-                        sign * (1.0 + (mant as f64 / 1024.0)) * (2.0f64.powi(exp as i32 - 15))
-                    };
-                    floats.push(val);
+                    floats.push(decode_f16(u));
                 }
             }
             "BF16" => {
@@ -8675,6 +9423,8 @@ pub fn load_tensor_resource(path: &str, key: &str) -> Result<MathValue, String> 
         } else {
             MathValue::new_tensor(shape, floats)
         }
+    } else if path.ends_with(".gguf") || bytes.starts_with(b"GGUF") {
+        load_gguf_tensor(&bytes, key, path)
     } else {
         // 2. Plain Text CLL / Vector / Matrix format
         let text = String::from_utf8_lossy(&bytes);
@@ -9947,5 +10697,176 @@ mod tests {
             assert!(g.is_finite());
             assert!(g > 0.0);
         }
+    }
+
+    #[test]
+    fn test_bitnet_b158_ternary_quantization_and_bitlinear() {
+        let code = r#"
+            // 1. BitNet b1.58 Ternary Quantization: weights -> {-1, 0, +1}
+            W = [[0.8, -0.4, 0.05], [-0.1, 0.9, -0.7]]
+            
+            // Unpack ternary quantized weights and scale factor
+            W_quant = quantize_t2(W)[0]
+            gamma   = quantize_t2(W)[1]
+            
+            // 2. Zero-multiplication BitLinear GEMM:
+            // X: [2, 3], W_quant: [2, 3] -> Output [2, 2] (via X @ W^T * gamma)
+            X = [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]]
+            Y = bitlinear(X, W_quant, gamma)
+            
+            // 3. Autodiff Straight-Through Estimator (STE)
+            loss(w) = sum(bitlinear(X, w, 1.0))
+            grad_W = grad(loss(W_quant), W_quant)
+        "#;
+        let prog = parse_math_code(code).expect("Parse BitNet b1.58 code failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution of BitNet b1.58 failed");
+
+        let w_q = eval.env.get("W_quant").unwrap();
+        assert_eq!(w_q.shape(), vec![2, 3]);
+        for &val in &w_q.flatten_elements() {
+            assert!(val == -1.0 || val == 0.0 || val == 1.0, "Ternary value must be in {{-1, 0, 1}}, got {}", val);
+        }
+
+        let gamma_val = eval.env.get("gamma").unwrap().as_scalar().unwrap();
+        assert!(gamma_val > 0.0);
+
+        let y_val = eval.env.get("Y").unwrap();
+        assert_eq!(y_val.shape(), vec![2, 2]);
+        for &val in &y_val.flatten_elements() {
+            assert!(val.is_finite());
+        }
+
+        let grad_w = eval.env.get("grad_W").unwrap();
+        assert_eq!(grad_w.shape(), vec![2, 3]);
+        for &g in &grad_w.flatten_elements() {
+            assert!(g.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_int8_quantization_and_qmatmul() {
+        let code = r#"
+            // Weights matrix with varying dynamic range
+            W = [[12.7, -6.35, 3.175], [1.27, -2.54, 5.08]]
+            
+            // Quantize to symmetric INT8 with per-row scales
+            W_i8   = quantize_i8(W)[0]
+            scales = quantize_i8(W)[1]
+            
+            // Input activations: [2, 3]
+            X = [[1.0, 0.5, 2.0], [0.0, 1.0, 0.5]]
+            
+            // INT8 Matrix Multiplication with dequantization
+            Y = qmatmul(X, W_i8, scales)
+        "#;
+        let prog = parse_math_code(code).expect("Parse INT8 quantization failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution of INT8 qmatmul failed");
+
+        let w_i8 = eval.env.get("W_i8").unwrap();
+        assert_eq!(w_i8.shape(), vec![2, 3]);
+        for &q in &w_i8.flatten_elements() {
+            assert!(q >= -128.0 && q <= 127.0);
+            assert_eq!(q, q.round());
+        }
+
+        let scales = eval.env.get("scales").unwrap();
+        assert_eq!(scales.shape(), vec![2]);
+        assert!((scales.flatten_elements()[0] - 0.1).abs() < 1e-4);
+
+        let y = eval.env.get("Y").unwrap();
+        assert_eq!(y.shape(), vec![2, 2]);
+        for &v in &y.flatten_elements() {
+            assert!(v.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_gguf_v3_loader_and_parser() {
+        let path = "test_mini_model.gguf";
+        let _ = std::fs::remove_file(path);
+
+        // Construct valid binary GGUF v3 file
+        let mut bytes = Vec::new();
+        // Magic
+        bytes.extend_from_slice(b"GGUF");
+        // Version 3
+        bytes.extend_from_slice(&3u32.to_le_bytes());
+        // Tensor count: 2
+        bytes.extend_from_slice(&2u64.to_le_bytes());
+        // Metadata KV count: 1
+        bytes.extend_from_slice(&1u64.to_le_bytes());
+
+        // Metadata KV: "general.alignment" -> uint32 = 32
+        let key_align = "general.alignment";
+        bytes.extend_from_slice(&(key_align.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(key_align.as_bytes());
+        bytes.extend_from_slice(&4u32.to_le_bytes()); // type 4: UINT32
+        bytes.extend_from_slice(&32u32.to_le_bytes());
+
+        // Tensor 0 Header: "tensor_f32", dims: [3, 2] (shape [2, 3]), type 0 (F32), offset 0
+        let t0_name = "tensor_f32";
+        bytes.extend_from_slice(&(t0_name.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(t0_name.as_bytes());
+        bytes.extend_from_slice(&2u32.to_le_bytes()); // 2 dims
+        bytes.extend_from_slice(&3u64.to_le_bytes()); // ne0 = 3
+        bytes.extend_from_slice(&2u64.to_le_bytes()); // ne1 = 2
+        bytes.extend_from_slice(&0u32.to_le_bytes()); // F32
+        bytes.extend_from_slice(&0u64.to_le_bytes()); // offset 0
+
+        // Tensor 1 Header: "tensor_f16", dims: [4] (shape [4]), type 1 (F16), offset 24 (6 floats * 4 bytes)
+        let t1_name = "tensor_f16";
+        bytes.extend_from_slice(&(t1_name.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(t1_name.as_bytes());
+        bytes.extend_from_slice(&1u32.to_le_bytes()); // 1 dim
+        bytes.extend_from_slice(&4u64.to_le_bytes()); // ne0 = 4
+        bytes.extend_from_slice(&1u32.to_le_bytes()); // F16
+        bytes.extend_from_slice(&24u64.to_le_bytes()); // offset 24
+
+        // Alignment padding up to 32 bytes
+        let header_len = bytes.len();
+        let pad_len = ((header_len + 31) & !31) - header_len;
+        bytes.extend(vec![0u8; pad_len]);
+
+        // Binary tensor data:
+        // Tensor 0: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32
+        let f32_vals: [f32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        for f in f32_vals {
+            bytes.extend_from_slice(&f.to_le_bytes());
+        }
+
+        // Tensor 1: [10.0, 20.0, 30.0, 40.0] as f16
+        // Pre-computed half-precision values:
+        let f16_vals: [u16; 4] = [0x4900, 0x4D00, 0x4F80, 0x5100];
+        for h in f16_vals {
+            bytes.extend_from_slice(&h.to_le_bytes());
+        }
+
+        std::fs::write(path, bytes).expect("Failed to write test GGUF file");
+
+        let code = r#"
+            W_f32 = @"test_mini_model.gguf:tensor_f32"
+            W_f16 = @"test_mini_model.gguf:tensor_f16"
+        "#;
+        let prog = parse_math_code(code).expect("Parse GGUF loading failed");
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution of GGUF loading failed");
+
+        let w_f32 = eval.env.get("W_f32").unwrap();
+        assert_eq!(w_f32.shape(), vec![2, 3]);
+        assert_eq!(w_f32.flatten_elements(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+
+        let w_f16 = eval.env.get("W_f16").unwrap();
+        assert_eq!(w_f16.shape(), vec![4]);
+        let f16_elems = w_f16.flatten_elements();
+        assert!((f16_elems[0] - 10.0).abs() < 1e-4);
+        assert!((f16_elems[1] - 20.0).abs() < 1e-4);
+        assert!((f16_elems[2] - 30.0).abs() < 1e-4);
+        assert!((f16_elems[3] - 40.0).abs() < 1e-4);
+
+        let _ = std::fs::remove_file(path);
     }
 }
