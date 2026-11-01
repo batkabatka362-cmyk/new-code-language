@@ -3899,11 +3899,16 @@ impl ExprTape {
                                 let weights: Vec<f64> = exps.into_iter().map(|e| e * inv_sum).collect();
 
                                 let mut gx = vec![0.0f64; in_dim];
+                                let mut v_scores = vec![0.0f64; k];
+                                let mut v_bar = 0.0f64;
+
                                 for (j, &(exp_idx, _)) in indexed_logits.iter().enumerate() {
                                     let w_j = weights[j];
                                     let e_mat = &expert_mats[exp_idx % expert_mats.len()];
                                     let e_rows = e_mat.len();
                                     let e_cols = e_mat.first().map(|r| r.len()).unwrap_or(0);
+                                    let mut v_j = 0.0f64;
+
                                     if e_rows == in_dim {
                                         for i in 0..in_dim {
                                             let mut dot = 0.0f64;
@@ -3911,6 +3916,13 @@ impl ExprTape {
                                                 dot += e_mat[i][d] * adj_row[d];
                                             }
                                             gx[i] += w_j * dot;
+                                        }
+                                        for d in 0..adj_row.len().min(e_cols) {
+                                            let mut x_dot_col = 0.0f64;
+                                            for i in 0..in_dim {
+                                                x_dot_col += x_row[i] * e_mat[i][d];
+                                            }
+                                            v_j += x_dot_col * adj_row[d];
                                         }
                                     } else if e_cols == in_dim {
                                         for i in 0..in_dim {
@@ -3920,6 +3932,25 @@ impl ExprTape {
                                             }
                                             gx[i] += w_j * dot;
                                         }
+                                        for d in 0..adj_row.len().min(e_rows) {
+                                            let mut x_dot_col = 0.0f64;
+                                            for i in 0..in_dim {
+                                                x_dot_col += x_row[i] * e_mat[d][i];
+                                            }
+                                            v_j += x_dot_col * adj_row[d];
+                                        }
+                                    }
+                                    v_scores[j] = v_j;
+                                    v_bar += w_j * v_j;
+                                }
+
+                                // 2. Full Jacobian through gating router weights: sum_j w_j * (v_j - v_bar) * gate[exp_idx]
+                                for (j, &(exp_idx, _)) in indexed_logits.iter().enumerate() {
+                                    let w_j = weights[j];
+                                    let delta_j = w_j * (v_scores[j] - v_bar);
+                                    let g_row = &gate_mat[exp_idx % gate_mat.len()];
+                                    for i in 0..in_dim {
+                                        gx[i] += delta_j * g_row[i];
                                     }
                                 }
                                 grad_x_rows.push(gx);
