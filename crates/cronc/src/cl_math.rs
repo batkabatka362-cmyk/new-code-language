@@ -12985,6 +12985,93 @@ impl MathProgram {
                 let r_ptx = inferred_ret.to_ptx_type();
                 let fused_body = body.inline_and_expand(&fns, true, 0).simplify();
 
+                let has_tensor_params = params.iter().any(|p| !p.dims.is_empty());
+                if has_tensor_params {
+                    // Emit a full general-purpose CUDA Entry Kernel (.visible .entry)
+                    out.push_str(&format!(
+                        "// Universal Tensor CUDA PTX Entry Kernel\n.visible .entry {}(\n",
+                        name
+                    ));
+                    for p in params.iter() {
+                        let p_type = if !p.dims.is_empty() { ".param .u64" } else { p.dtype.to_ptx_type() };
+                        out.push_str(&format!("    {} param_{},\n", p_type, p.name));
+                    }
+                    out.push_str("    .param .u64 param_out\n) {\n");
+                    let total_rd = (params.len() + 1) * 2 + 2;
+                    out.push_str(&format!("    .reg .b64 %rd<{}>;\n", total_rd));
+                    out.push_str("    .reg .b32 %r<16>;\n");
+                    out.push_str("    .reg .pred %p<4>;\n\n");
+
+                    out.push_str("    // Compute global thread ID: gid = ctaid.x * ntid.x + tid.x\n");
+                    out.push_str("    mov.u32 %r0, %tid.x;\n");
+                    out.push_str("    mov.u32 %r1, %ctaid.x;\n");
+                    out.push_str("    mov.u32 %r2, %ntid.x;\n");
+                    out.push_str("    mad.lo.u32 %r3, %r1, %r2, %r0;\n\n");
+
+                    let first_tensor = params.iter().find(|p| !p.dims.is_empty()).unwrap();
+                    let total_elems: usize = first_tensor.dims.iter().product();
+                    out.push_str(&format!("    setp.ge.u32 %p0, %r3, {};\n", total_elems.max(1)));
+                    out.push_str("    @%p0 bra L_exit;\n\n");
+
+                    let mut builder = PtxBuilder::new(&constants);
+                    let mut instr_lines = Vec::new();
+
+                    for (idx, p) in params.iter().enumerate() {
+                        let reg_val = builder.alloc_reg();
+                        if !p.dims.is_empty() {
+                            let rd_param = format!("%rd{}", idx * 2);
+                            let rd_addr = format!("%rd{}", idx * 2 + 1);
+                            instr_lines.push(format!("    ld.param.u64 {}, [param_{}];", rd_param, p.name));
+                            instr_lines.push(format!("    mad.wide.u32 {}, %r3, 4, {};", rd_addr, rd_param));
+                            if p.dtype == MathDtype::F16 {
+                                let hr = builder.alloc_half_reg();
+                                instr_lines.push(format!("    ld.global.f16 {}, [{}];", hr, rd_addr));
+                                instr_lines.push(format!("    cvt.f32.f16 {}, {};", reg_val, hr));
+                            } else {
+                                instr_lines.push(format!("    ld.global.f32 {}, [{}];", reg_val, rd_addr));
+                            }
+                        } else {
+                            if p.dtype == MathDtype::F16 {
+                                let hr = builder.alloc_half_reg();
+                                instr_lines.push(format!("    ld.param.f16 {}, [param_{}];", hr, p.name));
+                                instr_lines.push(format!("    cvt.f32.f16 {}, {};", reg_val, hr));
+                            } else {
+                                instr_lines.push(format!("    ld.param.f32 {}, [param_{}];", reg_val, p.name));
+                            }
+                        }
+                        builder.var_regs.insert(p.name.clone(), reg_val);
+                    }
+
+                    let final_reg = builder.emit_expr(&fused_body, &mut instr_lines);
+
+                    out.push_str(&format!("    .reg .f32 %f<{}>;\n", builder.next_reg.max(2)));
+                    if builder.next_half_reg > 0 {
+                        out.push_str(&format!("    .reg .f16 %h<{}>;\n", builder.next_half_reg));
+                    }
+                    if builder.next_pred > 0 {
+                        out.push_str(&format!("    .reg .pred %p<{}>;\n", builder.next_pred));
+                    }
+
+                    for line in instr_lines {
+                        out.push_str(&line);
+                        out.push('\n');
+                    }
+
+                    let rd_out = format!("%rd{}", params.len() * 2);
+                    let rd_out_addr = format!("%rd{}", params.len() * 2 + 1);
+                    out.push_str(&format!("    ld.param.u64 {}, [param_out];\n", rd_out));
+                    out.push_str(&format!("    mad.wide.u32 {}, %r3, 4, {};\n", rd_out_addr, rd_out));
+                    if inferred_ret == MathDtype::F16 {
+                        let hr = builder.alloc_half_reg();
+                        out.push_str(&format!("    cvt.rn.f16.f32 {}, {};\n", hr, final_reg));
+                        out.push_str(&format!("    st.global.f16 [{}], {};\n", rd_out_addr, hr));
+                    } else {
+                        out.push_str(&format!("    st.global.f32 [{}], {};\n", rd_out_addr, final_reg));
+                    }
+                    out.push_str("L_exit:\n    ret;\n}\n\n");
+                    continue;
+                }
+
                 out.push_str(&format!(
                     ".visible .func (.param {} ret) {}(\n",
                     r_ptx, name
@@ -13280,9 +13367,9 @@ impl MathProgram {
         doc
     }
 
-    fn seal_slot(raw9: &str, term: char) -> String {
-        let draft = format!("{}{}", raw9, term);
-        crate::cl_heal::heal_slot_crc(&draft).0
+    fn seal_slot(raw9: &str, _term: char) -> String {
+        let crc_char = crate::cl_lang::compute_crc8_token(raw9);
+        format!("{}{}", raw9, crc_char)
     }
 
     fn alloc_vliw_reg(next_reg: &mut u8) -> u8 {
@@ -13354,6 +13441,35 @@ impl MathProgram {
                 dst
             }
             MathExpr::Call(func, args) => {
+                if func.starts_with("fused_linear_") && args.len() >= 2 {
+                    let rx = Self::lower_expr_to_vliw(&args[0], reg_map, next_reg, slots);
+                    let rw = Self::lower_expr_to_vliw(&args[1], reg_map, next_reg, slots);
+                    let r_mm = Self::alloc_vliw_reg(next_reg);
+                    slots.push(Self::seal_slot(
+                        &format!("_MD{:02X}*{:X}{:X}0", r_mm, rx & 0xF, rw & 0xF),
+                        '>',
+                    ));
+                    let acc_reg = if args.len() >= 3 {
+                        let rb = Self::lower_expr_to_vliw(&args[2], reg_map, next_reg, slots);
+                        let r_add = Self::alloc_vliw_reg(next_reg);
+                        slots.push(Self::seal_slot(
+                            &format!("_PO{:02X}+{:X}{:X}0", r_add, r_mm & 0xF, rb & 0xF),
+                            '>',
+                        ));
+                        r_add
+                    } else {
+                        r_mm
+                    };
+                    let dst = Self::alloc_vliw_reg(next_reg);
+                    let raw8 = match func.as_str() {
+                        "fused_linear_relu" => format!("_MX{:02X}${:02X}0", dst, acc_reg),
+                        "fused_linear_silu" => format!("_SI{:02X}${:02X}0", dst, acc_reg),
+                        "fused_linear_gelu" => format!("_GE{:02X}${:02X}0", dst, acc_reg),
+                        _ => format!("_TT{:02X}${:02X}0", dst, acc_reg),
+                    };
+                    slots.push(Self::seal_slot(&raw8, '>'));
+                    return dst;
+                }
                 let arg_reg = if let Some(first) = args.first() {
                     Self::lower_expr_to_vliw(first, reg_map, next_reg, slots)
                 } else {
@@ -13364,7 +13480,7 @@ impl MathProgram {
                     "sigmoid" | "silu" | "tanh" => format!("_SI{:02X}${:02X}0", dst, arg_reg),
                     "gelu" => format!("_GE{:02X}${:02X}0", dst, arg_reg),
                     "relu" | "max" | "min" => format!("_MX{:02X}${:02X}0", dst, arg_reg),
-                    "sqrt" => format!("_SQ{:02X}${:02X}0", dst, arg_reg),
+                    "sqrt" | "rsqrt" => format!("_SQ{:02X}${:02X}0", dst, arg_reg),
                     "exp" | "ln" | "log" => format!("_EX{:02X}${:02X}0", dst, arg_reg),
                     "rmsnorm" | "norm" | "mean" => format!("_RM{:02X}${:02X}0", dst, arg_reg),
                     "softmax" => format!("_SM{:02X}${:02X}0", dst, arg_reg),
@@ -13487,16 +13603,68 @@ impl<'a> PtxBuilder<'a> {
                 dst
             }
             MathExpr::Binary(lhs, op, rhs) => {
-                let l = self.emit_expr(lhs, lines);
                 if *op == MathBinOp::Pow {
+                    let l = self.emit_expr(lhs, lines);
                     if let MathExpr::Num(exp) = **rhs {
                         if (exp - 2.0).abs() < 1e-9 {
                             let dst = self.alloc_reg();
                             lines.push(format!("    mul.f32 {}, {}, {};", dst, l, l));
                             return dst;
+                        } else if (exp - 0.5).abs() < 1e-9 {
+                            let dst = self.alloc_reg();
+                            lines.push(format!("    sqrt.rn.f32 {}, {};", dst, l));
+                            return dst;
+                        } else if (exp - (-0.5)).abs() < 1e-9 {
+                            let dst = self.alloc_reg();
+                            lines.push(format!("    rsqrt.approx.f32 {}, {};", dst, l));
+                            return dst;
                         }
                     }
+                    let r = self.emit_expr(rhs, lines);
+                    let tmp = self.alloc_reg();
+                    let tmp2 = self.alloc_reg();
+                    let dst = self.alloc_reg();
+                    lines.push(format!("    lg2.approx.f32 {}, {};", tmp, l));
+                    lines.push(format!("    mul.f32 {}, {}, {};", tmp2, tmp, r));
+                    lines.push(format!("    ex2.approx.f32 {}, {};", dst, tmp2));
+                    return dst;
                 }
+
+                // FMA Optimization: (a * b) + c or c + (a * b) -> fma.rn.f32
+                if *op == MathBinOp::Add {
+                    if let MathExpr::Binary(a, MathBinOp::Mul, b) = lhs.as_ref() {
+                        let ra = self.emit_expr(a, lines);
+                        let rb = self.emit_expr(b, lines);
+                        let rc = self.emit_expr(rhs, lines);
+                        let dst = self.alloc_reg();
+                        lines.push(format!("    fma.rn.f32 {}, {}, {}, {};", dst, ra, rb, rc));
+                        return dst;
+                    }
+                    if let MathExpr::Binary(a, MathBinOp::Mul, b) = rhs.as_ref() {
+                        let ra = self.emit_expr(a, lines);
+                        let rb = self.emit_expr(b, lines);
+                        let rc = self.emit_expr(lhs, lines);
+                        let dst = self.alloc_reg();
+                        lines.push(format!("    fma.rn.f32 {}, {}, {}, {};", dst, ra, rb, rc));
+                        return dst;
+                    }
+                }
+
+                // FMA Optimization for Subtraction: (a * b) - c -> fma.rn.f32(a, b, -c)
+                if *op == MathBinOp::Sub {
+                    if let MathExpr::Binary(a, MathBinOp::Mul, b) = lhs.as_ref() {
+                        let ra = self.emit_expr(a, lines);
+                        let rb = self.emit_expr(b, lines);
+                        let rc = self.emit_expr(rhs, lines);
+                        let neg_rc = self.alloc_reg();
+                        lines.push(format!("    neg.f32 {}, {};", neg_rc, rc));
+                        let dst = self.alloc_reg();
+                        lines.push(format!("    fma.rn.f32 {}, {}, {}, {};", dst, ra, rb, neg_rc));
+                        return dst;
+                    }
+                }
+
+                let l = self.emit_expr(lhs, lines);
                 let r = self.emit_expr(rhs, lines);
                 let dst = self.alloc_reg();
                 match op {
@@ -13506,21 +13674,86 @@ impl<'a> PtxBuilder<'a> {
                         lines.push(format!("    mul.f32 {}, {}, {};", dst, l, r))
                     }
                     MathBinOp::Div => lines.push(format!("    div.rn.f32 {}, {}, {};", dst, l, r)),
-                    MathBinOp::Pow => {
-                        let tmp = self.alloc_reg();
-                        lines.push(format!("    lg2.approx.f32 {}, {};", tmp, l));
-                        lines.push(format!("    mul.f32 {}, {}, {};", tmp, tmp, r));
-                        lines.push(format!("    ex2.approx.f32 {}, {};", dst, tmp));
-                    }
                     _ => {
                         let pred = self.alloc_pred();
-                        lines.push(format!("    setp.gt.f32 {}, {}, {};", pred, l, r));
+                        match op {
+                            MathBinOp::Lt => lines.push(format!("    setp.lt.f32 {}, {}, {};", pred, l, r)),
+                            MathBinOp::Gt => lines.push(format!("    setp.gt.f32 {}, {}, {};", pred, l, r)),
+                            MathBinOp::Eq => lines.push(format!("    setp.eq.f32 {}, {}, {};", pred, l, r)),
+                            MathBinOp::Neq => lines.push(format!("    setp.ne.f32 {}, {}, {};", pred, l, r)),
+                            MathBinOp::Lte => lines.push(format!("    setp.le.f32 {}, {}, {};", pred, l, r)),
+                            MathBinOp::Gte => lines.push(format!("    setp.ge.f32 {}, {}, {};", pred, l, r)),
+                            _ => lines.push(format!("    setp.gt.f32 {}, {}, {};", pred, l, r)),
+                        }
                         lines.push(format!("    selp.f32 {}, 1.0, 0.0, {};", dst, pred));
                     }
                 }
                 dst
             }
             MathExpr::Call(func, args) => {
+                if (func == "fma" || func == "simd_fma") && args.len() == 3 {
+                    let ra = self.emit_expr(&args[0], lines);
+                    let rb = self.emit_expr(&args[1], lines);
+                    let rc = self.emit_expr(&args[2], lines);
+                    let dst = self.alloc_reg();
+                    lines.push(format!("    fma.rn.f32 {}, {}, {}, {};", dst, ra, rb, rc));
+                    return dst;
+                }
+                if func.starts_with("fused_linear_") && args.len() >= 2 {
+                    let rx = self.emit_expr(&args[0], lines);
+                    let rw = self.emit_expr(&args[1], lines);
+                    let acc = if args.len() >= 3 {
+                        let rb = self.emit_expr(&args[2], lines);
+                        let acc = self.alloc_reg();
+                        lines.push(format!("    fma.rn.f32 {}, {}, {}, {};", acc, rx, rw, rb));
+                        acc
+                    } else {
+                        let acc = self.alloc_reg();
+                        lines.push(format!("    mul.f32 {}, {}, {};", acc, rx, rw));
+                        acc
+                    };
+                    let dst = self.alloc_reg();
+                    match func.as_str() {
+                        "fused_linear_relu" => {
+                            lines.push(format!("    max.f32 {}, {}, 0.0;", dst, acc));
+                        }
+                        "fused_linear_silu" => {
+                            let neg = self.alloc_reg();
+                            let scaled = self.alloc_reg();
+                            let ex = self.alloc_reg();
+                            let denom = self.alloc_reg();
+                            let sig = self.alloc_reg();
+                            lines.push(format!("    neg.f32 {}, {};", neg, acc));
+                            lines.push(format!("    mul.f32 {}, {}, 1.442695;", scaled, neg));
+                            lines.push(format!("    ex2.approx.f32 {}, {};", ex, scaled));
+                            lines.push(format!("    add.f32 {}, {}, 1.0;", denom, ex));
+                            lines.push(format!("    rcp.rn.f32 {}, {};", sig, denom));
+                            lines.push(format!("    mul.f32 {}, {}, {};", dst, acc, sig));
+                        }
+                        "fused_linear_gelu" => {
+                            let x2 = self.alloc_reg();
+                            let x3 = self.alloc_reg();
+                            let inner = self.alloc_reg();
+                            let scaled = self.alloc_reg();
+                            let th = self.alloc_reg();
+                            let one_plus = self.alloc_reg();
+                            let half_x = self.alloc_reg();
+                            lines.push(format!("    mul.f32 {}, {}, {};", x2, acc, acc));
+                            lines.push(format!("    mul.f32 {}, {}, {};", x3, x2, acc));
+                            lines.push(format!("    fma.rn.f32 {}, 0.044715, {}, {};", inner, x3, acc));
+                            lines.push(format!("    mul.f32 {}, {}, 0.79788456;", scaled, inner));
+                            lines.push(format!("    tanh.approx.f32 {}, {};", th, scaled));
+                            lines.push(format!("    add.f32 {}, {}, 1.0;", one_plus, th));
+                            lines.push(format!("    mul.f32 {}, {}, 0.5;", half_x, acc));
+                            lines.push(format!("    mul.f32 {}, {}, {};", dst, half_x, one_plus));
+                        }
+                        _ => {
+                            lines.push(format!("    mov.f32 {}, {};", dst, acc));
+                        }
+                    }
+                    return dst;
+                }
+
                 let arg0 = args
                     .first()
                     .map(|a| self.emit_expr(a, lines))
@@ -13531,17 +13764,41 @@ impl<'a> PtxBuilder<'a> {
                     });
                 let dst = self.alloc_reg();
                 match func.as_str() {
-                    "sqrt" => lines.push(format!("    sqrt.rn.f32 {}, {};", dst, arg0)),
+                    "sqrt" | "√" => lines.push(format!("    sqrt.rn.f32 {}, {};", dst, arg0)),
+                    "rsqrt" => lines.push(format!("    rsqrt.approx.f32 {}, {};", dst, arg0)),
                     "sin" => lines.push(format!("    sin.approx.f32 {}, {};", dst, arg0)),
                     "cos" => lines.push(format!("    cos.approx.f32 {}, {};", dst, arg0)),
                     "abs" => lines.push(format!("    abs.f32 {}, {};", dst, arg0)),
                     "relu" => lines.push(format!("    max.f32 {}, {}, 0.0;", dst, arg0)),
+                    "tanh" => lines.push(format!("    tanh.approx.f32 {}, {};", dst, arg0)),
+                    "gelu" => {
+                        let x2 = self.alloc_reg();
+                        let x3 = self.alloc_reg();
+                        let inner = self.alloc_reg();
+                        let scaled = self.alloc_reg();
+                        let th = self.alloc_reg();
+                        let one_plus = self.alloc_reg();
+                        let half_x = self.alloc_reg();
+                        lines.push(format!("    mul.f32 {}, {}, {};", x2, arg0, arg0));
+                        lines.push(format!("    mul.f32 {}, {}, {};", x3, x2, arg0));
+                        lines.push(format!("    fma.rn.f32 {}, 0.044715, {}, {};", inner, x3, arg0));
+                        lines.push(format!("    mul.f32 {}, {}, 0.79788456;", scaled, inner));
+                        lines.push(format!("    tanh.approx.f32 {}, {};", th, scaled));
+                        lines.push(format!("    add.f32 {}, {}, 1.0;", one_plus, th));
+                        lines.push(format!("    mul.f32 {}, {}, 0.5;", half_x, arg0));
+                        lines.push(format!("    mul.f32 {}, {}, {};", dst, half_x, one_plus));
+                    }
                     "exp" => {
                         let tmp = self.alloc_reg();
                         lines.push(format!("    mul.f32 {}, {}, 1.442695;", tmp, arg0));
                         lines.push(format!("    ex2.approx.f32 {}, {};", dst, tmp));
                     }
-                    "sigmoid" => {
+                    "log" | "ln" => {
+                        let tmp = self.alloc_reg();
+                        lines.push(format!("    lg2.approx.f32 {}, {};", tmp, arg0));
+                        lines.push(format!("    mul.f32 {}, {}, 0.69314718;", dst, tmp));
+                    }
+                    "sigmoid" | "σ" => {
                         let neg = self.alloc_reg();
                         let scaled = self.alloc_reg();
                         let ex = self.alloc_reg();
@@ -13564,6 +13821,22 @@ impl<'a> PtxBuilder<'a> {
                         lines.push(format!("    add.f32 {}, {}, 1.0;", denom, ex));
                         lines.push(format!("    rcp.rn.f32 {}, {};", sig, denom));
                         lines.push(format!("    mul.f32 {}, {}, {};", dst, arg0, sig));
+                    }
+                    "min" => {
+                        if args.len() >= 2 {
+                            let arg1 = self.emit_expr(&args[1], lines);
+                            lines.push(format!("    min.f32 {}, {}, {};", dst, arg0, arg1));
+                        } else {
+                            lines.push(format!("    mov.f32 {}, {};", dst, arg0));
+                        }
+                    }
+                    "max" => {
+                        if args.len() >= 2 {
+                            let arg1 = self.emit_expr(&args[1], lines);
+                            lines.push(format!("    max.f32 {}, {}, {};", dst, arg0, arg1));
+                        } else {
+                            lines.push(format!("    max.f32 {}, {}, 0.0;", dst, arg0));
+                        }
                     }
                     _ => lines.push(format!("    mov.f32 {}, {};", dst, arg0)),
                 }
