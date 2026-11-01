@@ -8740,6 +8740,74 @@ impl MathProgram {
         }
     }
 
+    /// Detects circular dependencies in the computational DAG using DFS cycle detection.
+    /// Returns Ok(()) if the dependency graph is acyclic, or Err(String) with the cycle path.
+    pub fn check_circular_dependencies(&self) -> Result<(), String> {
+        let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+        for item in &self.items {
+            match item {
+                MathItem::Binding { name, expr } => {
+                    let deps: Vec<String> = expr.free_vars().into_iter().collect();
+                    adj.entry(name.clone()).or_default().extend(deps);
+                }
+                MathItem::TupleBinding { names, expr } => {
+                    let deps: Vec<String> = expr.free_vars().into_iter().collect();
+                    for name in names {
+                        adj.entry(name.clone()).or_default().extend(deps.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        #[derive(Clone, Copy, PartialEq)]
+        enum NodeState { Unvisited, Visiting, Visited }
+        let mut state: HashMap<String, NodeState> = HashMap::new();
+        let mut path: Vec<String> = Vec::new();
+
+        fn dfs(
+            node: &str,
+            adj: &HashMap<String, Vec<String>>,
+            state: &mut HashMap<String, NodeState>,
+            path: &mut Vec<String>,
+        ) -> Result<(), String> {
+            state.insert(node.to_string(), NodeState::Visiting);
+            path.push(node.to_string());
+
+            if let Some(neighbors) = adj.get(node) {
+                for next in neighbors {
+                    if !adj.contains_key(next) {
+                        continue;
+                    }
+                    match state.get(next).copied().unwrap_or(NodeState::Unvisited) {
+                        NodeState::Visiting => {
+                            let cycle_start = path.iter().position(|x| x == next).unwrap_or(0);
+                            let cycle = path[cycle_start..].join(" -> ");
+                            return Err(format!("Circular dependency detected in computational graph: {} -> {}", cycle, next));
+                        }
+                        NodeState::Unvisited => {
+                            dfs(next, adj, state, path)?;
+                        }
+                        NodeState::Visited => {}
+                    }
+                }
+            }
+
+            path.pop();
+            state.insert(node.to_string(), NodeState::Visited);
+            Ok(())
+        }
+
+        let keys: Vec<String> = adj.keys().cloned().collect();
+        for node in &keys {
+            if state.get(node).copied().unwrap_or(NodeState::Unvisited) == NodeState::Unvisited {
+                dfs(node, &adj, &mut state, &mut path)?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Recursively infers and checks tensor shape for a mathematical expression AST
     pub fn infer_shape_expr(
         expr: &MathExpr,
