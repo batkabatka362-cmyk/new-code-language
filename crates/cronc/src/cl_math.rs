@@ -10037,11 +10037,16 @@ impl MathProgram {
                         out.push_str(&format!("CRON_API void {}({}) {{\n", name, p_decls.join(", ")));
                         let n = v_p.dims[0];
                         out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", n));
+                        let mut body_str = Self::expr_to_c23(&expanded_body);
+                        for p in params {
+                            if p.dims.len() == 1 {
+                                body_str = body_str.replace(&p.name, &format!("{}[i]", p.name));
+                            }
+                        }
                         out.push_str(&format!(
-                            "        out[i] = ({} )({});\n",
+                            "        out[i] = ({})({});\n",
                             r_type,
-                            Self::expr_to_c23(&expanded_body)
-                                .replace(&v_p.name, &format!("{}[i]", v_p.name))
+                            body_str
                         ));
                         out.push_str("    }\n}\n\n");
                         continue;
@@ -11208,7 +11213,23 @@ impl MathProgram {
         } else {
             self.to_c23_executable()
         };
-        crate::cl_c23::compile_c23_to_native_binary(&c_code, output_path, opt_level)
+        crate::cl_c23::compile_c23_to_native_binary(&c_code, output_path, opt_level)?;
+        if is_lib {
+            let h_path = if let Some(stripped) = output_path.strip_suffix(".dll")
+                .or_else(|| output_path.strip_suffix(".so"))
+                .or_else(|| output_path.strip_suffix(".dylib")) {
+                format!("{}.h", stripped)
+            } else {
+                format!("{}.h", output_path)
+            };
+            let mod_name = std::path::Path::new(output_path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("cron_model");
+            let h_code = self.to_c_header(mod_name);
+            let _ = std::fs::write(&h_path, h_code);
+        }
+        Ok(())
     }
 
     /// Compiles standard math into real SSA NVIDIA CUDA PTX v7.5+ GPU kernels with full function inlining
