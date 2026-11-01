@@ -84,27 +84,27 @@ fn main() {{
         gamma_vec = Float16(*[1.5] * 16)
         out_vec = Float16()
 
-        lib.norm_scale.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
-        lib.norm_scale.restype = None
+        lib.N.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
+        lib.N.restype = None
 
         # Warmup and timed benchmark
-        lib.norm_scale(x_vec, gamma_vec, out_vec)
+        lib.N(x_vec, gamma_vec, out_vec)
 
         N_ITERS = 100_000
         t0 = time.perf_counter()
         for _ in range(N_ITERS):
-            lib.norm_scale(x_vec, gamma_vec, out_vec)
+            lib.N(x_vec, gamma_vec, out_vec)
         t_total = (time.perf_counter() - t0) * 1e6 # microseconds
         avg_ns = (t_total * 1000.0) / N_ITERS
 
         print(f"\n[4] Live In-Silicon Inference Execution (100,000 calls):")
-        print(f"    * Function : norm_scale(x[16], gamma[16]) -> out[16]")
+        print(f"    * Function : N(x[16], gamma[16]) -> out[16]")
         print(f"    * Latency  : {avg_ns:.1f} nanoseconds per inference call!")
         print(f"    * Sample Output [first 4]: {[round(out_vec[i], 2) for i in range(4)]}")
 
     print(f"\n[5] Interop Status: 100% C-ABI Binary Ready.")
     print(f"    - Header: {os.path.exists(h_path)}")
-    print(f"    - Export functions: predict_gemm, norm_scale, proj_gemm")
+    print(f"    - Export functions: F, N, P (Pure Mathematical Symbols)")
     print(f"    - Target architecture: AVX2 / FMA / ISO C23")
 
     print("\n" + "=" * 80)

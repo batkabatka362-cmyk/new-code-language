@@ -48,38 +48,36 @@ fn test_hybrid_model_c_abi_dll_export_and_ctypes_inference() {
     // 5. Verify C header contents
     let header_content = fs::read_to_string(&h_path).expect("Failed to read header");
     assert!(header_content.contains("CRON_API"));
-    assert!(header_content.contains("void predict_gemm("));
-    assert!(header_content.contains("void norm_scale("));
-    assert!(header_content.contains("void proj_gemm("));
+    assert!(header_content.contains("void F("));
+    assert!(header_content.contains("void N("));
+    assert!(header_content.contains("void P("));
 
     // 6. Execute pure C ABI verification via Python ctypes
     let python_script = format!(
         r#"
 import ctypes
 import sys
-import numpy as np
 
 dll_path = r"{dll_path}"
 lib = ctypes.CDLL(dll_path)
 
-# 1. Test norm_scale(x[16], gamma[16], out[16])
+# 1. Test N(x[16], gamma[16], out[16])
 Float16 = ctypes.c_float * 16
 x = Float16(*[float(i + 1) for i in range(16)])
 gamma = Float16(*[2.0] * 16)
 out_norm = Float16()
 
-lib.norm_scale.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
-lib.norm_scale.restype = None
-lib.norm_scale(x, gamma, out_norm)
+lib.N.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
+lib.N.restype = None
+lib.N(x, gamma, out_norm)
 
 for i in range(16):
     expected = (float(i + 1)) * 2.0
     actual = out_norm[i]
     if abs(actual - expected) > 1e-4:
-        sys.exit(f"norm_scale mismatch at index {{i}}: expected {{expected}}, got {{actual}}")
+        sys.exit(f"N mismatch at index {{i}}: expected {{expected}}, got {{actual}}")
 
-# 2. Test predict_gemm(W[16, 16], x[16], out[16])
-# Set W as Identity matrix (scaled by 3.0)
+# 2. Test F(W[16, 16], x[16], out[16])
 Float256 = ctypes.c_float * 256
 w_data = [0.0] * 256
 for i in range(16):
@@ -87,15 +85,15 @@ for i in range(16):
 W = Float256(*w_data)
 out_gemm = Float16()
 
-lib.predict_gemm.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
-lib.predict_gemm.restype = None
-lib.predict_gemm(W, x, out_gemm)
+lib.F.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
+lib.F.restype = None
+lib.F(W, x, out_gemm)
 
 for i in range(16):
     expected = (float(i + 1)) * 3.0
     actual = out_gemm[i]
     if abs(actual - expected) > 1e-4:
-        sys.exit(f"predict_gemm mismatch at index {{i}}: expected {{expected}}, got {{actual}}")
+        sys.exit(f"F mismatch at index {{i}}: expected {{expected}}, got {{actual}}")
 
 print("SUCCESS")
 "#,
@@ -123,3 +121,4 @@ print("SUCCESS")
     let _ = fs::remove_file(&dll_path);
     let _ = fs::remove_file(&h_path);
 }
+

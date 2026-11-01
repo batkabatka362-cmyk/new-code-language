@@ -19,9 +19,9 @@ extern "C" {
   #define CRON_API __attribute__((visibility("default")))
 #endif
 
-CRON_API void predict_gemm(const float* W, const float* x, float* out);
-CRON_API void norm_scale(const float* x, const float* gamma, float* out);
-CRON_API void proj_gemm(const float* A, const float* B, float* out);
+CRON_API void F(const float* W, const float* x, float* out);
+CRON_API void N(const float* x, const float* γ, float* out);
+CRON_API void P(const float* A, const float* B, float* out);
 
 #ifdef __cplusplus
 }
