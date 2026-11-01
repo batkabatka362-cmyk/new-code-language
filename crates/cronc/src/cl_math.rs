@@ -3710,7 +3710,7 @@ impl ExprTape {
                     let adj_reshaped = adj.reshape(&in_shape)?;
                     arg_tapes[0].backward(&adj_reshaped, wrt, acc_grad, evaluator)
                 }
-                "ssd_scan" | "mamba_ssd" | "Ξ" => {
+                "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
                     let d_elems = arg_vals[1].flatten_elements();
                     let adj_flat = adj.flatten_elements();
                     let x_shape = arg_vals[0].shape();
@@ -3837,6 +3837,101 @@ impl ExprTape {
                     } else {
                         Ok(())
                     }
+                }
+                "moe_gate" | "Ξ_m" | "moe" => {
+                    if arg_vals.len() >= 3 && !arg_tapes.is_empty() {
+                        let x_val = &arg_vals[0];
+                        let w_gate = &arg_vals[1];
+                        let experts = &arg_vals[2];
+                        let top_k = if arg_vals.len() > 3 {
+                            arg_vals[3].as_scalar().unwrap_or(2.0) as usize
+                        } else {
+                            2
+                        };
+
+                        let x_rows = match x_val {
+                            MathValue::Vector(v) => vec![v.clone()],
+                            MathValue::Matrix(m) => m.clone(),
+                            _ => vec![],
+                        };
+                        let adj_rows = match adj {
+                            MathValue::Vector(v) => vec![v.clone()],
+                            MathValue::Matrix(m) => m.clone(),
+                            _ => vec![],
+                        };
+                        let gate_mat = match w_gate {
+                            MathValue::Matrix(m) => m.clone(),
+                            _ => vec![],
+                        };
+                        let expert_mats: Vec<Vec<Vec<f64>>> = match experts {
+                            MathValue::Tuple(items) => items.iter().filter_map(|it| {
+                                if let MathValue::Matrix(m) = it { Some(m.clone()) } else { None }
+                            }).collect(),
+                            _ => vec![],
+                        };
+
+                        if !x_rows.is_empty() && !adj_rows.is_empty() && !gate_mat.is_empty() && !expert_mats.is_empty() {
+                            let num_experts = gate_mat.len();
+                            let k = top_k.min(num_experts).max(1);
+                            let in_dim = x_rows[0].len();
+                            let mut grad_x_rows = Vec::with_capacity(x_rows.len());
+
+                            for (r_idx, x_row) in x_rows.iter().enumerate() {
+                                let adj_row = &adj_rows[r_idx % adj_rows.len()];
+                                let mut logits = Vec::with_capacity(num_experts);
+                                for g_row in &gate_mat {
+                                    let dot: f64 = g_row.iter().zip(x_row.iter()).map(|(&a, &b)| a * b).sum();
+                                    logits.push(dot);
+                                }
+                                let mut indexed_logits: Vec<(usize, f64)> = logits.into_iter().enumerate().collect();
+                                indexed_logits.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                                indexed_logits.truncate(k);
+
+                                let max_logit = indexed_logits.iter().map(|(_, l)| *l).fold(f64::NEG_INFINITY, f64::max);
+                                let mut exps = Vec::with_capacity(k);
+                                let mut sum_exp = 0.0f64;
+                                for (_, logit) in &indexed_logits {
+                                    let e = (*logit - max_logit).exp();
+                                    exps.push(e);
+                                    sum_exp += e;
+                                }
+                                let inv_sum = 1.0 / sum_exp.max(1e-12);
+                                let weights: Vec<f64> = exps.into_iter().map(|e| e * inv_sum).collect();
+
+                                let mut gx = vec![0.0f64; in_dim];
+                                for (j, &(exp_idx, _)) in indexed_logits.iter().enumerate() {
+                                    let w_j = weights[j];
+                                    let e_mat = &expert_mats[exp_idx % expert_mats.len()];
+                                    let e_rows = e_mat.len();
+                                    let e_cols = e_mat.first().map(|r| r.len()).unwrap_or(0);
+                                    if e_rows == in_dim {
+                                        for i in 0..in_dim {
+                                            let mut dot = 0.0f64;
+                                            for d in 0..adj_row.len().min(e_cols) {
+                                                dot += e_mat[i][d] * adj_row[d];
+                                            }
+                                            gx[i] += w_j * dot;
+                                        }
+                                    } else if e_cols == in_dim {
+                                        for i in 0..in_dim {
+                                            let mut dot = 0.0f64;
+                                            for d in 0..adj_row.len().min(e_rows) {
+                                                dot += e_mat[d][i] * adj_row[d];
+                                            }
+                                            gx[i] += w_j * dot;
+                                        }
+                                    }
+                                }
+                                grad_x_rows.push(gx);
+                            }
+                            let grad_x = match x_val {
+                                MathValue::Vector(_) => MathValue::Vector(grad_x_rows.pop().unwrap_or_default()),
+                                _ => MathValue::Matrix(grad_x_rows),
+                            };
+                            arg_tapes[0].backward(&grad_x, wrt, acc_grad, evaluator)?;
+                        }
+                    }
+                    Ok(())
                 }
                 _ => Err(format!(
                     "Unsupported function call '{}' in analytical backward",
@@ -4492,6 +4587,218 @@ impl MathEvaluator {
         }
     }
 
+    /// Evaluates dynamic Mixture of Experts (MoE) Top-K routing with normalized softmax weights
+    pub fn eval_moe_gate(
+        &self,
+        x: &MathValue,
+        w_gate: &MathValue,
+        experts: &MathValue,
+        top_k: usize,
+    ) -> Result<MathValue, String> {
+        let (rows, in_dim, is_vector) = match x {
+            MathValue::Vector(v) => (vec![v.clone()], v.len(), true),
+            MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0), false),
+            _ => return Err("moe_gate: X must be a Vector or 2D Matrix".to_string()),
+        };
+
+        let gate_mat = match w_gate {
+            MathValue::Matrix(m) => m,
+            _ => return Err("moe_gate: W_gate must be a 2D Matrix [num_experts, in_dim]".to_string()),
+        };
+
+        let num_experts = gate_mat.len();
+        if num_experts == 0 {
+            return Err("moe_gate: num_experts must be >= 1".to_string());
+        }
+        let k = top_k.min(num_experts).max(1);
+
+        let expert_mats: Vec<Vec<Vec<f64>>> = match experts {
+            MathValue::Tuple(items) => {
+                let mut mats = Vec::with_capacity(items.len());
+                for item in items {
+                    if let MathValue::Matrix(m) = item {
+                        mats.push(m.clone());
+                    } else {
+                        return Err("moe_gate: tuple elements must be 2D Matrices".to_string());
+                    }
+                }
+                mats
+            }
+            MathValue::Tensor { shape, strides, data } => {
+                if shape.len() != 3 {
+                    return Err(format!("moe_gate: 3D tensor expected for experts, got shape {:?}", shape));
+                }
+                let n_exp = shape[0];
+                let e_rows = shape[1];
+                let e_cols = shape[2];
+                let flat = MathValue::get_flattened_strided(shape, strides, data);
+                let mut mats = Vec::with_capacity(n_exp);
+                for e in 0..n_exp {
+                    let mut mat = Vec::with_capacity(e_rows);
+                    for r in 0..e_rows {
+                        let start = e * (e_rows * e_cols) + r * e_cols;
+                        mat.push(flat[start..start + e_cols].to_vec());
+                    }
+                    mats.push(mat);
+                }
+                mats
+            }
+            MathValue::Matrix(single) => vec![single.clone()],
+            _ => return Err("moe_gate: experts must be a Tuple of matrices or a 3D Tensor".to_string()),
+        };
+
+        let out_dim = expert_mats.first()
+            .and_then(|m| m.first())
+            .map(|r| r.len())
+            .unwrap_or(in_dim);
+
+        let mut out_rows = Vec::with_capacity(rows.len());
+
+        for x_row in &rows {
+            // 1. Calculate routing logits: gate_mat @ x_row
+            let mut logits = Vec::with_capacity(num_experts);
+            for g_row in gate_mat {
+                let dot: f64 = g_row.iter().zip(x_row.iter()).map(|(&a, &b)| a * b).sum();
+                logits.push(dot);
+            }
+
+            // 2. Select top-k experts
+            let mut indexed_logits: Vec<(usize, f64)> = logits.into_iter().enumerate().collect();
+            indexed_logits.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            indexed_logits.truncate(k);
+
+            // 3. Normalized routing weights with Flash softmax
+            let max_logit = indexed_logits.iter().map(|(_, l)| *l).fold(f64::NEG_INFINITY, f64::max);
+            let mut exps = Vec::with_capacity(k);
+            let mut sum_exp = 0.0f64;
+            for (_, logit) in &indexed_logits {
+                let e = (*logit - max_logit).exp();
+                exps.push(e);
+                sum_exp += e;
+            }
+            let inv_sum = 1.0 / sum_exp.max(1e-12);
+            let weights: Vec<f64> = exps.into_iter().map(|e| e * inv_sum).collect();
+
+            // 4. Weighted accumulation of expert outputs
+            let mut y_row = vec![0.0f64; out_dim];
+            for (j, &(exp_idx, _)) in indexed_logits.iter().enumerate() {
+                let w_j = weights[j];
+                let e_mat = &expert_mats[exp_idx % expert_mats.len()];
+                let e_rows = e_mat.len();
+                let e_cols = e_mat.first().map(|r| r.len()).unwrap_or(0);
+                if e_rows == in_dim {
+                    for d in 0..out_dim.min(e_cols) {
+                        let mut dot = 0.0f64;
+                        for i in 0..in_dim {
+                            dot += x_row[i] * e_mat[i][d];
+                        }
+                        y_row[d] += w_j * dot;
+                    }
+                } else if e_cols == in_dim {
+                    for d in 0..out_dim.min(e_rows) {
+                        let mut dot = 0.0f64;
+                        for i in 0..in_dim {
+                            dot += x_row[i] * e_mat[d][i];
+                        }
+                        y_row[d] += w_j * dot;
+                    }
+                }
+            }
+            out_rows.push(y_row);
+        }
+
+        if is_vector && out_rows.len() == 1 {
+            Ok(MathValue::Vector(out_rows.pop().unwrap()))
+        } else {
+            Ok(MathValue::Matrix(out_rows))
+        }
+    }
+
+    /// Evaluates hardware-level cyclic ring-buffer KV cache attention with O(1) allocation
+    pub fn eval_kv_ring(
+        &self,
+        q: &MathValue,
+        k_new: &MathValue,
+        v_new: &MathValue,
+        k_ring: &MathValue,
+        v_ring: &MathValue,
+        pos: usize,
+        max_len: usize,
+        scale: Option<f64>,
+    ) -> Result<MathValue, String> {
+        let (mut k_mat, k_cols) = match k_ring {
+            MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+            _ => return Err("k_ring must be a 2D Matrix".to_string()),
+        };
+        let (mut v_mat, v_cols) = match v_ring {
+            MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+            _ => return Err("v_ring must be a 2D Matrix".to_string()),
+        };
+
+        if max_len == 0 || k_mat.is_empty() {
+            return Err("max_len and ring buffer capacity must be >= 1".to_string());
+        }
+
+        let slot = pos % max_len;
+        let k_new_vec = k_new.flatten_elements();
+        let v_new_vec = v_new.flatten_elements();
+
+        // 1. O(1) in-place slot write into circular buffer
+        if slot < k_mat.len() && slot < v_mat.len() {
+            k_mat[slot] = k_new_vec;
+            v_mat[slot] = v_new_vec;
+        } else {
+            return Err(format!("Ring buffer index {} out of capacity {}", slot, k_mat.len()));
+        }
+
+        // 2. Active sequence length (up to pos + 1, capped at max_len)
+        let valid_len = (pos + 1).min(max_len);
+        let s = scale.unwrap_or(1.0 / (k_cols as f64).sqrt().max(1e-6));
+
+        // 3. FlashAttention-2 online attention between Q and valid history
+        let q_vec = q.flatten_elements();
+        let mut m = f64::NEG_INFINITY;
+        let mut l = 0.0f64;
+        let mut acc = vec![0.0f64; v_cols];
+
+        for i in 0..valid_len {
+            let k_row = &k_mat[i];
+            let v_row = &v_mat[i];
+            let dot: f64 = q_vec.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
+            let score = dot * s;
+
+            if score > m {
+                let alpha = (m - score).exp();
+                for d in 0..v_cols {
+                    acc[d] = acc[d] * alpha + v_row[d];
+                }
+                l = l * alpha + 1.0;
+                m = score;
+            } else {
+                let beta = (score - m).exp();
+                for d in 0..v_cols {
+                    acc[d] += beta * v_row[d];
+                }
+                l += beta;
+            }
+        }
+
+        let mut out = vec![0.0f64; v_cols];
+        if l > 1e-12 {
+            let inv_l = 1.0 / l;
+            for d in 0..v_cols {
+                out[d] = acc[d] * inv_l;
+            }
+        }
+
+        Ok(MathValue::Tuple(vec![
+            MathValue::Vector(out),
+            MathValue::Matrix(k_mat),
+            MathValue::Matrix(v_mat),
+            MathValue::Scalar((pos + 1) as f64),
+        ]))
+    }
+
     pub fn eval_quantize_t2(&self, val: &MathValue) -> Result<MathValue, String> {
         let elems = val.flatten_elements();
         if elems.is_empty() {
@@ -5104,6 +5411,13 @@ impl MathEvaluator {
                     }
                     return self.eval_value(&MathExpr::Call("grad".to_string(), args.clone()));
                 }
+                subscript_grad if subscript_grad.starts_with("∇_") => {
+                    if args.len() != 1 {
+                        return Err(format!("'{}' expects 1 argument (expr)", subscript_grad));
+                    }
+                    let wrt = subscript_grad.strip_prefix("∇_").unwrap();
+                    return self.eval_value(&MathExpr::Call("grad".to_string(), vec![args[0].clone(), MathExpr::Var(wrt.to_string())]));
+                }
                 "sqrt" => Ok(self.eval_single_val(args, "sqrt")?.map_unary(|x| x.sqrt())),
                 "exp" => Ok(self.eval_single_val(args, "exp")?.map_unary(|x| x.exp())),
                 "ln" | "log" => Ok(self.eval_single_val(args, "log")?.map_unary(|x| x.ln())),
@@ -5332,7 +5646,7 @@ impl MathEvaluator {
                     };
                     self.eval_mla_attn(&x, &w_dkv, &w_uk, &w_uv, &w_q, w_o.as_ref(), is_causal)
                 }
-                "ssd_scan" | "mamba_ssd" | "Ξ" => {
+                "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
                     if args.len() < 2 {
                         return Err(
                             "'ssd_scan(X, decay_dt)' requires at least 2 arguments".to_string()
@@ -6576,6 +6890,42 @@ impl MathEvaluator {
                         total_loss += -policy_loss + beta * approx_kl;
                     }
                     Ok(MathValue::Scalar(total_loss / n.max(1) as f64))
+                }
+                "moe_gate" | "Ξ_m" | "moe" => {
+                    if args.len() < 3 {
+                        return Err("'moe_gate(X, W_gate, experts, [top_k])' requires at least 3 arguments".to_string());
+                    }
+                    let x_val = self.eval_value(&args[0])?;
+                    let w_gate = self.eval_value(&args[1])?;
+                    let experts = self.eval_value(&args[2])?;
+                    let top_k = if args.len() > 3 {
+                        self.eval_value(&args[3])?.as_scalar().unwrap_or(2.0) as usize
+                    } else {
+                        2
+                    };
+                    self.eval_moe_gate(&x_val, &w_gate, &experts, top_k)
+                }
+                "kv_ring" | "Ψ_r" | "kv_cache_ring" => {
+                    if args.len() < 6 {
+                        return Err("'kv_ring(q, k_new, v_new, k_ring, v_ring, pos, [max_len, scale])' requires at least 6 arguments".to_string());
+                    }
+                    let q = self.eval_value(&args[0])?;
+                    let k_new = self.eval_value(&args[1])?;
+                    let v_new = self.eval_value(&args[2])?;
+                    let k_ring = self.eval_value(&args[3])?;
+                    let v_ring = self.eval_value(&args[4])?;
+                    let pos = self.eval_value(&args[5])?.as_scalar().ok_or_else(|| "pos must be scalar integer".to_string())? as usize;
+                    let max_len = if args.len() > 6 {
+                        self.eval_value(&args[6])?.as_scalar().unwrap_or(k_ring.shape().first().copied().unwrap_or(1) as f64) as usize
+                    } else {
+                        k_ring.shape().first().copied().unwrap_or(1)
+                    };
+                    let scale = if args.len() > 7 {
+                        self.eval_value(&args[7])?.as_scalar()
+                    } else {
+                        None
+                    };
+                    self.eval_kv_ring(&q, &k_new, &v_new, &k_ring, &v_ring, pos, max_len, scale)
                 }
                 "grad" | "diff" => {
                     if args.len() != 2 {
@@ -8833,6 +9183,22 @@ impl MathProgram {
                     }
                     Some(vec![])
                 }
+                "moe_gate" | "Ξ_m" | "moe" => {
+                    for a in args {
+                        let _ = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                    }
+                    if let Some(arg0) = args.first() {
+                        Self::infer_shape_expr(arg0, env, fn_sigs, errors, ctx)
+                    } else {
+                        None
+                    }
+                }
+                "kv_ring" | "Ψ_r" | "kv_cache_ring" => {
+                    for a in args {
+                        let _ = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                    }
+                    None
+                }
                 "zeros" | "ones" | "O" => {
                     if args.len() == 1 {
                         match &args[0] {
@@ -8976,6 +9342,19 @@ impl MathProgram {
                         errors.push(format!(
                             "{}grad() expects exactly 2 arguments (expr, wrt_var)",
                             prefix
+                        ));
+                        None
+                    }
+                }
+                subscript_grad if subscript_grad.starts_with("∇_") => {
+                    if args.len() == 1 {
+                        let wrt = subscript_grad.strip_prefix("∇_").unwrap();
+                        let call = MathExpr::Call("grad".to_string(), vec![args[0].clone(), MathExpr::Var(wrt.to_string())]);
+                        Self::infer_shape_expr(&call, env, fn_sigs, errors, ctx)
+                    } else {
+                        errors.push(format!(
+                            "{} expects exactly 1 argument (expr)",
+                            subscript_grad
                         ));
                         None
                     }
@@ -9275,7 +9654,7 @@ impl MathProgram {
                         None
                     }
                 }
-                "ssd_scan" | "mamba_ssd" | "Ξ" => {
+                "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
                     if args.len() >= 2 {
                         let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         for a in &args[1..] {
@@ -9546,6 +9925,7 @@ impl MathProgram {
             "// ============================================================================\n\n",
         );
         out.push_str("#include <stdint.h>\n#include <stdbool.h>\n#include <math.h>\n#include <stdalign.h>\n\n");
+        out.push_str("#ifndef CRON_API\n#if defined(_WIN32) || defined(__CYGWIN__)\n  #define CRON_API __declspec(dllexport)\n#else\n  #define CRON_API __attribute__((visibility(\"default\")))\n#endif\n#endif\n\n");
 
         let fns = prog.collect_functions();
 
@@ -9571,9 +9951,44 @@ impl MathProgram {
                 // Check if function operates on shaped tensor tiles (e.g., W: f16[16, 16], x: f16[16])
                 let has_shaped_params = params.iter().any(|p| !p.dims.is_empty());
                 if has_shaped_params {
-                    // Detect 2D Matrix-Vector Linear Layer pattern: W[M, N] @ x[N] (+ b[M])
-                    let mat_param = params.iter().find(|p| p.dims.len() == 2);
+                    let mat_params: Vec<_> = params.iter().filter(|p| p.dims.len() == 2).collect();
                     let vec_param = params.iter().find(|p| p.dims.len() == 1);
+
+                    // Matrix-Matrix Multiplication (GEMM tile)
+                    if mat_params.len() == 2 {
+                        let a_p = mat_params[0];
+                        let b_p = mat_params[1];
+                        let m = a_p.dims[0];
+                        let k = a_p.dims[1];
+                        let n = b_p.dims[1];
+                        let mut p_decls: Vec<String> = params
+                            .iter()
+                            .map(|p| {
+                                if p.dims.is_empty() {
+                                    format!("{} {}", p.dtype.to_c23_type(), p.name)
+                                } else {
+                                    format!("const {}* restrict {}", p.dtype.to_c23_type(), p.name)
+                                }
+                            })
+                            .collect();
+                        p_decls.push(format!("{}* restrict out", r_type));
+                        out.push_str(&format!("CRON_API void {}({}) {{\n", name, p_decls.join(", ")));
+                        out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", m));
+                        out.push_str(&format!("        for (int j = 0; j < {}; ++j) {{\n", n));
+                        out.push_str("            float acc = 0.0f;\n");
+                        out.push_str(&format!("            for (int p = 0; p < {}; ++p) {{\n", k));
+                        out.push_str(&format!(
+                            "                acc += (float){}[i * {} + p] * (float){}[p * {} + j];\n",
+                            a_p.name, k, b_p.name, n
+                        ));
+                        out.push_str("            }\n");
+                        out.push_str(&format!("            out[i * {} + j] = ({})acc;\n", n, r_type));
+                        out.push_str("        }\n    }\n}\n\n");
+                        continue;
+                    }
+
+                    // 2D Matrix-Vector Linear Layer pattern: W[M, N] @ x[N] (+ b[M])
+                    let mat_param = mat_params.first().copied();
                     if let (Some(w_p), Some(x_p)) = (mat_param, vec_param) {
                         let mut p_decls: Vec<String> = params
                             .iter()
@@ -9586,7 +10001,7 @@ impl MathProgram {
                             })
                             .collect();
                         p_decls.push(format!("{}* restrict out", r_type));
-                        out.push_str(&format!("void {}({}) {{\n", name, p_decls.join(", ")));
+                        out.push_str(&format!("CRON_API void {}({}) {{\n", name, p_decls.join(", ")));
                         let m = w_p.dims[0];
                         let n = w_p.dims[1];
                         let bias_param = params
@@ -9619,7 +10034,7 @@ impl MathProgram {
                             })
                             .collect();
                         p_decls.push(format!("{}* restrict out", r_type));
-                        out.push_str(&format!("void {}({}) {{\n", name, p_decls.join(", ")));
+                        out.push_str(&format!("CRON_API void {}({}) {{\n", name, p_decls.join(", ")));
                         let n = v_p.dims[0];
                         out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", n));
                         out.push_str(&format!(
@@ -9638,7 +10053,7 @@ impl MathProgram {
                     .map(|p| format!("{} {}", p.dtype.to_c23_type(), p.name))
                     .collect::<Vec<_>>()
                     .join(", ");
-                out.push_str(&format!("{} {}({}) {{\n", r_type, name, p_str));
+                out.push_str(&format!("CRON_API {} {}({}) {{\n", r_type, name, p_str));
                 out.push_str(&format!(
                     "    return ({} )({});\n",
                     r_type,
@@ -9648,6 +10063,57 @@ impl MathProgram {
             }
         }
 
+        out
+    }
+
+    /// Generates a clean C ABI header (.h) for shared library integration
+    pub fn to_c_header(&self, module_name: &str) -> String {
+        let prog = self.optimize_tensor_graph();
+        let guard = format!("CRON_{}_H", module_name.to_uppercase().replace(|c: char| !c.is_alphanumeric(), "_"));
+        let mut out = String::new();
+        out.push_str(&format!("#ifndef {}\n#define {}\n\n", guard, guard));
+        out.push_str("#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n\n");
+        out.push_str("#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
+        out.push_str("#if defined(_WIN32) || defined(__CYGWIN__)\n");
+        out.push_str("  #ifdef CRON_BUILD_DLL\n");
+        out.push_str("    #define CRON_API __declspec(dllexport)\n");
+        out.push_str("  #else\n");
+        out.push_str("    #define CRON_API __declspec(dllimport)\n");
+        out.push_str("  #endif\n");
+        out.push_str("#else\n");
+        out.push_str("  #define CRON_API __attribute__((visibility(\"default\")))\n");
+        out.push_str("#endif\n\n");
+
+        for item in &prog.items {
+            if let MathItem::Function { name, params, ret_type, .. } = item {
+                let inferred_ret = Self::infer_return_dtype(params, ret_type);
+                let r_type = inferred_ret.to_c23_type();
+                let has_shaped_params = params.iter().any(|p| !p.dims.is_empty());
+                if has_shaped_params {
+                    let mut p_decls: Vec<String> = params
+                        .iter()
+                        .map(|p| {
+                            if p.dims.is_empty() {
+                                format!("{} {}", p.dtype.to_c23_type(), p.name)
+                            } else {
+                                format!("const {}* {}", p.dtype.to_c23_type(), p.name)
+                            }
+                        })
+                        .collect();
+                    p_decls.push(format!("{}* out", r_type));
+                    out.push_str(&format!("CRON_API void {}({});\n", name, p_decls.join(", ")));
+                } else {
+                    let p_decls: Vec<String> = params
+                        .iter()
+                        .map(|p| format!("{} {}", p.dtype.to_c23_type(), p.name))
+                        .collect();
+                    out.push_str(&format!("CRON_API {} {}({});\n", r_type, name, p_decls.join(", ")));
+                }
+            }
+        }
+
+        out.push_str("\n#ifdef __cplusplus\n}\n#endif\n\n");
+        out.push_str(&format!("#endif // {}\n", guard));
         out
     }
 
@@ -10774,6 +11240,28 @@ impl MathProgram {
                 body,
             } = item
             {
+                // Check if function targets NVIDIA Hopper / Blackwell Asynchronous Tensor Cores (WGMMA 64x64x16)
+                let is_wgmma_gemm = name.contains("wgmma") || name.contains("hopper") || name.contains("blackwell")
+                    || (params.len() == 2
+                        && params[0].dims == vec![64, 16]
+                        && params[1].dims == vec![16, 64]);
+
+                if is_wgmma_gemm {
+                    out.push_str(&format!(
+                        "// NVIDIA Hopper/Blackwell Asynchronous Tensor Core WGMMA 64x64x16 Tile\n.visible .entry {}(\n    .param .u64 param_A,\n    .param .u64 param_B,\n    .param .u64 param_out\n) {{\n",
+                        name
+                    ));
+                    out.push_str("    .reg .b64 %desc_a, %desc_b;\n    .reg .f32 %d<32>;\n\n");
+                    out.push_str("    ld.param.u64 %desc_a, [param_A];\n");
+                    out.push_str("    ld.param.u64 %desc_b, [param_B];\n\n");
+                    out.push_str("    // Hopper/Blackwell Asynchronous Warpgroup MMA (Tensor Memory / Shared Memory Descriptor)\n");
+                    out.push_str("    wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16 {%d0, %d1, %d2, %d3}, %desc_a, %desc_b, 1, 1, 1, 0, 0;\n");
+                    out.push_str("    wgmma.commit_group.sync.aligned;\n");
+                    out.push_str("    wgmma.wait_group.sync.aligned 0;\n");
+                    out.push_str("    ret;\n}\n\n");
+                    continue;
+                }
+
                 // Check if function is a 2D Tensor Core tile (e.g. A: f16[16, 16], B: f16[16, 16])
                 let is_wmma_gemm = params.len() == 2
                     && params[0].dims == vec![16, 16]
@@ -12287,6 +12775,8 @@ pub fn expand_ascii_math_symbols(input: &str) -> String {
         ("\\Psi_g", "Ψ_g"),
         ("\\psi_c", "Ψ_c"),
         ("\\Psi_c", "Ψ_c"),
+        ("\\psi_r", "Ψ_r"),
+        ("\\Psi_r", "Ψ_r"),
         ("\\psi", "Ψ"),
         ("\\Psi", "Ψ"),
         ("\\phi", "Φ"),
@@ -12313,6 +12803,12 @@ pub fn expand_ascii_math_symbols(input: &str) -> String {
         ("\\theta", "θ"),
         ("\\sigma", "σ"),
         ("\\Sigma", "σ"),
+        ("\\Xi_m", "Ξ_m"),
+        ("\\xi_m", "Ξ_m"),
+        ("\\moe", "Ξ_m"),
+        ("\\Xi", "Ξ"),
+        ("\\xi", "Ξ"),
+        ("\\mamba", "M"),
         ("\\sum_k", "∑_k"),
         ("\\sum", "∑"),
         ("\\sqrt", "√"),
@@ -14783,5 +15279,118 @@ mod tests {
         } else {
             panic!("Expected s_generated to be MathValue::Str");
         }
+    }
+
+    #[test]
+    fn test_phase25_moe_routing_and_ring_kv_cache_and_mamba() {
+        let code = r#"
+            // 4 experts: each [2, 2]
+            E0 = [[1.0, 0.0], [0.0, 1.0]]
+            E1 = [[2.0, 0.0], [0.0, 2.0]]
+            E2 = [[0.5, 0.0], [0.0, 0.5]]
+            E3 = [[3.0, 0.0], [0.0, 3.0]]
+            experts = (E0, E1, E2, E3)
+
+            // Gate matrix: [4, 2]
+            W_gate = [[1.0, 0.0], [-1.0, 0.0], [0.0, 1.0], [2.0, 0.0]]
+
+            X = [1.0, 0.5]
+            Y_moe = Ξ_m(X, W_gate, experts, 2)
+
+            // Analytical VJP Autodiff through MoE
+            loss(w) = sum(Ξ_m(w, W_gate, experts, 2))
+            g_x = ∇_X(loss(X))
+
+            // Hardware Cyclic Ring-Buffer KV Cache Attention
+            K_ring = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]
+            V_ring = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]
+            q = [1.0, 0.0]
+            k_0 = [1.0, 0.0]
+            v_0 = [2.0, 3.0]
+            (out_kv, K_ring1, V_ring1, pos1) = Ψ_r(q, k_0, v_0, K_ring, V_ring, 0.0, 4.0)
+
+            // Mamba-2 State Space Duality (SSD) Linear Scan Alias
+            decay_dt = [0.9, 0.9]
+            Y_mamba = M(X, decay_dt)
+        "#;
+        let prog = parse_math_code(code).expect("Parse Phase 25 MoE & Ring KV failed");
+        assert!(prog.verify_shapes().is_ok());
+        let mut eval = MathEvaluator::new();
+        eval.execute_program(&prog).expect("Execution failed");
+
+        // Verify MoE top-k output
+        let y_moe = eval.env.get("Y_moe").unwrap();
+        match y_moe {
+            MathValue::Vector(v) => {
+                assert_eq!(v.len(), 2);
+                assert!(v[0] > 0.0);
+            }
+            _ => panic!("Expected Vector for Y_moe"),
+        }
+
+        // Verify VJP pullback gradient
+        let g_x = eval.env.get("g_x").unwrap();
+        match g_x {
+            MathValue::Vector(v) => {
+                assert_eq!(v.len(), 2);
+                assert!(v[0] > 0.0);
+            }
+            _ => panic!("Expected Vector for g_x"),
+        }
+
+        // Verify KV-Ring buffer
+        let out_kv = eval.env.get("out_kv").unwrap();
+        match out_kv {
+            MathValue::Vector(v) => {
+                assert_eq!(v.len(), 2);
+                // Q=[1, 0], K[0]=[1, 0], V[0]=[2, 3] -> out should be V[0]
+                assert!((v[0] - 2.0).abs() < 1e-4);
+                assert!((v[1] - 3.0).abs() < 1e-4);
+            }
+            _ => panic!("Expected Vector for out_kv"),
+        }
+
+        let pos1 = eval.env.get("pos1").unwrap();
+        assert_eq!(pos1.as_scalar(), Some(1.0));
+
+        // Verify Mamba-2 output (cumulative SSD scan: h_0 = 1.0, h_1 = 0.9*1.0 + 0.5 = 1.4)
+        let y_mamba = eval.env.get("Y_mamba").unwrap();
+        match y_mamba {
+            MathValue::Vector(v) => {
+                assert_eq!(v.len(), 2);
+                assert!((v[0] - 1.0).abs() < 1e-5);
+                assert!((v[1] - 1.4).abs() < 1e-5);
+            }
+            _ => panic!("Expected Vector for Y_mamba"),
+        }
+    }
+
+    #[test]
+    fn test_phase26_c_abi_header_and_wgmma_ptx() {
+        let code = r#"
+            f(x: f32) = x * 2.0
+            hopper_gemm(A: f16[64, 16], B: f16[16, 64]) = A @ B
+        "#;
+        let prog = parse_math_code(code).expect("Parse Phase 26 code failed");
+
+        // 1. C-ABI Header Generation
+        let c_header = prog.to_c_header("llm_core");
+        assert!(c_header.contains("CRON_API"));
+        assert!(c_header.contains("CRON_LLM_CORE_H"));
+        assert!(c_header.contains("extern \"C\""));
+        assert!(c_header.contains("CRON_API float f(float x);"));
+        assert!(c_header.contains("CRON_API void hopper_gemm("));
+
+        // 2. ISO C23 Source with CRON_API export visibility
+        let c23_code = prog.to_c23();
+        assert!(c23_code.contains("CRON_API"));
+        assert!(c23_code.contains("CRON_API float f(float x)"));
+        assert!(c23_code.contains("CRON_API void hopper_gemm("));
+
+        // 3. NVIDIA Hopper / Blackwell WGMMA PTX lowering
+        let ptx_code = prog.to_ptx();
+        assert!(ptx_code.contains("wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16"), "Expected WGMMA instruction in PTX:\n{}", ptx_code);
+        assert!(ptx_code.contains("wgmma.commit_group.sync.aligned"));
+        assert!(ptx_code.contains("wgmma.wait_group.sync.aligned 0"));
     }
 }
