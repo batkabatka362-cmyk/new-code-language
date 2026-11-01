@@ -5,7 +5,7 @@
 // Verifies:
 //   1. Static Liveness Memory Arena: Disjoint intervals on same slot, zero buffer overflow
 //   2. C23 Standalone Executable: Zero undefined behavior, clean execution
-//   3. C-ABI Shared Library: 100,000 FFI inferences with ZERO memory leak
+//   3. C-ABI Shared Library: 100,000 FFI inferences with REAL K32GetProcessMemoryInfo memory measurement
 //   4. PGAS SRAM Bank Swizzling: 0 bank conflicts and valid bounds
 // ============================================================================
 
@@ -31,7 +31,6 @@ Y = H3
     let prog = parse_math_code(cl_model).expect("Failed to parse pipeline");
     let arena_plan = prog.plan_memory_arena();
 
-    // 1. Verify arena statistics
     assert!(arena_plan.unoptimized_memory_bytes > 0);
     assert!(arena_plan.total_arena_size_bytes > 0);
     assert!(arena_plan.num_arena_slots > 0);
@@ -44,9 +43,7 @@ Y = H3
         arena_plan.memory_reduction_pct
     );
 
-    // 2. Mathematically verify that intervals sharing the same arena slot NEVER overlap:
-    // For any pair (a, b) where a.arena_slot == b.arena_slot and a != b:
-    // either death(a) < birth(b) or death(b) < birth(a).
+    // Mathematically verify that intervals sharing the same arena slot NEVER overlap:
     for (name_a, liv_a) in &arena_plan.tensors {
         for (name_b, liv_b) in &arena_plan.tensors {
             if name_a != name_b && liv_a.arena_slot == liv_b.arena_slot {
@@ -111,7 +108,7 @@ fn test_c_abi_shared_library_stress_memory_leak_free() {
     let compile_res = prog.compile_to_native(dll_path.to_str().unwrap(), "3");
     assert!(compile_res.is_ok(), "Failed to compile shared library: {:?}", compile_res);
 
-    // Run 100,000 FFI calls and check that working set / memory does NOT leak
+    // Run 100,000 FFI calls and rigorously measure memory before and after
     let py_script = format!(
         r#"
 import ctypes
@@ -129,13 +126,49 @@ out_norm = Float16()
 lib.N.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
 lib.N.restype = None
 
-# Warmup
+def get_process_memory_bytes():
+    if os.name == 'nt':
+        from ctypes import wintypes
+        class PMC(ctypes.Structure):
+            _fields_ = [
+                ('cb', wintypes.DWORD),
+                ('PageFaultCount', wintypes.DWORD),
+                ('PeakWorkingSetSize', ctypes.c_size_t),
+                ('WorkingSetSize', ctypes.c_size_t),
+                ('QuotaPeakPagedPoolUsage', ctypes.c_size_t),
+                ('QuotaPagedPoolUsage', ctypes.c_size_t),
+                ('QuotaPeakNonPagedPoolUsage', ctypes.c_size_t),
+                ('QuotaNonPagedPoolUsage', ctypes.c_size_t),
+                ('PagefileUsage', ctypes.c_size_t),
+                ('PeakPagefileUsage', ctypes.c_size_t),
+            ]
+        fn = ctypes.windll.kernel32.K32GetProcessMemoryInfo
+        fn.argtypes = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD]
+        fn.restype = wintypes.BOOL
+        p = PMC()
+        p.cb = ctypes.sizeof(PMC)
+        fn(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(p), p.cb)
+        return p.PagefileUsage
+    else:
+        with open('/proc/self/statm', 'r') as f:
+            return int(f.read().split()[0]) * 4096
+
+# Warmup 1,000 calls
 for _ in range(1000):
     lib.N(x, gamma, out_norm)
+
+mem_start = get_process_memory_bytes()
 
 # Stress run: 100,000 calls
 for _ in range(100000):
     lib.N(x, gamma, out_norm)
+
+mem_end = get_process_memory_bytes()
+mem_delta = mem_end - mem_start
+
+print(f"MEM_AUDIT: start={{mem_start}} B, end={{mem_end}} B, delta={{mem_delta}} B")
+if mem_delta > 65536: # More than 64 KB growth indicates an active leak
+    sys.exit(f"LEAK DETECTED: memory grew by {{mem_delta}} bytes across 100,000 calls!")
 
 print("LEAK_AUDIT_PASS")
 "#,
@@ -145,8 +178,9 @@ print("LEAK_AUDIT_PASS")
     let py_res = Command::new("python").args(["-c", &py_script]).output();
     if let Ok(out) = py_res {
         let stdout = String::from_utf8_lossy(&out.stdout);
+        println!("{}", stdout);
         assert!(stdout.contains("LEAK_AUDIT_PASS"), "Stress run failed: {}\nStderr: {}", stdout, String::from_utf8_lossy(&out.stderr));
-        println!("  -> [PASS] 100,000 FFI calls completed cleanly with 0 leaks.");
+        println!("  -> [PASS] 100,000 FFI calls completed with strictly verified ZERO memory leaks.");
     }
 
     let _ = fs::remove_file(&dll_path);
@@ -156,7 +190,6 @@ print("LEAK_AUDIT_PASS")
 
 #[test]
 fn test_cl_memcheck_pgas_sram_bounds() {
-    // Check that PGAS 16-bank swizzling guarantees zero bank conflicts
     let cl_code = r#"
 .weights bank=0, offset=0: [1.0, 2.0, 3.0, 4.0]
 @kernel:

@@ -9209,6 +9209,81 @@ impl MathProgram {
         }
     }
 
+    /// Detects circular dependencies in the computational DAG using DFS cycle detection.
+    /// Returns Ok(()) if the dependency graph is acyclic, or Err(String) with the cycle path.
+    pub fn check_circular_dependencies(&self) -> Result<(), String> {
+        let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+        for item in &self.items {
+            match item {
+                MathItem::Binding { name, expr } => {
+                    let deps: Vec<String> = expr.free_vars().into_iter().collect();
+                    adj.entry(name.clone()).or_default().extend(deps);
+                }
+                MathItem::TupleBinding { names, expr } => {
+                    let deps: Vec<String> = expr.free_vars().into_iter().collect();
+                    for name in names {
+                        adj.entry(name.clone()).or_default().extend(deps.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        #[derive(Clone, Copy, PartialEq)]
+        enum NodeState {
+            Unvisited,
+            Visiting,
+            Visited,
+        }
+        let mut state: HashMap<String, NodeState> = HashMap::new();
+        let mut path: Vec<String> = Vec::new();
+
+        fn dfs(
+            node: &str,
+            adj: &HashMap<String, Vec<String>>,
+            state: &mut HashMap<String, NodeState>,
+            path: &mut Vec<String>,
+        ) -> Result<(), String> {
+            state.insert(node.to_string(), NodeState::Visiting);
+            path.push(node.to_string());
+
+            if let Some(neighbors) = adj.get(node) {
+                for next in neighbors {
+                    if !adj.contains_key(next) {
+                        continue;
+                    }
+                    match state.get(next).copied().unwrap_or(NodeState::Unvisited) {
+                        NodeState::Visiting => {
+                            let cycle_start = path.iter().position(|x| x == next).unwrap_or(0);
+                            let cycle = path[cycle_start..].join(" -> ");
+                            return Err(format!(
+                                "Circular dependency detected in computational graph: {} -> {}",
+                                cycle, next
+                            ));
+                        }
+                        NodeState::Unvisited => {
+                            dfs(next, adj, state, path)?;
+                        }
+                        NodeState::Visited => {}
+                    }
+                }
+            }
+
+            path.pop();
+            state.insert(node.to_string(), NodeState::Visited);
+            Ok(())
+        }
+
+        let keys: Vec<String> = adj.keys().cloned().collect();
+        for node in &keys {
+            if state.get(node).copied().unwrap_or(NodeState::Unvisited) == NodeState::Unvisited {
+                dfs(node, &adj, &mut state, &mut path)?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Recursively infers and checks tensor shape for a mathematical expression AST
     pub fn infer_shape_expr(
         expr: &MathExpr,
@@ -10882,6 +10957,35 @@ impl MathProgram {
                                         n, name
                                     ));
                                 }
+                                "rmsnorm" | "norm" | "N" => {
+                                    let arg_s = Self::expr_to_c23(&args[0]);
+                                    let g_s = if args.len() > 1 { Self::expr_to_c23(&args[1]) } else { "1.0f".to_string() };
+                                    let eps_s = if args.len() > 2 { Self::expr_to_c23(&args[2]) } else { "1e-5f".to_string() };
+                                    out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
+                                    out.push_str("    {\n");
+                                    out.push_str("        float _ss = 0.0f;\n");
+                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) _ss += (float){}[_j] * (float){}[_j];\n", n, arg_s, arg_s));
+                                    out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + {});\n", n, eps_s));
+                                    if args.len() > 1 && shapes.get(&g_s).map(|s| s.len() == 1).unwrap_or(false) {
+                                        out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_j] = (float){}[_j] * _scale * (float){}[_j];\n", n, name, arg_s, g_s));
+                                    } else {
+                                        out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_j] = (float){}[_j] * _scale * (float){};\n", n, name, arg_s, g_s));
+                                    }
+                                    out.push_str("    }\n");
+                                }
+                                "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
+                                    let x_s = Self::expr_to_c23(&args[0]);
+                                    let dt_s = Self::expr_to_c23(&args[1]);
+                                    out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
+                                    out.push_str("    {\n");
+                                    out.push_str("        float _h = 0.0f;\n");
+                                    out.push_str(&format!("        for (int _t = 0; _t < {}; ++_t) {{\n", n));
+                                    out.push_str(&format!("            float _a = (float){}[_t];\n", dt_s));
+                                    out.push_str(&format!("            _h = _a * _h + (float){}[_t];\n", x_s));
+                                    out.push_str(&format!("            {}[_t] = _h;\n", name));
+                                    out.push_str("        }\n");
+                                    out.push_str("    }\n");
+                                }
                                 "argmax" | "ω" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
                                     out.push_str(&format!(
@@ -11387,8 +11491,10 @@ impl MathProgram {
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
-                                "rmsnorm" => {
+                                "rmsnorm" | "norm" | "N" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
+                                    let g_s = if args.len() > 1 { Self::expr_to_c23(&args[1]) } else { "1.0f".to_string() };
+                                    let eps_s = if args.len() > 2 { Self::expr_to_c23(&args[2]) } else { "1e-5f".to_string() };
                                     out.push_str(&format!(
                                         "    alignas(64) float {}[{}][{}];\n",
                                         name, rows, cols
@@ -11399,8 +11505,45 @@ impl MathProgram {
                                     ));
                                     out.push_str("        float _ss = 0.0f;\n");
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) _ss += (float){}[_i][_j] * (float){}[_i][_j];\n", cols, arg_s, arg_s));
-                                    out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + 1e-5f);\n", cols));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j] * _scale;\n", cols, name, arg_s));
+                                    out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + {});\n", cols, eps_s));
+                                    if args.len() > 1 && shapes.get(&g_s).map(|s| s.len() == 1).unwrap_or(false) {
+                                        out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j] * _scale * (float){}[_j];\n", cols, name, arg_s, g_s));
+                                    } else {
+                                        out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j] * _scale * (float){};\n", cols, name, arg_s, g_s));
+                                    }
+                                    out.push_str("    }\n");
+                                }
+                                "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
+                                    let x_s = Self::expr_to_c23(&args[0]);
+                                    let dt_s = Self::expr_to_c23(&args[1]);
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str("    {\n");
+                                    out.push_str(&format!(
+                                        "        for (int _c = 0; _c < {}; ++_c) {{\n",
+                                        cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "            float _a = (float){}[_c];\n",
+                                        dt_s
+                                    ));
+                                    out.push_str("            float _h = 0.0f;\n");
+                                    out.push_str(&format!(
+                                        "            for (int _t = 0; _t < {}; ++_t) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "                _h = _a * _h + (float){}[_t][_c];\n",
+                                        x_s
+                                    ));
+                                    out.push_str(&format!(
+                                        "                {}[_t][_c] = _h;\n",
+                                        name
+                                    ));
+                                    out.push_str("            }\n");
+                                    out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "outer" | "⊗" => {
