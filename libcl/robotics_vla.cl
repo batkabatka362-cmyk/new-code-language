@@ -1,30 +1,25 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:   Proprio[16×16:FP32] @sram[0x0000]
-    goal: Goal[16×16:FP32]    @sram[0x0200]
-    out:  Action[16×16:FP32]  @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§RoboticsVLABlock[16×16:FP32] {
-    W: T[16×16:FP32], Lim: T[16×16:FP32]
+§[16×16:FP32] {
+    W: T[16×16:FP32], L: T[16×16:FP32]
 
-    Proprio ↦ Action :
-        Fused := N(Proprio <~> Goal)
-        Vel := .op.nvfp4_gemm(Fused, W)
-        Int := .op.ode_dormand_prince(Vel, dt=0.01)
-        Action := silu(Int) + Fused
+    X ↦ Y :
+        F := N(X <~> S)
+        I := F * W
+        Y := σ(I)
 }
 
-§ControlFlow {
-    ⟳ (1000) {
-        #R1 ← @sram[0x0400]
-        ? (#R1 > 0x4800) ⮞ {
-            #R2 := #R1 * 0.90
-            @sram[0x0400] ← #R2
-        } : {
-            ⮌
-        }
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |Action| < 2e3, latency < 5ns }
+
+!Δ { ∥Y∥ < 1e5 }

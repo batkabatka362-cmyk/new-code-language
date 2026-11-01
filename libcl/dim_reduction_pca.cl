@@ -1,29 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:     DataMatrix[16×16:FP32]      @sram[0x0000]
-    proj:   EigenVectors[16×16:FP32]    @sram[0x0200]
-    out:    ReducedEmbedding[16×16:FP32] @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§PcaSvdBlock[16×16:FP32] {
-    Covariance: T[16×16:FP32], UMAPWeights: T[16×16:FP32]
+§[16×16:FP32] {
+    C: T[16×16:FP32], U: T[16×16:FP32]
 
-    DataMatrix ↦ ReducedEmbedding :
-        Covariance := DataMatrix ⊗ DataMatrix
-        EigenVectors := svd(Covariance)
-        Projected := DataMatrix ⊗ EigenVectors
-        ReducedEmbedding := silu(Projected)
+    X ↦ Y :
+        A := X ⊗ X
+        P := A <~> S
+        Z := N(P)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        #R4 := #R3 + #R2
-        @sram[0x0400] ← #R4
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
 
-!Δ { |ReducedEmbedding| < 1e5, energy_preservation > 0.95 }
+!Δ { ∥Y∥ < 1e5 }

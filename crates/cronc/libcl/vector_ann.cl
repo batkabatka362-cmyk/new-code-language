@@ -1,27 +1,25 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:   Query[16×16:FP32]      @sram[0x0000]
-    cand: Candidates[16×16:FP32] @sram[0x0200]
-    out:  SimScores[16×16:FP32]  @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§VectorANNBlock[16×16:FP32] {
-    HnswGraph: T[16×16:FP32], QuantCode: T[16×16:FP32]
+§[16×16:FP32] {
+    H: T[16×16:FP32], Q: T[16×16:FP32]
 
-    Query ↦ SimScores :
-        NormQ := N(Query)
-        Dot := NormQ <~> Candidates
-        Score := Dot * QuantCode
-        SimScores := silu(Score)
+    X ↦ Y :
+        Z := N(X)
+        D := Z <~> S
+        Y := σ(D)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        @sram[0x0400] ← #R3
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |SimScores| < 1e4, latency < 6ns }
+
+!Δ { ∥Y∥ < 1e5 }

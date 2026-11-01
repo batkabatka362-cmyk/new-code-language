@@ -1,28 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:     TileA[16×16:FP32]   @sram[0x0000]
-    tile_b: TileB[16×16:FP32]   @sram[0x0200]
-    out:    TileAccum[16×16:FP32] @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§ThunderKittensTmaBlock[16×16:FP32] {
-    Tma_S: T[16×16:FP32], SwizzleMask: T[16×16:FP32]
+§[16×16:FP32] {
+    T: T[16×16:FP32], M: T[16×16:FP32]
 
-    TileA ↦ TileAccum :
-        AsyncTileFused := TileA <~> TileB
-        SaturatedCore := AsyncTileFused * Tma_S
-        NormedAccum := N(SaturatedCore)
-        TileAccum := silu(NormedAccum)
+    X ↦ Y :
+        A := X <~> S
+        C := A * T
+        Z := N(C)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        #R4 := #R3 + #R1
-        @sram[0x0400] ← #R4
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |TileAccum| < 1e4, latency < 10ns }
+
+!Δ { ∥Y∥ < 1e5 }

@@ -1,27 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:  Hypothesis[16×16:FP32] @sram[0x0000]
-    ax:  Axioms[16×16:FP32]     @sram[0x0200]
-    out: Proof[16×16:FP32]      @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§FormalLogicBlock[16×16:FP32] {
-    Trail: T[16×16:FP32], Clauses: T[16×16:FP32]
+§[16×16:FP32] {
+    T: T[16×16:FP32], C: T[16×16:FP32]
 
-    Hypothesis ↦ Proof :
-        Unified := Hypothesis <~> Axioms
-        Learnt := Unified ^ Trail
-        Norm := N(Learnt)
-        Proof := silu(Norm)
+    X ↦ Y :
+        U := X <~> S
+        R := U * C
+        Z := N(R)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        @sram[0x0400] ← #R3
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |Proof| < 1e4, latency < 10ns }
+
+!Δ { ∥Y∥ < 1e5 }

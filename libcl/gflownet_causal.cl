@@ -1,28 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:     ParentFlow[16×16:FP32] @sram[0x0000]
-    reward: RewardState[16×16:FP32] @sram[0x0200]
-    out:    ChildFlow[16×16:FP32]  @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§GflownetCausalBlock[16×16:FP32] {
-    ForwardPolicy: T[16×16:FP32], BackwardPolicy: T[16×16:FP32]
+§[16×16:FP32] {
+    F: T[16×16:FP32], B: T[16×16:FP32]
 
-    ParentFlow ↦ ChildFlow :
-        DagCoupled := ParentFlow <~> RewardState
-        TrajectoryBalance := DagCoupled * ForwardPolicy
-        Norm_F := N(TrajectoryBalance)
-        ChildFlow := silu(Norm_F)
+    X ↦ Y :
+        P := X ⊗ S
+        M := P <~> F
+        Z := N(M)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        #R4 := #R3 + #R2
-        @sram[0x0400] ← #R4
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |ChildFlow| < 1e4, latency < 10ns }
+
+!Δ { ∥Y∥ < 1e5 }

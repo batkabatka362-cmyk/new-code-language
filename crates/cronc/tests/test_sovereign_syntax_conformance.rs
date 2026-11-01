@@ -103,3 +103,26 @@ fn test_pure_cipher_muon_kernel_passes_conformance() {
     execute_cl_on_core(&canonical, &mut core).expect("Execution must succeed");
     assert!(core.is_halted);
 }
+
+#[test]
+fn test_all_sovereign_v2_kernels_pass_pure_cipher_conformance() {
+    let libcl_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../libcl");
+    let mut verified = 0;
+    for entry in std::fs::read_dir(&libcl_dir).expect("libcl dir must exist") {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("cl") {
+            continue;
+        }
+        let src = std::fs::read_to_string(&path).unwrap();
+        if !src.contains('§') {
+            continue;
+        }
+        let fname = path.file_name().unwrap().to_string_lossy();
+        let report = verify_sovereign_pure_cipher_syntax(&src)
+            .unwrap_or_else(|e| panic!("{} failed pure cipher: {:?}", fname, e.violations));
+        assert!(report.is_pure_cipher, "{} must be pure cipher", fname);
+        assert!(report.violations.is_empty(), "{} has violations: {:?}", fname, report.violations);
+        verified += 1;
+    }
+    println!("Successfully verified {} Sovereign V2 kernels under Pure Cipher Constitution!", verified);
+}

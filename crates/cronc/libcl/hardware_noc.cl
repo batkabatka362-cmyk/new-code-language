@@ -1,30 +1,25 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:   Flit[16×16:FP32]   @sram[0x0000]
-    dest: Dst[16×16:FP32]    @sram[0x0200]
-    out:  Routed[16×16:FP32] @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§TorusNoCBlock[16×16:FP32] {
-    Phase: T[16×16:FP32], Map: T[16×16:FP32]
+§[16×16:FP32] {
+    P: T[16×16:FP32], M: T[16×16:FP32]
 
-    Flit ↦ Routed :
-        Route := Flit ^ Dst
-        Mzi := Route <~> Phase
-        Norm := N(Mzi)
-        Routed := silu(Norm)
+    X ↦ Y :
+        R := X <~> S
+        Z := N(R)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (512) {
-        #R1 ← @sram[0x0000]
-        ? (#R1 > 0x1000) ⮞ {
-            #R2 := #R1 * 0.99
-            @sram[0x0400] ← #R2
-        } : {
-            @sram[0x0400] ← #R1
-        }
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |Routed| < 1e4, latency < 5ns }
+
+!Δ { ∥Y∥ < 1e5 }

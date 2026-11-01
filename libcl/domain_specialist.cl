@@ -1,27 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:       DomainLatents[16×16:FP16]    @sram[0x0000]
-    guidance: AutoGuidanceField[16×16:FP16] @sram[0x0200]
-    out:      SynthesizedOut[16×16:FP16]   @sram[0x0400]
+    X[16×16:FP16] @0x0000
+    S[16×16:FP16] @0x0200
+    Y[16×16:FP16] @0x0400
 }
 
-§DomainSpecialistBlock[16×16:FP16] {
-    BezierSplines: T[16×16:FP16], RectifiedFlow: T[16×16:FP16]
+§[16×16:FP16] {
+    B: T[16×16:FP16], R: T[16×16:FP16]
 
-    DomainLatents ↦ SynthesizedOut :
-        GuidedFlow := DomainLatents <~> AutoGuidanceField
-        Norm := N(GuidedFlow)
-        Curves := Norm * BezierSplines
-        SynthesizedOut := silu(Curves)
+    X ↦ Y :
+        G := X <~> S
+        C := G * B
+        Z := N(C)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        @sram[0x0400] ← #R3
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |SynthesizedOut| < 1e4, latency < 14ns }
+
+!Δ { ∥Y∥ < 1e5 }

@@ -1,29 +1,27 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    points:     X[16×16:FP32]           @sram[0x0000]
-    centroids:  C[16×16:FP32]           @sram[0x0200]
-    clusters:   Assignments[16×16:FP32] @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§ClusterMetricBlock[16×16:FP32] {
-    EpsilonRadius: T[16×16:FP32], MinPtsDensity: T[16×16:FP32]
+§[16×16:FP32] {
+    E: T[16×16:FP32], D: T[16×16:FP32]
 
-    X ↦ Assignments :
-        DistMatrix := X ⊗ C
-        Norm_D := N(DistMatrix)
-        CorePoints := silu(Norm_D)
-        Assignments := CorePoints * X
+    X ↦ Y :
+        M := X ⊗ S
+        P := M - E
+        Z := σ(P)
+        Y := Z * X
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        #R4 := #R3 + #R1
-        @sram[0x0400] ← #R4
-    }
+⟳ (128) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 - #R2
+    #R4 := #R3 * #R3
+    @0x0400 ← #R4
 }
 
-!Δ { |Assignments| < 1e5, cluster_inertia < 1e3 }
+!Δ { ∥Y∥ < 1e5 }

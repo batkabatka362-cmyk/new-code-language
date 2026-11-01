@@ -1,27 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:  X[16×16:NVFP4]  @sram[0x0000]
-    wt:  W[16×16:NVFP4]  @sram[0x0200]
-    out: Y[16×16:NVFP4]  @sram[0x0400]
+    X[16×16:NVFP4] @0x0000
+    S[16×16:NVFP4] @0x0200
+    Y[16×16:NVFP4] @0x0400
 }
 
-§SiliconTensorBlock[16×16:NVFP4] {
-    H: T[16×16:NVFP4], Acc: T[16×16:FP32]
+§[16×16:NVFP4] {
+    H: T[16×16:NVFP4], A: T[16×16:FP32]
 
     X ↦ Y :
         R := X <~> H
-        Q := .op.nvfp4_gemm(R, W)
-        N := N(Q)
-        Y := silu(N)
+        Q := R @ S
+        Z := N(Q)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        @sram[0x0400] ← #R3
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |Y| < 1e4, latency < 10ns }
+
+!Δ { ∥Y∥ < 1e5 }

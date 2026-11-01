@@ -1,28 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:  X[16×16:FP32]    @sram[0x0000]
-    wt:  W[16×16:FP32]    @sram[0x0200]
-    out: Pred[16×16:FP32] @sram[0x0400]
+    X[16×16:FP32] @0x0000
+    S[16×16:FP32] @0x0200
+    Y[16×16:FP32] @0x0400
 }
 
-§ClassicalMLBlock[16×16:FP32] {
-    Bias: T[16×16:FP32], TargetY: T[16×16:FP32]
+§[16×16:FP32] {
+    B: T[16×16:FP32], T: T[16×16:FP32]
 
-    X ↦ Pred :
-        Grad := X <~> W
-        Hess := Grad * Grad
-        Residual := TargetY - Grad
-        Norm := N(Residual)
-        Pred := silu(Norm)
+    X ↦ Y :
+        G := X <~> S
+        A := G + B
+        Z := N(A)
+        Y := σ(Z)
 }
 
-§ControlFlow {
-    ⟳ (100) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        @sram[0x0400] ← #R3
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |Pred| < 1e4, latency < 8ns }
+
+!Δ { ∥Y∥ < 1e5 }

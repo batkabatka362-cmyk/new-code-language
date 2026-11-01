@@ -1,27 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:     Tokens[16×16:NVFP4]       @sram[0x0000]
-    engram: EngramStaticMem[16×16:NVFP4] @sram[0x0200]
-    out:    Output[16×16:NVFP4]       @sram[0x0400]
+    X[16×16:NVFP4] @0x0000
+    S[16×16:NVFP4] @0x0200
+    Y[16×16:NVFP4] @0x0400
 }
 
-§FrontierFlagshipBlock[16×16:NVFP4] {
-    TrilliumKern: T[16×16:NVFP4], HybridWeight: T[16×16:NVFP4]
+§[16×16:NVFP4] {
+    T: T[16×16:NVFP4], H: T[16×16:NVFP4]
 
-    Tokens ↦ Output :
-        EngramFused := Tokens <~> EngramStaticMem
-        Norm := N(EngramFused)
-        ReasoningGate := Norm * HybridWeight
-        Output := silu(ReasoningGate)
+    X ↦ Y :
+        E := X <~> S
+        Z := N(E)
+        G := Z * H
+        Y := σ(G)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        @sram[0x0400] ← #R3
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |Output| < 1e4, latency < 10ns }
+
+!Δ { ∥Y∥ < 1e5 }

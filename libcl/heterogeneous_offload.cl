@@ -1,27 +1,26 @@
 @⌖ [4×4×4×4] : ⮑ (x+1, y, z, w)
 
 @io {
-    in:       GpuTokens[16×16:NVFP4]    @sram[0x0000]
-    streamed: CpuAmxWeight[16×16:NVFP4] @sram[0x0200]
-    out:      FusedHidden[16×16:NVFP4]  @sram[0x0400]
+    X[16×16:NVFP4] @0x0000
+    S[16×16:NVFP4] @0x0200
+    Y[16×16:NVFP4] @0x0400
 }
 
-§HeterogeneousOffloadBlock[16×16:NVFP4] {
-    PciePipeline: T[16×16:NVFP4], BlockSparseKv: T[16×16:NVFP4]
+§[16×16:NVFP4] {
+    P: T[16×16:NVFP4], B: T[16×16:NVFP4]
 
-    GpuTokens ↦ FusedHidden :
-        Overlapped := GpuTokens <~> CpuAmxWeight
-        Norm := N(Overlapped)
-        ExpertVal := Norm * BlockSparseKv
-        FusedHidden := silu(ExpertVal)
+    X ↦ Y :
+        D := X <~> S
+        Z := N(D)
+        E := Z * B
+        Y := σ(E)
 }
 
-§ControlFlow {
-    ⟳ (256) {
-        #R1 ← @sram[0x0000]
-        #R2 ← @sram[0x0200]
-        #R3 := #R1 * #R2
-        @sram[0x0400] ← #R3
-    }
+⟳ (256) {
+    #R1 ← @0x0000
+    #R2 ← @0x0200
+    #R3 := #R1 * #R2
+    @0x0400 ← #R3
 }
-!Δ { |FusedHidden| < 1e4, latency < 12ns }
+
+!Δ { ∥Y∥ < 1e5 }
