@@ -11002,7 +11002,11 @@ impl MathProgram {
             MathExpr::Str(s) => format!("\"{}\"", s),
             MathExpr::Placeholder => "_".to_string(),
             MathExpr::TensorRef { path, key } => {
-                let safe_ident = if key.is_empty() { "weights" } else { key.as_str() };
+                let safe_ident = if key.is_empty() {
+                    "weights"
+                } else {
+                    key.as_str()
+                };
                 format!("/* @\"{}:{}\" */ ({})", path, key, safe_ident)
             }
             MathExpr::Var(v) => {
@@ -11046,10 +11050,16 @@ impl MathProgram {
                 let s = Self::eval_expr_indexed(inner, indices, shapes, pre_stmts, acc_counter);
                 format!("(!{})", s)
             }
-            MathExpr::Ternary { cond, then_expr, else_expr } => {
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
                 let c_s = Self::eval_expr_indexed(cond, indices, shapes, pre_stmts, acc_counter);
-                let t_s = Self::eval_expr_indexed(then_expr, indices, shapes, pre_stmts, acc_counter);
-                let e_s = Self::eval_expr_indexed(else_expr, indices, shapes, pre_stmts, acc_counter);
+                let t_s =
+                    Self::eval_expr_indexed(then_expr, indices, shapes, pre_stmts, acc_counter);
+                let e_s =
+                    Self::eval_expr_indexed(else_expr, indices, shapes, pre_stmts, acc_counter);
                 format!("({} ? {} : {})", c_s, t_s, e_s)
             }
             MathExpr::Index(base, idx) => {
@@ -11072,12 +11082,24 @@ impl MathProgram {
                 if *op == MathBinOp::MatMul {
                     let dummy_fns = HashMap::new();
                     let mut dummy_errs = Vec::new();
-                    let l_shape = Self::infer_shape_expr(lhs, shapes, &dummy_fns, &mut dummy_errs, None);
-                    let r_shape = Self::infer_shape_expr(rhs, shapes, &dummy_fns, &mut dummy_errs, None);
+                    let l_shape =
+                        Self::infer_shape_expr(lhs, shapes, &dummy_fns, &mut dummy_errs, None);
+                    let r_shape =
+                        Self::infer_shape_expr(rhs, shapes, &dummy_fns, &mut dummy_errs, None);
                     let k = if let Some(ref ls) = l_shape {
-                        if ls.len() >= 2 { ls[ls.len() - 1] } else if ls.len() == 1 { ls[0] } else { 1 }
+                        if ls.len() >= 2 {
+                            ls[ls.len() - 1]
+                        } else if ls.len() == 1 {
+                            ls[0]
+                        } else {
+                            1
+                        }
                     } else if let Some(ref rs) = r_shape {
-                        if !rs.is_empty() { rs[0] } else { 1 }
+                        if !rs.is_empty() {
+                            rs[0]
+                        } else {
+                            1
+                        }
                     } else {
                         1
                     };
@@ -11088,11 +11110,29 @@ impl MathProgram {
                     let k_var = format!("_k_{}", acc_id);
 
                     if indices.len() >= 2 {
-                        let l_val = Self::eval_expr_indexed(lhs, &[indices[0], &k_var], shapes, pre_stmts, acc_counter);
-                        let r_val = Self::eval_expr_indexed(rhs, &[&k_var, indices[1]], shapes, pre_stmts, acc_counter);
+                        let l_val = Self::eval_expr_indexed(
+                            lhs,
+                            &[indices[0], &k_var],
+                            shapes,
+                            pre_stmts,
+                            acc_counter,
+                        );
+                        let r_val = Self::eval_expr_indexed(
+                            rhs,
+                            &[&k_var, indices[1]],
+                            shapes,
+                            pre_stmts,
+                            acc_counter,
+                        );
                         pre_stmts.push(format!("float {} = 0.0f;", acc_name));
-                        pre_stmts.push(format!("for (int {} = 0; {} < {}; ++{}) {{", k_var, k_var, k, k_var));
-                        pre_stmts.push(format!("    {} += (float)({}) * (float)({});", acc_name, l_val, r_val));
+                        pre_stmts.push(format!(
+                            "for (int {} = 0; {} < {}; ++{}) {{",
+                            k_var, k_var, k, k_var
+                        ));
+                        pre_stmts.push(format!(
+                            "    {} += (float)({}) * (float)({});",
+                            acc_name, l_val, r_val
+                        ));
                         pre_stmts.push("}".to_string());
                     } else if indices.len() == 1 {
                         let l_rank = l_shape.as_ref().map(|s| s.len()).unwrap_or(0);
@@ -11100,26 +11140,64 @@ impl MathProgram {
                         let (l_val, r_val) = if l_rank == 1 && r_rank >= 2 {
                             // Row vector @ Matrix: v @ M -> out[j] = sum_k v[k] * M[k][j]
                             (
-                                Self::eval_expr_indexed(lhs, &[&k_var], shapes, pre_stmts, acc_counter),
-                                Self::eval_expr_indexed(rhs, &[&k_var, indices[0]], shapes, pre_stmts, acc_counter),
+                                Self::eval_expr_indexed(
+                                    lhs,
+                                    &[&k_var],
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                ),
+                                Self::eval_expr_indexed(
+                                    rhs,
+                                    &[&k_var, indices[0]],
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                ),
                             )
                         } else {
                             // Matrix @ Column vector: M @ v -> out[i] = sum_k M[i][k] * v[k]
                             (
-                                Self::eval_expr_indexed(lhs, &[indices[0], &k_var], shapes, pre_stmts, acc_counter),
-                                Self::eval_expr_indexed(rhs, &[&k_var], shapes, pre_stmts, acc_counter),
+                                Self::eval_expr_indexed(
+                                    lhs,
+                                    &[indices[0], &k_var],
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                ),
+                                Self::eval_expr_indexed(
+                                    rhs,
+                                    &[&k_var],
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                ),
                             )
                         };
                         pre_stmts.push(format!("float {} = 0.0f;", acc_name));
-                        pre_stmts.push(format!("for (int {} = 0; {} < {}; ++{}) {{", k_var, k_var, k, k_var));
-                        pre_stmts.push(format!("    {} += (float)({}) * (float)({});", acc_name, l_val, r_val));
+                        pre_stmts.push(format!(
+                            "for (int {} = 0; {} < {}; ++{}) {{",
+                            k_var, k_var, k, k_var
+                        ));
+                        pre_stmts.push(format!(
+                            "    {} += (float)({}) * (float)({});",
+                            acc_name, l_val, r_val
+                        ));
                         pre_stmts.push("}".to_string());
                     } else {
-                        let l_val = Self::eval_expr_indexed(lhs, &[&k_var], shapes, pre_stmts, acc_counter);
-                        let r_val = Self::eval_expr_indexed(rhs, &[&k_var], shapes, pre_stmts, acc_counter);
+                        let l_val =
+                            Self::eval_expr_indexed(lhs, &[&k_var], shapes, pre_stmts, acc_counter);
+                        let r_val =
+                            Self::eval_expr_indexed(rhs, &[&k_var], shapes, pre_stmts, acc_counter);
                         pre_stmts.push(format!("float {} = 0.0f;", acc_name));
-                        pre_stmts.push(format!("for (int {} = 0; {} < {}; ++{}) {{", k_var, k_var, k, k_var));
-                        pre_stmts.push(format!("    {} += (float)({}) * (float)({});", acc_name, l_val, r_val));
+                        pre_stmts.push(format!(
+                            "for (int {} = 0; {} < {}; ++{}) {{",
+                            k_var, k_var, k, k_var
+                        ));
+                        pre_stmts.push(format!(
+                            "    {} += (float)({}) * (float)({});",
+                            acc_name, l_val, r_val
+                        ));
                         pre_stmts.push("}".to_string());
                     }
                     return acc_name;
@@ -11132,13 +11210,26 @@ impl MathProgram {
                                 let mut tr = indices.to_vec();
                                 let n = tr.len();
                                 tr.swap(n - 2, n - 1);
-                                return Self::eval_expr_indexed(lhs, &tr, shapes, pre_stmts, acc_counter);
+                                return Self::eval_expr_indexed(
+                                    lhs,
+                                    &tr,
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                );
                             } else {
-                                return Self::eval_expr_indexed(lhs, indices, shapes, pre_stmts, acc_counter);
+                                return Self::eval_expr_indexed(
+                                    lhs,
+                                    indices,
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                );
                             }
                         }
                     }
-                    let l_val = Self::eval_expr_indexed(lhs, indices, shapes, pre_stmts, acc_counter);
+                    let l_val =
+                        Self::eval_expr_indexed(lhs, indices, shapes, pre_stmts, acc_counter);
                     if let MathExpr::Num(exp) = rhs.as_ref() {
                         if (*exp - 2.0).abs() < 1e-9 {
                             return format!("(({0}) * ({0}))", l_val);
@@ -11150,7 +11241,8 @@ impl MathProgram {
                             return format!("(1.0f / sqrtf({}))", l_val);
                         }
                     }
-                    let r_val = Self::eval_expr_indexed(rhs, indices, shapes, pre_stmts, acc_counter);
+                    let r_val =
+                        Self::eval_expr_indexed(rhs, indices, shapes, pre_stmts, acc_counter);
                     return format!("powf({}, {})", l_val, r_val);
                 }
 
@@ -11170,257 +11262,308 @@ impl MathProgram {
                     _ => format!("({} + {})", l_val, r_val),
                 }
             }
-            MathExpr::Call(func, args) => {
-                match func.as_str() {
-                    "transpose" | "T" => {
-                        if !args.is_empty() && indices.len() >= 2 {
-                            let mut tr = indices.to_vec();
-                            let n = tr.len();
-                            tr.swap(n - 2, n - 1);
-                            Self::eval_expr_indexed(&args[0], &tr, shapes, pre_stmts, acc_counter)
-                        } else if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        }
+            MathExpr::Call(func, args) => match func.as_str() {
+                "transpose" | "T" => {
+                    if !args.is_empty() && indices.len() >= 2 {
+                        let mut tr = indices.to_vec();
+                        let n = tr.len();
+                        tr.swap(n - 2, n - 1);
+                        Self::eval_expr_indexed(&args[0], &tr, shapes, pre_stmts, acc_counter)
+                    } else if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
                     }
-                    "silu" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("(({0}) / (1.0f + expf(-({0}))))", a0)
-                    }
-                    "swiglu" if args.len() >= 3 => {
-                        let gate = MathExpr::Call(
-                            "silu".to_string(),
-                            vec![MathExpr::Binary(
-                                Box::new(args[0].clone()),
-                                MathBinOp::MatMul,
-                                Box::new(args[1].clone()),
-                            )],
-                        );
-                        let up = MathExpr::Binary(
-                            Box::new(args[0].clone()),
-                            MathBinOp::MatMul,
-                            Box::new(args[2].clone()),
-                        );
-                        let combined = MathExpr::Binary(Box::new(gate), MathBinOp::Mul, Box::new(up));
-                        Self::eval_expr_indexed(&combined, indices, shapes, pre_stmts, acc_counter)
-                    }
-                    "fused_swiglu" if args.len() >= 4 => {
-                        let gate = MathExpr::Call(
-                            "silu".to_string(),
-                            vec![MathExpr::Binary(
-                                Box::new(args[0].clone()),
-                                MathBinOp::MatMul,
-                                Box::new(args[1].clone()),
-                            )],
-                        );
-                        let up = MathExpr::Binary(
-                            Box::new(args[0].clone()),
-                            MathBinOp::MatMul,
-                            Box::new(args[2].clone()),
-                        );
-                        let swiglu_out = MathExpr::Binary(Box::new(gate), MathBinOp::Mul, Box::new(up));
-                        let down = MathExpr::Binary(
-                            Box::new(swiglu_out),
-                            MathBinOp::MatMul,
-                            Box::new(args[3].clone()),
-                        );
-                        Self::eval_expr_indexed(&down, indices, shapes, pre_stmts, acc_counter)
-                    }
-                    "fused_linear_relu" | "fused_linear_silu" | "fused_linear_gelu" if args.len() >= 2 => {
-                        let mut linear_expr = MathExpr::Binary(
+                }
+                "silu" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("(({0}) / (1.0f + expf(-({0}))))", a0)
+                }
+                "swiglu" if args.len() >= 3 => {
+                    let gate = MathExpr::Call(
+                        "silu".to_string(),
+                        vec![MathExpr::Binary(
                             Box::new(args[0].clone()),
                             MathBinOp::MatMul,
                             Box::new(args[1].clone()),
+                        )],
+                    );
+                    let up = MathExpr::Binary(
+                        Box::new(args[0].clone()),
+                        MathBinOp::MatMul,
+                        Box::new(args[2].clone()),
+                    );
+                    let combined = MathExpr::Binary(Box::new(gate), MathBinOp::Mul, Box::new(up));
+                    Self::eval_expr_indexed(&combined, indices, shapes, pre_stmts, acc_counter)
+                }
+                "fused_swiglu" if args.len() >= 4 => {
+                    let gate = MathExpr::Call(
+                        "silu".to_string(),
+                        vec![MathExpr::Binary(
+                            Box::new(args[0].clone()),
+                            MathBinOp::MatMul,
+                            Box::new(args[1].clone()),
+                        )],
+                    );
+                    let up = MathExpr::Binary(
+                        Box::new(args[0].clone()),
+                        MathBinOp::MatMul,
+                        Box::new(args[2].clone()),
+                    );
+                    let swiglu_out = MathExpr::Binary(Box::new(gate), MathBinOp::Mul, Box::new(up));
+                    let down = MathExpr::Binary(
+                        Box::new(swiglu_out),
+                        MathBinOp::MatMul,
+                        Box::new(args[3].clone()),
+                    );
+                    Self::eval_expr_indexed(&down, indices, shapes, pre_stmts, acc_counter)
+                }
+                "fused_linear_relu" | "fused_linear_silu" | "fused_linear_gelu"
+                    if args.len() >= 2 =>
+                {
+                    let mut linear_expr = MathExpr::Binary(
+                        Box::new(args[0].clone()),
+                        MathBinOp::MatMul,
+                        Box::new(args[1].clone()),
+                    );
+                    if args.len() > 2 {
+                        linear_expr = MathExpr::Binary(
+                            Box::new(linear_expr),
+                            MathBinOp::Add,
+                            Box::new(args[2].clone()),
                         );
-                        if args.len() > 2 {
-                            linear_expr = MathExpr::Binary(
-                                Box::new(linear_expr),
-                                MathBinOp::Add,
-                                Box::new(args[2].clone()),
-                            );
-                        }
-                        let z_str = Self::eval_expr_indexed(&linear_expr, indices, shapes, pre_stmts, acc_counter);
-                        match func.as_str() {
+                    }
+                    let z_str = Self::eval_expr_indexed(
+                        &linear_expr,
+                        indices,
+                        shapes,
+                        pre_stmts,
+                        acc_counter,
+                    );
+                    match func.as_str() {
                             "fused_linear_relu" => format!("((({0}) > 0.0f) ? ({0}) : 0.0f)", z_str),
                             "fused_linear_silu" => format!("(({0}) / (1.0f + expf(-({0}))))", z_str),
                             "fused_linear_gelu" => format!("(0.5f * ({0}) * (1.0f + tanhf(0.79788456f * (({0}) + 0.044715f * (({0}) * ({0}) * ({0}))))))", z_str),
                             _ => z_str,
                         }
-                    }
-                    "relu" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("((({0}) > 0.0f) ? ({0}) : 0.0f)", a0)
-                    }
-                    "gelu" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("(0.5f * ({0}) * (1.0f + tanhf(0.79788456f * (({0}) + 0.044715f * (({0}) * ({0}) * ({0}))))))", a0)
-                    }
-                    "tanh" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("tanhf({})", a0)
-                    }
-                    "sigmoid" | "σ" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("(1.0f / (1.0f + expf(-({}))))", a0)
-                    }
-                    "exp" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("expf({})", a0)
-                    }
-                    "sqrt" | "√" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("sqrtf({})", a0)
-                    }
-                    "log" | "ln" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("logf({})", a0)
-                    }
-                    "abs" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("fabsf({})", a0)
-                    }
-                    "sin" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("sinf({})", a0)
-                    }
-                    "cos" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("cosf({})", a0)
-                    }
-                    "tan" => {
-                        let a0 = if !args.is_empty() {
-                            Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
-                        } else {
-                            "0.0f".to_string()
-                        };
-                        format!("tanf({})", a0)
-                    }
-                    "max" if args.len() == 2 => {
-                        let a0 = Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter);
-                        let a1 = Self::eval_expr_indexed(&args[1], indices, shapes, pre_stmts, acc_counter);
-                        format!("fmaxf({}, {})", a0, a1)
-                    }
-                    "min" if args.len() == 2 => {
-                        let a0 = Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter);
-                        let a1 = Self::eval_expr_indexed(&args[1], indices, shapes, pre_stmts, acc_counter);
-                        format!("fminf({}, {})", a0, a1)
-                    }
-                    "sum" | "mean" | "μ" => {
-                        if !args.is_empty() {
-                            let arg = &args[0];
-                            let dummy_fns = HashMap::new();
-                            let mut dummy_errs = Vec::new();
-                            let a_shape = Self::infer_shape_expr(arg, shapes, &dummy_fns, &mut dummy_errs, None).unwrap_or_default();
-                            let red_id = *acc_counter;
-                            *acc_counter += 1;
-                            let red_name = format!("_red_{}", red_id);
+                }
+                "relu" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("((({0}) > 0.0f) ? ({0}) : 0.0f)", a0)
+                }
+                "gelu" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("(0.5f * ({0}) * (1.0f + tanhf(0.79788456f * (({0}) + 0.044715f * (({0}) * ({0}) * ({0}))))))", a0)
+                }
+                "tanh" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("tanhf({})", a0)
+                }
+                "sigmoid" | "σ" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("(1.0f / (1.0f + expf(-({}))))", a0)
+                }
+                "exp" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("expf({})", a0)
+                }
+                "sqrt" | "√" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("sqrtf({})", a0)
+                }
+                "log" | "ln" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("logf({})", a0)
+                }
+                "abs" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("fabsf({})", a0)
+                }
+                "sin" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("sinf({})", a0)
+                }
+                "cos" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("cosf({})", a0)
+                }
+                "tan" => {
+                    let a0 = if !args.is_empty() {
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                    } else {
+                        "0.0f".to_string()
+                    };
+                    format!("tanf({})", a0)
+                }
+                "max" if args.len() == 2 => {
+                    let a0 =
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter);
+                    let a1 =
+                        Self::eval_expr_indexed(&args[1], indices, shapes, pre_stmts, acc_counter);
+                    format!("fmaxf({}, {})", a0, a1)
+                }
+                "min" if args.len() == 2 => {
+                    let a0 =
+                        Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter);
+                    let a1 =
+                        Self::eval_expr_indexed(&args[1], indices, shapes, pre_stmts, acc_counter);
+                    format!("fminf({}, {})", a0, a1)
+                }
+                "sum" | "mean" | "μ" => {
+                    if !args.is_empty() {
+                        let arg = &args[0];
+                        let dummy_fns = HashMap::new();
+                        let mut dummy_errs = Vec::new();
+                        let a_shape =
+                            Self::infer_shape_expr(arg, shapes, &dummy_fns, &mut dummy_errs, None)
+                                .unwrap_or_default();
+                        let red_id = *acc_counter;
+                        *acc_counter += 1;
+                        let red_name = format!("_red_{}", red_id);
 
-                            if a_shape.len() == 1 {
-                                let n = a_shape[0];
+                        if a_shape.len() == 1 {
+                            let n = a_shape[0];
+                            let r_var = format!("_r_{}", red_id);
+                            let inner = Self::eval_expr_indexed(
+                                arg,
+                                &[&r_var],
+                                shapes,
+                                pre_stmts,
+                                acc_counter,
+                            );
+                            pre_stmts.push(format!("float {} = 0.0f;", red_name));
+                            pre_stmts.push(format!(
+                                "for (int {} = 0; {} < {}; ++{}) {{",
+                                r_var, r_var, n, r_var
+                            ));
+                            pre_stmts.push(format!("    {} += (float)({});", red_name, inner));
+                            pre_stmts.push("}".to_string());
+                            if func == "mean" || func == "μ" {
+                                format!("({} / {:.1}f)", red_name, n as f32)
+                            } else {
+                                red_name
+                            }
+                        } else if a_shape.len() == 2 {
+                            let rows = a_shape[0];
+                            let cols = a_shape[1];
+                            if indices.len() == 1 {
                                 let r_var = format!("_r_{}", red_id);
-                                let inner = Self::eval_expr_indexed(arg, &[&r_var], shapes, pre_stmts, acc_counter);
+                                let inner = Self::eval_expr_indexed(
+                                    arg,
+                                    &[indices[0], &r_var],
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                );
                                 pre_stmts.push(format!("float {} = 0.0f;", red_name));
-                                pre_stmts.push(format!("for (int {} = 0; {} < {}; ++{}) {{", r_var, r_var, n, r_var));
+                                pre_stmts.push(format!(
+                                    "for (int {} = 0; {} < {}; ++{}) {{",
+                                    r_var, r_var, cols, r_var
+                                ));
                                 pre_stmts.push(format!("    {} += (float)({});", red_name, inner));
                                 pre_stmts.push("}".to_string());
                                 if func == "mean" || func == "μ" {
-                                    format!("({} / {:.1}f)", red_name, n as f32)
+                                    format!("({} / {:.1}f)", red_name, cols as f32)
                                 } else {
                                     red_name
                                 }
-                            } else if a_shape.len() == 2 {
-                                let rows = a_shape[0];
-                                let cols = a_shape[1];
-                                if indices.len() == 1 {
-                                    let r_var = format!("_r_{}", red_id);
-                                    let inner = Self::eval_expr_indexed(arg, &[indices[0], &r_var], shapes, pre_stmts, acc_counter);
-                                    pre_stmts.push(format!("float {} = 0.0f;", red_name));
-                                    pre_stmts.push(format!("for (int {} = 0; {} < {}; ++{}) {{", r_var, r_var, cols, r_var));
-                                    pre_stmts.push(format!("    {} += (float)({});", red_name, inner));
-                                    pre_stmts.push("}".to_string());
-                                    if func == "mean" || func == "μ" {
-                                        format!("({} / {:.1}f)", red_name, cols as f32)
-                                    } else {
-                                        red_name
-                                    }
-                                } else {
-                                    let ri_var = format!("_ri_{}", red_id);
-                                    let rj_var = format!("_rj_{}", red_id);
-                                    let inner = Self::eval_expr_indexed(arg, &[&ri_var, &rj_var], shapes, pre_stmts, acc_counter);
-                                    pre_stmts.push(format!("float {} = 0.0f;", red_name));
-                                    pre_stmts.push(format!("for (int {} = 0; {} < {}; ++{}) {{", ri_var, ri_var, rows, ri_var));
-                                    pre_stmts.push(format!("    for (int {} = 0; {} < {}; ++{}) {{", rj_var, rj_var, cols, rj_var));
-                                    pre_stmts.push(format!("        {} += (float)({});", red_name, inner));
-                                    pre_stmts.push("    }".to_string());
-                                    pre_stmts.push("}".to_string());
-                                    let total = rows * cols;
-                                    if func == "mean" || func == "μ" {
-                                        format!("({} / {:.1}f)", red_name, total as f32)
-                                    } else {
-                                        red_name
-                                    }
-                                }
                             } else {
-                                Self::eval_expr_indexed(&args[0], indices, shapes, pre_stmts, acc_counter)
+                                let ri_var = format!("_ri_{}", red_id);
+                                let rj_var = format!("_rj_{}", red_id);
+                                let inner = Self::eval_expr_indexed(
+                                    arg,
+                                    &[&ri_var, &rj_var],
+                                    shapes,
+                                    pre_stmts,
+                                    acc_counter,
+                                );
+                                pre_stmts.push(format!("float {} = 0.0f;", red_name));
+                                pre_stmts.push(format!(
+                                    "for (int {} = 0; {} < {}; ++{}) {{",
+                                    ri_var, ri_var, rows, ri_var
+                                ));
+                                pre_stmts.push(format!(
+                                    "    for (int {} = 0; {} < {}; ++{}) {{",
+                                    rj_var, rj_var, cols, rj_var
+                                ));
+                                pre_stmts
+                                    .push(format!("        {} += (float)({});", red_name, inner));
+                                pre_stmts.push("    }".to_string());
+                                pre_stmts.push("}".to_string());
+                                let total = rows * cols;
+                                if func == "mean" || func == "μ" {
+                                    format!("({} / {:.1}f)", red_name, total as f32)
+                                } else {
+                                    red_name
+                                }
                             }
                         } else {
-                            "0.0f".to_string()
+                            Self::eval_expr_indexed(
+                                &args[0],
+                                indices,
+                                shapes,
+                                pre_stmts,
+                                acc_counter,
+                            )
                         }
-                    }
-                    other => {
-                        let arg_strs: Vec<String> = args
-                            .iter()
-                            .map(|a| Self::eval_expr_indexed(a, indices, shapes, pre_stmts, acc_counter))
-                            .collect();
-                        format!("{}({})", other, arg_strs.join(", "))
+                    } else {
+                        "0.0f".to_string()
                     }
                 }
-            }
+                other => {
+                    let arg_strs: Vec<String> = args
+                        .iter()
+                        .map(|a| {
+                            Self::eval_expr_indexed(a, indices, shapes, pre_stmts, acc_counter)
+                        })
+                        .collect();
+                    format!("{}({})", other, arg_strs.join(", "))
+                }
+            },
             MathExpr::Array(elems) => {
                 if indices.is_empty() {
                     let s: Vec<String> = elems.iter().map(Self::expr_to_c23).collect();
@@ -11487,7 +11630,13 @@ impl MathProgram {
                 0 => {
                     let mut pre_stmts = Vec::new();
                     let mut acc_counter = 0;
-                    let val_str = Self::eval_expr_indexed(expr, &[], &shapes, &mut pre_stmts, &mut acc_counter);
+                    let val_str = Self::eval_expr_indexed(
+                        expr,
+                        &[],
+                        &shapes,
+                        &mut pre_stmts,
+                        &mut acc_counter,
+                    );
                     out.push_str(&format!("    alignas(16) float {};\n", name));
                     if !pre_stmts.is_empty() {
                         out.push_str("    {\n");
@@ -11507,8 +11656,7 @@ impl MathProgram {
                 1 => {
                     let n = shape[0];
                     if let MathExpr::Array(elems) = expr {
-                        let elem_strs: Vec<String> =
-                            elems.iter().map(Self::expr_to_c23).collect();
+                        let elem_strs: Vec<String> = elems.iter().map(Self::expr_to_c23).collect();
                         out.push_str(&format!(
                             "    alignas(64) float {}[{}] = {{ {} }};\n",
                             name,
@@ -11524,10 +11672,7 @@ impl MathProgram {
                                 ));
                             }
                             "ones" => {
-                                out.push_str(&format!(
-                                    "    alignas(64) float {}[{}];\n",
-                                    name, n
-                                ));
+                                out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
                                 out.push_str(&format!(
                                     "    for (int _i = 0; _i < {}; ++_i) {}[_i] = 1.0f;\n",
                                     n, name
@@ -11535,39 +11680,56 @@ impl MathProgram {
                             }
                             "rmsnorm" | "norm" | "N" => {
                                 let arg_s = Self::expr_to_c23(&args[0]);
-                                let g_s = if args.len() > 1 { Self::expr_to_c23(&args[1]) } else { "1.0f".to_string() };
-                                let eps_s = if args.len() > 2 { Self::expr_to_c23(&args[2]) } else { "1e-5f".to_string() };
+                                let g_s = if args.len() > 1 {
+                                    Self::expr_to_c23(&args[1])
+                                } else {
+                                    "1.0f".to_string()
+                                };
+                                let eps_s = if args.len() > 2 {
+                                    Self::expr_to_c23(&args[2])
+                                } else {
+                                    "1e-5f".to_string()
+                                };
                                 out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
                                 out.push_str("    {\n");
                                 out.push_str("        float _ss = 0.0f;\n");
                                 out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) _ss += (float){}[_j] * (float){}[_j];\n", n, arg_s, arg_s));
                                 out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + {});\n", n, eps_s));
-                                if args.len() > 1 && shapes.get(&g_s).map(|s| s.len() == 1).unwrap_or(false) {
+                                if args.len() > 1
+                                    && shapes.get(&g_s).map(|s| s.len() == 1).unwrap_or(false)
+                                {
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_j] = (float){}[_j] * _scale * (float){}[_j];\n", n, name, arg_s, g_s));
                                 } else {
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_j] = (float){}[_j] * _scale * (float){};\n", n, name, arg_s, g_s));
                                 }
                                 out.push_str("    }\n");
                             }
-                            "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
+                            "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" =>
+                            {
                                 let x_s = Self::expr_to_c23(&args[0]);
                                 let dt_s = Self::expr_to_c23(&args[1]);
                                 out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
                                 out.push_str("    {\n");
                                 out.push_str("        float _h = 0.0f;\n");
-                                out.push_str(&format!("        for (int _t = 0; _t < {}; ++_t) {{\n", n));
-                                out.push_str(&format!("            float _a = (float){}[_t];\n", dt_s));
-                                out.push_str(&format!("            _h = _a * _h + (float){}[_t];\n", x_s));
+                                out.push_str(&format!(
+                                    "        for (int _t = 0; _t < {}; ++_t) {{\n",
+                                    n
+                                ));
+                                out.push_str(&format!(
+                                    "            float _a = (float){}[_t];\n",
+                                    dt_s
+                                ));
+                                out.push_str(&format!(
+                                    "            _h = _a * _h + (float){}[_t];\n",
+                                    x_s
+                                ));
                                 out.push_str(&format!("            {}[_t] = _h;\n", name));
                                 out.push_str("        }\n");
                                 out.push_str("    }\n");
                             }
                             "argmax" | "ω" => {
                                 let arg_s = Self::expr_to_c23(&args[0]);
-                                out.push_str(&format!(
-                                    "    alignas(64) float {}[{}];\n",
-                                    name, n
-                                ));
+                                out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
                                 out.push_str(&format!(
                                     "    for (int _i = 0; _i < {}; ++_i) {{\n",
                                     n
@@ -11586,18 +11748,24 @@ impl MathProgram {
                                     arg_s, arg_s
                                 ));
                                 out.push_str("        }\n");
-                                out.push_str(&format!(
-                                    "        {}[_i] = (float)_best_j;\n",
-                                    name
-                                ));
+                                out.push_str(&format!("        {}[_i] = (float)_best_j;\n", name));
                                 out.push_str("    }\n");
                             }
                             _ => {
                                 out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
-                                out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
+                                out.push_str(&format!(
+                                    "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                    n
+                                ));
                                 let mut pre_stmts = Vec::new();
                                 let mut acc_counter = 0;
-                                let val_str = Self::eval_expr_indexed(expr, &["_i"], &shapes, &mut pre_stmts, &mut acc_counter);
+                                let val_str = Self::eval_expr_indexed(
+                                    expr,
+                                    &["_i"],
+                                    &shapes,
+                                    &mut pre_stmts,
+                                    &mut acc_counter,
+                                );
                                 for s in pre_stmts {
                                     out.push_str(&format!("        {}\n", s));
                                 }
@@ -11610,7 +11778,13 @@ impl MathProgram {
                         out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
                         let mut pre_stmts = Vec::new();
                         let mut acc_counter = 0;
-                        let val_str = Self::eval_expr_indexed(expr, &["_i"], &shapes, &mut pre_stmts, &mut acc_counter);
+                        let val_str = Self::eval_expr_indexed(
+                            expr,
+                            &["_i"],
+                            &shapes,
+                            &mut pre_stmts,
+                            &mut acc_counter,
+                        );
                         for s in pre_stmts {
                             out.push_str(&format!("        {}\n", s));
                         }
@@ -11651,10 +11825,7 @@ impl MathProgram {
                             "    alignas(64) float {}[{}][{}];\n",
                             name, rows, cols
                         ));
-                        out.push_str(&format!(
-                            "    for (int _i = 0; _i < {}; ++_i) {{\n",
-                            rows
-                        ));
+                        out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
                         out.push_str(&format!("        int _tok = (int){}[_i];\n", toks_s));
                         out.push_str(&format!(
                             "        for (int _j = 0; _j < {}; ++_j) {{\n",
@@ -11756,7 +11927,10 @@ impl MathProgram {
                         ));
                         out.push_str("    }\n");
                     } else if let MathExpr::Binary(lhs, op, rhs) = expr {
-                        if matches!((lhs.as_ref(), rhs.as_ref()), (MathExpr::Var(_), MathExpr::Var(_))) {
+                        if matches!(
+                            (lhs.as_ref(), rhs.as_ref()),
+                            (MathExpr::Var(_), MathExpr::Var(_))
+                        ) {
                             let l_str = Self::expr_to_c23(lhs);
                             let r_str = Self::expr_to_c23(rhs);
                             let r_shape = shapes.get(&r_str).cloned().unwrap_or_default();
@@ -11798,11 +11972,23 @@ impl MathProgram {
                                 "    alignas(64) float {}[{}][{}];\n",
                                 name, rows, cols
                             ));
-                            out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                            out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                            out.push_str(&format!(
+                                "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                rows
+                            ));
+                            out.push_str(&format!(
+                                "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                cols
+                            ));
                             let mut pre_stmts = Vec::new();
                             let mut acc_counter = 0;
-                            let val_str = Self::eval_expr_indexed(expr, &["_i", "_j"], &shapes, &mut pre_stmts, &mut acc_counter);
+                            let val_str = Self::eval_expr_indexed(
+                                expr,
+                                &["_i", "_j"],
+                                &shapes,
+                                &mut pre_stmts,
+                                &mut acc_counter,
+                            );
                             for s in pre_stmts {
                                 out.push_str(&format!("            {}\n", s));
                             }
@@ -11863,10 +12049,7 @@ impl MathProgram {
                                     "        for (int _j = 0; _j < {}; ++_j) {{\n",
                                     cols
                                 ));
-                                out.push_str(&format!(
-                                    "            {}[_i][_j] = 1.0f;\n",
-                                    name
-                                ));
+                                out.push_str(&format!("            {}[_i][_j] = 1.0f;\n", name));
                                 out.push_str("        }\n");
                                 out.push_str("    }\n");
                             }
@@ -11942,10 +12125,7 @@ impl MathProgram {
                                 ));
                                 out.push_str("            float _v_acc = 0.0f;\n");
                                 out.push_str(&format!("            for (int _j = 0; _j < {}; ++_j) _v_acc += (_scores[_j] / _sum_e) * (float){}[_j][_d];\n", seq_k, v_s));
-                                out.push_str(&format!(
-                                    "            {}[_i][_d] = _v_acc;\n",
-                                    name
-                                ));
+                                out.push_str(&format!("            {}[_i][_d] = _v_acc;\n", name));
                                 out.push_str("        }\n");
                                 out.push_str("    }\n");
                             }
@@ -12087,7 +12267,10 @@ impl MathProgram {
                                     "                float _wv = (float){}[_j][_k];\n",
                                     w_s
                                 ));
-                                out.push_str(&format!("                if (_wv > 0.5f) _acc += (float){}[_i][_k];\n", x_s));
+                                out.push_str(&format!(
+                                    "                if (_wv > 0.5f) _acc += (float){}[_i][_k];\n",
+                                    x_s
+                                ));
                                 out.push_str(&format!("                else if (_wv < -0.5f) _acc -= (float){}[_i][_k];\n", x_s));
                                 out.push_str("            }\n");
                                 out.push_str(&format!(
@@ -12099,8 +12282,16 @@ impl MathProgram {
                             }
                             "rmsnorm" | "norm" | "N" => {
                                 let arg_s = Self::expr_to_c23(&args[0]);
-                                let g_s = if args.len() > 1 { Self::expr_to_c23(&args[1]) } else { "1.0f".to_string() };
-                                let eps_s = if args.len() > 2 { Self::expr_to_c23(&args[2]) } else { "1e-5f".to_string() };
+                                let g_s = if args.len() > 1 {
+                                    Self::expr_to_c23(&args[1])
+                                } else {
+                                    "1.0f".to_string()
+                                };
+                                let eps_s = if args.len() > 2 {
+                                    Self::expr_to_c23(&args[2])
+                                } else {
+                                    "1e-5f".to_string()
+                                };
                                 out.push_str(&format!(
                                     "    alignas(64) float {}[{}][{}];\n",
                                     name, rows, cols
@@ -12112,14 +12303,17 @@ impl MathProgram {
                                 out.push_str("        float _ss = 0.0f;\n");
                                 out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) _ss += (float){}[_i][_j] * (float){}[_i][_j];\n", cols, arg_s, arg_s));
                                 out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + {});\n", cols, eps_s));
-                                if args.len() > 1 && shapes.get(&g_s).map(|s| s.len() == 1).unwrap_or(false) {
+                                if args.len() > 1
+                                    && shapes.get(&g_s).map(|s| s.len() == 1).unwrap_or(false)
+                                {
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j] * _scale * (float){}[_j];\n", cols, name, arg_s, g_s));
                                 } else {
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j] * _scale * (float){};\n", cols, name, arg_s, g_s));
                                 }
                                 out.push_str("    }\n");
                             }
-                            "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
+                            "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" =>
+                            {
                                 let x_s = Self::expr_to_c23(&args[0]);
                                 let dt_s = Self::expr_to_c23(&args[1]);
                                 out.push_str(&format!(
@@ -12144,10 +12338,7 @@ impl MathProgram {
                                     "                _h = _a * _h + (float){}[_t][_c];\n",
                                     x_s
                                 ));
-                                out.push_str(&format!(
-                                    "                {}[_t][_c] = _h;\n",
-                                    name
-                                ));
+                                out.push_str(&format!("                {}[_t][_c] = _h;\n", name));
                                 out.push_str("            }\n");
                                 out.push_str("        }\n");
                                 out.push_str("    }\n");
@@ -12185,10 +12376,7 @@ impl MathProgram {
                                     "    for (int _i = 0; _i < {}; ++_i) {{\n",
                                     rows
                                 ));
-                                out.push_str(&format!(
-                                    "        int _tok = (int){}[_i];\n",
-                                    toks_s
-                                ));
+                                out.push_str(&format!("        int _tok = (int){}[_i];\n", toks_s));
                                 out.push_str(&format!(
                                     "        for (int _j = 0; _j < {}; ++_j) {{\n",
                                     cols
@@ -12265,10 +12453,7 @@ impl MathProgram {
                                     "    for (int _i = 0; _i < {}; ++_i) {{\n",
                                     rows
                                 ));
-                                out.push_str(&format!(
-                                    "        alignas(64) float _h[{}];\n",
-                                    h
-                                ));
+                                out.push_str(&format!("        alignas(64) float _h[{}];\n", h));
                                 out.push_str(&format!(
                                     "        for (int _j = 0; _j < {}; ++_j) {{\n",
                                     h
@@ -12299,10 +12484,7 @@ impl MathProgram {
                                     wd_s
                                 ));
                                 out.push_str("            }\n");
-                                out.push_str(&format!(
-                                    "            {}[_i][_j] = _acc_d;\n",
-                                    name
-                                ));
+                                out.push_str(&format!("            {}[_i][_j] = _acc_d;\n", name));
                                 out.push_str("        }\n");
                                 out.push_str("    }\n");
                             }
@@ -12365,15 +12547,30 @@ impl MathProgram {
                                     "    alignas(64) float {}[{}][{}];\n",
                                     name, rows, cols
                                 ));
-                                out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                out.push_str(&format!(
+                                    "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                    rows
+                                ));
+                                out.push_str(&format!(
+                                    "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                    cols
+                                ));
                                 let mut pre_stmts = Vec::new();
                                 let mut acc_counter = 0;
-                                let val_str = Self::eval_expr_indexed(expr, &["_i", "_j"], &shapes, &mut pre_stmts, &mut acc_counter);
+                                let val_str = Self::eval_expr_indexed(
+                                    expr,
+                                    &["_i", "_j"],
+                                    &shapes,
+                                    &mut pre_stmts,
+                                    &mut acc_counter,
+                                );
                                 for s in pre_stmts {
                                     out.push_str(&format!("            {}\n", s));
                                 }
-                                out.push_str(&format!("            {}[_i][_j] = {};\n", name, val_str));
+                                out.push_str(&format!(
+                                    "            {}[_i][_j] = {};\n",
+                                    name, val_str
+                                ));
                                 out.push_str("        }\n");
                                 out.push_str("    }\n");
                             }
@@ -12384,10 +12581,19 @@ impl MathProgram {
                             name, rows, cols
                         ));
                         out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                        out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                        out.push_str(&format!(
+                            "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                            cols
+                        ));
                         let mut pre_stmts = Vec::new();
                         let mut acc_counter = 0;
-                        let val_str = Self::eval_expr_indexed(expr, &["_i", "_j"], &shapes, &mut pre_stmts, &mut acc_counter);
+                        let val_str = Self::eval_expr_indexed(
+                            expr,
+                            &["_i", "_j"],
+                            &shapes,
+                            &mut pre_stmts,
+                            &mut acc_counter,
+                        );
                         for s in pre_stmts {
                             out.push_str(&format!("            {}\n", s));
                         }
@@ -12420,7 +12626,11 @@ impl MathProgram {
                     if let MathExpr::Array(_) = expr {
                         out.push_str(&format!(
                             "    alignas(64) float {}[{}][{}][{}] = {};\n",
-                            name, d0, d1, d2, Self::expr_to_c23(expr)
+                            name,
+                            d0,
+                            d1,
+                            d2,
+                            Self::expr_to_c23(expr)
                         ));
                     } else {
                         out.push_str(&format!(
@@ -12428,15 +12638,30 @@ impl MathProgram {
                             name, d0, d1, d2
                         ));
                         out.push_str(&format!("    for (int _i0 = 0; _i0 < {}; ++_i0) {{\n", d0));
-                        out.push_str(&format!("        for (int _i1 = 0; _i1 < {}; ++_i1) {{\n", d1));
-                        out.push_str(&format!("            for (int _i2 = 0; _i2 < {}; ++_i2) {{\n", d2));
+                        out.push_str(&format!(
+                            "        for (int _i1 = 0; _i1 < {}; ++_i1) {{\n",
+                            d1
+                        ));
+                        out.push_str(&format!(
+                            "            for (int _i2 = 0; _i2 < {}; ++_i2) {{\n",
+                            d2
+                        ));
                         let mut pre_stmts = Vec::new();
                         let mut acc_counter = 0;
-                        let val_str = Self::eval_expr_indexed(expr, &["_i0", "_i1", "_i2"], &shapes, &mut pre_stmts, &mut acc_counter);
+                        let val_str = Self::eval_expr_indexed(
+                            expr,
+                            &["_i0", "_i1", "_i2"],
+                            &shapes,
+                            &mut pre_stmts,
+                            &mut acc_counter,
+                        );
                         for s in pre_stmts {
                             out.push_str(&format!("                {}\n", s));
                         }
-                        out.push_str(&format!("                {}[_i0][_i1][_i2] = {};\n", name, val_str));
+                        out.push_str(&format!(
+                            "                {}[_i0][_i1][_i2] = {};\n",
+                            name, val_str
+                        ));
                         out.push_str("            }\n");
                         out.push_str("        }\n");
                         out.push_str("    }\n");
@@ -12444,17 +12669,29 @@ impl MathProgram {
                     out.push_str(&format!("    printf(\"  [=] {} = [\");\n", name));
                     out.push_str(&format!("    for (int _i0 = 0; _i0 < {}; ++_i0) {{\n", d0));
                     out.push_str("        printf(\"[\");\n");
-                    out.push_str(&format!("        for (int _i1 = 0; _i1 < {}; ++_i1) {{\n", d1));
+                    out.push_str(&format!(
+                        "        for (int _i1 = 0; _i1 < {}; ++_i1) {{\n",
+                        d1
+                    ));
                     out.push_str("            printf(\"[\");\n");
-                    out.push_str(&format!("            for (int _i2 = 0; _i2 < {}; ++_i2) {{\n", d2));
+                    out.push_str(&format!(
+                        "            for (int _i2 = 0; _i2 < {}; ++_i2) {{\n",
+                        d2
+                    ));
                     out.push_str(&format!(
                         "                printf(\"%f%s\", (double){}[_i0][_i1][_i2], (_i2 + 1 < {}) ? \", \" : \"\");\n",
                         name, d2
                     ));
                     out.push_str("            }\n");
-                    out.push_str(&format!("            printf(\"]%s\", (_i1 + 1 < {}) ? \", \" : \"\");\n", d1));
+                    out.push_str(&format!(
+                        "            printf(\"]%s\", (_i1 + 1 < {}) ? \", \" : \"\");\n",
+                        d1
+                    ));
                     out.push_str("        }\n");
-                    out.push_str(&format!("        printf(\"]%s\", (_i0 + 1 < {}) ? \", \" : \"\");\n", d0));
+                    out.push_str(&format!(
+                        "        printf(\"]%s\", (_i0 + 1 < {}) ? \", \" : \"\");\n",
+                        d0
+                    ));
                     out.push_str("    }\n    printf(\"]\\n\");\n");
                 }
                 _ => {
@@ -12475,7 +12712,10 @@ impl MathProgram {
                         let mut idx_names = Vec::new();
                         for (dim_idx, &dim_size) in shape.iter().enumerate() {
                             let idx_var = format!("_i{}", dim_idx);
-                            loop_open.push_str(&format!("    for (int {} = 0; {} < {}; ++{}) {{\n", idx_var, idx_var, dim_size, idx_var));
+                            loop_open.push_str(&format!(
+                                "    for (int {} = 0; {} < {}; ++{}) {{\n",
+                                idx_var, idx_var, dim_size, idx_var
+                            ));
                             loop_close.push_str("    }\n");
                             idx_names.push(idx_var);
                         }
@@ -12488,12 +12728,25 @@ impl MathProgram {
                         out.push_str(&loop_open);
                         let mut pre_stmts = Vec::new();
                         let mut acc_counter = 0;
-                        let val_str = Self::eval_expr_indexed(expr, &idx_refs, &shapes, &mut pre_stmts, &mut acc_counter);
+                        let val_str = Self::eval_expr_indexed(
+                            expr,
+                            &idx_refs,
+                            &shapes,
+                            &mut pre_stmts,
+                            &mut acc_counter,
+                        );
                         for s in pre_stmts {
                             out.push_str(&format!("        {}\n", s));
                         }
-                        let idx_str = idx_names.iter().map(|s| format!("[{}]", s)).collect::<Vec<_>>().join("");
-                        out.push_str(&format!("        {}{{}} = {};\n", name, val_str).replace("{}", &idx_str));
+                        let idx_str = idx_names
+                            .iter()
+                            .map(|s| format!("[{}]", s))
+                            .collect::<Vec<_>>()
+                            .join("");
+                        out.push_str(
+                            &format!("        {}{{}} = {};\n", name, val_str)
+                                .replace("{}", &idx_str),
+                        );
                         out.push_str(&loop_close);
                     }
                 }
@@ -12512,7 +12765,8 @@ impl MathProgram {
             } else if let MathItem::Expression(expr) = item {
                 let mut pre_stmts = Vec::new();
                 let mut acc_counter = 0;
-                let val_str = Self::eval_expr_indexed(expr, &[], &shapes, &mut pre_stmts, &mut acc_counter);
+                let val_str =
+                    Self::eval_expr_indexed(expr, &[], &shapes, &mut pre_stmts, &mut acc_counter);
                 if !pre_stmts.is_empty() {
                     out.push_str("    {\n");
                     for s in pre_stmts {
@@ -13156,7 +13410,11 @@ impl MathProgram {
                         name
                     ));
                     for p in params.iter() {
-                        let p_type = if !p.dims.is_empty() { ".param .u64" } else { p.dtype.to_ptx_type() };
+                        let p_type = if !p.dims.is_empty() {
+                            ".param .u64"
+                        } else {
+                            p.dtype.to_ptx_type()
+                        };
                         out.push_str(&format!("    {} param_{},\n", p_type, p.name));
                     }
                     out.push_str("    .param .u64 param_out\n) {\n");
@@ -13165,7 +13423,9 @@ impl MathProgram {
                     out.push_str("    .reg .b32 %r<16>;\n");
                     out.push_str("    .reg .pred %p<4>;\n\n");
 
-                    out.push_str("    // Compute global thread ID: gid = ctaid.x * ntid.x + tid.x\n");
+                    out.push_str(
+                        "    // Compute global thread ID: gid = ctaid.x * ntid.x + tid.x\n",
+                    );
                     out.push_str("    mov.u32 %r0, %tid.x;\n");
                     out.push_str("    mov.u32 %r1, %ctaid.x;\n");
                     out.push_str("    mov.u32 %r2, %ntid.x;\n");
@@ -13173,7 +13433,10 @@ impl MathProgram {
 
                     let first_tensor = params.iter().find(|p| !p.dims.is_empty()).unwrap();
                     let total_elems: usize = first_tensor.dims.iter().product();
-                    out.push_str(&format!("    setp.ge.u32 %p0, %r3, {};\n", total_elems.max(1)));
+                    out.push_str(&format!(
+                        "    setp.ge.u32 %p0, %r3, {};\n",
+                        total_elems.max(1)
+                    ));
                     out.push_str("    @%p0 bra L_exit;\n\n");
 
                     let mut builder = PtxBuilder::new(&constants);
@@ -13184,22 +13447,34 @@ impl MathProgram {
                         if !p.dims.is_empty() {
                             let rd_param = format!("%rd{}", idx * 2);
                             let rd_addr = format!("%rd{}", idx * 2 + 1);
-                            instr_lines.push(format!("    ld.param.u64 {}, [param_{}];", rd_param, p.name));
-                            instr_lines.push(format!("    mad.wide.u32 {}, %r3, 4, {};", rd_addr, rd_param));
+                            instr_lines.push(format!(
+                                "    ld.param.u64 {}, [param_{}];",
+                                rd_param, p.name
+                            ));
+                            instr_lines.push(format!(
+                                "    mad.wide.u32 {}, %r3, 4, {};",
+                                rd_addr, rd_param
+                            ));
                             if p.dtype == MathDtype::F16 {
                                 let hr = builder.alloc_half_reg();
-                                instr_lines.push(format!("    ld.global.f16 {}, [{}];", hr, rd_addr));
+                                instr_lines
+                                    .push(format!("    ld.global.f16 {}, [{}];", hr, rd_addr));
                                 instr_lines.push(format!("    cvt.f32.f16 {}, {};", reg_val, hr));
                             } else {
-                                instr_lines.push(format!("    ld.global.f32 {}, [{}];", reg_val, rd_addr));
+                                instr_lines
+                                    .push(format!("    ld.global.f32 {}, [{}];", reg_val, rd_addr));
                             }
                         } else {
                             if p.dtype == MathDtype::F16 {
                                 let hr = builder.alloc_half_reg();
-                                instr_lines.push(format!("    ld.param.f16 {}, [param_{}];", hr, p.name));
+                                instr_lines
+                                    .push(format!("    ld.param.f16 {}, [param_{}];", hr, p.name));
                                 instr_lines.push(format!("    cvt.f32.f16 {}, {};", reg_val, hr));
                             } else {
-                                instr_lines.push(format!("    ld.param.f32 {}, [param_{}];", reg_val, p.name));
+                                instr_lines.push(format!(
+                                    "    ld.param.f32 {}, [param_{}];",
+                                    reg_val, p.name
+                                ));
                             }
                         }
                         builder.var_regs.insert(p.name.clone(), reg_val);
@@ -13223,13 +13498,19 @@ impl MathProgram {
                     let rd_out = format!("%rd{}", params.len() * 2);
                     let rd_out_addr = format!("%rd{}", params.len() * 2 + 1);
                     out.push_str(&format!("    ld.param.u64 {}, [param_out];\n", rd_out));
-                    out.push_str(&format!("    mad.wide.u32 {}, %r3, 4, {};\n", rd_out_addr, rd_out));
+                    out.push_str(&format!(
+                        "    mad.wide.u32 {}, %r3, 4, {};\n",
+                        rd_out_addr, rd_out
+                    ));
                     if inferred_ret == MathDtype::F16 {
                         let hr = builder.alloc_half_reg();
                         out.push_str(&format!("    cvt.rn.f16.f32 {}, {};\n", hr, final_reg));
                         out.push_str(&format!("    st.global.f16 [{}], {};\n", rd_out_addr, hr));
                     } else {
-                        out.push_str(&format!("    st.global.f32 [{}], {};\n", rd_out_addr, final_reg));
+                        out.push_str(&format!(
+                            "    st.global.f32 [{}], {};\n",
+                            rd_out_addr, final_reg
+                        ));
                     }
                     out.push_str("L_exit:\n    ret;\n}\n\n");
                     continue;
@@ -13822,7 +14103,10 @@ impl<'a> PtxBuilder<'a> {
                         let neg_rc = self.alloc_reg();
                         lines.push(format!("    neg.f32 {}, {};", neg_rc, rc));
                         let dst = self.alloc_reg();
-                        lines.push(format!("    fma.rn.f32 {}, {}, {}, {};", dst, ra, rb, neg_rc));
+                        lines.push(format!(
+                            "    fma.rn.f32 {}, {}, {}, {};",
+                            dst, ra, rb, neg_rc
+                        ));
                         return dst;
                     }
                 }
@@ -13840,12 +14124,24 @@ impl<'a> PtxBuilder<'a> {
                     _ => {
                         let pred = self.alloc_pred();
                         match op {
-                            MathBinOp::Lt => lines.push(format!("    setp.lt.f32 {}, {}, {};", pred, l, r)),
-                            MathBinOp::Gt => lines.push(format!("    setp.gt.f32 {}, {}, {};", pred, l, r)),
-                            MathBinOp::Eq => lines.push(format!("    setp.eq.f32 {}, {}, {};", pred, l, r)),
-                            MathBinOp::Neq => lines.push(format!("    setp.ne.f32 {}, {}, {};", pred, l, r)),
-                            MathBinOp::Lte => lines.push(format!("    setp.le.f32 {}, {}, {};", pred, l, r)),
-                            MathBinOp::Gte => lines.push(format!("    setp.ge.f32 {}, {}, {};", pred, l, r)),
+                            MathBinOp::Lt => {
+                                lines.push(format!("    setp.lt.f32 {}, {}, {};", pred, l, r))
+                            }
+                            MathBinOp::Gt => {
+                                lines.push(format!("    setp.gt.f32 {}, {}, {};", pred, l, r))
+                            }
+                            MathBinOp::Eq => {
+                                lines.push(format!("    setp.eq.f32 {}, {}, {};", pred, l, r))
+                            }
+                            MathBinOp::Neq => {
+                                lines.push(format!("    setp.ne.f32 {}, {}, {};", pred, l, r))
+                            }
+                            MathBinOp::Lte => {
+                                lines.push(format!("    setp.le.f32 {}, {}, {};", pred, l, r))
+                            }
+                            MathBinOp::Gte => {
+                                lines.push(format!("    setp.ge.f32 {}, {}, {};", pred, l, r))
+                            }
                             _ => lines.push(format!("    setp.gt.f32 {}, {}, {};", pred, l, r)),
                         }
                         lines.push(format!("    selp.f32 {}, 1.0, 0.0, {};", dst, pred));
@@ -13903,7 +14199,10 @@ impl<'a> PtxBuilder<'a> {
                             let half_x = self.alloc_reg();
                             lines.push(format!("    mul.f32 {}, {}, {};", x2, acc, acc));
                             lines.push(format!("    mul.f32 {}, {}, {};", x3, x2, acc));
-                            lines.push(format!("    fma.rn.f32 {}, 0.044715, {}, {};", inner, x3, acc));
+                            lines.push(format!(
+                                "    fma.rn.f32 {}, 0.044715, {}, {};",
+                                inner, x3, acc
+                            ));
                             lines.push(format!("    mul.f32 {}, {}, 0.79788456;", scaled, inner));
                             lines.push(format!("    tanh.approx.f32 {}, {};", th, scaled));
                             lines.push(format!("    add.f32 {}, {}, 1.0;", one_plus, th));
@@ -13944,7 +14243,10 @@ impl<'a> PtxBuilder<'a> {
                         let half_x = self.alloc_reg();
                         lines.push(format!("    mul.f32 {}, {}, {};", x2, arg0, arg0));
                         lines.push(format!("    mul.f32 {}, {}, {};", x3, x2, arg0));
-                        lines.push(format!("    fma.rn.f32 {}, 0.044715, {}, {};", inner, x3, arg0));
+                        lines.push(format!(
+                            "    fma.rn.f32 {}, 0.044715, {}, {};",
+                            inner, x3, arg0
+                        ));
                         lines.push(format!("    mul.f32 {}, {}, 0.79788456;", scaled, inner));
                         lines.push(format!("    tanh.approx.f32 {}, {};", th, scaled));
                         lines.push(format!("    add.f32 {}, {}, 1.0;", one_plus, th));
