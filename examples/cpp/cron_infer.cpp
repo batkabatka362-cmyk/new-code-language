@@ -10,7 +10,13 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#if __has_include("../include/cron_engine.hpp")
 #include "../include/cron_engine.hpp"
+#elif __has_include("../../include/cron_engine.hpp")
+#include "../../include/cron_engine.hpp"
+#else
+#include "cron_engine.hpp"
+#endif
 
 void print_banner() {
     std::cout << R"(
