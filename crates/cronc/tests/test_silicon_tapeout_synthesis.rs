@@ -101,3 +101,4 @@ fn test_full_silicon_synth_package_export() {
 
     let _ = fs::remove_dir_all(out_dir);
 }
+

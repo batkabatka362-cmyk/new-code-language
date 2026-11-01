@@ -12142,6 +12142,10 @@ fn handle_cl_train_command(args: &[String]) {
     let mut checkpoint_out: Option<String> = Some("checkpoint.safetensors".to_string());
     let mut optimizer_type = cronc::cl_train_pipeline::TrainingOptimizer::AdamW;
     let mut profile_type = "max-quality".to_string();
+    let mut eval_prompt: Option<String> = None;
+    let mut gen_tokens = 32usize;
+    let mut temp = 0.7f32;
+    let mut enable_tui = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -12181,6 +12185,22 @@ fn handle_cl_train_command(args: &[String]) {
             "--profile" if i + 1 < args.len() => {
                 profile_type = args[i + 1].clone();
                 i += 2;
+            }
+            "--prompt" | "-p" if i + 1 < args.len() => {
+                eval_prompt = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--gen-tokens" if i + 1 < args.len() => {
+                if let Ok(t) = args[i + 1].parse::<usize>() { gen_tokens = t; }
+                i += 2;
+            }
+            "--temp" | "--temperature" if i + 1 < args.len() => {
+                if let Ok(t) = args[i + 1].parse::<f32>() { temp = t; }
+                i += 2;
+            }
+            "--tui" => {
+                enable_tui = true;
+                i += 1;
             }
             "--qat" => {
                 qat = true;
@@ -12255,6 +12275,9 @@ fn handle_cl_train_command(args: &[String]) {
     auto_cfg.optimizer = optimizer_type;
     auto_cfg.checkpoint_out = checkpoint_out;
     auto_cfg.profile = profile_type;
+    auto_cfg.eval_prompt = eval_prompt.clone();
+    auto_cfg.eval_max_tokens = gen_tokens;
+    auto_cfg.eval_temperature = temp;
 
     println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
     println!("║   CRON AUTONOMOUS ZERO-PYTHON IN-SILICON TRAINING PIPELINE (cron train)               ║");
@@ -12264,11 +12287,30 @@ fn handle_cl_train_command(args: &[String]) {
     println!("║ Batch/Seq  : {:<73} ║", format!("Batch: {} | Seq Len: {} | Dim: {}", auto_cfg.batch_size, auto_cfg.seq_len, auto_cfg.dim));
     println!("║ Dataset    : {:<73} ║", auto_cfg.data_path.as_deref().unwrap_or("CRON Sovereign Foundation Corpus"));
     println!("║ Checkpoint : {:<73} ║", auto_cfg.checkpoint_out.as_deref().unwrap_or("None"));
+    if let Some(ref p) = eval_prompt {
+        println!("║ Autoregress: {:<73} ║", format!("Prompt: \"{}\" ({} tokens)", p, gen_tokens));
+    }
     println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
 
     let total_steps = auto_cfg.steps;
+    let is_tui = enable_tui;
+    let loss_history = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let loss_history_cb = loss_history.clone();
+
     let callback = Box::new(move |rep: &cronc::cl_train_pipeline::TrainingStepReport| {
-        if rep.step == 1 || rep.step % 10 == 0 || rep.step == total_steps {
+        let mut hist = loss_history_cb.lock().unwrap();
+        hist.push(rep.loss);
+
+        if is_tui {
+            if rep.step == 1 || rep.step % 5 == 0 || rep.step == total_steps {
+                let spark = cronc::cl_train_pipeline::render_ascii_sparkline(&hist, 20);
+                let pbar = cronc::cl_train_pipeline::render_progress_bar(rep.step, total_steps, 16);
+                println!(
+                    "  [TUI] {} | Loss: {:>6.4} {} | PPL: {:>6.2} | LR: {:.6} | Time: {:.1}ms",
+                    pbar, rep.loss, spark, rep.perplexity, rep.lr, rep.elapsed_ms
+                );
+            }
+        } else if rep.step == 1 || rep.step % 10 == 0 || rep.step == total_steps {
             println!(
                 "  [STEP {:4}/{}] Loss: {:.4} | PPL: {:7.2} | LR: {:.6} | |Grad|: {:.4} | Time: {:.2}ms",
                 rep.step, total_steps, rep.loss, rep.perplexity, rep.lr, rep.grad_norm, rep.elapsed_ms
@@ -12296,6 +12338,12 @@ fn handle_cl_train_command(args: &[String]) {
                 if let Some(ref path) = summary.checkpoint_saved_to {
                     println!("   • Checkpoint Saved:  {} (Standard IEEE 754 SafeTensors)", path);
                 }
+                if let Some(ref sample) = summary.generated_sample {
+                    println!("─────────────────────────────────────────────────────────────────────────────────────────");
+                    println!(" [AUTOREGRESSIVE INFERENCE] Live Output from Trained Model:");
+                    println!("   Prompt : \"{}\"", eval_prompt.as_deref().unwrap_or(""));
+                    println!("   Output : \"{}\"", sample);
+                }
                 println!("═════════════════════════════════════════════════════════════════════════════════════════");
             }
         }
@@ -12314,6 +12362,8 @@ fn handle_synth_command(args: &[String]) {
 
     let mut cfg = cronc::cl_silicon_tapeout::SiliconSynthConfig::default();
     let mut emit_json = false;
+    let mut run_sim = false;
+    let mut vcd_path: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -12342,6 +12392,15 @@ fn handle_synth_command(args: &[String]) {
             }
             "-o" | "--out-dir" if i + 1 < args.len() => {
                 cfg.out_dir = args[i + 1].clone();
+                i += 2;
+            }
+            "--sim" => {
+                run_sim = true;
+                i += 1;
+            }
+            "--vcd" if i + 1 < args.len() => {
+                run_sim = true;
+                vcd_path = Some(args[i + 1].clone());
                 i += 2;
             }
             "--json" => {
@@ -12384,6 +12443,28 @@ fn handle_synth_command(args: &[String]) {
                     println!("║   • {:<73} ║", f);
                 }
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+            }
+
+            if run_sim || vcd_path.is_some() {
+                let vcd_target = vcd_path.as_deref().unwrap_or("silicon_trace.vcd");
+                match cronc::cl_silicon_tapeout::simulate_silicon_and_dump_vcd(&cfg, Some(vcd_target)) {
+                    Ok(sim_rep) => {
+                        println!("┌────────────────────────────────────────────────────────────────────────────────────────┐");
+                        println!("│  HARDWARE RTL CO-SIMULATION & WAVEFORM VCD TRACE REPORT                                │");
+                        println!("├────────────────────────────────────────────────────────────────────────────────────────┤");
+                        println!("│  Cycles Simulated : {:<66} │", sim_rep.total_cycles);
+                        println!("│  Input Words Fed  : {:<66} │", sim_rep.input_words_fed);
+                        println!("│  Output Words Out : {:<66} │", sim_rep.output_words_received);
+                        println!("│  Pipeline Latency : {:<66} │", format!("{} clock cycles", sim_rep.latency_cycles));
+                        if let Some(ref path) = sim_rep.vcd_saved_to {
+                            println!("│  Waveform Saved   : {:<66} │", format!("{} (IEEE 1364-2001 GTKWave)", path));
+                        }
+                        println!("└────────────────────────────────────────────────────────────────────────────────────────┘");
+                    }
+                    Err(e) => {
+                        eprintln!("[ERROR] Silicon co-simulation failed: {}", e);
+                    }
+                }
             }
         }
         Err(e) => {

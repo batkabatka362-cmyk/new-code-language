@@ -144,3 +144,4 @@ fn test_autonomous_training_loop_lion_convergence() {
 
     let _ = fs::remove_file(ckpt_path);
 }
+

@@ -282,6 +282,8 @@ module tb_{name};
     reg [31:0] received_count;
 
     initial begin
+        $dumpfile("silicon_trace.vcd");
+        $dumpvars(0, tb_{name});
         $display("=== STARTING SILICON HARDWARE SIMULATION: {name} ===");
         rst_n         = 0;
         s_axis_tdata  = 32'd0;
@@ -569,3 +571,324 @@ pub fn generate_silicon_synth_package(
 
     Ok(manifest)
 }
+
+/// Cycle snapshot for silicon hardware co-simulation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SiliconCycleTraceRecord {
+    pub cycle: usize,
+    pub time_ns: u64,
+    pub clk: u8,
+    pub rst_n: u8,
+    pub state: u8,
+    pub s_axis_tdata: u32,
+    pub s_axis_tvalid: u8,
+    pub s_axis_tready: u8,
+    pub s_axis_tlast: u8,
+    pub m_axis_tdata: u32,
+    pub m_axis_tvalid: u8,
+    pub m_axis_tready: u8,
+    pub m_axis_tlast: u8,
+}
+
+/// Comprehensive Report of Silicon Hardware RTL Co-Simulation & Waveform Trace
+#[derive(Debug, Clone)]
+pub struct SiliconCosimReport {
+    pub total_cycles: usize,
+    pub input_words_fed: usize,
+    pub output_words_received: usize,
+    pub latency_cycles: usize,
+    pub vcd_content: String,
+    pub vcd_saved_to: Option<String>,
+    pub trace_records: Vec<SiliconCycleTraceRecord>,
+}
+
+/// Simulates the synthesizable silicon core cycle-by-cycle in pure Rust and generates IEEE 1364-2001 VCD
+pub fn simulate_silicon_and_dump_vcd(
+    cfg: &SiliconSynthConfig,
+    vcd_path: Option<&str>,
+) -> Result<SiliconCosimReport, String> {
+    let in_dim = cfg.in_dim;
+    let out_dim = cfg.out_dim;
+    let period_ns = (1000.0 / cfg.clock_freq_mhz).round() as u64;
+    let half_period_ns = (period_ns / 2).max(1);
+
+    const FSM_IDLE: u8 = 0;
+    const FSM_LOAD: u8 = 1;
+    const FSM_COMPUTE: u8 = 2;
+    const FSM_EMIT: u8 = 3;
+
+    let mut state = FSM_IDLE;
+    let mut in_buf = vec![0u32; in_dim];
+    let mut in_idx = 0usize;
+    let mut out_idx = 0usize;
+    let mut accum_reg = 0u32;
+
+    let mut m_axis_tdata = 0u32;
+    let mut m_axis_tvalid = 0u8;
+    let mut m_axis_tlast = 0u8;
+    let m_axis_tready = 1u8;
+
+    let mut records = Vec::new();
+    let mut cur_time_ns = 0u64;
+
+    let mut input_words_fed = 0usize;
+    let mut output_words_received = 0usize;
+    let mut start_load_cycle = 0usize;
+    let mut finish_emit_cycle = 0usize;
+
+    let total_simulation_cycles = 15 + in_dim + 4 + out_dim + 5;
+
+    for cycle in 0..total_simulation_cycles {
+        let rst_n = if cycle < 5 { 0u8 } else { 1u8 };
+        let s_axis_tready = if state == FSM_LOAD || state == FSM_IDLE { 1u8 } else { 0u8 };
+
+        // Testbench stimulus
+        let (s_axis_tvalid, s_axis_tdata, s_axis_tlast) = if rst_n == 1 && cycle >= 7 && input_words_fed < in_dim {
+            let data = 0x00000010u32 + (input_words_fed as u32);
+            let last = if input_words_fed == in_dim - 1 { 1u8 } else { 0u8 };
+            (1u8, data, last)
+        } else {
+            (0u8, 0u32, 0u8)
+        };
+
+        // Rising edge clock phase
+        if rst_n == 0 {
+            state = FSM_IDLE;
+            in_idx = 0;
+            out_idx = 0;
+            m_axis_tdata = 0;
+            m_axis_tvalid = 0;
+            m_axis_tlast = 0;
+            accum_reg = 0;
+        } else {
+            // Next-state & Datapath
+            match state {
+                FSM_IDLE => {
+                    in_idx = 0;
+                    out_idx = 0;
+                    m_axis_tvalid = 0;
+                    m_axis_tlast = 0;
+                    accum_reg = 0;
+                    if s_axis_tvalid == 1 {
+                        state = FSM_LOAD;
+                        start_load_cycle = cycle;
+                        in_buf[in_idx] = s_axis_tdata;
+                        input_words_fed += 1;
+                        if in_idx < in_dim - 1 {
+                            in_idx += 1;
+                        }
+                    }
+                }
+                FSM_LOAD => {
+                    if s_axis_tvalid == 1 && s_axis_tready == 1 {
+                        in_buf[in_idx] = s_axis_tdata;
+                        input_words_fed += 1;
+                        if in_idx < in_dim - 1 {
+                            in_idx += 1;
+                        } else {
+                            state = FSM_COMPUTE;
+                        }
+                    }
+                }
+                FSM_COMPUTE => {
+                    accum_reg = (in_buf[0] ^ in_buf[in_dim - 1]).wrapping_add(1);
+                    out_idx = 0;
+                    state = FSM_EMIT;
+                }
+                FSM_EMIT => {
+                    m_axis_tvalid = 1;
+                    m_axis_tdata = accum_reg.wrapping_add(out_idx as u32);
+                    m_axis_tlast = if out_idx == out_dim - 1 { 1 } else { 0 };
+
+                    if m_axis_tready == 1 {
+                        output_words_received += 1;
+                        if out_idx < out_dim - 1 {
+                            out_idx += 1;
+                        } else {
+                            m_axis_tvalid = 0;
+                            finish_emit_cycle = cycle;
+                            state = FSM_IDLE;
+                        }
+                    }
+                }
+                _ => {
+                    state = FSM_IDLE;
+                }
+            }
+        }
+
+        // Low clock phase record
+        records.push(SiliconCycleTraceRecord {
+            cycle,
+            time_ns: cur_time_ns,
+            clk: 0,
+            rst_n,
+            state,
+            s_axis_tdata,
+            s_axis_tvalid,
+            s_axis_tready,
+            s_axis_tlast,
+            m_axis_tdata,
+            m_axis_tvalid,
+            m_axis_tready,
+            m_axis_tlast,
+        });
+
+        // High clock phase record
+        records.push(SiliconCycleTraceRecord {
+            cycle,
+            time_ns: cur_time_ns + half_period_ns,
+            clk: 1,
+            rst_n,
+            state,
+            s_axis_tdata,
+            s_axis_tvalid,
+            s_axis_tready,
+            s_axis_tlast,
+            m_axis_tdata,
+            m_axis_tvalid,
+            m_axis_tready,
+            m_axis_tlast,
+        });
+
+        cur_time_ns += period_ns;
+    }
+
+    // Build standard IEEE 1364-2001 VCD content
+    let mut vcd = String::new();
+    vcd.push_str("$date\n   CRON In-Silicon Hardware Co-Simulation\n$end\n");
+    vcd.push_str("$version\n   CRON Silicon Waveform Engine v1.0\n$end\n");
+    vcd.push_str("$timescale\n   1ns\n$end\n");
+    vcd.push_str(&format!("$scope module tb_{} $end\n", cfg.design_name));
+    vcd.push_str("$var wire 1 ! clk $end\n");
+    vcd.push_str("$var wire 1 \" rst_n $end\n");
+    vcd.push_str("$var wire 2 # state $end\n");
+    vcd.push_str("$var wire 32 $ s_axis_tdata $end\n");
+    vcd.push_str("$var wire 1 % s_axis_tvalid $end\n");
+    vcd.push_str("$var wire 1 & s_axis_tready $end\n");
+    vcd.push_str("$var wire 1 ' s_axis_tlast $end\n");
+    vcd.push_str("$var wire 32 ( m_axis_tdata $end\n");
+    vcd.push_str("$var wire 1 ) m_axis_tvalid $end\n");
+    vcd.push_str("$var wire 1 * m_axis_tready $end\n");
+    vcd.push_str("$var wire 1 + m_axis_tlast $end\n");
+    vcd.push_str("$upscope $end\n$enddefinitions $end\n");
+
+    let mut last_clk = 255u8;
+    let mut last_rst = 255u8;
+    let mut last_state = 255u8;
+    let mut last_sdata = 0xFFFFFFFFu32;
+    let mut last_svalid = 255u8;
+    let mut last_sready = 255u8;
+    let mut last_slast = 255u8;
+    let mut last_mdata = 0xFFFFFFFFu32;
+    let mut last_mvalid = 255u8;
+    let mut last_mready = 255u8;
+    let mut last_mlast = 255u8;
+
+    for (idx, r) in records.iter().enumerate() {
+        if idx == 0 {
+            vcd.push_str("#0\n$dumpvars\n");
+            vcd.push_str(&format!("{}!\n", r.clk));
+            vcd.push_str(&format!("{}\"\n", r.rst_n));
+            vcd.push_str(&format!("b{:02b} #\n", r.state));
+            vcd.push_str(&format!("b{:032b} $\n", r.s_axis_tdata));
+            vcd.push_str(&format!("{}%\n", r.s_axis_tvalid));
+            vcd.push_str(&format!("{}&\n", r.s_axis_tready));
+            vcd.push_str(&format!("{}'\n", r.s_axis_tlast));
+            vcd.push_str(&format!("b{:032b} (\n", r.m_axis_tdata));
+            vcd.push_str(&format!("{}) \n", r.m_axis_tvalid));
+            vcd.push_str(&format!("{}*\n", r.m_axis_tready));
+            vcd.push_str(&format!("{}+\n", r.m_axis_tlast));
+            vcd.push_str("$end\n");
+
+            last_clk = r.clk;
+            last_rst = r.rst_n;
+            last_state = r.state;
+            last_sdata = r.s_axis_tdata;
+            last_svalid = r.s_axis_tvalid;
+            last_sready = r.s_axis_tready;
+            last_slast = r.s_axis_tlast;
+            last_mdata = r.m_axis_tdata;
+            last_mvalid = r.m_axis_tvalid;
+            last_mready = r.m_axis_tready;
+            last_mlast = r.m_axis_tlast;
+        } else {
+            vcd.push_str(&format!("#{}\n", r.time_ns));
+            if r.clk != last_clk {
+                vcd.push_str(&format!("{}!\n", r.clk));
+                last_clk = r.clk;
+            }
+            if r.rst_n != last_rst {
+                vcd.push_str(&format!("{}\"\n", r.rst_n));
+                last_rst = r.rst_n;
+            }
+            if r.state != last_state {
+                vcd.push_str(&format!("b{:02b} #\n", r.state));
+                last_state = r.state;
+            }
+            if r.s_axis_tdata != last_sdata {
+                vcd.push_str(&format!("b{:032b} $\n", r.s_axis_tdata));
+                last_sdata = r.s_axis_tdata;
+            }
+            if r.s_axis_tvalid != last_svalid {
+                vcd.push_str(&format!("{}%\n", r.s_axis_tvalid));
+                last_svalid = r.s_axis_tvalid;
+            }
+            if r.s_axis_tready != last_sready {
+                vcd.push_str(&format!("{}&\n", r.s_axis_tready));
+                last_sready = r.s_axis_tready;
+            }
+            if r.s_axis_tlast != last_slast {
+                vcd.push_str(&format!("{}'\n", r.s_axis_tlast));
+                last_slast = r.s_axis_tlast;
+            }
+            if r.m_axis_tdata != last_mdata {
+                vcd.push_str(&format!("b{:032b} (\n", r.m_axis_tdata));
+                last_mdata = r.m_axis_tdata;
+            }
+            if r.m_axis_tvalid != last_mvalid {
+                vcd.push_str(&format!("{}) \n", r.m_axis_tvalid));
+                last_mvalid = r.m_axis_tvalid;
+            }
+            if r.m_axis_tready != last_mready {
+                vcd.push_str(&format!("{}*\n", r.m_axis_tready));
+                last_mready = r.m_axis_tready;
+            }
+            if r.m_axis_tlast != last_mlast {
+                vcd.push_str(&format!("{}+\n", r.m_axis_tlast));
+                last_mlast = r.m_axis_tlast;
+            }
+        }
+    }
+
+    let vcd_saved_to = if let Some(path) = vcd_path {
+        let parent = Path::new(path).parent();
+        if let Some(p) = parent {
+            if !p.as_os_str().is_empty() {
+                let _ = fs::create_dir_all(p);
+            }
+        }
+        let mut file = File::create(path).map_err(|e| format!("Failed to create VCD file '{}': {}", path, e))?;
+        file.write_all(vcd.as_bytes()).map_err(|e| format!("Failed to write VCD: {}", e))?;
+        Some(path.to_string())
+    } else {
+        None
+    };
+
+    let latency = if finish_emit_cycle > start_load_cycle {
+        finish_emit_cycle - start_load_cycle
+    } else {
+        in_dim + out_dim + 2
+    };
+
+    Ok(SiliconCosimReport {
+        total_cycles: total_simulation_cycles,
+        input_words_fed,
+        output_words_received,
+        latency_cycles: latency,
+        vcd_content: vcd,
+        vcd_saved_to,
+        trace_records: records,
+    })
+}
+

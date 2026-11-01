@@ -90,6 +90,9 @@ pub struct TrainingConfig {
     pub checkpoint_out: Option<String>,
     pub profile: String,
     pub seed: u64,
+    pub eval_prompt: Option<String>,
+    pub eval_max_tokens: usize,
+    pub eval_temperature: f32,
 }
 
 impl Default for TrainingConfig {
@@ -113,6 +116,9 @@ impl Default for TrainingConfig {
             checkpoint_out: Some("checkpoint.safetensors".to_string()),
             profile: "max-quality".to_string(),
             seed: 42,
+            eval_prompt: None,
+            eval_max_tokens: 32,
+            eval_temperature: 0.7,
         }
     }
 }
@@ -142,6 +148,89 @@ pub struct AutonomousTrainingSummary {
     pub tokens_per_sec: f64,
     pub checkpoint_saved_to: Option<String>,
     pub step_history: Vec<TrainingStepReport>,
+    pub generated_sample: Option<String>,
+}
+
+/// Render a unicode sparkline given a sequence of float values
+pub fn render_ascii_sparkline(values: &[f32], max_chars: usize) -> String {
+    if values.is_empty() {
+        return String::new();
+    }
+    const TICKS: [char; 8] = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    let slice = if values.len() > max_chars {
+        &values[values.len() - max_chars..]
+    } else {
+        values
+    };
+
+    let mut min_val = f32::INFINITY;
+    let mut max_val = f32::NEG_INFINITY;
+    for &v in slice {
+        if v < min_val {
+            min_val = v;
+        }
+        if v > max_val {
+            max_val = v;
+        }
+    }
+
+    let diff = (max_val - min_val).max(1e-6);
+    let mut sparkline = String::with_capacity(slice.len());
+    for &v in slice {
+        let normalized = ((v - min_val) / diff).clamp(0.0, 1.0);
+        let tick_idx = ((normalized * 7.0).round() as usize).min(7);
+        sparkline.push(TICKS[tick_idx]);
+    }
+    sparkline
+}
+
+/// Render a horizontal progress bar
+pub fn render_progress_bar(current: usize, total: usize, width: usize) -> String {
+    let pct = if total > 0 {
+        ((current as f64) / (total as f64)).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    let filled = ((pct * (width as f64)).round() as usize).min(width);
+    let empty = width.saturating_sub(filled);
+    format!("[{}{}] {:3.0}%", "█".repeat(filled), "░".repeat(empty), pct * 100.0)
+}
+
+/// Render interactive ANSI / ASCII HUD block for live training monitoring
+pub fn render_training_hud(
+    step: usize,
+    total_steps: usize,
+    loss_history: &[f32],
+    current_loss: f32,
+    perplexity: f32,
+    lr: f32,
+    grad_norm: f32,
+    tokens_per_sec: f64,
+    elapsed_secs: f64,
+) -> String {
+    let progress_bar = render_progress_bar(step, total_steps, 24);
+    let sparkline = render_ascii_sparkline(loss_history, 24);
+    let initial_loss = loss_history.first().copied().unwrap_or(current_loss);
+    let delta_loss = if initial_loss > 1e-6 {
+        ((initial_loss - current_loss) / initial_loss) * 100.0
+    } else {
+        0.0
+    };
+    let eta_secs = if step > 0 && step < total_steps {
+        let avg_time_per_step = elapsed_secs / (step as f64);
+        avg_time_per_step * ((total_steps - step) as f64)
+    } else {
+        0.0
+    };
+
+    let mut hud = String::new();
+    hud.push_str("┌────────────────────────────────────────────────────────────────────────────────────────┐\n");
+    hud.push_str(&format!("│  LIVE MONITOR │ Step {:4}/{} {} │ ETA: {:>6.2}s │\n", step, total_steps, progress_bar, eta_secs));
+    hud.push_str("├────────────────────────────────────────────────────────────────────────────────────────┤\n");
+    hud.push_str(&format!("│  Loss Trend   : {:<24} │ Loss: {:>7.4} (Δ: {:>+6.2}%)                   │\n", sparkline, current_loss, -delta_loss));
+    hud.push_str(&format!("│  Perplexity   : {:<12.2} │ LR: {:<10.6} │ |∇|: {:<8.4} │ Speed: {:>7.1} tok/s │\n", perplexity, lr, grad_norm, tokens_per_sec));
+    hud.push_str("└────────────────────────────────────────────────────────────────────────────────────────┘");
+    hud
 }
 
 /// Parameter Matrix with Gradient Tracking
@@ -674,6 +763,163 @@ impl AutonomousLanguageModel {
             .map_err(|e| format!("Failed to flush safetensors file: {}", e))?;
         Ok(())
     }
+
+    /// Compute next-token output logits for the last token given an input sequence
+    pub fn forward_logits_last(&self, token_seq: &[usize]) -> Vec<f32> {
+        let n_tokens = token_seq.len();
+        if n_tokens == 0 {
+            return vec![0.0f32; self.config.vocab_size];
+        }
+        let d = self.config.dim;
+        let h = self.config.hidden_dim;
+        let v = self.config.vocab_size;
+
+        // 1. Embedding lookup: H0 [N, d]
+        let mut h0 = vec![0.0f32; n_tokens * d];
+        for (i, &tok) in token_seq.iter().enumerate() {
+            let tok_clamped = tok % v;
+            let src = &self.embedding.data[tok_clamped * d..(tok_clamped + 1) * d];
+            h0[i * d..(i + 1) * d].copy_from_slice(src);
+        }
+
+        // 2. SwiGLU forward:
+        let mut g = vec![0.0f32; n_tokens * h];
+        let mut u = vec![0.0f32; n_tokens * h];
+        for i in 0..n_tokens {
+            for j in 0..h {
+                let mut sum_g = 0.0f32;
+                let mut sum_u = 0.0f32;
+                for k in 0..d {
+                    let h_val = h0[i * d + k];
+                    sum_g += h_val * self.w_gate.data[k * h + j];
+                    sum_u += h_val * self.w_up.data[k * h + j];
+                }
+                g[i * h + j] = sum_g;
+                u[i * h + j] = sum_u;
+            }
+        }
+
+        let mut act = vec![0.0f32; n_tokens * h];
+        for i in 0..(n_tokens * h) {
+            let x = g[i];
+            let sig = 1.0 / (1.0 + (-x).exp());
+            act[i] = (x * sig) * u[i];
+        }
+
+        // 3. Down projection + Residual skip for last token only
+        let last_idx = n_tokens - 1;
+        let mut h1_last = vec![0.0f32; d];
+        for j in 0..d {
+            let mut sum_d = 0.0f32;
+            for k in 0..h {
+                sum_d += act[last_idx * h + k] * self.w_down.data[k * d + j];
+            }
+            h1_last[j] = sum_d + h0[last_idx * d + j];
+        }
+
+        // 4. Output Logits for last token: Z = H1_last @ W_head [v]
+        let mut logits = vec![0.0f32; v];
+        for j in 0..v {
+            let mut sum_z = 0.0f32;
+            for k in 0..d {
+                sum_z += h1_last[k] * self.w_head.data[k * v + j];
+            }
+            logits[j] = sum_z;
+        }
+
+        logits
+    }
+
+    /// Autoregressively generates new token IDs given an initial sequence
+    pub fn generate_tokens(&self, prompt_tokens: &[usize], max_new_tokens: usize, temperature: f32) -> Vec<usize> {
+        let mut tokens = prompt_tokens.to_vec();
+        if tokens.is_empty() {
+            tokens.push(0);
+        }
+        let v = self.config.vocab_size;
+
+        for step in 0..max_new_tokens {
+            let window_start = if tokens.len() > self.config.seq_len {
+                tokens.len() - self.config.seq_len
+            } else {
+                0
+            };
+            let context = &tokens[window_start..];
+            let logits = self.forward_logits_last(context);
+
+            let next_tok = if temperature <= 0.01 {
+                // Greedy argmax
+                let mut best_tok = 0;
+                let mut best_val = -1e9f32;
+                for (idx, &val) in logits.iter().enumerate() {
+                    if val > best_val {
+                        best_val = val;
+                        best_tok = idx;
+                    }
+                }
+                best_tok
+            } else {
+                // Temperature scaled sampling
+                let mut max_l = -1e9f32;
+                for &l in &logits {
+                    if l > max_l {
+                        max_l = l;
+                    }
+                }
+                let mut probs = Vec::with_capacity(v);
+                let mut sum_p = 0.0f32;
+                for &l in &logits {
+                    let p = ((l - max_l) / temperature).exp();
+                    probs.push(p);
+                    sum_p += p;
+                }
+
+                let inv_sum = 1.0 / sum_p.max(1e-12);
+                let seed_step = (tokens.len() + step).wrapping_mul(1103515245).wrapping_add(12345);
+                let seed_ratio = ((seed_step & 0x7fffffff) as f32) / (0x7fffffff as f32);
+
+                let mut accum = 0.0f32;
+                let mut chosen = 0;
+                for (idx, &p) in probs.iter().enumerate() {
+                    accum += p * inv_sum;
+                    if accum >= seed_ratio {
+                        chosen = idx;
+                        break;
+                    }
+                }
+                chosen
+            };
+
+            tokens.push(next_tok % v);
+        }
+
+        tokens
+    }
+
+    /// Autoregressively generates continuation text given a text prompt
+    pub fn generate_text(&self, prompt: &str, max_new_tokens: usize, temperature: f32) -> String {
+        let tokenizer = BpeTokenizer::from_default_vocab();
+        let prompt_tokens = tokenizer.encode(prompt);
+        let input_tokens: Vec<usize> = if prompt_tokens.is_empty() {
+            prompt.bytes().map(|b| b as usize).collect()
+        } else {
+            prompt_tokens.into_iter().map(|t| t as usize).collect()
+        };
+
+        let generated_ids = self.generate_tokens(&input_tokens, max_new_tokens, temperature);
+        let new_ids = &generated_ids[input_tokens.len()..];
+        let u32_ids: Vec<u32> = new_ids.iter().map(|&x| x as u32).collect();
+        let decoded = tokenizer.decode(&u32_ids);
+        if !decoded.is_empty() {
+            format!("{}{}", prompt, decoded)
+        } else {
+            let mut bytes = prompt.as_bytes().to_vec();
+            for &id in new_ids {
+                bytes.push((id % 256) as u8);
+            }
+            String::from_utf8_lossy(&bytes).to_string()
+        }
+    }
 }
 
 /// Tokenizes source training corpus into a continuous sequence of token IDs
@@ -802,6 +1048,12 @@ pub fn train_autonomous_model(
         None
     };
 
+    let generated_sample = if let Some(ref prompt) = actual_config.eval_prompt {
+        Some(model.generate_text(prompt, actual_config.eval_max_tokens, actual_config.eval_temperature))
+    } else {
+        None
+    };
+
     Ok(AutonomousTrainingSummary {
         initial_loss,
         final_loss,
@@ -813,5 +1065,6 @@ pub fn train_autonomous_model(
         tokens_per_sec,
         checkpoint_saved_to: checkpoint_saved,
         step_history,
+        generated_sample,
     })
 }

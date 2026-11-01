@@ -5992,6 +5992,22 @@ impl MathEvaluator {
                     self.eval_mla_attn(&x, &w_dkv, &w_uk, &w_uv, &w_q, w_o.as_ref(), is_causal)
                 }
                 "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
+                    if name == "M" && self.functions.contains_key("M") {
+                        let (param_names, body) = self.functions.get("M").unwrap().clone();
+                        if param_names.len() != args.len() {
+                            return Err(format!(
+                                "Function 'M' expects {} arguments, got {}",
+                                param_names.len(),
+                                args.len()
+                            ));
+                        }
+                        let mut scoped_eval = self.clone();
+                        for (p_name, arg_expr) in param_names.iter().zip(args.iter()) {
+                            let arg_val = self.eval_value(arg_expr)?;
+                            scoped_eval.env.insert(p_name.clone(), arg_val);
+                        }
+                        return scoped_eval.eval_value(&body);
+                    }
                     if args.len() < 2 {
                         return Err(
                             "'ssd_scan(X, decay_dt)' requires at least 2 arguments".to_string()
@@ -10298,6 +10314,43 @@ impl MathProgram {
                     }
                 }
                 "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "Ξ_ssd" | "M" => {
+                    if func == "M" && fn_sigs.contains_key("M") {
+                        let (params, _ret, body) = fn_sigs.get("M").unwrap();
+                        if params.len() != args.len() {
+                            errors.push(format!(
+                                "{}Function 'M' expects {} arguments, received {}",
+                                prefix,
+                                params.len(),
+                                args.len()
+                            ));
+                        }
+                        let mut fn_env = env.clone();
+                        for (p, a) in params.iter().zip(args.iter()) {
+                            let arg_s = Self::infer_shape_expr(a, env, fn_sigs, errors, ctx);
+                            if !p.dims.is_empty() {
+                                if let Some(ref ashp) = arg_s {
+                                    let dims_match = ashp.len() == p.dims.len()
+                                        || (ashp.is_empty() && p.dims.len() == 1);
+                                    if !dims_match {
+                                        errors.push(format!(
+                                            "{}Argument '{}' to function 'M' rank mismatch: expected {}D tensor, received {:?}",
+                                            prefix, p.name, p.dims.len(), ashp
+                                        ));
+                                    }
+                                }
+                            }
+                            if let Some(s) = arg_s {
+                                fn_env.insert(p.name.clone(), s);
+                            }
+                        }
+                        return Self::infer_shape_expr(
+                            body,
+                            &fn_env,
+                            fn_sigs,
+                            errors,
+                            Some("call to 'M'"),
+                        );
+                    }
                     if args.len() >= 2 {
                         let x_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         for a in &args[1..] {

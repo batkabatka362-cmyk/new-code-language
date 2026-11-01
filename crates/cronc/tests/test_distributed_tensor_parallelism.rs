@@ -169,3 +169,4 @@ fn test_distributed_c23_harness_synthesis() {
     assert!(harness.contains("silu_f32"));
     assert!(harness.contains("pthread_barrier_wait"));
 }
+
