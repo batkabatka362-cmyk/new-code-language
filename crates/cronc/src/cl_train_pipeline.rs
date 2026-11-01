@@ -83,6 +83,9 @@ pub struct TrainingConfig {
     pub dim: usize,
     pub hidden_dim: usize,
     pub vocab_size: usize,
+    pub num_layers: usize,
+    pub num_experts: usize,
+    pub top_k: usize,
     pub optimizer: TrainingOptimizer,
     pub weight_decay: f32,
     pub warmup_steps: usize,
@@ -109,6 +112,9 @@ impl Default for TrainingConfig {
             dim: 32,
             hidden_dim: 64,
             vocab_size: 256,
+            num_layers: 1,
+            num_experts: 1,
+            top_k: 1,
             optimizer: TrainingOptimizer::AdamW,
             weight_decay: 0.01,
             warmup_steps: 5,
@@ -268,6 +274,18 @@ impl ParamMatrix {
         }
     }
 
+    pub fn new_constant(rows: usize, cols: usize, val: f32) -> Self {
+        let n = rows * cols;
+        Self {
+            rows,
+            cols,
+            data: vec![val; n],
+            grad: vec![0.0f32; n],
+            m: vec![0.0f32; n],
+            v: vec![0.0f32; n],
+        }
+    }
+
     pub fn zero_grad(&mut self) {
         self.grad.fill(0.0);
     }
@@ -277,14 +295,68 @@ impl ParamMatrix {
     }
 }
 
+/// Single Transformer Layer Block with SwiGLU / MoE Feed-Forward
+#[derive(Debug, Clone)]
+pub struct TransformerLayerBlock {
+    pub w_gate: Vec<ParamMatrix>,      // [num_experts], each [dim, hidden_dim]
+    pub w_up: Vec<ParamMatrix>,        // [num_experts], each [dim, hidden_dim]
+    pub w_down: Vec<ParamMatrix>,      // [num_experts], each [hidden_dim, dim]
+    pub w_router: Option<ParamMatrix>, // [dim, num_experts] if num_experts > 1
+}
+
+impl TransformerLayerBlock {
+    pub fn new(dim: usize, hidden_dim: usize, num_experts: usize, seed: &mut u64) -> Self {
+        let scale = (2.0 / (dim as f32)).sqrt();
+        let down_scale = (2.0 / (hidden_dim as f32)).sqrt();
+        let mut w_gate = Vec::with_capacity(num_experts);
+        let mut w_up = Vec::with_capacity(num_experts);
+        let mut w_down = Vec::with_capacity(num_experts);
+        for _ in 0..num_experts {
+            w_gate.push(ParamMatrix::new_random(dim, hidden_dim, seed, scale));
+            w_up.push(ParamMatrix::new_random(dim, hidden_dim, seed, scale));
+            w_down.push(ParamMatrix::new_random(hidden_dim, dim, seed, down_scale));
+        }
+        let w_router = if num_experts > 1 {
+            Some(ParamMatrix::new_random(dim, num_experts, seed, scale))
+        } else {
+            None
+        };
+        Self {
+            w_gate,
+            w_up,
+            w_down,
+            w_router,
+        }
+    }
+
+    pub fn zero_grad(&mut self) {
+        for g in &mut self.w_gate { g.zero_grad(); }
+        for u in &mut self.w_up { u.zero_grad(); }
+        for d in &mut self.w_down { d.zero_grad(); }
+        if let Some(r) = &mut self.w_router { r.zero_grad(); }
+    }
+
+    pub fn grad_norm_sq(&self) -> f32 {
+        let mut sum = 0.0f32;
+        for g in &self.w_gate { sum += g.grad_norm_sq(); }
+        for u in &self.w_up { sum += u.grad_norm_sq(); }
+        for d in &self.w_down { sum += d.grad_norm_sq(); }
+        if let Some(r) = &self.w_router { sum += r.grad_norm_sq(); }
+        sum
+    }
+}
+
 /// Autonomous In-Silicon Neural Language Model Architecture
 pub struct AutonomousLanguageModel {
     pub config: TrainingConfig,
-    pub embedding: ParamMatrix, // [vocab_size, dim]
-    pub w_gate: ParamMatrix,    // [dim, hidden_dim]
-    pub w_up: ParamMatrix,      // [dim, hidden_dim]
-    pub w_down: ParamMatrix,    // [hidden_dim, dim]
-    pub w_head: ParamMatrix,    // [dim, vocab_size]
+    pub embedding: ParamMatrix,              // [vocab_size, dim]
+    pub layers: Vec<TransformerLayerBlock>,  // [num_layers]
+    pub w_head: ParamMatrix,                 // [dim, vocab_size]
+
+    // Backward-compatibility mirrors for layer 0 expert 0
+    pub w_gate: ParamMatrix,                 // [dim, hidden_dim]
+    pub w_up: ParamMatrix,                   // [dim, hidden_dim]
+    pub w_down: ParamMatrix,                 // [hidden_dim, dim]
 }
 
 impl AutonomousLanguageModel {
@@ -293,38 +365,47 @@ impl AutonomousLanguageModel {
         let d = config.dim;
         let h = config.hidden_dim;
         let v = config.vocab_size;
+        let num_layers = config.num_layers.max(1);
+        let num_experts = config.num_experts.max(1);
 
         let scale = (2.0 / (d as f32)).sqrt();
         let embedding = ParamMatrix::new_random(v, d, &mut seed, 0.02);
-        let w_gate = ParamMatrix::new_random(d, h, &mut seed, scale);
-        let w_up = ParamMatrix::new_random(d, h, &mut seed, scale);
-        let w_down = ParamMatrix::new_random(h, d, &mut seed, (2.0 / (h as f32)).sqrt());
+        let mut layers = Vec::with_capacity(num_layers);
+        for _ in 0..num_layers {
+            layers.push(TransformerLayerBlock::new(d, h, num_experts, &mut seed));
+        }
+        let w_gate = layers[0].w_gate[0].clone();
+        let w_up = layers[0].w_up[0].clone();
+        let w_down = layers[0].w_down[0].clone();
         let w_head = ParamMatrix::new_random(d, v, &mut seed, scale);
 
         Self {
             config,
             embedding,
+            layers,
+            w_head,
             w_gate,
             w_up,
             w_down,
-            w_head,
         }
     }
 
     pub fn zero_grad(&mut self) {
         self.embedding.zero_grad();
+        for layer in &mut self.layers {
+            layer.zero_grad();
+        }
+        self.w_head.zero_grad();
         self.w_gate.zero_grad();
         self.w_up.zero_grad();
         self.w_down.zero_grad();
-        self.w_head.zero_grad();
     }
 
     pub fn total_grad_norm(&self) -> f32 {
-        let sum_sq = self.embedding.grad_norm_sq()
-            + self.w_gate.grad_norm_sq()
-            + self.w_up.grad_norm_sq()
-            + self.w_down.grad_norm_sq()
-            + self.w_head.grad_norm_sq();
+        let mut sum_sq = self.embedding.grad_norm_sq() + self.w_head.grad_norm_sq();
+        for layer in &self.layers {
+            sum_sq += layer.grad_norm_sq();
+        }
         sum_sq.sqrt()
     }
 
@@ -338,223 +419,354 @@ impl AutonomousLanguageModel {
         let d = self.config.dim;
         let h = self.config.hidden_dim;
         let v = self.config.vocab_size;
+        let num_layers = self.layers.len();
+        let num_experts = self.config.num_experts.max(1);
+        let top_k = self.config.top_k.min(num_experts).max(1);
 
-        // 1. Embedding lookup: H0 [N, d]
+        // 1. Embedding lookup: H_0 [N, d]
+        let mut h_layers = Vec::with_capacity(num_layers + 1);
         let mut h0 = vec![0.0f32; n_tokens * d];
         for (i, &tok) in input_tokens.iter().enumerate() {
             let tok_clamped = tok % v;
             let src = &self.embedding.data[tok_clamped * d..(tok_clamped + 1) * d];
             h0[i * d..(i + 1) * d].copy_from_slice(src);
         }
+        h_layers.push(h0);
 
-        // 2. SwiGLU forward:
-        // Gate: G = H0 @ W_gate [N, h]
-        // Up:   U = H0 @ W_up   [N, h]
-        let mut g = vec![0.0f32; n_tokens * h];
-        let mut u = vec![0.0f32; n_tokens * h];
-        for i in 0..n_tokens {
-            for j in 0..h {
-                let mut sum_g = 0.0f32;
-                let mut sum_u = 0.0f32;
-                for k in 0..d {
-                    let h_val = h0[i * d + k];
-                    sum_g += h_val * self.w_gate.data[k * h + j];
-                    sum_u += h_val * self.w_up.data[k * h + j];
+        // Activations cache for backward pass:
+        struct LayerActivations {
+            expert_g: Vec<Vec<f32>>,     // [E][N * h]
+            expert_u: Vec<Vec<f32>>,     // [E][N * h]
+            expert_act: Vec<Vec<f32>>,   // [E][N * h]
+            expert_silu: Vec<Vec<f32>>,  // [E][N * h]
+            chosen_topk: Option<Vec<Vec<(usize, f32)>>>, // [N] -> Vec<(expert_idx, weight)>
+        }
+
+        let mut layer_caches = Vec::with_capacity(num_layers);
+
+        // 2. Multi-layer forward pass
+        for l in 0..num_layers {
+            let h_curr = &h_layers[l];
+            let layer = &self.layers[l];
+
+            let mut exp_g = Vec::with_capacity(num_experts);
+            let mut exp_u = Vec::with_capacity(num_experts);
+            let mut exp_act = Vec::with_capacity(num_experts);
+            let mut exp_silu = Vec::with_capacity(num_experts);
+
+            for e in 0..num_experts {
+                let mut g = vec![0.0f32; n_tokens * h];
+                let mut u = vec![0.0f32; n_tokens * h];
+                let mut act = vec![0.0f32; n_tokens * h];
+                let mut silu_g = vec![0.0f32; n_tokens * h];
+
+                for i in 0..n_tokens {
+                    for j in 0..h {
+                        let mut sum_g = 0.0f32;
+                        let mut sum_u = 0.0f32;
+                        for k in 0..d {
+                            let h_val = h_curr[i * d + k];
+                            sum_g += h_val * layer.w_gate[e].data[k * h + j];
+                            sum_u += h_val * layer.w_up[e].data[k * h + j];
+                        }
+                        g[i * h + j] = sum_g;
+                        u[i * h + j] = sum_u;
+
+                        let sig = 1.0 / (1.0 + (-sum_g).exp());
+                        let sg = sum_g * sig;
+                        silu_g[i * h + j] = sg;
+                        act[i * h + j] = sg * sum_u;
+                    }
                 }
-                g[i * h + j] = sum_g;
-                u[i * h + j] = sum_u;
+
+                exp_g.push(g);
+                exp_u.push(u);
+                exp_act.push(act);
+                exp_silu.push(silu_g);
             }
-        }
 
-        // SiLU(G) and SwiGLU activation A = SiLU(G) * U
-        let mut silu_g = vec![0.0f32; n_tokens * h];
-        let mut act = vec![0.0f32; n_tokens * h];
-        for i in 0..(n_tokens * h) {
-            let x = g[i];
-            let sig = 1.0 / (1.0 + (-x).exp());
-            let sg = x * sig;
-            silu_g[i] = sg;
-            act[i] = sg * u[i];
-        }
+            let mut h_next = h_curr.clone();
 
-        // 3. Down projection + Residual skip: H1 = A @ W_down + H0 [N, d]
-        let mut h1 = vec![0.0f32; n_tokens * d];
-        for i in 0..n_tokens {
-            for j in 0..d {
-                let mut sum_d = 0.0f32;
-                for k in 0..h {
-                    sum_d += act[i * h + k] * self.w_down.data[k * d + j];
+            if num_experts == 1 {
+                for i in 0..n_tokens {
+                    for j in 0..d {
+                        let mut sum_d = 0.0f32;
+                        for k in 0..h {
+                            sum_d += exp_act[0][i * h + k] * layer.w_down[0].data[k * d + j];
+                        }
+                        h_next[i * d + j] += sum_d;
+                    }
                 }
-                h1[i * d + j] = sum_d + h0[i * d + j];
+                layer_caches.push(LayerActivations {
+                    expert_g: exp_g,
+                    expert_u: exp_u,
+                    expert_act: exp_act,
+                    expert_silu: exp_silu,
+                    chosen_topk: None,
+                });
+            } else {
+                let router = layer.w_router.as_ref().unwrap();
+                let mut chosen_topk = Vec::with_capacity(n_tokens);
+
+                for i in 0..n_tokens {
+                    let mut max_r = -1e9f32;
+                    let mut r_logits = vec![0.0f32; num_experts];
+                    for e in 0..num_experts {
+                        let mut sum_r = 0.0f32;
+                        for k in 0..d {
+                            sum_r += h_curr[i * d + k] * router.data[k * num_experts + e];
+                        }
+                        r_logits[e] = sum_r;
+                        if sum_r > max_r { max_r = sum_r; }
+                    }
+
+                    let mut r_probs = vec![0.0f32; num_experts];
+                    let mut sum_exp = 0.0f32;
+                    for e in 0..num_experts {
+                        let exp_val = (r_logits[e] - max_r).exp();
+                        r_probs[e] = exp_val;
+                        sum_exp += exp_val;
+                    }
+                    let inv_sum = 1.0 / sum_exp.max(1e-12);
+                    for e in 0..num_experts { r_probs[e] *= inv_sum; }
+
+                    let mut indexed_probs: Vec<(usize, f32)> = (0..num_experts)
+                        .map(|e| (e, r_probs[e]))
+                        .collect();
+                    indexed_probs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                    let selected: Vec<(usize, f32)> = indexed_probs.into_iter().take(top_k).collect();
+
+                    let topk_weight_sum: f32 = selected.iter().map(|(_, w)| *w).sum();
+                    let inv_topk = 1.0 / topk_weight_sum.max(1e-12);
+                    let normalized_selected: Vec<(usize, f32)> = selected
+                        .into_iter()
+                        .map(|(e, w)| (e, w * inv_topk))
+                        .collect();
+
+                    for &(e, w) in &normalized_selected {
+                        for j in 0..d {
+                            let mut sum_d = 0.0f32;
+                            for k in 0..h {
+                                sum_d += exp_act[e][i * h + k] * layer.w_down[e].data[k * d + j];
+                            }
+                            h_next[i * d + j] += w * sum_d;
+                        }
+                    }
+
+                    chosen_topk.push(normalized_selected);
+                }
+
+                layer_caches.push(LayerActivations {
+                    expert_g: exp_g,
+                    expert_u: exp_u,
+                    expert_act: exp_act,
+                    expert_silu: exp_silu,
+                    chosen_topk: Some(chosen_topk),
+                });
             }
+
+            h_layers.push(h_next);
         }
 
-        // 4. Output Logits: Z = H1 @ W_head [N, v]
+        // 3. Output Logits: Z = H_final @ W_head [N, v]
+        let h_final = &h_layers[num_layers];
         let mut logits = vec![0.0f32; n_tokens * v];
         for i in 0..n_tokens {
             for j in 0..v {
                 let mut sum_z = 0.0f32;
                 for k in 0..d {
-                    sum_z += h1[i * d + k] * self.w_head.data[k * v + j];
+                    sum_z += h_final[i * d + k] * self.w_head.data[k * v + j];
                 }
                 logits[i * v + j] = sum_z;
             }
         }
 
-        // 5. Cross-Entropy Loss & Softmax probabilities
+        // 4. Softmax & Cross-Entropy Loss
         let mut probs = vec![0.0f32; n_tokens * v];
         let mut total_loss = 0.0f32;
-
         for i in 0..n_tokens {
             let row = &logits[i * v..(i + 1) * v];
             let mut max_val = -1e9f32;
             for &val in row {
-                if val > max_val {
-                    max_val = val;
-                }
+                if val > max_val { max_val = val; }
             }
-
             let mut sum_exp = 0.0f32;
             for j in 0..v {
                 let exp_val = (row[j] - max_val).exp();
                 probs[i * v + j] = exp_val;
                 sum_exp += exp_val;
             }
-
-            let inv_sum = 1.0 / (sum_exp.max(1e-12));
+            let inv_sum = 1.0 / sum_exp.max(1e-12);
             for j in 0..v {
                 probs[i * v + j] *= inv_sum;
             }
-
             let tgt = target_tokens[i] % v;
             let prob_tgt = probs[i * v + tgt].max(1e-12);
             total_loss += -prob_tgt.ln();
         }
 
         let mean_loss = total_loss / (n_tokens as f32);
-        let perplexity = mean_loss.exp();
+        let perplexity = mean_loss.min(80.0).exp();
 
-        // 6. ANALYTICAL BACKWARD PASS (VJP Pullback)
+        // 5. Analytical Reverse-Mode Autodiff Pullback
         self.zero_grad();
-        let scale_grad = 1.0 / (n_tokens as f32);
-
-        // dLogits = (probs - 1_target) / N
+        let inv_n = 1.0 / (n_tokens as f32);
         let mut d_logits = vec![0.0f32; n_tokens * v];
         for i in 0..n_tokens {
             let tgt = target_tokens[i] % v;
             for j in 0..v {
                 let p = probs[i * v + j];
-                let indicator = if j == tgt { 1.0f32 } else { 0.0f32 };
-                d_logits[i * v + j] = (p - indicator) * scale_grad;
+                d_logits[i * v + j] = if j == tgt { (p - 1.0) * inv_n } else { p * inv_n };
             }
         }
 
-        // dW_head = H1^T @ dLogits [d, v]
-        // dH1 = dLogits @ W_head^T [N, d]
-        let mut d_h1 = vec![0.0f32; n_tokens * d];
+        // Backprop through W_head
         for k in 0..d {
             for j in 0..v {
-                let mut sum = 0.0f32;
+                let mut sum_head = 0.0f32;
                 for i in 0..n_tokens {
-                    sum += h1[i * d + k] * d_logits[i * v + j];
+                    sum_head += h_final[i * d + k] * d_logits[i * v + j];
                 }
-                self.w_head.grad[k * v + j] += sum;
+                self.w_head.grad[k * v + j] += sum_head;
             }
         }
 
+        // dH_final = d_logits @ W_head^T
+        let mut d_h = vec![0.0f32; n_tokens * d];
         for i in 0..n_tokens {
             for k in 0..d {
-                let mut sum = 0.0f32;
+                let mut sum_dh = 0.0f32;
                 for j in 0..v {
-                    sum += d_logits[i * v + j] * self.w_head.data[k * v + j];
+                    sum_dh += d_logits[i * v + j] * self.w_head.data[k * v + j];
                 }
-                d_h1[i * d + k] = sum;
+                d_h[i * d + k] = sum_dh;
             }
         }
 
-        // Residual skip: dH0_res = dH1
-        // Down projection backward:
-        // dAct = dH1 @ W_down^T [N, h]
-        // dW_down = Act^T @ dH1 [h, d]
-        let mut d_act = vec![0.0f32; n_tokens * h];
-        for k in 0..h {
-            for j in 0..d {
-                let mut sum = 0.0f32;
+        // Backward through layers in reverse order: num_layers - 1 down to 0
+        for l in (0..num_layers).rev() {
+            let h_curr = &h_layers[l];
+            let cache = &layer_caches[l];
+            let layer = &mut self.layers[l];
+
+            let mut d_h_prev = d_h.clone(); // Residual connection skip
+
+            if num_experts == 1 {
+                let mut d_act = vec![0.0f32; n_tokens * h];
+                for k in 0..h {
+                    for j in 0..d {
+                        let mut sum_down = 0.0f32;
+                        for i in 0..n_tokens {
+                            sum_down += cache.expert_act[0][i * h + k] * d_h[i * d + j];
+                        }
+                        layer.w_down[0].grad[k * d + j] += sum_down;
+                    }
+                }
+
                 for i in 0..n_tokens {
-                    sum += act[i * h + k] * d_h1[i * d + j];
+                    for k in 0..h {
+                        let mut sum_act = 0.0f32;
+                        for j in 0..d {
+                            sum_act += d_h[i * d + j] * layer.w_down[0].data[k * d + j];
+                        }
+                        d_act[i * h + k] = sum_act;
+                    }
                 }
-                self.w_down.grad[k * d + j] += sum;
-            }
-        }
 
-        for i in 0..n_tokens {
-            for k in 0..h {
-                let mut sum = 0.0f32;
-                for j in 0..d {
-                    sum += d_h1[i * d + j] * self.w_down.data[k * d + j];
+                let mut d_u = vec![0.0f32; n_tokens * h];
+                let mut d_g = vec![0.0f32; n_tokens * h];
+                for i in 0..(n_tokens * h) {
+                    let da = d_act[i];
+                    let sg = cache.expert_silu[0][i];
+                    d_u[i] = da * sg;
+
+                    let x = cache.expert_g[0][i];
+                    let sig = 1.0 / (1.0 + (-x).exp());
+                    let d_silu = sig * (1.0 + x * (1.0 - sig));
+                    d_g[i] = (da * cache.expert_u[0][i]) * d_silu;
                 }
-                d_act[i * h + k] = sum;
-            }
-        }
 
-        // SwiGLU elementwise backward:
-        // Act = SiLU(G) * U
-        // dU = dAct * SiLU(G)
-        // dSiLU(G) = dAct * U
-        // dG = dSiLU(G) * (sigma(G) * (1 + G * (1 - sigma(G))))
-        let mut d_u = vec![0.0f32; n_tokens * h];
-        let mut d_g = vec![0.0f32; n_tokens * h];
-        for i in 0..(n_tokens * h) {
-            let da = d_act[i];
-            let sg = silu_g[i];
-            d_u[i] = da * sg;
+                for k in 0..d {
+                    for j in 0..h {
+                        let mut sum_up = 0.0f32;
+                        let mut sum_gate = 0.0f32;
+                        for i in 0..n_tokens {
+                            let h0_val = h_curr[i * d + k];
+                            sum_up += h0_val * d_u[i * h + j];
+                            sum_gate += h0_val * d_g[i * h + j];
+                        }
+                        layer.w_up[0].grad[k * h + j] += sum_up;
+                        layer.w_gate[0].grad[k * h + j] += sum_gate;
+                    }
+                }
 
-            let x = g[i];
-            let sig = 1.0 / (1.0 + (-x).exp());
-            let d_silu = sig * (1.0 + x * (1.0 - sig));
-            d_g[i] = (da * u[i]) * d_silu;
-        }
-
-        // dW_up = H0^T @ dU [d, h]
-        // dW_gate = H0^T @ dG [d, h]
-        for k in 0..d {
-            for j in 0..h {
-                let mut sum_up = 0.0f32;
-                let mut sum_gate = 0.0f32;
                 for i in 0..n_tokens {
-                    let h0_val = h0[i * d + k];
-                    sum_up += h0_val * d_u[i * h + j];
-                    sum_gate += h0_val * d_g[i * h + j];
+                    for k in 0..d {
+                        let mut sum_proj = 0.0f32;
+                        for j in 0..h {
+                            sum_proj += d_u[i * h + j] * layer.w_up[0].data[k * h + j]
+                                + d_g[i * h + j] * layer.w_gate[0].data[k * h + j];
+                        }
+                        d_h_prev[i * d + k] += sum_proj;
+                    }
                 }
-                self.w_up.grad[k * h + j] += sum_up;
-                self.w_gate.grad[k * h + j] += sum_gate;
+            } else {
+                let chosen_topk = cache.chosen_topk.as_ref().unwrap();
+                for i in 0..n_tokens {
+                    for &(e, w) in &chosen_topk[i] {
+                        let mut d_act_i = vec![0.0f32; h];
+                        for k in 0..h {
+                            let mut sum_act = 0.0f32;
+                            for j in 0..d {
+                                sum_act += (w * d_h[i * d + j]) * layer.w_down[e].data[k * d + j];
+                            }
+                            d_act_i[k] = sum_act;
+                        }
+
+                        for k in 0..h {
+                            for j in 0..d {
+                                layer.w_down[e].grad[k * d + j] += (w * cache.expert_act[e][i * h + k]) * d_h[i * d + j];
+                            }
+                        }
+
+                        for j in 0..h {
+                            let da = d_act_i[j];
+                            let sg = cache.expert_silu[e][i * h + j];
+                            let du = da * sg;
+
+                            let x = cache.expert_g[e][i * h + j];
+                            let sig = 1.0 / (1.0 + (-x).exp());
+                            let d_silu = sig * (1.0 + x * (1.0 - sig));
+                            let dg = (da * cache.expert_u[e][i * h + j]) * d_silu;
+
+                            for k in 0..d {
+                                let h_val = h_curr[i * d + k];
+                                layer.w_up[e].grad[k * h + j] += h_val * du;
+                                layer.w_gate[e].grad[k * h + j] += h_val * dg;
+                                d_h_prev[i * d + k] += du * layer.w_up[e].data[k * h + j] + dg * layer.w_gate[e].data[k * h + j];
+                            }
+                        }
+                    }
+                }
             }
+
+            d_h = d_h_prev;
         }
 
-        // dH0_proj = dU @ W_up^T + dG @ W_gate^T
-        // dH0 = dH0_res + dH0_proj
-        let mut d_h0 = d_h1; // Start with residual connection gradient
-        for i in 0..n_tokens {
-            for k in 0..d {
-                let mut sum_proj = 0.0f32;
-                for j in 0..h {
-                    sum_proj += d_u[i * h + j] * self.w_up.data[k * h + j]
-                        + d_g[i * h + j] * self.w_gate.data[k * h + j];
-                }
-                d_h0[i * d + k] += sum_proj;
-            }
-        }
-
-        // Embedding table backward:
-        // dEmbedding[tok, :] += dH0[i, :]
+        // 6. Embedding table backward
         for (i, &tok) in input_tokens.iter().enumerate() {
             let tok_clamped = tok % v;
             let dst = &mut self.embedding.grad[tok_clamped * d..(tok_clamped + 1) * d];
-            let src = &d_h0[i * d..(i + 1) * d];
+            let src = &d_h[i * d..(i + 1) * d];
             for k in 0..d {
                 dst[k] += src[k];
             }
         }
+
+        // Mirror layer 0 expert 0 grads for backward compatibility
+        self.w_gate.grad.copy_from_slice(&self.layers[0].w_gate[0].grad);
+        self.w_up.grad.copy_from_slice(&self.layers[0].w_up[0].grad);
+        self.w_down.grad.copy_from_slice(&self.layers[0].w_down[0].grad);
 
         (mean_loss, perplexity)
     }
@@ -564,15 +776,17 @@ impl AutonomousLanguageModel {
         let opt = self.config.optimizer;
         let wd = self.config.weight_decay;
 
-        let params: [&mut ParamMatrix; 5] = [
-            &mut self.embedding,
-            &mut self.w_gate,
-            &mut self.w_up,
-            &mut self.w_down,
-            &mut self.w_head,
-        ];
+        let mut all_params: Vec<&mut ParamMatrix> = Vec::new();
+        all_params.push(&mut self.embedding);
+        for layer in &mut self.layers {
+            for g in &mut layer.w_gate { all_params.push(g); }
+            for u in &mut layer.w_up { all_params.push(u); }
+            for d in &mut layer.w_down { all_params.push(d); }
+            if let Some(r) = &mut layer.w_router { all_params.push(r); }
+        }
+        all_params.push(&mut self.w_head);
 
-        for param in params {
+        for param in all_params {
             let n = param.data.len();
             match opt {
                 TrainingOptimizer::AdamW => {
@@ -585,10 +799,8 @@ impl AutonomousLanguageModel {
 
                     for i in 0..n {
                         let g = param.grad[i];
-                        // Decoupled weight decay
                         param.data[i] -= current_lr * wd * param.data[i];
 
-                        // First and second moment updates
                         param.m[i] = beta1 * param.m[i] + (1.0 - beta1) * g;
                         param.v[i] = beta2 * param.v[i] + (1.0 - beta2) * g * g;
 
@@ -604,10 +816,8 @@ impl AutonomousLanguageModel {
 
                     for i in 0..n {
                         let g = param.grad[i];
-                        // Decoupled weight decay
                         param.data[i] -= current_lr * wd * param.data[i];
 
-                        // Lion update with sign direction
                         let c = beta1 * param.m[i] + (1.0 - beta1) * g;
                         let sign_c = if c > 0.0 {
                             1.0f32
@@ -618,7 +828,6 @@ impl AutonomousLanguageModel {
                         };
 
                         param.data[i] -= current_lr * sign_c;
-                        // Momentum tracking
                         param.m[i] = beta2 * param.m[i] + (1.0 - beta2) * g;
                     }
                 }
@@ -633,6 +842,11 @@ impl AutonomousLanguageModel {
                 }
             }
         }
+
+        // Mirror layer 0 expert 0 data for backward compatibility
+        self.w_gate.data.copy_from_slice(&self.layers[0].w_gate[0].data);
+        self.w_up.data.copy_from_slice(&self.layers[0].w_up[0].data);
+        self.w_down.data.copy_from_slice(&self.layers[0].w_down[0].data);
     }
 
     /// Calculate learning rate for step according to schedule
@@ -673,38 +887,71 @@ impl AutonomousLanguageModel {
         }
 
         struct TensorEntry<'a> {
-            name: &'a str,
+            name: String,
             shape: Vec<usize>,
             data: &'a [f32],
         }
 
-        let entries = vec![
-            TensorEntry {
-                name: "embedding",
-                shape: vec![self.embedding.rows, self.embedding.cols],
-                data: &self.embedding.data,
-            },
-            TensorEntry {
-                name: "w_gate",
-                shape: vec![self.w_gate.rows, self.w_gate.cols],
-                data: &self.w_gate.data,
-            },
-            TensorEntry {
-                name: "w_up",
-                shape: vec![self.w_up.rows, self.w_up.cols],
-                data: &self.w_up.data,
-            },
-            TensorEntry {
-                name: "w_down",
-                shape: vec![self.w_down.rows, self.w_down.cols],
-                data: &self.w_down.data,
-            },
-            TensorEntry {
-                name: "w_head",
-                shape: vec![self.w_head.rows, self.w_head.cols],
-                data: &self.w_head.data,
-            },
-        ];
+        let mut entries = Vec::new();
+        entries.push(TensorEntry {
+            name: "embedding".to_string(),
+            shape: vec![self.embedding.rows, self.embedding.cols],
+            data: &self.embedding.data,
+        });
+
+        for (l, layer) in self.layers.iter().enumerate() {
+            for (e, g) in layer.w_gate.iter().enumerate() {
+                entries.push(TensorEntry {
+                    name: format!("model.layers.{}.mlp.gate_proj.{}", l, e),
+                    shape: vec![g.rows, g.cols],
+                    data: &g.data,
+                });
+            }
+            for (e, u) in layer.w_up.iter().enumerate() {
+                entries.push(TensorEntry {
+                    name: format!("model.layers.{}.mlp.up_proj.{}", l, e),
+                    shape: vec![u.rows, u.cols],
+                    data: &u.data,
+                });
+            }
+            for (e, d) in layer.w_down.iter().enumerate() {
+                entries.push(TensorEntry {
+                    name: format!("model.layers.{}.mlp.down_proj.{}", l, e),
+                    shape: vec![d.rows, d.cols],
+                    data: &d.data,
+                });
+            }
+            if let Some(ref r) = layer.w_router {
+                entries.push(TensorEntry {
+                    name: format!("model.layers.{}.moe.router", l),
+                    shape: vec![r.rows, r.cols],
+                    data: &r.data,
+                });
+            }
+        }
+
+        entries.push(TensorEntry {
+            name: "w_head".to_string(),
+            shape: vec![self.w_head.rows, self.w_head.cols],
+            data: &self.w_head.data,
+        });
+
+        // Mirror legacy aliases for backward compatibility
+        entries.push(TensorEntry {
+            name: "w_gate".to_string(),
+            shape: vec![self.w_gate.rows, self.w_gate.cols],
+            data: &self.w_gate.data,
+        });
+        entries.push(TensorEntry {
+            name: "w_up".to_string(),
+            shape: vec![self.w_up.rows, self.w_up.cols],
+            data: &self.w_up.data,
+        });
+        entries.push(TensorEntry {
+            name: "w_down".to_string(),
+            shape: vec![self.w_down.rows, self.w_down.cols],
+            data: &self.w_down.data,
+        });
 
         let mut header_map = Vec::new();
         let mut current_offset = 0usize;
@@ -773,56 +1020,103 @@ impl AutonomousLanguageModel {
         let d = self.config.dim;
         let h = self.config.hidden_dim;
         let v = self.config.vocab_size;
+        let num_layers = self.layers.len();
+        let num_experts = self.config.num_experts.max(1);
+        let top_k = self.config.top_k.min(num_experts).max(1);
 
-        // 1. Embedding lookup: H0 [N, d]
-        let mut h0 = vec![0.0f32; n_tokens * d];
+        let mut h_curr = vec![0.0f32; n_tokens * d];
         for (i, &tok) in token_seq.iter().enumerate() {
             let tok_clamped = tok % v;
             let src = &self.embedding.data[tok_clamped * d..(tok_clamped + 1) * d];
-            h0[i * d..(i + 1) * d].copy_from_slice(src);
+            h_curr[i * d..(i + 1) * d].copy_from_slice(src);
         }
 
-        // 2. SwiGLU forward:
-        let mut g = vec![0.0f32; n_tokens * h];
-        let mut u = vec![0.0f32; n_tokens * h];
-        for i in 0..n_tokens {
-            for j in 0..h {
-                let mut sum_g = 0.0f32;
-                let mut sum_u = 0.0f32;
-                for k in 0..d {
-                    let h_val = h0[i * d + k];
-                    sum_g += h_val * self.w_gate.data[k * h + j];
-                    sum_u += h_val * self.w_up.data[k * h + j];
+        for l in 0..num_layers {
+            let layer = &self.layers[l];
+            let mut h_next = h_curr.clone();
+
+            if num_experts == 1 {
+                for i in 0..n_tokens {
+                    for j in 0..d {
+                        let mut sum_d = 0.0f32;
+                        for k in 0..h {
+                            let mut sum_g = 0.0f32;
+                            let mut sum_u = 0.0f32;
+                            for m in 0..d {
+                                let val = h_curr[i * d + m];
+                                sum_g += val * layer.w_gate[0].data[m * h + k];
+                                sum_u += val * layer.w_up[0].data[m * h + k];
+                            }
+                            let sig = 1.0 / (1.0 + (-sum_g).exp());
+                            let act = (sum_g * sig) * sum_u;
+                            sum_d += act * layer.w_down[0].data[k * d + j];
+                        }
+                        h_next[i * d + j] += sum_d;
+                    }
                 }
-                g[i * h + j] = sum_g;
-                u[i * h + j] = sum_u;
+            } else {
+                let router = layer.w_router.as_ref().unwrap();
+                for i in 0..n_tokens {
+                    let mut r_logits = vec![0.0f32; num_experts];
+                    let mut max_r = -1e9f32;
+                    for e in 0..num_experts {
+                        let mut sum_r = 0.0f32;
+                        for k in 0..d {
+                            sum_r += h_curr[i * d + k] * router.data[k * num_experts + e];
+                        }
+                        r_logits[e] = sum_r;
+                        if sum_r > max_r { max_r = sum_r; }
+                    }
+
+                    let mut r_probs = vec![0.0f32; num_experts];
+                    let mut sum_exp = 0.0f32;
+                    for e in 0..num_experts {
+                        let exp_val = (r_logits[e] - max_r).exp();
+                        r_probs[e] = exp_val;
+                        sum_exp += exp_val;
+                    }
+                    let inv_sum = 1.0 / sum_exp.max(1e-12);
+                    for e in 0..num_experts { r_probs[e] *= inv_sum; }
+
+                    let mut indexed_probs: Vec<(usize, f32)> = (0..num_experts)
+                        .map(|e| (e, r_probs[e]))
+                        .collect();
+                    indexed_probs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                    let selected: Vec<(usize, f32)> = indexed_probs.into_iter().take(top_k).collect();
+                    let topk_sum: f32 = selected.iter().map(|(_, w)| *w).sum();
+                    let inv_topk = 1.0 / topk_sum.max(1e-12);
+
+                    for &(e, w) in &selected {
+                        let norm_w = w * inv_topk;
+                        for j in 0..d {
+                            let mut sum_d = 0.0f32;
+                            for k in 0..h {
+                                let mut sum_g = 0.0f32;
+                                let mut sum_u = 0.0f32;
+                                for m in 0..d {
+                                    let val = h_curr[i * d + m];
+                                    sum_g += val * layer.w_gate[e].data[m * h + k];
+                                    sum_u += val * layer.w_up[e].data[m * h + k];
+                                }
+                                let sig = 1.0 / (1.0 + (-sum_g).exp());
+                                let act = (sum_g * sig) * sum_u;
+                                sum_d += act * layer.w_down[e].data[k * d + j];
+                            }
+                            h_next[i * d + j] += norm_w * sum_d;
+                        }
+                    }
+                }
             }
+
+            h_curr = h_next;
         }
 
-        let mut act = vec![0.0f32; n_tokens * h];
-        for i in 0..(n_tokens * h) {
-            let x = g[i];
-            let sig = 1.0 / (1.0 + (-x).exp());
-            act[i] = (x * sig) * u[i];
-        }
-
-        // 3. Down projection + Residual skip for last token only
         let last_idx = n_tokens - 1;
-        let mut h1_last = vec![0.0f32; d];
-        for j in 0..d {
-            let mut sum_d = 0.0f32;
-            for k in 0..h {
-                sum_d += act[last_idx * h + k] * self.w_down.data[k * d + j];
-            }
-            h1_last[j] = sum_d + h0[last_idx * d + j];
-        }
-
-        // 4. Output Logits for last token: Z = H1_last @ W_head [v]
         let mut logits = vec![0.0f32; v];
         for j in 0..v {
             let mut sum_z = 0.0f32;
             for k in 0..d {
-                sum_z += h1_last[k] * self.w_head.data[k * v + j];
+                sum_z += h_curr[last_idx * d + k] * self.w_head.data[k * v + j];
             }
             logits[j] = sum_z;
         }

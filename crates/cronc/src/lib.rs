@@ -17,6 +17,8 @@ pub mod cl_tensor_engine;
 pub mod cl_verify_math;
 pub mod fusion;
 pub mod cl_train_pipeline;
+pub mod cl_zero_verbal_lint;
+pub mod cl_safetensors_convert;
 
 // ============================================================================
 // [2] SILICON MICROCODE & 128-BIT VLIW HARDWARE CORE (Level 2)
@@ -387,6 +389,12 @@ pub use cl_compose::{
 };
 pub use cl_verify_math::{
     run_mathematical_verifications, MathVerificationReport,
+};
+pub use cl_zero_verbal_lint::{
+    ZeroVerbalAuditReport, ZeroVerbalDiagnostic, ZeroVerbalLinter, ZeroVerbalSeverity,
+};
+pub use cl_safetensors_convert::{
+    convert_safetensors_to_dpsta, quantize_to_ternary_158, SafetensorsConversionSummary,
 };
 pub use cl_lint::{
     lint_cl_source, ClLintIssue, ClLintReport, LintSeverity,

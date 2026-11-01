@@ -551,6 +551,24 @@ pub fn handle_convert(args: &[String]) {
         }
     }
 
+    let is_dpsta = args.iter().any(|a| a == "--ternary" || a == "--dpsta")
+        || out_path.as_deref().map(|p| p.ends_with(".cldb")).unwrap_or(false);
+
+    if is_dpsta {
+        let out_cldb = out_path.clone().unwrap_or_else(|| "model.cldb".to_string());
+        let cl_out = args.iter().position(|a| a == "--cl-out").and_then(|idx| args.get(idx + 1)).map(|s| s.as_str());
+        match cronc::convert_safetensors_to_dpsta(input_path, &out_cldb, cl_out, true) {
+            Ok(summary) => {
+                println!("{}", summary.render_ascii_hud());
+                return;
+            }
+            Err(e) => {
+                eprintln!("[CONVERSION ERROR] {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
     let options = cronc::ModelConvertOptions {
         target_heads,
         base_layer_depth: 0,

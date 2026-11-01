@@ -1309,7 +1309,7 @@ fn main() {
         "cl-verify-math" | "verify-math" => {
             handle_cl_verify_math_command(&args[2..]);
         }
-        "cl-lint" | "lint-cl" => {
+        "cl-lint" | "lint-cl" | "lint" => {
             handle_cl_lint_command(&args[2..]);
         }
         "cl-fix" | "fix-cl" => {
@@ -1317,6 +1317,9 @@ fn main() {
         }
         "synth" | "cl-synth" => {
             handle_synth_command(&args[2..]);
+        }
+        "convert-dpsta" | "convert-ternary" => {
+            handle_convert_command(&args[2..]);
         }
         "cl-train" | "train-cl" | "train" => {
             handle_cl_train_command(&args[2..]);
@@ -12061,23 +12064,57 @@ fn handle_cl_verify_math_command(args: &[String]) {
 
 fn handle_cl_lint_command(args: &[String]) {
     if args.is_empty() {
-        println!("USAGE: cron cl-lint <file.cl> [--json]");
+        println!("USAGE: cron lint <file.cl> [--json] [--strict] [--fix]");
+        println!("       cron cl-lint <file.cl> [--json] [--strict] [--fix]");
         return;
     }
 
     let input_path = &args[0];
     let emit_json = args.iter().any(|a| a == "--json");
+    let do_fix = args.iter().any(|a| a == "--fix");
+    let is_strict = args.iter().any(|a| a == "--strict");
 
     match std::fs::read_to_string(input_path) {
-        Ok(source) => {
-            let report = cronc::lint_cl_source(&source, input_path);
-            if emit_json {
-                println!("{}", report.to_json());
-            } else {
-                println!("{}", report.render_ascii_hud());
+        Ok(mut source) => {
+            if do_fix {
+                let (fixed, count) = cronc::ZeroVerbalLinter::auto_fix_source(&source);
+                if count > 0 {
+                    if let Err(e) = std::fs::write(input_path, &fixed) {
+                        eprintln!("[ERROR] Failed to write fixed code to '{}': {}", input_path, e);
+                    } else {
+                        println!("✓ [AUTO-FIX] Converted {} prose/word violations into canonical Zero-Verbal Unicode in '{}'", count, input_path);
+                    }
+                    source = fixed;
+                } else {
+                    println!("✓ [AUTO-FIX] File is already 100% Zero-Verbal compliant. Zero changes needed.");
+                }
             }
-            if !report.is_clean && report.error_count > 0 {
-                std::process::exit(1);
+
+            // 1. Audit Level 1A Zero-Verbal Constitution
+            let zv_report = cronc::ZeroVerbalLinter::audit_source(&source, input_path);
+            let is_vliw_bundle = source.lines().any(|l| {
+                let t = l.trim();
+                t.starts_with('[') && t.ends_with(']') && t.contains('|')
+            });
+
+            if !is_vliw_bundle || is_strict {
+                println!("{}", zv_report.render_ascii_hud());
+                if !zv_report.is_constitution_compliant {
+                    std::process::exit(1);
+                }
+            }
+
+            // 2. Hardware VLIW Hazard Linter (only if Level 2 VLIW bundles are present)
+            if is_vliw_bundle {
+                let report = cronc::lint_cl_source(&source, input_path);
+                if emit_json {
+                    println!("{}", report.to_json());
+                } else {
+                    println!("{}", report.render_ascii_hud());
+                }
+                if !report.is_clean && report.error_count > 0 {
+                    std::process::exit(1);
+                }
             }
         }
         Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
@@ -12109,6 +12146,35 @@ fn handle_cl_fix_command(args: &[String]) {
             }
         }
         Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
+    }
+}
+
+fn handle_convert_command(args: &[String]) {
+    if args.is_empty() || args.iter().any(|a| a == "-h" || a == "--help") {
+        println!("USAGE:\n    cron convert <input.safetensors> -o <out.cldb> [--cl-out <out.cl>] [--ternary]");
+        println!("\nDESCRIPTION:\n    Zero-Python Safetensors -> DPSTA 1.58-bit ternary sub-byte silicon converter.");
+        println!("\nOPTIONS:\n    -o <path>          Output binary CLDB dataset (.cldb) [default: model.cldb]");
+        println!("    --cl-out <path>    Optional generated Zero-Verbal .cl model file");
+        println!("    --ternary          Quantize weights to 1.58-bit DPSTA (19.9x RAM compression)");
+        return;
+    }
+
+    let input_path = &args[0];
+    let output_cldb = args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1))
+        .map(|s| s.as_str())
+        .unwrap_or("model.cldb");
+    let output_cl = args.iter().position(|a| a == "--cl-out").and_then(|i| args.get(i + 1))
+        .map(|s| s.as_str());
+    let quantize_ternary = !args.iter().any(|a| a == "--float32" || a == "--no-quant");
+
+    match cronc::convert_safetensors_to_dpsta(input_path, output_cldb, output_cl, quantize_ternary) {
+        Ok(summary) => {
+            println!("{}", summary.render_ascii_hud());
+        }
+        Err(e) => {
+            eprintln!("[ERROR] Safetensors conversion failed: {}", e);
+            std::process::exit(1);
+        }
     }
 }
 
@@ -12146,6 +12212,9 @@ fn handle_cl_train_command(args: &[String]) {
     let mut gen_tokens = 32usize;
     let mut temp = 0.7f32;
     let mut enable_tui = false;
+    let mut num_layers = 1usize;
+    let mut num_experts = 1usize;
+    let mut top_k = 1usize;
 
     let mut i = 0;
     while i < args.len() {
@@ -12196,6 +12265,18 @@ fn handle_cl_train_command(args: &[String]) {
             }
             "--temp" | "--temperature" if i + 1 < args.len() => {
                 if let Ok(t) = args[i + 1].parse::<f32>() { temp = t; }
+                i += 2;
+            }
+            "--layers" if i + 1 < args.len() => {
+                if let Ok(l) = args[i + 1].parse::<usize>() { num_layers = l; }
+                i += 2;
+            }
+            "--experts" if i + 1 < args.len() => {
+                if let Ok(e) = args[i + 1].parse::<usize>() { num_experts = e; }
+                i += 2;
+            }
+            "--top-k" if i + 1 < args.len() => {
+                if let Ok(k) = args[i + 1].parse::<usize>() { top_k = k; }
                 i += 2;
             }
             "--tui" => {
@@ -12274,6 +12355,9 @@ fn handle_cl_train_command(args: &[String]) {
     auto_cfg.hidden_dim = hidden_dim;
     auto_cfg.optimizer = optimizer_type;
     auto_cfg.checkpoint_out = checkpoint_out;
+    auto_cfg.num_layers = num_layers;
+    auto_cfg.num_experts = num_experts;
+    auto_cfg.top_k = top_k;
     auto_cfg.profile = profile_type;
     auto_cfg.eval_prompt = eval_prompt.clone();
     auto_cfg.eval_max_tokens = gen_tokens;
