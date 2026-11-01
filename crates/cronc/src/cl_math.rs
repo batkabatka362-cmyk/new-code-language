@@ -1267,6 +1267,7 @@ impl MathExpr {
                         then_expr: Box::new(MathExpr::Num(1.0)),
                         else_expr: Box::new(MathExpr::Num(0.0)),
                     },
+                    "softplus" => MathExpr::Call("sigmoid".to_string(), vec![u.clone()]),
                     "silu" => {
                         let s = MathExpr::Call("sigmoid".to_string(), vec![u.clone()]);
                         let one_minus_s = MathExpr::Binary(
@@ -1548,6 +1549,14 @@ impl MathExpr {
                                 )
                             }
                             "sigmoid" => return MathExpr::Num(1.0 / (1.0 + (-n).exp())),
+                            "softplus" => {
+                                let sp = if n > 20.0 { n } else if n < -20.0 { n.exp() } else { (1.0 + n.exp()).ln() };
+                                return MathExpr::Num(sp);
+                            }
+                            "mish" => {
+                                let sp = if n > 20.0 { n } else if n < -20.0 { n.exp() } else { (1.0 + n.exp()).ln() };
+                                return MathExpr::Num(n * sp.tanh());
+                            }
                             _ => {}
                         }
                     }
@@ -5780,6 +5789,13 @@ impl MathEvaluator {
                 "gelu" => Ok(self.eval_single_val(args, "gelu")?.map_unary(|z| {
                     0.5 * z * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh())
                 })),
+                "softplus" => Ok(self.eval_single_val(args, "softplus")?.map_unary(|x| {
+                    if x > 20.0 { x } else if x < -20.0 { x.exp() } else { (1.0 + x.exp()).ln() }
+                })),
+                "mish" => Ok(self.eval_single_val(args, "mish")?.map_unary(|x| {
+                    let sp = if x > 20.0 { x } else if x < -20.0 { x.exp() } else { (1.0 + x.exp()).ln() };
+                    x * sp.tanh()
+                })),
                 "softmax" | "ρ" => {
                     let val = self.eval_single_val(args, "softmax")?;
                     match val {
@@ -7426,6 +7442,368 @@ impl MathEvaluator {
                         None
                     };
                     self.eval_kv_ring(&q, &k_new, &v_new, &k_ring, &v_ring, pos, max_len, scale)
+                }
+                "cos_sim" => {
+                    if args.len() != 2 {
+                        return Err("'cos_sim(A, B)' requires 2 arguments".to_string());
+                    }
+                    let a = self.eval_value(&args[0])?;
+                    let b = self.eval_value(&args[1])?;
+                    let a_elems = a.flatten_elements();
+                    let b_elems = b.flatten_elements();
+                    if a_elems.len() != b_elems.len() || a_elems.is_empty() {
+                        return Err(format!(
+                            "Dimension mismatch in cos_sim: {} vs {}",
+                            a_elems.len(),
+                            b_elems.len()
+                        ));
+                    }
+                    let dot: f64 = a_elems.iter().zip(b_elems.iter()).map(|(&x, &y)| x * y).sum();
+                    let norm_a: f64 = a_elems.iter().map(|&x| x * x).sum::<f64>().sqrt().max(1e-12);
+                    let norm_b: f64 = b_elems.iter().map(|&x| x * x).sum::<f64>().sqrt().max(1e-12);
+                    Ok(MathValue::Scalar(dot / (norm_a * norm_b)))
+                }
+                "cos_dist" => {
+                    if args.len() != 2 {
+                        return Err("'cos_dist(A, B)' requires 2 arguments".to_string());
+                    }
+                    let sim = self.eval_value(&MathExpr::Call("cos_sim".to_string(), args.clone()))?;
+                    let s = sim.as_scalar().unwrap_or(0.0);
+                    Ok(MathValue::Scalar(1.0 - s))
+                }
+                "euclidean" | "l2_dist" | "dist" => {
+                    if args.len() != 2 {
+                        return Err("'euclidean(A, B)' requires 2 arguments".to_string());
+                    }
+                    let a = self.eval_value(&args[0])?;
+                    let b = self.eval_value(&args[1])?;
+                    let a_elems = a.flatten_elements();
+                    let b_elems = b.flatten_elements();
+                    if a_elems.len() != b_elems.len() {
+                        return Err(format!(
+                            "Dimension mismatch in euclidean: {} vs {}",
+                            a_elems.len(),
+                            b_elems.len()
+                        ));
+                    }
+                    let sq_sum: f64 = a_elems
+                        .iter()
+                        .zip(b_elems.iter())
+                        .map(|(&x, &y)| (x - y) * (x - y))
+                        .sum();
+                    Ok(MathValue::Scalar(sq_sum.sqrt()))
+                }
+                "manhattan" | "l1_dist" => {
+                    if args.len() != 2 {
+                        return Err("'manhattan(A, B)' requires 2 arguments".to_string());
+                    }
+                    let a = self.eval_value(&args[0])?;
+                    let b = self.eval_value(&args[1])?;
+                    let a_elems = a.flatten_elements();
+                    let b_elems = b.flatten_elements();
+                    if a_elems.len() != b_elems.len() {
+                        return Err(format!(
+                            "Dimension mismatch in manhattan: {} vs {}",
+                            a_elems.len(),
+                            b_elems.len()
+                        ));
+                    }
+                    let l1_sum: f64 = a_elems
+                        .iter()
+                        .zip(b_elems.iter())
+                        .map(|(&x, &y)| (x - y).abs())
+                        .sum();
+                    Ok(MathValue::Scalar(l1_sum))
+                }
+                "poincare_dist" => {
+                    if args.len() != 2 {
+                        return Err("'poincare_dist(u, v)' requires 2 arguments".to_string());
+                    }
+                    let u = self.eval_value(&args[0])?;
+                    let v = self.eval_value(&args[1])?;
+                    let u_elems = u.flatten_elements();
+                    let v_elems = v.flatten_elements();
+                    if u_elems.len() != v_elems.len() {
+                        return Err(format!(
+                            "Dimension mismatch in poincare_dist: {} vs {}",
+                            u_elems.len(),
+                            v_elems.len()
+                        ));
+                    }
+                    let sq_dist: f64 = u_elems
+                        .iter()
+                        .zip(v_elems.iter())
+                        .map(|(&x, &y)| (x - y) * (x - y))
+                        .sum();
+                    let u_sq: f64 = u_elems.iter().map(|&x| x * x).sum();
+                    let v_sq: f64 = v_elems.iter().map(|&x| x * x).sum();
+                    let denom = ((1.0 - u_sq) * (1.0 - v_sq)).max(1e-12);
+                    let arg = (1.0 + 2.0 * sq_dist / denom).max(1.0);
+                    let dist = (arg + (arg * arg - 1.0).max(0.0).sqrt()).ln();
+                    Ok(MathValue::Scalar(dist))
+                }
+                "var" => {
+                    let val = self.eval_single_val(args, "var")?;
+                    let elems = val.flatten_elements();
+                    if elems.is_empty() {
+                        return Ok(MathValue::Scalar(0.0));
+                    }
+                    let mean = elems.iter().sum::<f64>() / elems.len() as f64;
+                    let var = elems.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
+                        / elems.len() as f64;
+                    Ok(MathValue::Scalar(var))
+                }
+                "std" => {
+                    let val = self.eval_single_val(args, "std")?;
+                    let elems = val.flatten_elements();
+                    if elems.is_empty() {
+                        return Ok(MathValue::Scalar(0.0));
+                    }
+                    let mean = elems.iter().sum::<f64>() / elems.len() as f64;
+                    let var = elems.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
+                        / elems.len() as f64;
+                    Ok(MathValue::Scalar(var.sqrt()))
+                }
+                "minmax" => {
+                    let val = self.eval_single_val(args, "minmax")?;
+                    let elems = val.flatten_elements();
+                    if elems.is_empty() {
+                        return Ok(val);
+                    }
+                    let min_v = elems.iter().copied().fold(f64::INFINITY, f64::min);
+                    let max_v = elems.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let range = (max_v - min_v).max(1e-12);
+                    Ok(val.map_unary(|x| (x - min_v) / range))
+                }
+                "standardize" | "zscore" => {
+                    let val = self.eval_single_val(args, "standardize")?;
+                    let elems = val.flatten_elements();
+                    if elems.is_empty() {
+                        return Ok(val);
+                    }
+                    let mean = elems.iter().sum::<f64>() / elems.len() as f64;
+                    let var = elems.iter().map(|&x| (x - mean).powi(2)).sum::<f64>()
+                        / elems.len() as f64;
+                    let std = var.sqrt().max(1e-12);
+                    Ok(val.map_unary(|x| (x - mean) / std))
+                }
+                "chebyshev" | "T_k" => {
+                    if args.len() < 2 {
+                        return Err(
+                            "'chebyshev(x, k)' requires 2 arguments (input, degree)".to_string()
+                        );
+                    }
+                    let x_val = self.eval_value(&args[0])?;
+                    let k = self.eval(&args[1])? as usize;
+                    let eval_cheb = |x: f64| -> f64 {
+                        if k == 0 {
+                            1.0
+                        } else if k == 1 {
+                            x
+                        } else {
+                            let mut t_prev = 1.0;
+                            let mut t_curr = x;
+                            for _ in 2..=k {
+                                let t_next = 2.0 * x * t_curr - t_prev;
+                                t_prev = t_curr;
+                                t_curr = t_next;
+                            }
+                            t_curr
+                        }
+                    };
+                    Ok(x_val.map_unary(eval_cheb))
+                }
+                "chebyshev_basis" => {
+                    if args.len() < 2 {
+                        return Err(
+                            "'chebyshev_basis(x, max_degree)' requires 2 arguments".to_string()
+                        );
+                    }
+                    let x_val = self.eval_value(&args[0])?;
+                    let max_k = self.eval(&args[1])? as usize;
+                    match x_val {
+                        MathValue::Scalar(x) => {
+                            let mut basis = Vec::with_capacity(max_k + 1);
+                            basis.push(1.0);
+                            if max_k >= 1 {
+                                basis.push(x);
+                                let mut t_prev = 1.0;
+                                let mut t_curr = x;
+                                for _ in 2..=max_k {
+                                    let t_next = 2.0 * x * t_curr - t_prev;
+                                    basis.push(t_next);
+                                    t_prev = t_curr;
+                                    t_curr = t_next;
+                                }
+                            }
+                            Ok(MathValue::Vector(basis))
+                        }
+                        MathValue::Vector(vec) => {
+                            let mut basis_mat = Vec::with_capacity(vec.len());
+                            for x in vec {
+                                let mut row = Vec::with_capacity(max_k + 1);
+                                row.push(1.0);
+                                if max_k >= 1 {
+                                    row.push(x);
+                                    let mut t_prev = 1.0;
+                                    let mut t_curr = x;
+                                    for _ in 2..=max_k {
+                                        let t_next = 2.0 * x * t_curr - t_prev;
+                                        row.push(t_next);
+                                        t_prev = t_curr;
+                                        t_curr = t_next;
+                                    }
+                                }
+                                basis_mat.push(row);
+                            }
+                            Ok(MathValue::Matrix(basis_mat))
+                        }
+                        _ => Err("'chebyshev_basis' expects scalar or vector input".to_string()),
+                    }
+                }
+                "newton_schulz" | "muon_step" | "NS" => {
+                    if args.is_empty() {
+                        return Err(
+                            "'newton_schulz(G, [steps])' requires at least 1 argument".to_string()
+                        );
+                    }
+                    let g = self.eval_value(&args[0])?;
+                    let steps = if args.len() > 1 {
+                        self.eval(&args[1])?.max(1.0) as usize
+                    } else {
+                        5
+                    };
+                    let mat = match g {
+                        MathValue::Matrix(m) => m,
+                        _ => return Err("'newton_schulz' expects a 2D matrix".to_string()),
+                    };
+                    if mat.is_empty() || mat[0].is_empty() {
+                        return Ok(MathValue::Matrix(mat));
+                    }
+                    let r = mat.len();
+                    let c = mat[0].len();
+                    let frob_sq: f64 = mat.iter().flatten().map(|&x| x * x).sum();
+                    let frob = frob_sq.sqrt().max(1e-7);
+                    let mut x_mat = mat.clone();
+                    for row in x_mat.iter_mut() {
+                        for v in row.iter_mut() {
+                            *v /= frob;
+                        }
+                    }
+                    let transpose_trick = r < c;
+                    for _ in 0..steps {
+                        if transpose_trick {
+                            let mut xx = vec![vec![0.0; r]; r];
+                            for i in 0..r {
+                                for j in 0..r {
+                                    let mut s = 0.0;
+                                    for k in 0..c {
+                                        s += x_mat[i][k] * x_mat[j][k];
+                                    }
+                                    xx[i][j] = s;
+                                }
+                            }
+                            let mut xx2 = vec![vec![0.0; r]; r];
+                            for i in 0..r {
+                                for j in 0..r {
+                                    let mut s = 0.0;
+                                    for k in 0..r {
+                                        s += xx[i][k] * xx[k][j];
+                                    }
+                                    xx2[i][j] = s;
+                                }
+                            }
+                            let mut m = vec![vec![0.0; r]; r];
+                            for i in 0..r {
+                                for j in 0..r {
+                                    let id = if i == j { 3.4445 } else { 0.0 };
+                                    m[i][j] = id - 4.7750 * xx[i][j] + 2.0315 * xx2[i][j];
+                                }
+                            }
+                            let mut x_next = vec![vec![0.0; c]; r];
+                            for i in 0..r {
+                                for j in 0..c {
+                                    let mut s = 0.0;
+                                    for k in 0..r {
+                                        s += m[i][k] * x_mat[k][j];
+                                    }
+                                    x_next[i][j] = s;
+                                }
+                            }
+                            x_mat = x_next;
+                        } else {
+                            let mut xt_x = vec![vec![0.0; c]; c];
+                            for i in 0..c {
+                                for j in 0..c {
+                                    let mut s = 0.0;
+                                    for k in 0..r {
+                                        s += x_mat[k][i] * x_mat[k][j];
+                                    }
+                                    xt_x[i][j] = s;
+                                }
+                            }
+                            let mut xt_x2 = vec![vec![0.0; c]; c];
+                            for i in 0..c {
+                                for j in 0..c {
+                                    let mut s = 0.0;
+                                    for k in 0..c {
+                                        s += xt_x[i][k] * xt_x[k][j];
+                                    }
+                                    xt_x2[i][j] = s;
+                                }
+                            }
+                            let mut m = vec![vec![0.0; c]; c];
+                            for i in 0..c {
+                                for j in 0..c {
+                                    let id = if i == j { 3.4445 } else { 0.0 };
+                                    m[i][j] = id - 4.7750 * xt_x[i][j] + 2.0315 * xt_x2[i][j];
+                                }
+                            }
+                            let mut x_next = vec![vec![0.0; c]; r];
+                            for i in 0..r {
+                                for j in 0..c {
+                                    let mut s = 0.0;
+                                    for k in 0..c {
+                                        s += x_mat[i][k] * m[k][j];
+                                    }
+                                    x_next[i][j] = s;
+                                }
+                            }
+                            x_mat = x_next;
+                        }
+                    }
+                    Ok(MathValue::Matrix(x_mat))
+                }
+                "titans_step" => {
+                    if args.len() < 4 {
+                        return Err(
+                            "'titans_step(M, K, V, S, [alpha, eta])' requires at least 4 arguments"
+                                .to_string(),
+                        );
+                    }
+                    let m_val = self.eval_value(&args[0])?;
+                    let _k_val = self.eval_value(&args[1])?;
+                    let _v_val = self.eval_value(&args[2])?;
+                    let _s_val = self.eval_value(&args[3])?;
+                    let alpha = if args.len() > 4 {
+                        self.eval(&args[4])?.clamp(0.0, 1.0)
+                    } else {
+                        0.01
+                    };
+                    let eta = if args.len() > 5 {
+                        self.eval(&args[5])?
+                    } else {
+                        0.1
+                    };
+                    let s_outer_k = self.eval_value(&MathExpr::Call(
+                        "outer".to_string(),
+                        vec![args[3].clone(), args[1].clone()],
+                    ))?;
+                    let decayed_m =
+                        self.eval_binary_op(&m_val, MathBinOp::Mul, &MathValue::Scalar(1.0 - alpha))?;
+                    let scaled_update =
+                        self.eval_binary_op(&s_outer_k, MathBinOp::Mul, &MathValue::Scalar(eta))?;
+                    self.eval_binary_op(&decayed_m, MathBinOp::Add, &scaled_update)
                 }
                 "grad" | "diff" => {
                     if args.len() != 2 {
@@ -10002,12 +10380,17 @@ impl MathProgram {
                 }
                 "exp" | "ln" | "log" | "sqrt" | "sin" | "cos" | "tan" | "tanh" | "abs"
                 | "sigmoid" | "relu" | "gelu" | "softmax" | "silu" | "rmsnorm" | "rope"
-                | "log_softmax" | "√" | "σ" | "ρ" | "Φ" | "τ" => {
+                | "log_softmax" | "softplus" | "mish" | "minmax" | "standardize" | "zscore"
+                | "chebyshev" | "newton_schulz" | "muon_step" | "titans_step"
+                | "√" | "σ" | "ρ" | "Φ" | "τ" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
                         Some(vec![])
                     }
+                }
+                "var" | "std" | "cos_sim" | "cos_dist" | "euclidean" | "manhattan" | "poincare_dist" => {
+                    Some(vec![])
                 }
                 "encode" | "ι" => {
                     if let Some(arg) = args.first() {
@@ -10949,6 +11332,8 @@ impl MathProgram {
                         "(0.5f * ({0}) * (1.0f + tanhf(0.79788456f * (({0}) + 0.044715f * (({0}) * ({0}) * ({0}))))))",
                         a0
                     ),
+                    "softplus" => format!("logf(1.0f + expf({}))", a0),
+                    "mish" => format!("(({0}) * tanhf(logf(1.0f + expf({0}))))", a0),
                     "mean" | "sum" => {
                         if arg_strs.len() <= 1 {
                             a0
@@ -18065,5 +18450,127 @@ mod tests {
         );
         assert!(ptx_code.contains("wgmma.commit_group.sync.aligned"));
         assert!(ptx_code.contains("wgmma.wait_group.sync.aligned 0"));
+    }
+
+    #[test]
+    fn test_frontier_mathematical_operators_audit() {
+        // 1. Softplus & Mish activations
+        let code_act = r#"
+            y_sp = softplus(0.0)
+            y_mish = mish(0.0)
+        "#;
+        let mut eval = MathEvaluator::new();
+        let prog_act = parse_math_code(code_act).expect("Parse softplus/mish failed");
+        eval.execute_program_value(&prog_act).expect("Eval softplus/mish failed");
+        let y_sp = eval.env.get("y_sp").unwrap().as_scalar().unwrap();
+        assert!((y_sp - 2.0_f64.ln()).abs() < 1e-5);
+        let y_mish = eval.env.get("y_mish").unwrap().as_scalar().unwrap();
+        assert!(y_mish.abs() < 1e-6);
+
+        // 2. Preprocessing & Statistics (var, std, minmax, standardize)
+        let code_stats = r#"
+            x = [1.0, 2.0, 3.0, 4.0, 5.0]
+            v = var(x)
+            s = std(x)
+            mm = minmax([0.0, 5.0, 10.0])
+        "#;
+        let prog_stats = parse_math_code(code_stats).expect("Parse stats failed");
+        eval.execute_program_value(&prog_stats).expect("Eval stats failed");
+        let v = eval.env.get("v").unwrap().as_scalar().unwrap();
+        assert!((v - 2.0).abs() < 1e-5);
+        let s = eval.env.get("s").unwrap().as_scalar().unwrap();
+        assert!((s - 2.0_f64.sqrt()).abs() < 1e-5);
+        if let MathValue::Vector(mm_vec) = eval.env.get("mm").unwrap() {
+            assert_eq!(mm_vec.len(), 3);
+            assert!((mm_vec[0] - 0.0).abs() < 1e-5);
+            assert!((mm_vec[1] - 0.5).abs() < 1e-5);
+            assert!((mm_vec[2] - 1.0).abs() < 1e-5);
+        } else {
+            panic!("Expected vector for minmax");
+        }
+
+        // 3. Distance & Vector Math (cos_sim, euclidean, manhattan, poincare_dist)
+        let code_dist = r#"
+            sim_ortho = cos_sim([1.0, 0.0], [0.0, 1.0])
+            sim_parallel = cos_sim([3.0, 4.0], [6.0, 8.0])
+            d_l2 = euclidean([0.0, 0.0], [3.0, 4.0])
+            d_l1 = manhattan([0.0, 0.0], [3.0, 4.0])
+            d_hyp = poincare_dist([0.0, 0.0], [0.5, 0.0])
+        "#;
+        let prog_dist = parse_math_code(code_dist).expect("Parse dist failed");
+        eval.execute_program_value(&prog_dist).expect("Eval dist failed");
+        let sim_ortho = eval.env.get("sim_ortho").unwrap().as_scalar().unwrap();
+        assert!(sim_ortho.abs() < 1e-6);
+        let sim_parallel = eval.env.get("sim_parallel").unwrap().as_scalar().unwrap();
+        assert!((sim_parallel - 1.0).abs() < 1e-5);
+        let d_l2 = eval.env.get("d_l2").unwrap().as_scalar().unwrap();
+        assert!((d_l2 - 5.0).abs() < 1e-5);
+        let d_l1 = eval.env.get("d_l1").unwrap().as_scalar().unwrap();
+        assert!((d_l1 - 7.0).abs() < 1e-5);
+        let d_hyp = eval.env.get("d_hyp").unwrap().as_scalar().unwrap();
+        assert!(d_hyp > 0.0);
+
+        // 4. KAN Chebyshev Polynomial Basis
+        let code_kan = r#"
+            t0 = chebyshev(0.5, 0)
+            t1 = chebyshev(0.5, 1)
+            t2 = chebyshev(0.5, 2)
+            basis = chebyshev_basis(0.5, 2)
+        "#;
+        let prog_kan = parse_math_code(code_kan).expect("Parse KAN Chebyshev failed");
+        eval.execute_program_value(&prog_kan).expect("Eval KAN Chebyshev failed");
+        let t0 = eval.env.get("t0").unwrap().as_scalar().unwrap();
+        let t1 = eval.env.get("t1").unwrap().as_scalar().unwrap();
+        let t2 = eval.env.get("t2").unwrap().as_scalar().unwrap();
+        assert!((t0 - 1.0).abs() < 1e-5);
+        assert!((t1 - 0.5).abs() < 1e-5);
+        assert!((t2 - (-0.5)).abs() < 1e-5);
+        if let MathValue::Vector(b_vec) = eval.env.get("basis").unwrap() {
+            assert_eq!(b_vec.len(), 3);
+            assert!((b_vec[0] - 1.0).abs() < 1e-5);
+            assert!((b_vec[1] - 0.5).abs() < 1e-5);
+            assert!((b_vec[2] - (-0.5)).abs() < 1e-5);
+        } else {
+            panic!("Expected Vector for chebyshev_basis");
+        }
+
+        // 5. Muon Newton-Schulz Iteration for Matrix Orthogonalization
+        let code_muon = r#"
+            G = [[2.0, 0.5], [0.5, 3.0]]
+            O = newton_schulz(G, 5)
+        "#;
+        let prog_muon = parse_math_code(code_muon).expect("Parse Muon Newton-Schulz failed");
+        eval.execute_program_value(&prog_muon).expect("Eval Muon Newton-Schulz failed");
+        if let MathValue::Matrix(m_ortho) = eval.env.get("O").unwrap() {
+            assert_eq!(m_ortho.len(), 2);
+            assert_eq!(m_ortho[0].len(), 2);
+            // Verify O^T @ O ~ I (orthogonality property)
+            let col0_norm = (m_ortho[0][0] * m_ortho[0][0] + m_ortho[1][0] * m_ortho[1][0]).sqrt();
+            let col1_norm = (m_ortho[0][1] * m_ortho[0][1] + m_ortho[1][1] * m_ortho[1][1]).sqrt();
+            let dot_cols = m_ortho[0][0] * m_ortho[0][1] + m_ortho[1][0] * m_ortho[1][1];
+            assert!((col0_norm - 1.0).abs() < 0.25, "Col0 norm: {}", col0_norm);
+            assert!((col1_norm - 1.0).abs() < 0.25, "Col1 norm: {}", col1_norm);
+            assert!(dot_cols.abs() < 0.15, "Col dot: {}", dot_cols);
+        } else {
+            panic!("Expected Matrix for newton_schulz");
+        }
+
+        // 6. Titans Long-Term Associative Memory Step
+        let code_titans = r#"
+            M = [[0.0, 0.0], [0.0, 0.0]]
+            K = [1.0, 0.0]
+            V = [0.0, 1.0]
+            S = [2.0, 3.0]
+            M_next = titans_step(M, K, V, S, 0.0, 1.0)
+        "#;
+        let prog_titans = parse_math_code(code_titans).expect("Parse Titans step failed");
+        eval.execute_program_value(&prog_titans).expect("Eval Titans step failed");
+        if let MathValue::Matrix(m_next) = eval.env.get("M_next").unwrap() {
+            assert_eq!(m_next.len(), 2);
+            assert_eq!(m_next[0], vec![2.0, 0.0]);
+            assert_eq!(m_next[1], vec![3.0, 0.0]);
+        } else {
+            panic!("Expected Matrix for M_next");
+        }
     }
 }
