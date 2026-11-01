@@ -5845,7 +5845,18 @@ impl MathEvaluator {
                 let r = self.eval_value(rhs)?;
                 self.eval_binary_op(&l, *op, &r)
             }
-            MathExpr::Call(name, args) => match name.as_str() {
+            MathExpr::Call(name, args) => {
+                if let Some((param_names, body)) = self.functions.get(name).cloned() {
+                    if param_names.len() == args.len() {
+                        let mut scoped_eval = self.clone();
+                        for (p_name, arg_expr) in param_names.iter().zip(args.iter()) {
+                            let arg_val = self.eval_value(arg_expr)?;
+                            scoped_eval.env.insert(p_name.clone(), arg_val);
+                        }
+                        return scoped_eval.eval_value(&body);
+                    }
+                }
+                match name.as_str() {
                 "√" => Ok(self.eval_single_val(args, "√")?.map_unary(|x| x.sqrt())),
                 "∑" => {
                     let mut all_elems = Vec::new();
@@ -5915,10 +5926,10 @@ impl MathEvaluator {
                 "gelu" => Ok(self.eval_single_val(args, "gelu")?.map_unary(|z| {
                     0.5 * z * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh())
                 })),
-                "softplus" => Ok(self.eval_single_val(args, "softplus")?.map_unary(|x| {
+                "softplus" | "ς" => Ok(self.eval_single_val(args, "softplus")?.map_unary(|x| {
                     if x > 20.0 { x } else if x < -20.0 { x.exp() } else { (1.0 + x.exp()).ln() }
                 })),
-                "mish" => Ok(self.eval_single_val(args, "mish")?.map_unary(|x| {
+                "mish" | "m" => Ok(self.eval_single_val(args, "mish")?.map_unary(|x| {
                     let sp = if x > 20.0 { x } else if x < -20.0 { x.exp() } else { (1.0 + x.exp()).ln() };
                     x * sp.tanh()
                 })),
@@ -5974,10 +5985,7 @@ impl MathEvaluator {
                         MathValue::Str(_) => Err("Cannot compute softmax on a String".to_string()),
                     }
                 }
-                "swiglu" => {
-                    if args.len() < 3 {
-                        return Err("'swiglu(X, W_gate, W_up)' requires 3 arguments".to_string());
-                    }
+                "swiglu" if args.len() == 3 || (name == "S" && args.len() == 3) => {
                     let x = self.eval_value(&args[0])?;
                     let w_gate = self.eval_value(&args[1])?;
                     let w_up = self.eval_value(&args[2])?;
@@ -5986,10 +5994,10 @@ impl MathEvaluator {
                     let act_g = g.map_unary(|z| z / (1.0 + (-z).exp()));
                     self.eval_binary_op(&act_g, MathBinOp::Mul, &u)
                 }
-                "fused_swiglu" => {
+                "fused_swiglu" | "S" => {
                     if args.len() < 4 {
                         return Err(
-                            "'fused_swiglu(X, W_gate, W_up, W_down)' requires 4 arguments"
+                            "'S(X, W_gate, W_up, W_down)' requires 4 arguments"
                                 .to_string(),
                         );
                     }
@@ -6113,7 +6121,7 @@ impl MathEvaluator {
                     };
                     self.eval_gqa_attn(&q, &k, &v, nh, nkv, scale, is_causal)
                 }
-                "mla_attn" | "mla" | "causal_mla" => {
+                "mla_attn" | "mla" | "causal_mla" | "Ψ_m" => {
                     if args.len() < 5 {
                         return Err(
                             "'mla_attn(X, W_dkv, W_uk, W_uv, W_q, [W_o])' requires at least 5 arguments"
@@ -6212,7 +6220,7 @@ impl MathEvaluator {
                     let val = self.eval_single_val(args, "quantize_t2")?;
                     self.eval_quantize_t2(&val)
                 }
-                "bitlinear" => {
+                "bitlinear" | "B" => {
                     if args.len() < 2 {
                         return Err(
                             "'bitlinear(X, W, [gamma])' requires at least 2 arguments".to_string()
@@ -6251,13 +6259,7 @@ impl MathEvaluator {
                     let scales = self.eval_value(&args[2])?;
                     self.eval_qmatmul(&x, &w_q, &scales)
                 }
-                "norm" => {
-                    let val = self.eval_single_val(args, "norm")?;
-                    let elems = val.flatten_elements();
-                    let sq_sum: f64 = elems.iter().map(|x| x * x).sum();
-                    Ok(MathValue::Scalar(sq_sum.sqrt()))
-                }
-                "rmsnorm" => {
+                "rmsnorm" | "norm" | "N" => {
                     if args.is_empty() {
                         return Err(
                             "'rmsnorm(x, [gamma], [eps])' requires at least 1 argument".to_string()
@@ -7569,7 +7571,7 @@ impl MathEvaluator {
                     };
                     self.eval_kv_ring(&q, &k_new, &v_new, &k_ring, &v_ring, pos, max_len, scale)
                 }
-                "cos_sim" => {
+                "cos_sim" | "S_c" => {
                     if args.len() != 2 {
                         return Err("'cos_sim(A, B)' requires 2 arguments".to_string());
                     }
@@ -7589,7 +7591,7 @@ impl MathEvaluator {
                     let norm_b: f64 = b_elems.iter().map(|&x| x * x).sum::<f64>().sqrt().max(1e-12);
                     Ok(MathValue::Scalar(dot / (norm_a * norm_b)))
                 }
-                "cos_dist" => {
+                "cos_dist" | "D_c" => {
                     if args.len() != 2 {
                         return Err("'cos_dist(A, B)' requires 2 arguments".to_string());
                     }
@@ -7597,7 +7599,7 @@ impl MathEvaluator {
                     let s = sim.as_scalar().unwrap_or(0.0);
                     Ok(MathValue::Scalar(1.0 - s))
                 }
-                "euclidean" | "l2_dist" | "dist" => {
+                "euclidean" | "l2_dist" | "dist" | "d_2" | "d_E" => {
                     if args.len() != 2 {
                         return Err("'euclidean(A, B)' requires 2 arguments".to_string());
                     }
@@ -7619,7 +7621,7 @@ impl MathEvaluator {
                         .sum();
                     Ok(MathValue::Scalar(sq_sum.sqrt()))
                 }
-                "manhattan" | "l1_dist" => {
+                "manhattan" | "l1_dist" | "d_1" | "d_M" => {
                     if args.len() != 2 {
                         return Err("'manhattan(A, B)' requires 2 arguments".to_string());
                     }
@@ -7641,7 +7643,7 @@ impl MathEvaluator {
                         .sum();
                     Ok(MathValue::Scalar(l1_sum))
                 }
-                "poincare_dist" => {
+                "poincare_dist" | "d_P" | "d_H" => {
                     if args.len() != 2 {
                         return Err("'poincare_dist(u, v)' requires 2 arguments".to_string());
                     }
@@ -7668,7 +7670,7 @@ impl MathEvaluator {
                     let dist = (arg + (arg * arg - 1.0).max(0.0).sqrt()).ln();
                     Ok(MathValue::Scalar(dist))
                 }
-                "var" => {
+                "var" | "V" | "σ_2" => {
                     let val = self.eval_single_val(args, "var")?;
                     let elems = val.flatten_elements();
                     if elems.is_empty() {
@@ -7679,7 +7681,7 @@ impl MathEvaluator {
                         / elems.len() as f64;
                     Ok(MathValue::Scalar(var))
                 }
-                "std" => {
+                "std" | "s_d" | "s" => {
                     let val = self.eval_single_val(args, "std")?;
                     let elems = val.flatten_elements();
                     if elems.is_empty() {
@@ -7690,7 +7692,7 @@ impl MathEvaluator {
                         / elems.len() as f64;
                     Ok(MathValue::Scalar(var.sqrt()))
                 }
-                "minmax" => {
+                "minmax" | "M_01" => {
                     let val = self.eval_single_val(args, "minmax")?;
                     let elems = val.flatten_elements();
                     if elems.is_empty() {
@@ -7701,7 +7703,7 @@ impl MathEvaluator {
                     let range = (max_v - min_v).max(1e-12);
                     Ok(val.map_unary(|x| (x - min_v) / range))
                 }
-                "standardize" | "zscore" => {
+                "standardize" | "zscore" | "Z" => {
                     let val = self.eval_single_val(args, "standardize")?;
                     let elems = val.flatten_elements();
                     if elems.is_empty() {
@@ -7739,7 +7741,7 @@ impl MathEvaluator {
                     };
                     Ok(x_val.map_unary(eval_cheb))
                 }
-                "chebyshev_basis" => {
+                "chebyshev_basis" | "T_B" => {
                     if args.len() < 2 {
                         return Err(
                             "'chebyshev_basis(x, max_degree)' requires 2 arguments".to_string()
@@ -7787,7 +7789,7 @@ impl MathEvaluator {
                         _ => Err("'chebyshev_basis' expects scalar or vector input".to_string()),
                     }
                 }
-                "newton_schulz" | "muon_step" | "NS" => {
+                "newton_schulz" | "muon_step" | "NS" | "Ω_μ" | "NS_5" => {
                     if args.is_empty() {
                         return Err(
                             "'newton_schulz(G, [steps])' requires at least 1 argument".to_string()
@@ -7900,7 +7902,7 @@ impl MathEvaluator {
                     }
                     Ok(MathValue::Matrix(x_mat))
                 }
-                "titans_step" => {
+                "titans_step" | "Θ" | "M_t" => {
                     if args.len() < 4 {
                         return Err(
                             "'titans_step(M, K, V, S, [alpha, eta])' requires at least 4 arguments"
@@ -8122,7 +8124,8 @@ impl MathEvaluator {
                         Err(format!("Undefined mathematical function '{}'", user_fn))
                     }
                 }
-            },
+            }
+        }
             MathExpr::Iterate { input, func, count } => {
                 let mut curr_val = self.eval_value(input)?;
                 let count_val = self.eval_value(count)?;
@@ -10508,14 +10511,16 @@ impl MathProgram {
                 | "sigmoid" | "relu" | "gelu" | "softmax" | "silu" | "rmsnorm" | "rope"
                 | "log_softmax" | "softplus" | "mish" | "minmax" | "standardize" | "zscore"
                 | "chebyshev" | "newton_schulz" | "muon_step" | "titans_step"
-                | "√" | "σ" | "ρ" | "Φ" | "τ" => {
+                | "√" | "σ" | "ρ" | "Φ" | "τ"
+                | "N" | "S" | "B" | "T_k" | "T_B" | "M_01" | "Z" | "Ω_μ" | "NS_5" | "Θ" | "M_t" | "ς" | "m" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
                         Some(vec![])
                     }
                 }
-                "var" | "std" | "cos_sim" | "cos_dist" | "euclidean" | "manhattan" | "poincare_dist" => {
+                "var" | "std" | "cos_sim" | "cos_dist" | "euclidean" | "manhattan" | "poincare_dist"
+                | "V" | "σ_2" | "s_d" | "s" | "S_c" | "D_c" | "d_2" | "d_E" | "d_1" | "d_M" | "d_P" | "d_H" => {
                     Some(vec![])
                 }
                 "encode" | "ι" => {
@@ -14432,14 +14437,27 @@ impl MathProgram {
                 };
                 let dst = Self::alloc_vliw_reg(next_reg);
                 let raw8 = match func.as_str() {
-                    "sigmoid" | "silu" | "tanh" => format!("_SI{:02X}${:02X}0", dst, arg_reg),
+                    "sigmoid" | "silu" | "tanh" | "σ" | "softplus" | "ς" | "mish" | "m" => {
+                        format!("_SI{:02X}${:02X}0", dst, arg_reg)
+                    }
                     "gelu" => format!("_GE{:02X}${:02X}0", dst, arg_reg),
-                    "relu" | "max" | "min" => format!("_MX{:02X}${:02X}0", dst, arg_reg),
-                    "sqrt" | "rsqrt" => format!("_SQ{:02X}${:02X}0", dst, arg_reg),
+                    "relu" | "max" | "min" | "minmax" | "M_01" => format!("_MX{:02X}${:02X}0", dst, arg_reg),
+                    "sqrt" | "rsqrt" | "√" | "euclidean" | "d_2" | "d_E" | "std" | "s" | "s_d" => {
+                        format!("_SQ{:02X}${:02X}0", dst, arg_reg)
+                    }
                     "exp" | "ln" | "log" => format!("_EX{:02X}${:02X}0", dst, arg_reg),
-                    "rmsnorm" | "norm" | "mean" => format!("_RM{:02X}${:02X}0", dst, arg_reg),
-                    "softmax" => format!("_SM{:02X}${:02X}0", dst, arg_reg),
-                    "sin" | "cos" | "tan" => format!("_CD{:02X}${:02X}0", dst, arg_reg),
+                    "rmsnorm" | "norm" | "mean" | "N" | "μ" | "standardize" | "zscore" | "Z" | "var" | "V" | "σ_2" => {
+                        format!("_RM{:02X}${:02X}0", dst, arg_reg)
+                    }
+                    "softmax" | "ρ" => format!("_SM{:02X}${:02X}0", dst, arg_reg),
+                    "sin" | "cos" | "tan" | "cos_sim" | "S_c" | "rope" | "Φ" => {
+                        format!("_CD{:02X}${:02X}0", dst, arg_reg)
+                    }
+                    "chebyshev" | "T" | "T_k" | "T_B" => format!("_TK{:02X}${:02X}0", dst, arg_reg),
+                    "manhattan" | "d_1" | "d_M" => format!("_PO{:02X}${:02X}0", dst, arg_reg),
+                    "bitlinear" | "B" | "τ" | "τ_2" | "τ_8" => format!("_PC{:02X}${:02X}0", dst, arg_reg),
+                    "titans_step" | "Θ" | "M_t" => format!("_TT{:02X}${:02X}0", dst, arg_reg),
+                    "muon_step" | "newton_schulz" | "NS" | "Ω_μ" | "NS_5" => format!("_MD{:02X}${:02X}0", dst, arg_reg),
                     _ => format!("_TT{:02X}${:02X}0", dst, arg_reg),
                 };
                 slots.push(Self::seal_slot(&raw8, '>'));
@@ -18723,17 +18741,17 @@ mod tests {
             panic!("Expected Vector for y");
         }
 
-        // 2. User-defined modular composition & nesting (Norm -> KAN -> Activation -> Dense)
+        // 2. Pure Zero-Verbal Modular Composition & Nesting (Z-Score -> MinMax -> Chebyshev KAN -> Activation -> Dense)
         let code2 = r#"
-            norm_layer(z) = z -> standardize -> minmax
-            kan_edge(z, W_k) = chebyshev_basis(z, 2) @ W_k
-            custom_mlp(z, W_k, b_k, W_out) = z -> norm_layer -> kan_edge(W_k) -> (+ b_k) -> mish -> (@ W_out)
+            N_0(z) = z -> Z -> M_01
+            K_0(z, W_k) = T_B(z, 2) @ W_k
+            F_0(z, W_k, b_k, W_o) = z -> N_0 -> K_0(W_k) -> (+ b_k) -> m -> (@ W_o)
 
             inp = [1.0, 2.0, 3.0]
             W_k = [[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]]
             b_k = [0.05, -0.05]
-            W_out = [[2.0], [1.0]]
-            out = custom_mlp(inp, W_k, b_k, W_out)
+            W_o = [[2.0], [1.0]]
+            out = F_0(inp, W_k, b_k, W_o)
         "#;
         let prog2 = parse_math_code(code2).expect("Parse modular composition failed");
         eval.execute_program_value(&prog2).expect("Eval modular composition failed");
@@ -18775,5 +18793,17 @@ mod tests {
         let c23_out = prog_c23.to_c23();
         assert!(c23_out.contains("layer"));
         assert!(c23_out.contains("CRON_API"));
+
+        // 5. Level 2: Low-Level Silicon VLIW Microcode Lowering for Zero-Verbal Composition
+        let code_vliw = r#"
+            x = [1.0, 2.0, 3.0]
+            W = [[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]]
+            b = [0.1, -0.1]
+            y = x -> M_01 -> T_k(2) -> (@ W) -> (+ b) -> m
+        "#;
+        let prog_vliw = parse_math_code(code_vliw).expect("Parse vliw code failed");
+        let vliw_asm = prog_vliw.to_vliw();
+        assert!(!vliw_asm.is_empty());
+        assert!(vliw_asm.contains("_RM") || vliw_asm.contains("_TK") || vliw_asm.contains("_MD"));
     }
 }
