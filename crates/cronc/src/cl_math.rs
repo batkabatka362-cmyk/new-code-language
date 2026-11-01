@@ -46,7 +46,7 @@ pub enum MathDtype {
     Bf16,
     I32,
     I64,
-    T2, // Ternary {-1, 0, +1} (BitNet 1.58-bit)
+    T2,  // Ternary {-1, 0, +1} (BitNet 1.58-bit)
     C64, // Complex 64-bit float pair [real, imag]
 }
 
@@ -163,15 +163,25 @@ impl MathValue {
     }
 
     pub fn new_tensor(shape: Vec<usize>, data: Vec<f64>) -> Result<Self, String> {
-        let expected_total: usize = if shape.is_empty() { 0 } else { shape.iter().product() };
+        let expected_total: usize = if shape.is_empty() {
+            0
+        } else {
+            shape.iter().product()
+        };
         if !data.is_empty() && expected_total != data.len() {
             return Err(format!(
                 "Tensor shape {:?} expects {} elements, but got {}",
-                shape, expected_total, data.len()
+                shape,
+                expected_total,
+                data.len()
             ));
         }
         let strides = Self::compute_contiguous_strides(&shape);
-        Ok(MathValue::Tensor { shape, strides, data })
+        Ok(MathValue::Tensor {
+            shape,
+            strides,
+            data,
+        })
     }
 
     pub fn get_flattened_strided(shape: &[usize], strides: &[usize], data: &[f64]) -> Vec<f64> {
@@ -204,7 +214,11 @@ impl MathValue {
 
     pub fn to_contiguous(&self) -> MathValue {
         match self {
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 let canonical = Self::compute_contiguous_strides(shape);
                 if strides == &canonical {
                     self.clone()
@@ -223,7 +237,11 @@ impl MathValue {
 
     pub fn transpose_axes(&self, ax1: usize, ax2: usize) -> Result<MathValue, String> {
         match self {
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 let ndim = shape.len();
                 if ax1 >= ndim || ax2 >= ndim {
                     return Err(format!(
@@ -254,12 +272,17 @@ impl MathValue {
 
     pub fn permute(&self, dims: &[usize]) -> Result<MathValue, String> {
         match self {
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 let ndim = shape.len();
                 if dims.len() != ndim {
                     return Err(format!(
                         "permute dims length {} does not match tensor rank {}",
-                        dims.len(), ndim
+                        dims.len(),
+                        ndim
                     ));
                 }
                 let mut seen = vec![false; ndim];
@@ -322,7 +345,11 @@ impl MathValue {
             MathValue::Tuple(items) => {
                 MathValue::Tuple(items.iter().map(|item| item.map_unary_dyn(f)).collect())
             }
-            MathValue::Tensor { shape, strides, data } => MathValue::Tensor {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => MathValue::Tensor {
                 shape: shape.clone(),
                 strides: strides.clone(),
                 data: data.iter().map(|&x| f(x)).collect(),
@@ -336,10 +363,15 @@ impl MathValue {
             MathValue::Scalar(v) => vec![*v],
             MathValue::Vector(vec) => vec.clone(),
             MathValue::Matrix(mat) => mat.iter().flatten().copied().collect(),
-            MathValue::Tuple(items) => items.iter().flat_map(|item| item.flatten_elements()).collect(),
-            MathValue::Tensor { shape, strides, data } => {
-                Self::get_flattened_strided(shape, strides, data)
-            }
+            MathValue::Tuple(items) => items
+                .iter()
+                .flat_map(|item| item.flatten_elements())
+                .collect(),
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => Self::get_flattened_strided(shape, strides, data),
             MathValue::Str(s) => s.as_bytes().iter().map(|&b| b as f64).collect(),
         }
     }
@@ -375,7 +407,11 @@ impl MathValue {
                 }
                 Ok(MathValue::Tuple(res))
             }
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 if shape.len() < 2 {
                     Ok(self.clone())
                 } else {
@@ -459,7 +495,11 @@ impl MathValue {
                     Ok(MathValue::Tuple(items[s..e].to_vec()))
                 }
             }
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 if shape.is_empty() {
                     return Err("Cannot slice empty tensor".to_string());
                 }
@@ -470,7 +510,11 @@ impl MathValue {
                 if s >= e {
                     new_shape[0] = 0;
                     let new_strides = Self::compute_contiguous_strides(&new_shape);
-                    Ok(MathValue::Tensor { shape: new_shape, strides: new_strides, data: Vec::new() })
+                    Ok(MathValue::Tensor {
+                        shape: new_shape,
+                        strides: new_strides,
+                        data: Vec::new(),
+                    })
                 } else {
                     new_shape[0] = e - s;
                     let flat = Self::get_flattened_strided(shape, strides, data);
@@ -479,7 +523,11 @@ impl MathValue {
                     let e_offset = e * elems_per_d0;
                     let new_data = flat[s_offset..e_offset.min(flat.len())].to_vec();
                     let new_strides = Self::compute_contiguous_strides(&new_shape);
-                    Ok(MathValue::Tensor { shape: new_shape, strides: new_strides, data: new_data })
+                    Ok(MathValue::Tensor {
+                        shape: new_shape,
+                        strides: new_strides,
+                        data: new_data,
+                    })
                 }
             }
             MathValue::Str(s) => {
@@ -514,8 +562,14 @@ impl MathValue {
                 let cols = m.first().map(|r| r.len()).unwrap_or(0);
                 MathValue::Matrix(vec![vec![0.0; cols]; rows])
             }
-            MathValue::Tuple(items) => MathValue::Tuple(items.iter().map(|i| i.zeros_like()).collect()),
-            MathValue::Tensor { shape, strides, data } => MathValue::Tensor {
+            MathValue::Tuple(items) => {
+                MathValue::Tuple(items.iter().map(|i| i.zeros_like()).collect())
+            }
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => MathValue::Tensor {
                 shape: shape.clone(),
                 strides: strides.clone(),
                 data: vec![0.0; data.len()],
@@ -662,14 +716,25 @@ impl MathValue {
                 }
             }
             MathValue::Tuple(_) => Err("Cannot sum_axis on a Tuple".to_string()),
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 let ndim = shape.len();
                 if axis >= ndim {
-                    return Err(format!("Axis {} out of bounds for tensor of rank {}", axis, ndim));
+                    return Err(format!(
+                        "Axis {} out of bounds for tensor of rank {}",
+                        axis, ndim
+                    ));
                 }
                 let mut out_shape = shape.clone();
                 let _removed_dim = out_shape.remove(axis);
-                let out_total: usize = if out_shape.is_empty() { 1 } else { out_shape.iter().product() };
+                let out_total: usize = if out_shape.is_empty() {
+                    1
+                } else {
+                    out_shape.iter().product()
+                };
                 let mut out_data = vec![0.0; out_total];
                 let out_strides = Self::compute_contiguous_strides(&out_shape);
 
@@ -1262,12 +1327,18 @@ impl MathExpr {
             return replacement.clone();
         }
         match self {
-            MathExpr::Array(elems) => {
-                MathExpr::Array(elems.iter().map(|e| e.replace_subexpr(target, replacement)).collect())
-            }
-            MathExpr::Tuple(items) => {
-                MathExpr::Tuple(items.iter().map(|e| e.replace_subexpr(target, replacement)).collect())
-            }
+            MathExpr::Array(elems) => MathExpr::Array(
+                elems
+                    .iter()
+                    .map(|e| e.replace_subexpr(target, replacement))
+                    .collect(),
+            ),
+            MathExpr::Tuple(items) => MathExpr::Tuple(
+                items
+                    .iter()
+                    .map(|e| e.replace_subexpr(target, replacement))
+                    .collect(),
+            ),
             MathExpr::Index(b, i) => MathExpr::Index(
                 Box::new(b.replace_subexpr(target, replacement)),
                 Box::new(i.replace_subexpr(target, replacement)),
@@ -1296,10 +1367,15 @@ impl MathExpr {
             },
             MathExpr::Call(name, args) => MathExpr::Call(
                 name.clone(),
-                args.iter().map(|a| a.replace_subexpr(target, replacement)).collect(),
+                args.iter()
+                    .map(|a| a.replace_subexpr(target, replacement))
+                    .collect(),
             ),
             MathExpr::Pipeline(stages) => MathExpr::Pipeline(
-                stages.iter().map(|s| s.replace_subexpr(target, replacement)).collect(),
+                stages
+                    .iter()
+                    .map(|s| s.replace_subexpr(target, replacement))
+                    .collect(),
             ),
             other => other.clone(),
         }
@@ -1351,7 +1427,10 @@ impl MathExpr {
     /// Collects all referenced variable identifiers
     pub fn collect_free_vars(&self, vars: &mut HashSet<String>) {
         match self {
-            MathExpr::Num(_) | MathExpr::Str(_) | MathExpr::Placeholder | MathExpr::TensorRef { .. } => {}
+            MathExpr::Num(_)
+            | MathExpr::Str(_)
+            | MathExpr::Placeholder
+            | MathExpr::TensorRef { .. } => {}
             MathExpr::Var(v) => {
                 vars.insert(v.clone());
             }
@@ -1462,7 +1541,12 @@ impl MathExpr {
                             "abs" => return MathExpr::Num(n.abs()),
                             "relu" => return MathExpr::Num(n.max(0.0)),
                             "silu" => return MathExpr::Num(n / (1.0 + (-n).exp())),
-                            "gelu" => return MathExpr::Num(0.5 * n * (1.0 + (0.79788456 * (n + 0.044715 * n.powi(3))).tanh())),
+                            "gelu" => {
+                                return MathExpr::Num(
+                                    0.5 * n
+                                        * (1.0 + (0.79788456 * (n + 0.044715 * n.powi(3))).tanh()),
+                                )
+                            }
                             "sigmoid" => return MathExpr::Num(1.0 / (1.0 + (-n).exp())),
                             _ => {}
                         }
@@ -1581,12 +1665,10 @@ impl MathExpr {
             MathExpr::Tuple(items) => {
                 MathExpr::Tuple(items.iter().map(|e| e.optimize_tensor_graph()).collect())
             }
-            MathExpr::Index(b, i) => {
-                MathExpr::Index(
-                    Box::new(b.optimize_tensor_graph()),
-                    Box::new(i.optimize_tensor_graph()),
-                )
-            }
+            MathExpr::Index(b, i) => MathExpr::Index(
+                Box::new(b.optimize_tensor_graph()),
+                Box::new(i.optimize_tensor_graph()),
+            ),
             MathExpr::Unary(op, inner) => {
                 MathExpr::Unary(*op, Box::new(inner.optimize_tensor_graph()))
             }
@@ -1684,13 +1766,12 @@ impl MathExpr {
                     let extract_ternary_w = |expr: &MathExpr| -> Option<MathExpr> {
                         let inner_q = match expr {
                             MathExpr::Call(t_name, t_args)
-                                if (t_name == "transpose" || t_name == "T") && t_args.len() == 1 =>
+                                if (t_name == "transpose" || t_name == "T")
+                                    && t_args.len() == 1 =>
                             {
                                 &t_args[0]
                             }
-                            MathExpr::Binary(base, MathBinOp::Pow, exp)
-                                if matches!(exp.as_ref(), MathExpr::Var(v) if v == "T") =>
-                            {
+                            MathExpr::Binary(base, MathBinOp::Pow, exp) if matches!(exp.as_ref(), MathExpr::Var(v) if v == "T") => {
                                 base.as_ref()
                             }
                             other => other,
@@ -1749,9 +1830,7 @@ impl MathExpr {
                                     {
                                         Some(kt_args[0].clone())
                                     }
-                                    MathExpr::Binary(k_base, MathBinOp::Pow, exp)
-                                        if matches!(exp.as_ref(), MathExpr::Var(v) if v == "T") =>
-                                    {
+                                    MathExpr::Binary(k_base, MathBinOp::Pow, exp) if matches!(exp.as_ref(), MathExpr::Var(v) if v == "T") => {
                                         Some(*k_base.clone())
                                     }
                                     _ => None,
@@ -1807,7 +1886,8 @@ impl MathExpr {
                     let check_rms_scale = |a: &MathExpr, b: &MathExpr| -> Option<MathExpr> {
                         if let MathExpr::Call(ref fn_name, ref fn_args) = a {
                             if fn_name == "rmsnorm" && fn_args.len() == 3 {
-                                if matches!(fn_args[1], MathExpr::Num(n) if (n - 1.0).abs() < 1e-9) {
+                                if matches!(fn_args[1], MathExpr::Num(n) if (n - 1.0).abs() < 1e-9)
+                                {
                                     return Some(MathExpr::Call(
                                         "rmsnorm".to_string(),
                                         vec![fn_args[0].clone(), b.clone(), fn_args[2].clone()],
@@ -1865,34 +1945,38 @@ impl MathExpr {
                     // Rule 5b: SwiGLU Gating Fusion:
                     // silu(X @ W_gate) * (X @ W_up) -> swiglu(X, W_gate, W_up)
                     // (X @ W_up) * silu(X @ W_gate) -> swiglu(X, W_gate, W_up)
-                    let check_swiglu = |a: &MathExpr, b: &MathExpr| -> Option<(MathExpr, MathExpr, MathExpr)> {
-                        let gate_info = match a {
-                            MathExpr::Call(ref fn_name, ref fn_args)
-                                if fn_name == "fused_linear_silu" && fn_args.len() >= 2 =>
-                            {
-                                Some((&fn_args[0], &fn_args[1]))
-                            }
-                            MathExpr::Call(ref fn_name, ref fn_args)
-                                if fn_name == "silu" && fn_args.len() == 1 =>
-                            {
-                                if let MathExpr::Binary(ref x1, MathBinOp::MatMul, ref wg) = fn_args[0] {
-                                    Some((x1.as_ref(), wg.as_ref()))
-                                } else {
-                                    None
+                    let check_swiglu =
+                        |a: &MathExpr, b: &MathExpr| -> Option<(MathExpr, MathExpr, MathExpr)> {
+                            let gate_info = match a {
+                                MathExpr::Call(ref fn_name, ref fn_args)
+                                    if fn_name == "fused_linear_silu" && fn_args.len() >= 2 =>
+                                {
+                                    Some((&fn_args[0], &fn_args[1]))
+                                }
+                                MathExpr::Call(ref fn_name, ref fn_args)
+                                    if fn_name == "silu" && fn_args.len() == 1 =>
+                                {
+                                    if let MathExpr::Binary(ref x1, MathBinOp::MatMul, ref wg) =
+                                        fn_args[0]
+                                    {
+                                        Some((x1.as_ref(), wg.as_ref()))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
+                            };
+                            if let Some((x1, wg)) = gate_info {
+                                if let MathExpr::Binary(ref x2, MathBinOp::MatMul, ref wu) = b {
+                                    if x1 == x2.as_ref() {
+                                        return Some((x1.clone(), wg.clone(), *wu.clone()));
+                                    }
                                 }
                             }
-                            _ => None,
+                            None
                         };
-                        if let Some((x1, wg)) = gate_info {
-                            if let MathExpr::Binary(ref x2, MathBinOp::MatMul, ref wu) = b {
-                                if x1 == x2.as_ref() {
-                                    return Some((x1.clone(), wg.clone(), *wu.clone()));
-                                }
-                            }
-                        }
-                        None
-                    };
-                    if let Some((x, wg, wu)) = check_swiglu(&l, &r).or_else(|| check_swiglu(&r, &l)) {
+                    if let Some((x, wg, wu)) = check_swiglu(&l, &r).or_else(|| check_swiglu(&r, &l))
+                    {
                         return MathExpr::Call("swiglu".to_string(), vec![x, wg, wu]);
                     }
                 }
@@ -1915,34 +1999,56 @@ impl MathExpr {
                         MathExpr::Call("bitlinear".to_string(), vec![l, r, MathExpr::Num(0.5)])
                     }
                     MathExpr::Call(name, args) => {
-                        let t_args: Vec<MathExpr> = args.iter().map(|a| a.transform_for_profile(profile)).collect();
+                        let t_args: Vec<MathExpr> = args
+                            .iter()
+                            .map(|a| a.transform_for_profile(profile))
+                            .collect();
                         // Rewrite heavy softmax attention to GQA / DPSTA compressed attention
                         if (name == "attention" || name == "Ψ") && t_args.len() >= 3 {
-                            let scale = if t_args.len() > 3 { t_args[3].clone() } else { MathExpr::Num(0.25) };
-                            MathExpr::Call("gqa_attn".to_string(), vec![
-                                t_args[0].clone(),
-                                t_args[1].clone(),
-                                t_args[2].clone(),
-                                MathExpr::Num(4.0),
-                                MathExpr::Num(1.0),
-                                scale,
-                            ])
+                            let scale = if t_args.len() > 3 {
+                                t_args[3].clone()
+                            } else {
+                                MathExpr::Num(0.25)
+                            };
+                            MathExpr::Call(
+                                "gqa_attn".to_string(),
+                                vec![
+                                    t_args[0].clone(),
+                                    t_args[1].clone(),
+                                    t_args[2].clone(),
+                                    MathExpr::Num(4.0),
+                                    MathExpr::Num(1.0),
+                                    scale,
+                                ],
+                            )
                         } else {
                             MathExpr::Call(name.clone(), t_args)
                         }
                     }
-                    MathExpr::Array(elems) => {
-                        MathExpr::Array(elems.iter().map(|e| e.transform_for_profile(profile)).collect())
-                    }
-                    MathExpr::Tuple(items) => {
-                        MathExpr::Tuple(items.iter().map(|e| e.transform_for_profile(profile)).collect())
-                    }
+                    MathExpr::Array(elems) => MathExpr::Array(
+                        elems
+                            .iter()
+                            .map(|e| e.transform_for_profile(profile))
+                            .collect(),
+                    ),
+                    MathExpr::Tuple(items) => MathExpr::Tuple(
+                        items
+                            .iter()
+                            .map(|e| e.transform_for_profile(profile))
+                            .collect(),
+                    ),
                     MathExpr::Index(b, i) => MathExpr::Index(
                         Box::new(b.transform_for_profile(profile)),
                         Box::new(i.transform_for_profile(profile)),
                     ),
-                    MathExpr::Unary(op, inner) => MathExpr::Unary(*op, Box::new(inner.transform_for_profile(profile))),
-                    MathExpr::Ternary { cond, then_expr, else_expr } => MathExpr::Ternary {
+                    MathExpr::Unary(op, inner) => {
+                        MathExpr::Unary(*op, Box::new(inner.transform_for_profile(profile)))
+                    }
+                    MathExpr::Ternary {
+                        cond,
+                        then_expr,
+                        else_expr,
+                    } => MathExpr::Ternary {
                         cond: Box::new(cond.transform_for_profile(profile)),
                         then_expr: Box::new(then_expr.transform_for_profile(profile)),
                         else_expr: Box::new(else_expr.transform_for_profile(profile)),
@@ -1952,9 +2058,12 @@ impl MathExpr {
                         func: Box::new(func.transform_for_profile(profile)),
                         count: Box::new(count.transform_for_profile(profile)),
                     },
-                    MathExpr::Pipeline(stages) => {
-                        MathExpr::Pipeline(stages.iter().map(|s| s.transform_for_profile(profile)).collect())
-                    }
+                    MathExpr::Pipeline(stages) => MathExpr::Pipeline(
+                        stages
+                            .iter()
+                            .map(|s| s.transform_for_profile(profile))
+                            .collect(),
+                    ),
                     MathExpr::Binary(lhs, op, rhs) => {
                         let l = lhs.transform_for_profile(profile);
                         let r = rhs.transform_for_profile(profile);
@@ -2038,22 +2147,22 @@ pub enum Token {
     At,          // @ (MatMul)
     Otimes,      // (Tensor Outer Product)
 
-    Caret,       // ^ (Power)
-    Question,    // ? (Conditional ternary)
-    EqEq,        // ==
-    NotEq,       // !=
-    Lt,          // <
-    Lte,         // <=
-    Gt,          // >
-    Gte,         // >=
-    LParen,      // (
-    RParen,      // )
-    LBracket,    // [
-    RBracket,    // ]
-    Comma,       // ,
-    Colon,       // :
-    Semicolon,   // ;
-    Underscore,  // _
+    Caret,      // ^ (Power)
+    Question,   // ? (Conditional ternary)
+    EqEq,       // ==
+    NotEq,      // !=
+    Lt,         // <
+    Lte,        // <=
+    Gt,         // >
+    Gte,        // >=
+    LParen,     // (
+    RParen,     // )
+    LBracket,   // [
+    RBracket,   // ]
+    Comma,      // ,
+    Colon,      // :
+    Semicolon,  // ;
+    Underscore, // _
 }
 
 pub struct MathLexer<'a> {
@@ -2148,11 +2257,9 @@ impl<'a> MathLexer<'a> {
                     tokens.push(Token::At);
                 }
                 '⊗' => {
-
                     self.chars.next();
 
                     tokens.push(Token::Otimes);
-
                 }
 
                 '^' => {
@@ -2299,11 +2406,15 @@ impl<'a> MathLexer<'a> {
                     }
                     tokens.push(Token::Str(s));
                 }
-                'a'..='z' | 'A'..='Z' | 'α'..='ω' | 'Α'..='Ω' | '∇' | '∑' | '√' | '∥' => {
+                'a'..='z' | 'A'..='Z' | 'α'..='ω' | 'Α'..='Ω' | '∇' | '∑' | '√' | '∥' =>
+                {
                     let start = i;
                     let mut end = i;
                     while let Some(&(curr_i, c)) = self.chars.peek() {
-                        if c.is_alphanumeric() || c == '_' || matches!(c, 'α'..='ω' | 'Α'..='Ω' | '∇' | '∑' | '√' | '∥') {
+                        if c.is_alphanumeric()
+                            || c == '_'
+                            || matches!(c, 'α'..='ω' | 'Α'..='Ω' | '∇' | '∑' | '√' | '∥')
+                        {
                             end = curr_i + c.len_utf8();
                             self.chars.next();
                         } else {
@@ -2585,7 +2696,10 @@ impl MathParser {
                             symbolic_dims.push(MathDim::Symbolic(s));
                         }
                         other => {
-                            return Err(format!("Expected dimension size or symbol in tensor brackets, found {:?}", other));
+                            return Err(format!(
+                                "Expected dimension size or symbol in tensor brackets, found {:?}",
+                                other
+                            ));
                         }
                     }
 
@@ -2599,7 +2713,12 @@ impl MathParser {
                 }
             }
 
-            params.push(MathParam { name, dtype, dims, symbolic_dims });
+            params.push(MathParam {
+                name,
+                dtype,
+                dims,
+                symbolic_dims,
+            });
 
             if self.match_tok(&Token::Comma) {
                 continue;
@@ -2745,7 +2864,6 @@ impl MathParser {
                 Token::Slash => MathBinOp::Div,
                 Token::At => MathBinOp::MatMul,
                 Token::Otimes => {
-
                     self.pos += 1;
 
                     let rhs = self.parse_power()?;
@@ -2753,7 +2871,6 @@ impl MathParser {
                     lhs = MathExpr::Call("⊗".to_string(), vec![lhs, rhs]);
 
                     continue;
-
                 }
 
                 _ => break,
@@ -3163,9 +3280,9 @@ impl ExprTape {
                                 rhs_tape.backward(&adj_v, wrt, acc_grad, evaluator)?;
                                 Ok(())
                             }
-                            _ => Err(
-                                "Expected vector adjoint for vector-matrix product".to_string()
-                            ),
+                            _ => {
+                                Err("Expected vector adjoint for vector-matrix product".to_string())
+                            }
                         }
                     }
                     (MathValue::Vector(u), MathValue::Vector(v)) => {
@@ -3331,9 +3448,8 @@ impl ExprTape {
                             let logits_adj = MathValue::Vector(grad_vec);
                             arg_tapes[0].backward(&logits_adj, wrt, acc_grad, evaluator)
                         }
-                        _ => Err(
-                            "cross_entropy expects (Matrix, Vector) or (Vector, Scalar)".to_string()
-                        ),
+                        _ => Err("cross_entropy expects (Matrix, Vector) or (Vector, Scalar)"
+                            .to_string()),
                     }
                 }
                 "grpo_loss" | "Λ_g" => {
@@ -3341,8 +3457,16 @@ impl ExprTape {
                     let logp_elems = arg_vals[0].flatten_elements();
                     let ref_elems = arg_vals[1].flatten_elements();
                     let adv_elems = arg_vals[2].flatten_elements();
-                    let eps = if arg_vals.len() > 3 { arg_vals[3].as_scalar().unwrap_or(0.2) } else { 0.2 };
-                    let beta = if arg_vals.len() > 4 { arg_vals[4].as_scalar().unwrap_or(0.04) } else { 0.04 };
+                    let eps = if arg_vals.len() > 3 {
+                        arg_vals[3].as_scalar().unwrap_or(0.2)
+                    } else {
+                        0.2
+                    };
+                    let beta = if arg_vals.len() > 4 {
+                        arg_vals[4].as_scalar().unwrap_or(0.04)
+                    } else {
+                        0.04
+                    };
 
                     let n = logp_elems.len();
                     let scale = s / n.max(1) as f64;
@@ -3399,7 +3523,12 @@ impl ExprTape {
                             for (row, adj_row) in m.iter().zip(adj_m.iter()) {
                                 out_m.push(calc_log_softmax_vjp(row, adj_row));
                             }
-                            arg_tapes[0].backward(&MathValue::Matrix(out_m), wrt, acc_grad, evaluator)
+                            arg_tapes[0].backward(
+                                &MathValue::Matrix(out_m),
+                                wrt,
+                                acc_grad,
+                                evaluator,
+                            )
                         }
                         _ => Err("log_softmax shape mismatch in backward".to_string()),
                     }
@@ -3410,11 +3539,7 @@ impl ExprTape {
                         let exps: Vec<f64> = x.iter().map(|&xi| (xi - max_v).exp()).collect();
                         let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
                         let probs: Vec<f64> = exps.iter().map(|&e| e / sum_exp).collect();
-                        let dot: f64 = probs
-                            .iter()
-                            .zip(adj_row.iter())
-                            .map(|(&p, &a)| p * a)
-                            .sum();
+                        let dot: f64 = probs.iter().zip(adj_row.iter()).map(|(&p, &a)| p * a).sum();
                         probs
                             .iter()
                             .zip(adj_row.iter())
@@ -3431,7 +3556,12 @@ impl ExprTape {
                             for (row, adj_row) in m.iter().zip(adj_m.iter()) {
                                 out_m.push(calc_softmax_vjp(row, adj_row));
                             }
-                            arg_tapes[0].backward(&MathValue::Matrix(out_m), wrt, acc_grad, evaluator)
+                            arg_tapes[0].backward(
+                                &MathValue::Matrix(out_m),
+                                wrt,
+                                acc_grad,
+                                evaluator,
+                            )
                         }
                         _ => Err("softmax shape mismatch in backward".to_string()),
                     }
@@ -3459,7 +3589,12 @@ impl ExprTape {
                             for (row, adj_row) in m.iter().zip(adj_m.iter()) {
                                 out_m.push(calc_rmsnorm_vjp(row, adj_row));
                             }
-                            arg_tapes[0].backward(&MathValue::Matrix(out_m), wrt, acc_grad, evaluator)
+                            arg_tapes[0].backward(
+                                &MathValue::Matrix(out_m),
+                                wrt,
+                                acc_grad,
+                                evaluator,
+                            )
                         }
                         _ => Err("rmsnorm shape mismatch in backward".to_string()),
                     }
@@ -3502,8 +3637,13 @@ impl ExprTape {
                     }
                 }
                 "relu" => {
-                    let calc_relu_vjp =
-                        |x: f64, a: f64| -> f64 { if x > 0.0 { a } else { 0.0 } };
+                    let calc_relu_vjp = |x: f64, a: f64| -> f64 {
+                        if x > 0.0 {
+                            a
+                        } else {
+                            0.0
+                        }
+                    };
                     match (&arg_vals[0], adj) {
                         (MathValue::Scalar(s), MathValue::Scalar(a)) => arg_tapes[0].backward(
                             &MathValue::Scalar(calc_relu_vjp(*s, *a)),
@@ -3548,11 +3688,24 @@ impl ExprTape {
                             evaluator,
                         ),
                         (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
-                            let out: Vec<f64> = v.iter().zip(adj_v.iter()).map(|(&x, &a)| calc_sig_vjp(x, a)).collect();
+                            let out: Vec<f64> = v
+                                .iter()
+                                .zip(adj_v.iter())
+                                .map(|(&x, &a)| calc_sig_vjp(x, a))
+                                .collect();
                             arg_tapes[0].backward(&MathValue::Vector(out), wrt, acc_grad, evaluator)
                         }
                         (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
-                            let out: Vec<Vec<f64>> = m.iter().zip(adj_m.iter()).map(|(r, ar)| r.iter().zip(ar.iter()).map(|(&x, &a)| calc_sig_vjp(x, a)).collect()).collect();
+                            let out: Vec<Vec<f64>> = m
+                                .iter()
+                                .zip(adj_m.iter())
+                                .map(|(r, ar)| {
+                                    r.iter()
+                                        .zip(ar.iter())
+                                        .map(|(&x, &a)| calc_sig_vjp(x, a))
+                                        .collect()
+                                })
+                                .collect();
                             arg_tapes[0].backward(&MathValue::Matrix(out), wrt, acc_grad, evaluator)
                         }
                         _ => Err("sigmoid shape mismatch in backward".to_string()),
@@ -3568,11 +3721,24 @@ impl ExprTape {
                             evaluator,
                         ),
                         (MathValue::Vector(v), MathValue::Vector(adj_v)) => {
-                            let out: Vec<f64> = v.iter().zip(adj_v.iter()).map(|(&x, &a)| calc_sqrt_vjp(x, a)).collect();
+                            let out: Vec<f64> = v
+                                .iter()
+                                .zip(adj_v.iter())
+                                .map(|(&x, &a)| calc_sqrt_vjp(x, a))
+                                .collect();
                             arg_tapes[0].backward(&MathValue::Vector(out), wrt, acc_grad, evaluator)
                         }
                         (MathValue::Matrix(m), MathValue::Matrix(adj_m)) => {
-                            let out: Vec<Vec<f64>> = m.iter().zip(adj_m.iter()).map(|(r, ar)| r.iter().zip(ar.iter()).map(|(&x, &a)| calc_sqrt_vjp(x, a)).collect()).collect();
+                            let out: Vec<Vec<f64>> = m
+                                .iter()
+                                .zip(adj_m.iter())
+                                .map(|(r, ar)| {
+                                    r.iter()
+                                        .zip(ar.iter())
+                                        .map(|(&x, &a)| calc_sqrt_vjp(x, a))
+                                        .collect()
+                                })
+                                .collect();
                             arg_tapes[0].backward(&MathValue::Matrix(out), wrt, acc_grad, evaluator)
                         }
                         _ => Err("sqrt shape mismatch in backward".to_string()),
@@ -3587,21 +3753,37 @@ impl ExprTape {
                     }
                     let act_deriv = |z: f64, a: f64| -> f64 {
                         if name == "fused_linear_relu" {
-                            if z > 0.0 { a } else { 0.0 }
+                            if z > 0.0 {
+                                a
+                            } else {
+                                0.0
+                            }
                         } else if name == "fused_linear_silu" {
                             let s = 1.0 / (1.0 + (-z).exp());
                             a * s * (1.0 + z * (1.0 - s))
                         } else {
-                            let cdf = 0.5 * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh());
+                            let cdf =
+                                0.5 * (1.0 + (0.79788456 * (z + 0.044715 * z.powi(3))).tanh());
                             a * cdf
                         }
                     };
                     let adj_z = match (&z_val, adj) {
                         (MathValue::Matrix(zm), MathValue::Matrix(am)) => MathValue::Matrix(
-                            zm.iter().zip(am.iter()).map(|(zr, ar)| zr.iter().zip(ar.iter()).map(|(&z, &a)| act_deriv(z, a)).collect()).collect()
+                            zm.iter()
+                                .zip(am.iter())
+                                .map(|(zr, ar)| {
+                                    zr.iter()
+                                        .zip(ar.iter())
+                                        .map(|(&z, &a)| act_deriv(z, a))
+                                        .collect()
+                                })
+                                .collect(),
                         ),
                         (MathValue::Vector(zv), MathValue::Vector(av)) => MathValue::Vector(
-                            zv.iter().zip(av.iter()).map(|(&z, &a)| act_deriv(z, a)).collect()
+                            zv.iter()
+                                .zip(av.iter())
+                                .map(|(&z, &a)| act_deriv(z, a))
+                                .collect(),
                         ),
                         _ => adj.clone(),
                     };
@@ -3693,7 +3875,9 @@ impl ExprTape {
                 }
                 "permute" => {
                     let dims = match &arg_vals[1] {
-                        MathValue::Vector(v) => v.iter().map(|&d| d as usize).collect::<Vec<usize>>(),
+                        MathValue::Vector(v) => {
+                            v.iter().map(|&d| d as usize).collect::<Vec<usize>>()
+                        }
                         _ => arg_vals[0].shape(),
                     };
                     let mut inv_dims = vec![0; dims.len()];
@@ -3727,24 +3911,25 @@ impl ExprTape {
                             grad_x[idx] = delta;
                         }
                     }
-                    let reconstruct = |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
-                        match shape.len() {
-                            0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
-                            1 => Ok(MathValue::Vector(elems)),
-                            2 => {
-                                let rows = shape[0];
-                                let cols = shape[1];
-                                let mut mat = Vec::with_capacity(rows);
-                                for r in 0..rows {
-                                    let start = r * cols;
-                                    let end = (start + cols).min(elems.len());
-                                    mat.push(elems[start..end].to_vec());
+                    let reconstruct =
+                        |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
+                            match shape.len() {
+                                0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
+                                1 => Ok(MathValue::Vector(elems)),
+                                2 => {
+                                    let rows = shape[0];
+                                    let cols = shape[1];
+                                    let mut mat = Vec::with_capacity(rows);
+                                    for r in 0..rows {
+                                        let start = r * cols;
+                                        let end = (start + cols).min(elems.len());
+                                        mat.push(elems[start..end].to_vec());
+                                    }
+                                    Ok(MathValue::Matrix(mat))
                                 }
-                                Ok(MathValue::Matrix(mat))
+                                _ => MathValue::new_tensor(shape.to_vec(), elems),
                             }
-                            _ => MathValue::new_tensor(shape.to_vec(), elems),
-                        }
-                    };
+                        };
                     let adj_x = reconstruct(grad_x, &x_shape)?;
                     arg_tapes[0].backward(&adj_x, wrt, acc_grad, evaluator)
                 }
@@ -3864,13 +4049,24 @@ impl ExprTape {
                             _ => vec![],
                         };
                         let expert_mats: Vec<Vec<Vec<f64>>> = match experts {
-                            MathValue::Tuple(items) => items.iter().filter_map(|it| {
-                                if let MathValue::Matrix(m) = it { Some(m.clone()) } else { None }
-                            }).collect(),
+                            MathValue::Tuple(items) => items
+                                .iter()
+                                .filter_map(|it| {
+                                    if let MathValue::Matrix(m) = it {
+                                        Some(m.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect(),
                             _ => vec![],
                         };
 
-                        if !x_rows.is_empty() && !adj_rows.is_empty() && !gate_mat.is_empty() && !expert_mats.is_empty() {
+                        if !x_rows.is_empty()
+                            && !adj_rows.is_empty()
+                            && !gate_mat.is_empty()
+                            && !expert_mats.is_empty()
+                        {
                             let num_experts = gate_mat.len();
                             let k = top_k.min(num_experts).max(1);
                             let in_dim = x_rows[0].len();
@@ -3880,14 +4076,21 @@ impl ExprTape {
                                 let adj_row = &adj_rows[r_idx % adj_rows.len()];
                                 let mut logits = Vec::with_capacity(num_experts);
                                 for g_row in &gate_mat {
-                                    let dot: f64 = g_row.iter().zip(x_row.iter()).map(|(&a, &b)| a * b).sum();
+                                    let dot: f64 =
+                                        g_row.iter().zip(x_row.iter()).map(|(&a, &b)| a * b).sum();
                                     logits.push(dot);
                                 }
-                                let mut indexed_logits: Vec<(usize, f64)> = logits.into_iter().enumerate().collect();
-                                indexed_logits.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                                let mut indexed_logits: Vec<(usize, f64)> =
+                                    logits.into_iter().enumerate().collect();
+                                indexed_logits.sort_by(|a, b| {
+                                    b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                                });
                                 indexed_logits.truncate(k);
 
-                                let max_logit = indexed_logits.iter().map(|(_, l)| *l).fold(f64::NEG_INFINITY, f64::max);
+                                let max_logit = indexed_logits
+                                    .iter()
+                                    .map(|(_, l)| *l)
+                                    .fold(f64::NEG_INFINITY, f64::max);
                                 let mut exps = Vec::with_capacity(k);
                                 let mut sum_exp = 0.0f64;
                                 for (_, logit) in &indexed_logits {
@@ -3896,7 +4099,8 @@ impl ExprTape {
                                     sum_exp += e;
                                 }
                                 let inv_sum = 1.0 / sum_exp.max(1e-12);
-                                let weights: Vec<f64> = exps.into_iter().map(|e| e * inv_sum).collect();
+                                let weights: Vec<f64> =
+                                    exps.into_iter().map(|e| e * inv_sum).collect();
 
                                 let mut gx = vec![0.0f64; in_dim];
                                 let mut v_scores = vec![0.0f64; k];
@@ -3956,7 +4160,9 @@ impl ExprTape {
                                 grad_x_rows.push(gx);
                             }
                             let grad_x = match x_val {
-                                MathValue::Vector(_) => MathValue::Vector(grad_x_rows.pop().unwrap_or_default()),
+                                MathValue::Vector(_) => {
+                                    MathValue::Vector(grad_x_rows.pop().unwrap_or_default())
+                                }
                                 _ => MathValue::Matrix(grad_x_rows),
                             };
                             arg_tapes[0].backward(&grad_x, wrt, acc_grad, evaluator)?;
@@ -4053,7 +4259,7 @@ impl MathEvaluator {
                 MathValue::Scalar(_) => 8,
                 MathValue::Vector(v) => match self.profile {
                     CompilationProfile::MinResource => (v.len() + 4) / 5, // Sub-byte 1.58-bit ternary: 5 weights in 1 byte
-                    _ => v.len() * 4, // 32-bit float
+                    _ => v.len() * 4,                                     // 32-bit float
                 },
                 MathValue::Matrix(m) => {
                     let elems: usize = m.iter().map(|r| r.len()).sum();
@@ -4434,8 +4640,7 @@ impl MathEvaluator {
 
                     // FlashAttention-2 Fused Online Softmax for 3D/4D multi-head tensor
                     for r in 0..seq_q {
-                        let q_row =
-                            &q_flat[q_offset + r * head_dim..q_offset + (r + 1) * head_dim];
+                        let q_row = &q_flat[q_offset + r * head_dim..q_offset + (r + 1) * head_dim];
                         let mut m = f64::NEG_INFINITY;
                         let mut l = 0.0f64;
                         let mut acc = vec![0.0f64; head_dim];
@@ -4552,18 +4757,19 @@ impl MathEvaluator {
         }
     }
 
-    pub fn eval_ssd_scan(
-        &self,
-        x: &MathValue,
-        decay_dt: &MathValue,
-    ) -> Result<MathValue, String> {
+    pub fn eval_ssd_scan(&self, x: &MathValue, decay_dt: &MathValue) -> Result<MathValue, String> {
         match x {
             MathValue::Vector(x_vec) => {
                 let d_vec = decay_dt.flatten_elements();
                 let mut out = Vec::with_capacity(x_vec.len());
                 let mut h = 0.0;
                 for (t, &xt) in x_vec.iter().enumerate() {
-                    let a = d_vec.get(t % d_vec.len()).copied().unwrap_or(0.9).min(1.0).max(0.0);
+                    let a = d_vec
+                        .get(t % d_vec.len())
+                        .copied()
+                        .unwrap_or(0.9)
+                        .min(1.0)
+                        .max(0.0);
                     h = a * h + xt;
                     out.push(h);
                 }
@@ -4590,7 +4796,11 @@ impl MathEvaluator {
                 }
                 Ok(MathValue::Matrix(out))
             }
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 let flat = MathValue::get_flattened_strided(shape, strides, data);
                 let d_elems = decay_dt.flatten_elements();
                 let ndim = shape.len();
@@ -4606,7 +4816,12 @@ impl MathEvaluator {
                     for s in 0..seq {
                         let s_offset = b_offset + s * dim;
                         for d in 0..dim {
-                            let a = d_elems.get(d % d_elems.len()).copied().unwrap_or(0.9).min(1.0).max(0.0);
+                            let a = d_elems
+                                .get(d % d_elems.len())
+                                .copied()
+                                .unwrap_or(0.9)
+                                .min(1.0)
+                                .max(0.0);
                             h[d] = a * h[d] + flat[s_offset + d];
                             out[s_offset + d] = h[d];
                         }
@@ -4634,7 +4849,9 @@ impl MathEvaluator {
 
         let gate_mat = match w_gate {
             MathValue::Matrix(m) => m,
-            _ => return Err("moe_gate: W_gate must be a 2D Matrix [num_experts, in_dim]".to_string()),
+            _ => {
+                return Err("moe_gate: W_gate must be a 2D Matrix [num_experts, in_dim]".to_string())
+            }
         };
 
         let num_experts = gate_mat.len();
@@ -4655,9 +4872,16 @@ impl MathEvaluator {
                 }
                 mats
             }
-            MathValue::Tensor { shape, strides, data } => {
+            MathValue::Tensor {
+                shape,
+                strides,
+                data,
+            } => {
                 if shape.len() != 3 {
-                    return Err(format!("moe_gate: 3D tensor expected for experts, got shape {:?}", shape));
+                    return Err(format!(
+                        "moe_gate: 3D tensor expected for experts, got shape {:?}",
+                        shape
+                    ));
                 }
                 let n_exp = shape[0];
                 let e_rows = shape[1];
@@ -4675,10 +4899,15 @@ impl MathEvaluator {
                 mats
             }
             MathValue::Matrix(single) => vec![single.clone()],
-            _ => return Err("moe_gate: experts must be a Tuple of matrices or a 3D Tensor".to_string()),
+            _ => {
+                return Err(
+                    "moe_gate: experts must be a Tuple of matrices or a 3D Tensor".to_string(),
+                )
+            }
         };
 
-        let out_dim = expert_mats.first()
+        let out_dim = expert_mats
+            .first()
             .and_then(|m| m.first())
             .map(|r| r.len())
             .unwrap_or(in_dim);
@@ -4695,11 +4924,15 @@ impl MathEvaluator {
 
             // 2. Select top-k experts
             let mut indexed_logits: Vec<(usize, f64)> = logits.into_iter().enumerate().collect();
-            indexed_logits.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            indexed_logits
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             indexed_logits.truncate(k);
 
             // 3. Normalized routing weights with Flash softmax
-            let max_logit = indexed_logits.iter().map(|(_, l)| *l).fold(f64::NEG_INFINITY, f64::max);
+            let max_logit = indexed_logits
+                .iter()
+                .map(|(_, l)| *l)
+                .fold(f64::NEG_INFINITY, f64::max);
             let mut exps = Vec::with_capacity(k);
             let mut sum_exp = 0.0f64;
             for (_, logit) in &indexed_logits {
@@ -4779,7 +5012,11 @@ impl MathEvaluator {
             k_mat[slot] = k_new_vec;
             v_mat[slot] = v_new_vec;
         } else {
-            return Err(format!("Ring buffer index {} out of capacity {}", slot, k_mat.len()));
+            return Err(format!(
+                "Ring buffer index {} out of capacity {}",
+                slot,
+                k_mat.len()
+            ));
         }
 
         // 2. Active sequence length (up to pos + 1, capped at max_len)
@@ -4836,9 +5073,7 @@ impl MathEvaluator {
             return Ok(MathValue::Tuple(vec![val.clone(), MathValue::Scalar(1.0)]));
         }
         let gamma = (elems.iter().map(|x| x.abs()).sum::<f64>() / elems.len() as f64).max(1e-12);
-        let quant_fn = |x: f64| -> f64 {
-            (x / gamma).clamp(-1.0, 1.0).round()
-        };
+        let quant_fn = |x: f64| -> f64 { (x / gamma).clamp(-1.0, 1.0).round() };
         let quantized = val.map_unary_dyn(&quant_fn);
         Ok(MathValue::Tuple(vec![quantized, MathValue::Scalar(gamma)]))
     }
@@ -4945,7 +5180,14 @@ impl MathEvaluator {
                     ))
                 }
             }
-            (MathValue::Tensor { shape, strides, data }, MathValue::Matrix(w_m)) => {
+            (
+                MathValue::Tensor {
+                    shape,
+                    strides,
+                    data,
+                },
+                MathValue::Matrix(w_m),
+            ) => {
                 let flat = MathValue::get_flattened_strided(shape, strides, data);
                 let k_x = *shape.last().unwrap_or(&1);
                 let w_rows = w_m.len();
@@ -5055,10 +5297,7 @@ impl MathEvaluator {
                     }
                 }
                 let q_tensor = MathValue::new_tensor(shape.clone(), q_flat)?;
-                Ok(MathValue::Tuple(vec![
-                    q_tensor,
-                    MathValue::Vector(scales),
-                ]))
+                Ok(MathValue::Tuple(vec![q_tensor, MathValue::Vector(scales)]))
             }
             _ => Err("quantize_i8 requires Matrix, Vector, or Tensor".to_string()),
         }
@@ -5083,11 +5322,8 @@ impl MathEvaluator {
                     for i in 0..m {
                         for j in 0..n {
                             let s = scales_vec.get(j).copied().unwrap_or(1.0);
-                            let dot: f64 = x_m[i]
-                                .iter()
-                                .zip(w_m[j].iter())
-                                .map(|(&a, &b)| a * b)
-                                .sum();
+                            let dot: f64 =
+                                x_m[i].iter().zip(w_m[j].iter()).map(|(&a, &b)| a * b).sum();
                             out[i][j] = dot * s;
                         }
                     }
@@ -5118,11 +5354,7 @@ impl MathEvaluator {
                     let mut out = Vec::with_capacity(w_rows);
                     for j in 0..w_rows {
                         let s = scales_vec.get(j).copied().unwrap_or(1.0);
-                        let dot: f64 = x_v
-                            .iter()
-                            .zip(w_m[j].iter())
-                            .map(|(&a, &b)| a * b)
-                            .sum();
+                        let dot: f64 = x_v.iter().zip(w_m[j].iter()).map(|(&a, &b)| a * b).sum();
                         out.push(dot * s);
                     }
                     Ok(MathValue::Vector(out))
@@ -5187,7 +5419,12 @@ impl MathEvaluator {
                 } else if matches!(evaluated[0], MathValue::Tensor { .. }) {
                     let mut sub_tensors = Vec::with_capacity(evaluated.len());
                     for item in evaluated {
-                        if let MathValue::Tensor { shape, strides, data } = item {
+                        if let MathValue::Tensor {
+                            shape,
+                            strides,
+                            data,
+                        } = item
+                        {
                             sub_tensors.push((shape, strides, data));
                         } else {
                             return Err("Inconsistent tensor types in ND array literal".to_string());
@@ -5256,12 +5493,9 @@ impl MathEvaluator {
                     .ok_or_else(|| "Index must evaluate to a scalar integer".to_string())?
                     as usize;
                 match b_val {
-                    MathValue::Tuple(vals) => vals
-                        .get(i_num)
-                        .cloned()
-                        .ok_or_else(|| {
-                            format!("Tuple index {} out of bounds (len {})", i_num, vals.len())
-                        }),
+                    MathValue::Tuple(vals) => vals.get(i_num).cloned().ok_or_else(|| {
+                        format!("Tuple index {} out of bounds (len {})", i_num, vals.len())
+                    }),
                     MathValue::Vector(vec) => vec
                         .get(i_num)
                         .copied()
@@ -5280,7 +5514,11 @@ impl MathEvaluator {
                                 mat.len()
                             )
                         }),
-                    MathValue::Tensor { shape, strides, data } => {
+                    MathValue::Tensor {
+                        shape,
+                        strides,
+                        data,
+                    } => {
                         if shape.is_empty() {
                             return Err("Cannot index empty tensor".to_string());
                         }
@@ -5323,7 +5561,11 @@ impl MathEvaluator {
                         if i_num < bytes.len() {
                             Ok(MathValue::Scalar(bytes[i_num] as f64))
                         } else {
-                            Err(format!("String index {} out of bounds (len {})", i_num, bytes.len()))
+                            Err(format!(
+                                "String index {} out of bounds (len {})",
+                                i_num,
+                                bytes.len()
+                            ))
                         }
                     }
                 }
@@ -5360,9 +5602,15 @@ impl MathEvaluator {
                         let mut out = Vec::with_capacity(cv.len());
                         for (i, &cond_v) in cv.iter().enumerate() {
                             let v = if cond_v != 0.0 {
-                                t_elems.get(i % t_elems.len().max(1)).copied().unwrap_or(0.0)
+                                t_elems
+                                    .get(i % t_elems.len().max(1))
+                                    .copied()
+                                    .unwrap_or(0.0)
                             } else {
-                                e_elems.get(i % e_elems.len().max(1)).copied().unwrap_or(0.0)
+                                e_elems
+                                    .get(i % e_elems.len().max(1))
+                                    .copied()
+                                    .unwrap_or(0.0)
                             };
                             out.push(v);
                         }
@@ -5379,9 +5627,15 @@ impl MathEvaluator {
                             let mut out_row = Vec::with_capacity(row.len());
                             for cond_v in row {
                                 let v = if cond_v != 0.0 {
-                                    t_elems.get(flat_idx % t_elems.len().max(1)).copied().unwrap_or(0.0)
+                                    t_elems
+                                        .get(flat_idx % t_elems.len().max(1))
+                                        .copied()
+                                        .unwrap_or(0.0)
                                 } else {
-                                    e_elems.get(flat_idx % e_elems.len().max(1)).copied().unwrap_or(0.0)
+                                    e_elems
+                                        .get(flat_idx % e_elems.len().max(1))
+                                        .copied()
+                                        .unwrap_or(0.0)
                                 };
                                 out_row.push(v);
                                 flat_idx += 1;
@@ -5390,7 +5644,10 @@ impl MathEvaluator {
                         }
                         Ok(MathValue::Matrix(out))
                     }
-                    _ => Err("Ternary condition must evaluate to a scalar, vector, or matrix".to_string()),
+                    _ => Err(
+                        "Ternary condition must evaluate to a scalar, vector, or matrix"
+                            .to_string(),
+                    ),
                 }
             }
             MathExpr::Binary(lhs, op, rhs) => {
@@ -5427,9 +5684,13 @@ impl MathEvaluator {
                     for a in args {
                         all_elems.extend(self.eval_value(a)?.flatten_elements());
                     }
-                    Ok(MathValue::Scalar(all_elems.iter().sum::<f64>() / all_elems.len().max(1) as f64))
+                    Ok(MathValue::Scalar(
+                        all_elems.iter().sum::<f64>() / all_elems.len().max(1) as f64,
+                    ))
                 }
-                "σ" => Ok(self.eval_single_val(args, "σ")?.map_unary(|z| 1.0 / (1.0 + (-z).exp()))),
+                "σ" => Ok(self
+                    .eval_single_val(args, "σ")?
+                    .map_unary(|z| 1.0 / (1.0 + (-z).exp()))),
                 "∥" => {
                     let val = self.eval_single_val(args, "∥")?;
                     let elems = val.flatten_elements();
@@ -5447,7 +5708,10 @@ impl MathEvaluator {
                         return Err(format!("'{}' expects 1 argument (expr)", subscript_grad));
                     }
                     let wrt = subscript_grad.strip_prefix("∇_").unwrap();
-                    return self.eval_value(&MathExpr::Call("grad".to_string(), vec![args[0].clone(), MathExpr::Var(wrt.to_string())]));
+                    return self.eval_value(&MathExpr::Call(
+                        "grad".to_string(),
+                        vec![args[0].clone(), MathExpr::Var(wrt.to_string())],
+                    ));
                 }
                 "sqrt" => Ok(self.eval_single_val(args, "sqrt")?.map_unary(|x| x.sqrt())),
                 "exp" => Ok(self.eval_single_val(args, "exp")?.map_unary(|x| x.exp())),
@@ -5535,7 +5799,10 @@ impl MathEvaluator {
                 }
                 "fused_swiglu" => {
                     if args.len() < 4 {
-                        return Err("'fused_swiglu(X, W_gate, W_up, W_down)' requires 4 arguments".to_string());
+                        return Err(
+                            "'fused_swiglu(X, W_gate, W_up, W_down)' requires 4 arguments"
+                                .to_string(),
+                        );
                     }
                     let x = self.eval_value(&args[0])?;
                     let w_gate = self.eval_value(&args[1])?;
@@ -5711,8 +5978,8 @@ impl MathEvaluator {
                     if already_ternary {
                         return Ok(val);
                     }
-                    let gamma =
-                        (elems.iter().map(|x| x.abs()).sum::<f64>() / elems.len() as f64).max(1e-12);
+                    let gamma = (elems.iter().map(|x| x.abs()).sum::<f64>() / elems.len() as f64)
+                        .max(1e-12);
                     let quant_fn = |x: f64| -> f64 { (x / gamma).clamp(-1.0, 1.0).round() };
                     Ok(val.map_unary_dyn(&quant_fn))
                 }
@@ -5743,7 +6010,7 @@ impl MathEvaluator {
                 "bitlinear" => {
                     if args.len() < 2 {
                         return Err(
-                            "'bitlinear(X, W, [gamma])' requires at least 2 arguments".to_string(),
+                            "'bitlinear(X, W, [gamma])' requires at least 2 arguments".to_string()
                         );
                     }
                     let x = self.eval_value(&args[0])?;
@@ -5758,7 +6025,8 @@ impl MathEvaluator {
                 "quantize_i8" | "i8_quant" | "τ_8" => {
                     if args.is_empty() {
                         return Err(
-                            "'quantize_i8(W, [group_size])' requires at least 1 argument".to_string(),
+                            "'quantize_i8(W, [group_size])' requires at least 1 argument"
+                                .to_string(),
                         );
                     }
                     let w = self.eval_value(&args[0])?;
@@ -5834,7 +6102,8 @@ impl MathEvaluator {
                                 let mean_sq = row.iter().map(|&v| v * v).sum::<f64>()
                                     / row.len().max(1) as f64;
                                 let inv_rms = 1.0 / (mean_sq + eps).sqrt();
-                                let mut norm_r: Vec<f64> = row.iter().map(|&v| v * inv_rms).collect();
+                                let mut norm_r: Vec<f64> =
+                                    row.iter().map(|&v| v * inv_rms).collect();
                                 if let Some(ref g_elems) = g_elems_opt {
                                     let glen = g_elems.len().max(1);
                                     for (i, v) in norm_r.iter_mut().enumerate() {
@@ -5860,8 +6129,8 @@ impl MathEvaluator {
                                 let start = r * last_dim;
                                 let end = start + last_dim;
                                 let row = &flat[start..end];
-                                let mean_sq =
-                                    row.iter().map(|&v| v * v).sum::<f64>() / last_dim.max(1) as f64;
+                                let mean_sq = row.iter().map(|&v| v * v).sum::<f64>()
+                                    / last_dim.max(1) as f64;
                                 let rms = (mean_sq + eps).sqrt();
                                 for (i, &v) in row.iter().enumerate() {
                                     let mut val = v / rms;
@@ -5874,12 +6143,8 @@ impl MathEvaluator {
                             }
                             MathValue::new_tensor(shape, out)
                         }
-                        MathValue::Tuple(_) => {
-                            Err("Cannot compute rmsnorm on a Tuple".to_string())
-                        }
-                        MathValue::Str(_) => {
-                            Err("Cannot compute rmsnorm on a String".to_string())
-                        }
+                        MathValue::Tuple(_) => Err("Cannot compute rmsnorm on a Tuple".to_string()),
+                        MathValue::Str(_) => Err("Cannot compute rmsnorm on a String".to_string()),
                     }
                 }
                 "rope" | "Φ" => {
@@ -6043,7 +6308,6 @@ impl MathEvaluator {
                     }
                 }
                 "outer" | "⊗" => {
-
                     if args.len() == 2 {
                         let u_val = self.eval_value(&args[0])?;
                         let v_val = self.eval_value(&args[1])?;
@@ -6129,7 +6393,12 @@ impl MathEvaluator {
                         match self.eval_value(&args[0])? {
                             MathValue::Scalar(n) => vec![n as usize],
                             MathValue::Vector(v) => v.iter().map(|&x| x as usize).collect(),
-                            _ => return Err(format!("'{}' expects (N), (M, N), or shape vector", name)),
+                            _ => {
+                                return Err(format!(
+                                    "'{}' expects (N), (M, N), or shape vector",
+                                    name
+                                ))
+                            }
                         }
                     } else {
                         let mut ds = Vec::new();
@@ -6199,7 +6468,9 @@ impl MathEvaluator {
                     let std_dev = 1.0 / (last_d.max(1) as f64).sqrt();
                     let mut state = 42u64;
                     let total: usize = dims.iter().product();
-                    let samples: Vec<f64> = (0..total).map(|_| sample_norm(&mut state, std_dev)).collect();
+                    let samples: Vec<f64> = (0..total)
+                        .map(|_| sample_norm(&mut state, std_dev))
+                        .collect();
                     match dims.len() {
                         0 => Ok(MathValue::Scalar(samples.first().copied().unwrap_or(0.0))),
                         1 => Ok(MathValue::Vector(samples)),
@@ -6332,11 +6603,7 @@ impl MathEvaluator {
                         return Err("'decode(tokens)' expects 1 argument".to_string());
                     }
                     let val = self.eval_value(&args[0])?;
-                    let bytes: Vec<u8> = val
-                        .flatten_elements()
-                        .iter()
-                        .map(|&x| x as u8)
-                        .collect();
+                    let bytes: Vec<u8> = val.flatten_elements().iter().map(|&x| x as u8).collect();
                     let s = String::from_utf8_lossy(&bytes).into_owned();
                     Ok(MathValue::Str(s))
                 }
@@ -6345,16 +6612,25 @@ impl MathEvaluator {
                         return Err("'top_k(logits, k)' expects 2 arguments".to_string());
                     }
                     let logits = self.eval_value(&args[0])?;
-                    let k = self.eval_value(&args[1])?.as_scalar().ok_or_else(|| "k must be a scalar number".to_string())? as usize;
+                    let k = self
+                        .eval_value(&args[1])?
+                        .as_scalar()
+                        .ok_or_else(|| "k must be a scalar number".to_string())?
+                        as usize;
                     let k = k.max(1);
                     let filter_top_k = |row: &[f64]| -> Vec<f64> {
                         if k >= row.len() {
                             return row.to_vec();
                         }
-                        let mut indexed: Vec<(usize, f64)> = row.iter().copied().enumerate().collect();
-                        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                        let mut indexed: Vec<(usize, f64)> =
+                            row.iter().copied().enumerate().collect();
+                        indexed.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
                         let cutoff = indexed[k - 1].1;
-                        row.iter().map(|&v| if v >= cutoff { v } else { f64::NEG_INFINITY }).collect()
+                        row.iter()
+                            .map(|&v| if v >= cutoff { v } else { f64::NEG_INFINITY })
+                            .collect()
                     };
                     match logits {
                         MathValue::Vector(v) => Ok(MathValue::Vector(filter_top_k(&v))),
@@ -6370,15 +6646,21 @@ impl MathEvaluator {
                         return Err("'top_p(logits, p)' expects 2 arguments".to_string());
                     }
                     let logits = self.eval_value(&args[0])?;
-                    let p = self.eval_value(&args[1])?.as_scalar().ok_or_else(|| "p must be a scalar number".to_string())?;
+                    let p = self
+                        .eval_value(&args[1])?
+                        .as_scalar()
+                        .ok_or_else(|| "p must be a scalar number".to_string())?;
                     let filter_top_p = |row: &[f64]| -> Vec<f64> {
                         let max_v = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
                         let exps: Vec<f64> = row.iter().map(|&x| (x - max_v).exp()).collect();
                         let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
                         let probs: Vec<f64> = exps.iter().map(|&e| e / sum_exp).collect();
 
-                        let mut indexed: Vec<(usize, f64, f64)> = (0..row.len()).map(|i| (i, row[i], probs[i])).collect();
-                        indexed.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+                        let mut indexed: Vec<(usize, f64, f64)> =
+                            (0..row.len()).map(|i| (i, row[i], probs[i])).collect();
+                        indexed.sort_by(|a, b| {
+                            b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal)
+                        });
 
                         let mut cum_p = 0.0;
                         let mut keep_indices = std::collections::HashSet::new();
@@ -6389,7 +6671,16 @@ impl MathEvaluator {
                                 break;
                             }
                         }
-                        row.iter().enumerate().map(|(i, &v)| if keep_indices.contains(&i) { v } else { f64::NEG_INFINITY }).collect()
+                        row.iter()
+                            .enumerate()
+                            .map(|(i, &v)| {
+                                if keep_indices.contains(&i) {
+                                    v
+                                } else {
+                                    f64::NEG_INFINITY
+                                }
+                            })
+                            .collect()
                     };
                     match logits {
                         MathValue::Vector(v) => Ok(MathValue::Vector(filter_top_p(&v))),
@@ -6402,7 +6693,10 @@ impl MathEvaluator {
                 }
                 "sample" | "χ" => {
                     if args.is_empty() {
-                        return Err("'sample(logits, [temp, top_p, seed])' expects at least 1 argument".to_string());
+                        return Err(
+                            "'sample(logits, [temp, top_p, seed])' expects at least 1 argument"
+                                .to_string(),
+                        );
                     }
                     let logits_val = self.eval_value(&args[0])?;
                     let temp = if args.len() > 1 {
@@ -6429,8 +6723,11 @@ impl MathEvaluator {
                         let sum_exp: f64 = exps.iter().sum::<f64>().max(1e-12);
                         let probs: Vec<f64> = exps.iter().map(|&e| e / sum_exp).collect();
 
-                        let mut indexed: Vec<(usize, f64)> = probs.iter().copied().enumerate().collect();
-                        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                        let mut indexed: Vec<(usize, f64)> =
+                            probs.iter().copied().enumerate().collect();
+                        indexed.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
 
                         let mut cum_p = 0.0;
                         let mut filtered_indices = Vec::new();
@@ -6445,7 +6742,9 @@ impl MathEvaluator {
                         }
 
                         let p_sum: f64 = filtered_probs.iter().sum::<f64>().max(1e-12);
-                        let rng_state = s_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                        let rng_state = s_seed
+                            .wrapping_mul(6364136223846793005)
+                            .wrapping_add(1442695040888963407);
                         let u = ((rng_state >> 11) as f64) / (9007199254740992.0_f64);
                         let target = u * p_sum;
 
@@ -6486,7 +6785,9 @@ impl MathEvaluator {
                         None
                     };
 
-                    let append_cache = |new_val: &MathValue, cache_val: &MathValue| -> Result<MathValue, String> {
+                    let append_cache = |new_val: &MathValue,
+                                        cache_val: &MathValue|
+                     -> Result<MathValue, String> {
                         match (cache_val, new_val) {
                             (MathValue::Matrix(c), MathValue::Matrix(n)) => {
                                 let mut updated = c.clone();
@@ -6523,20 +6824,34 @@ impl MathEvaluator {
 
                     let (q_rows, head_dim) = match &q_val {
                         MathValue::Vector(v) => (vec![v.clone()], v.len()),
-                        MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+                        MathValue::Matrix(m) => {
+                            (m.clone(), m.first().map(|r| r.len()).unwrap_or(0))
+                        }
                         _ => return Err("Q in kv_cache_attn must be Vector or Matrix".to_string()),
                     };
 
                     let (k_rows, k_dim) = match &updated_k {
-                        MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+                        MathValue::Matrix(m) => {
+                            (m.clone(), m.first().map(|r| r.len()).unwrap_or(0))
+                        }
                         MathValue::Vector(v) => (vec![v.clone()], v.len()),
-                        _ => return Err("K_cache in kv_cache_attn must be Matrix or Vector".to_string()),
+                        _ => {
+                            return Err(
+                                "K_cache in kv_cache_attn must be Matrix or Vector".to_string()
+                            )
+                        }
                     };
 
                     let (v_rows, v_dim) = match &updated_v {
-                        MathValue::Matrix(m) => (m.clone(), m.first().map(|r| r.len()).unwrap_or(0)),
+                        MathValue::Matrix(m) => {
+                            (m.clone(), m.first().map(|r| r.len()).unwrap_or(0))
+                        }
                         MathValue::Vector(v) => (vec![v.clone()], v.len()),
-                        _ => return Err("V_cache in kv_cache_attn must be Matrix or Vector".to_string()),
+                        _ => {
+                            return Err(
+                                "V_cache in kv_cache_attn must be Matrix or Vector".to_string()
+                            )
+                        }
                     };
 
                     if head_dim != k_dim || k_rows.len() != v_rows.len() {
@@ -6552,7 +6867,8 @@ impl MathEvaluator {
                     for q_row in &q_rows {
                         let mut score_row = Vec::with_capacity(k_rows.len());
                         for k_row in &k_rows {
-                            let dot: f64 = q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
+                            let dot: f64 =
+                                q_row.iter().zip(k_row.iter()).map(|(&a, &b)| a * b).sum();
                             score_row.push(dot * s);
                         }
                         let max_v = score_row.iter().copied().fold(f64::NEG_INFINITY, f64::max);
@@ -6730,17 +7046,37 @@ impl MathEvaluator {
                     if args.len() < 3 {
                         return Err("'cosine_lr(t, max_t, lr_max, [lr_min, warmup])' requires at least 3 arguments".to_string());
                     }
-                    let t = self.eval_value(&args[0])?.as_scalar().ok_or_else(|| "'t' must be a scalar".to_string())?;
-                    let max_t = self.eval_value(&args[1])?.as_scalar().ok_or_else(|| "'max_t' must be a scalar".to_string())?;
-                    let lr_max = self.eval_value(&args[2])?.as_scalar().ok_or_else(|| "'lr_max' must be a scalar".to_string())?;
-                    let lr_min = if args.len() > 3 { self.eval_value(&args[3])?.as_scalar().unwrap_or(0.0) } else { 0.0 };
-                    let warmup = if args.len() > 4 { self.eval_value(&args[4])?.as_scalar().unwrap_or(0.0) } else { 0.0 };
+                    let t = self
+                        .eval_value(&args[0])?
+                        .as_scalar()
+                        .ok_or_else(|| "'t' must be a scalar".to_string())?;
+                    let max_t = self
+                        .eval_value(&args[1])?
+                        .as_scalar()
+                        .ok_or_else(|| "'max_t' must be a scalar".to_string())?;
+                    let lr_max = self
+                        .eval_value(&args[2])?
+                        .as_scalar()
+                        .ok_or_else(|| "'lr_max' must be a scalar".to_string())?;
+                    let lr_min = if args.len() > 3 {
+                        self.eval_value(&args[3])?.as_scalar().unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
+                    let warmup = if args.len() > 4 {
+                        self.eval_value(&args[4])?.as_scalar().unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
 
                     let lr = if t < warmup {
                         lr_max * (t / warmup.max(1.0))
                     } else {
                         let progress = ((t - warmup) / (max_t - warmup).max(1.0)).clamp(0.0, 1.0);
-                        lr_min + 0.5 * (lr_max - lr_min) * (1.0 + (std::f64::consts::PI * progress).cos())
+                        lr_min
+                            + 0.5
+                                * (lr_max - lr_min)
+                                * (1.0 + (std::f64::consts::PI * progress).cos())
                     };
                     Ok(MathValue::Scalar(lr))
                 }
@@ -6752,19 +7088,44 @@ impl MathEvaluator {
                     let g_val = self.eval_value(&args[1])?;
                     let m_val = self.eval_value(&args[2])?;
                     let v_val = self.eval_value(&args[3])?;
-                    let t = self.eval_value(&args[4])?.as_scalar().ok_or_else(|| "step count 't' must be a scalar".to_string())?;
-                    let lr = self.eval_value(&args[5])?.as_scalar().ok_or_else(|| "learning rate 'lr' must be a scalar".to_string())?;
-                    let beta1 = if args.len() > 6 { self.eval_value(&args[6])?.as_scalar().unwrap_or(0.9) } else { 0.9 };
-                    let beta2 = if args.len() > 7 { self.eval_value(&args[7])?.as_scalar().unwrap_or(0.999) } else { 0.999 };
-                    let eps = if args.len() > 8 { self.eval_value(&args[8])?.as_scalar().unwrap_or(1e-8) } else { 1e-8 };
-                    let wd = if args.len() > 9 { self.eval_value(&args[9])?.as_scalar().unwrap_or(0.01) } else { 0.01 };
+                    let t = self
+                        .eval_value(&args[4])?
+                        .as_scalar()
+                        .ok_or_else(|| "step count 't' must be a scalar".to_string())?;
+                    let lr = self
+                        .eval_value(&args[5])?
+                        .as_scalar()
+                        .ok_or_else(|| "learning rate 'lr' must be a scalar".to_string())?;
+                    let beta1 = if args.len() > 6 {
+                        self.eval_value(&args[6])?.as_scalar().unwrap_or(0.9)
+                    } else {
+                        0.9
+                    };
+                    let beta2 = if args.len() > 7 {
+                        self.eval_value(&args[7])?.as_scalar().unwrap_or(0.999)
+                    } else {
+                        0.999
+                    };
+                    let eps = if args.len() > 8 {
+                        self.eval_value(&args[8])?.as_scalar().unwrap_or(1e-8)
+                    } else {
+                        1e-8
+                    };
+                    let wd = if args.len() > 9 {
+                        self.eval_value(&args[9])?.as_scalar().unwrap_or(0.01)
+                    } else {
+                        0.01
+                    };
 
                     let w_elems = w_val.flatten_elements();
                     let g_elems = g_val.flatten_elements();
                     let m_elems = m_val.flatten_elements();
                     let v_elems = v_val.flatten_elements();
 
-                    if w_elems.len() != g_elems.len() || w_elems.len() != m_elems.len() || w_elems.len() != v_elems.len() {
+                    if w_elems.len() != g_elems.len()
+                        || w_elems.len() != m_elems.len()
+                        || w_elems.len() != v_elems.len()
+                    {
                         return Err(format!(
                             "Dimension mismatch in adamw_step: W len {}, g len {}, m len {}, v len {}",
                             w_elems.len(), g_elems.len(), m_elems.len(), v_elems.len()
@@ -6797,24 +7158,25 @@ impl MathEvaluator {
                     }
 
                     let shape = w_val.shape();
-                    let reconstruct = |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
-                        match shape.len() {
-                            0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
-                            1 => Ok(MathValue::Vector(elems)),
-                            2 => {
-                                let rows = shape[0];
-                                let cols = shape[1];
-                                let mut mat = Vec::with_capacity(rows);
-                                for r in 0..rows {
-                                    let start = r * cols;
-                                    let end = (start + cols).min(elems.len());
-                                    mat.push(elems[start..end].to_vec());
+                    let reconstruct =
+                        |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
+                            match shape.len() {
+                                0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
+                                1 => Ok(MathValue::Vector(elems)),
+                                2 => {
+                                    let rows = shape[0];
+                                    let cols = shape[1];
+                                    let mut mat = Vec::with_capacity(rows);
+                                    for r in 0..rows {
+                                        let start = r * cols;
+                                        let end = (start + cols).min(elems.len());
+                                        mat.push(elems[start..end].to_vec());
+                                    }
+                                    Ok(MathValue::Matrix(mat))
                                 }
-                                Ok(MathValue::Matrix(mat))
+                                _ => MathValue::new_tensor(shape.to_vec(), elems),
                             }
-                            _ => MathValue::new_tensor(shape.to_vec(), elems),
-                        }
-                    };
+                        };
 
                     let w_out = reconstruct(w_new, &shape)?;
                     let m_out = reconstruct(m_new, &shape)?;
@@ -6829,10 +7191,25 @@ impl MathEvaluator {
                     let w_val = self.eval_value(&args[0])?;
                     let g_val = self.eval_value(&args[1])?;
                     let m_val = self.eval_value(&args[2])?;
-                    let lr = self.eval_value(&args[3])?.as_scalar().ok_or_else(|| "learning rate 'lr' must be a scalar".to_string())?;
-                    let beta1 = if args.len() > 4 { self.eval_value(&args[4])?.as_scalar().unwrap_or(0.9) } else { 0.9 };
-                    let beta2 = if args.len() > 5 { self.eval_value(&args[5])?.as_scalar().unwrap_or(0.99) } else { 0.99 };
-                    let wd = if args.len() > 6 { self.eval_value(&args[6])?.as_scalar().unwrap_or(0.01) } else { 0.01 };
+                    let lr = self
+                        .eval_value(&args[3])?
+                        .as_scalar()
+                        .ok_or_else(|| "learning rate 'lr' must be a scalar".to_string())?;
+                    let beta1 = if args.len() > 4 {
+                        self.eval_value(&args[4])?.as_scalar().unwrap_or(0.9)
+                    } else {
+                        0.9
+                    };
+                    let beta2 = if args.len() > 5 {
+                        self.eval_value(&args[5])?.as_scalar().unwrap_or(0.99)
+                    } else {
+                        0.99
+                    };
+                    let wd = if args.len() > 6 {
+                        self.eval_value(&args[6])?.as_scalar().unwrap_or(0.01)
+                    } else {
+                        0.01
+                    };
 
                     let w_elems = w_val.flatten_elements();
                     let g_elems = g_val.flatten_elements();
@@ -6841,7 +7218,9 @@ impl MathEvaluator {
                     if w_elems.len() != g_elems.len() || w_elems.len() != m_elems.len() {
                         return Err(format!(
                             "Dimension mismatch in lion_step: W len {}, g len {}, m len {}",
-                            w_elems.len(), g_elems.len(), m_elems.len()
+                            w_elems.len(),
+                            g_elems.len(),
+                            m_elems.len()
                         ));
                     }
 
@@ -6854,7 +7233,13 @@ impl MathEvaluator {
                         let m = m_elems[i];
 
                         let c = beta1 * m + (1.0 - beta1) * g;
-                        let sign_c = if c > 0.0 { 1.0 } else if c < 0.0 { -1.0 } else { 0.0 };
+                        let sign_c = if c > 0.0 {
+                            1.0
+                        } else if c < 0.0 {
+                            -1.0
+                        } else {
+                            0.0
+                        };
                         let w_t = w * (1.0 - lr * wd) - lr * sign_c;
                         let m_t = beta2 * m + (1.0 - beta2) * g;
 
@@ -6863,24 +7248,25 @@ impl MathEvaluator {
                     }
 
                     let shape = w_val.shape();
-                    let reconstruct = |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
-                        match shape.len() {
-                            0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
-                            1 => Ok(MathValue::Vector(elems)),
-                            2 => {
-                                let rows = shape[0];
-                                let cols = shape[1];
-                                let mut mat = Vec::with_capacity(rows);
-                                for r in 0..rows {
-                                    let start = r * cols;
-                                    let end = (start + cols).min(elems.len());
-                                    mat.push(elems[start..end].to_vec());
+                    let reconstruct =
+                        |elems: Vec<f64>, shape: &[usize]| -> Result<MathValue, String> {
+                            match shape.len() {
+                                0 => Ok(MathValue::Scalar(elems.first().copied().unwrap_or(0.0))),
+                                1 => Ok(MathValue::Vector(elems)),
+                                2 => {
+                                    let rows = shape[0];
+                                    let cols = shape[1];
+                                    let mut mat = Vec::with_capacity(rows);
+                                    for r in 0..rows {
+                                        let start = r * cols;
+                                        let end = (start + cols).min(elems.len());
+                                        mat.push(elems[start..end].to_vec());
+                                    }
+                                    Ok(MathValue::Matrix(mat))
                                 }
-                                Ok(MathValue::Matrix(mat))
+                                _ => MathValue::new_tensor(shape.to_vec(), elems),
                             }
-                            _ => MathValue::new_tensor(shape.to_vec(), elems),
-                        }
-                    };
+                        };
 
                     let w_out = reconstruct(w_new, &shape)?;
                     let m_out = reconstruct(m_new, &shape)?;
@@ -6894,8 +7280,16 @@ impl MathEvaluator {
                     let logp_val = self.eval_value(&args[0])?;
                     let ref_val = self.eval_value(&args[1])?;
                     let adv_val = self.eval_value(&args[2])?;
-                    let eps = if args.len() > 3 { self.eval_value(&args[3])?.as_scalar().unwrap_or(0.2) } else { 0.2 };
-                    let beta = if args.len() > 4 { self.eval_value(&args[4])?.as_scalar().unwrap_or(0.04) } else { 0.04 };
+                    let eps = if args.len() > 3 {
+                        self.eval_value(&args[3])?.as_scalar().unwrap_or(0.2)
+                    } else {
+                        0.2
+                    };
+                    let beta = if args.len() > 4 {
+                        self.eval_value(&args[4])?.as_scalar().unwrap_or(0.04)
+                    } else {
+                        0.04
+                    };
 
                     let logp_elems = logp_val.flatten_elements();
                     let ref_elems = ref_val.flatten_elements();
@@ -6904,7 +7298,9 @@ impl MathEvaluator {
                     if logp_elems.len() != ref_elems.len() || logp_elems.len() != adv_elems.len() {
                         return Err(format!(
                             "Dimension mismatch in grpo_loss: logp len {}, ref len {}, adv len {}",
-                            logp_elems.len(), ref_elems.len(), adv_elems.len()
+                            logp_elems.len(),
+                            ref_elems.len(),
+                            adv_elems.len()
                         ));
                     }
 
@@ -6924,7 +7320,10 @@ impl MathEvaluator {
                 }
                 "moe_gate" | "Ξ_m" | "moe" => {
                     if args.len() < 3 {
-                        return Err("'moe_gate(X, W_gate, experts, [top_k])' requires at least 3 arguments".to_string());
+                        return Err(
+                            "'moe_gate(X, W_gate, experts, [top_k])' requires at least 3 arguments"
+                                .to_string(),
+                        );
                     }
                     let x_val = self.eval_value(&args[0])?;
                     let w_gate = self.eval_value(&args[1])?;
@@ -6945,9 +7344,16 @@ impl MathEvaluator {
                     let v_new = self.eval_value(&args[2])?;
                     let k_ring = self.eval_value(&args[3])?;
                     let v_ring = self.eval_value(&args[4])?;
-                    let pos = self.eval_value(&args[5])?.as_scalar().ok_or_else(|| "pos must be scalar integer".to_string())? as usize;
+                    let pos = self
+                        .eval_value(&args[5])?
+                        .as_scalar()
+                        .ok_or_else(|| "pos must be scalar integer".to_string())?
+                        as usize;
                     let max_len = if args.len() > 6 {
-                        self.eval_value(&args[6])?.as_scalar().unwrap_or(k_ring.shape().first().copied().unwrap_or(1) as f64) as usize
+                        self.eval_value(&args[6])?
+                            .as_scalar()
+                            .unwrap_or(k_ring.shape().first().copied().unwrap_or(1) as f64)
+                            as usize
                     } else {
                         k_ring.shape().first().copied().unwrap_or(1)
                     };
@@ -6963,18 +7369,28 @@ impl MathEvaluator {
                         return Err(format!("'{}' expects (expr, var)", name));
                     }
                     if let MathExpr::Tuple(vars) | MathExpr::Array(vars) = &args[1] {
-                        let inlined = args[0].inline_and_expand(&self.functions, true, 0).simplify();
+                        let inlined = args[0]
+                            .inline_and_expand(&self.functions, true, 0)
+                            .simplify();
                         let mut grads = Vec::with_capacity(vars.len());
                         for v_expr in vars {
                             if let MathExpr::Var(wrt) = v_expr {
-                                if let Ok(analytical_grad) = self.eval_analytical_grad(&inlined, wrt) {
+                                if let Ok(analytical_grad) =
+                                    self.eval_analytical_grad(&inlined, wrt)
+                                {
                                     grads.push(analytical_grad);
                                 } else {
-                                    let g = self.eval_value(&MathExpr::Call("grad".to_string(), vec![args[0].clone(), v_expr.clone()]))?;
+                                    let g = self.eval_value(&MathExpr::Call(
+                                        "grad".to_string(),
+                                        vec![args[0].clone(), v_expr.clone()],
+                                    ))?;
                                     grads.push(g);
                                 }
                             } else {
-                                return Err("Target variables in multi-gradient must be identifiers".to_string());
+                                return Err(
+                                    "Target variables in multi-gradient must be identifiers"
+                                        .to_string(),
+                                );
                             }
                         }
                         return Ok(MathValue::Tuple(grads));
@@ -6987,7 +7403,9 @@ impl MathEvaluator {
                             )
                         }
                     };
-                    let inlined = args[0].inline_and_expand(&self.functions, true, 0).simplify();
+                    let inlined = args[0]
+                        .inline_and_expand(&self.functions, true, 0)
+                        .simplify();
                     // 1. Try Analytical Reverse-Mode Tape Autodiff first (O(1) backpropagation)
                     if let Ok(analytical_grad) = self.eval_analytical_grad(&inlined, &wrt) {
                         return Ok(analytical_grad);
@@ -7102,7 +7520,10 @@ impl MathEvaluator {
                                 MathValue::new_tensor(shape, grad_data)
                             }
                             MathValue::Tuple(_) => {
-                                return Err("Cannot compute scalar grad directly wrt a Tuple variable".to_string());
+                                return Err(
+                                    "Cannot compute scalar grad directly wrt a Tuple variable"
+                                        .to_string(),
+                                );
                             }
                             MathValue::Str(_) => {
                                 return Err("Cannot compute grad wrt a String variable".to_string());
@@ -7440,7 +7861,11 @@ impl MathEvaluator {
                             k1, k2
                         ));
                     }
-                    let batch_dims = if n1 >= n2 { &s1[..n1 - 2] } else { &s2[..n2 - 2] };
+                    let batch_dims = if n1 >= n2 {
+                        &s1[..n1 - 2]
+                    } else {
+                        &s2[..n2 - 2]
+                    };
                     let mut out_shape = batch_dims.to_vec();
                     out_shape.push(m);
                     out_shape.push(n);
@@ -7794,7 +8219,10 @@ impl MathEvaluator {
                 if let Some(val) = self.env.get(v) {
                     Ok((val.clone(), ExprTape::Var(v.clone())))
                 } else {
-                    Err(format!("Variable '{}' not found in environment for autodiff", v))
+                    Err(format!(
+                        "Variable '{}' not found in environment for autodiff",
+                        v
+                    ))
                 }
             }
             MathExpr::Array(elems) => {
@@ -7849,7 +8277,9 @@ impl MathEvaluator {
             MathExpr::Index(base, idx_expr) => {
                 let (base_val, base_tape) = self.eval_tape(base)?;
                 let idx_math = self.eval_value(idx_expr)?;
-                if let (MathValue::Matrix(vocab_mat), MathValue::Vector(toks)) = (&base_val, &idx_math) {
+                if let (MathValue::Matrix(vocab_mat), MathValue::Vector(toks)) =
+                    (&base_val, &idx_math)
+                {
                     let mut res = Vec::with_capacity(toks.len());
                     for &t in toks {
                         let row_idx = t as usize;
@@ -7910,7 +8340,11 @@ impl MathEvaluator {
                             ));
                         }
                     }
-                    MathValue::Tensor { shape, strides, data } => {
+                    MathValue::Tensor {
+                        shape,
+                        strides,
+                        data,
+                    } => {
                         if shape.is_empty() {
                             return Err("Cannot index empty tensor in tape".to_string());
                         }
@@ -8428,8 +8862,7 @@ impl MathProgram {
         }
 
         // 3. Compute memory metrics
-        let unoptimized_memory_bytes: usize =
-            tensor_liveness.values().map(|t| t.size_bytes).sum();
+        let unoptimized_memory_bytes: usize = tensor_liveness.values().map(|t| t.size_bytes).sum();
         let total_arena_size_bytes: usize = slot_max_sizes.iter().sum();
 
         let mut peak_memory_bytes = 0;
@@ -8591,9 +9024,27 @@ impl MathProgram {
                         }
                     } else if let MathExpr::Call(ref fn_name, ref args) = expr {
                         if (fn_name == "kv_cache_attn" || fn_name == "Ψ_c") && args.len() >= 5 {
-                            let q_s = Self::infer_shape_expr(&args[0], &env, &fns, &mut errors, Some("kv_cache_attn"));
-                            let k_s = Self::infer_shape_expr(&args[3], &env, &fns, &mut errors, Some("kv_cache_attn"));
-                            let v_s = Self::infer_shape_expr(&args[4], &env, &fns, &mut errors, Some("kv_cache_attn"));
+                            let q_s = Self::infer_shape_expr(
+                                &args[0],
+                                &env,
+                                &fns,
+                                &mut errors,
+                                Some("kv_cache_attn"),
+                            );
+                            let k_s = Self::infer_shape_expr(
+                                &args[3],
+                                &env,
+                                &fns,
+                                &mut errors,
+                                Some("kv_cache_attn"),
+                            );
+                            let v_s = Self::infer_shape_expr(
+                                &args[4],
+                                &env,
+                                &fns,
+                                &mut errors,
+                                Some("kv_cache_attn"),
+                            );
                             if let Some(ref name0) = names.get(0) {
                                 if let Some(ref s) = q_s {
                                     env.insert((*name0).clone(), s.clone());
@@ -8682,9 +9133,27 @@ impl MathProgram {
                         }
                     } else if let MathExpr::Call(ref fn_name, ref args) = expr {
                         if fn_name == "kv_cache_attn" && args.len() >= 5 {
-                            let q_s = Self::infer_shape_expr(&args[0], &global_env, &fns, &mut errors, Some("kv_cache_attn"));
-                            let k_s = Self::infer_shape_expr(&args[3], &global_env, &fns, &mut errors, Some("kv_cache_attn"));
-                            let v_s = Self::infer_shape_expr(&args[4], &global_env, &fns, &mut errors, Some("kv_cache_attn"));
+                            let q_s = Self::infer_shape_expr(
+                                &args[0],
+                                &global_env,
+                                &fns,
+                                &mut errors,
+                                Some("kv_cache_attn"),
+                            );
+                            let k_s = Self::infer_shape_expr(
+                                &args[3],
+                                &global_env,
+                                &fns,
+                                &mut errors,
+                                Some("kv_cache_attn"),
+                            );
+                            let v_s = Self::infer_shape_expr(
+                                &args[4],
+                                &global_env,
+                                &fns,
+                                &mut errors,
+                                Some("kv_cache_attn"),
+                            );
                             if let Some(ref name0) = names.get(0) {
                                 if let Some(ref s) = q_s {
                                     global_env.insert((*name0).clone(), s.clone());
@@ -8740,74 +9209,6 @@ impl MathProgram {
         }
     }
 
-    /// Detects circular dependencies in the computational DAG using DFS cycle detection.
-    /// Returns Ok(()) if the dependency graph is acyclic, or Err(String) with the cycle path.
-    pub fn check_circular_dependencies(&self) -> Result<(), String> {
-        let mut adj: HashMap<String, Vec<String>> = HashMap::new();
-        for item in &self.items {
-            match item {
-                MathItem::Binding { name, expr } => {
-                    let deps: Vec<String> = expr.free_vars().into_iter().collect();
-                    adj.entry(name.clone()).or_default().extend(deps);
-                }
-                MathItem::TupleBinding { names, expr } => {
-                    let deps: Vec<String> = expr.free_vars().into_iter().collect();
-                    for name in names {
-                        adj.entry(name.clone()).or_default().extend(deps.clone());
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        #[derive(Clone, Copy, PartialEq)]
-        enum NodeState { Unvisited, Visiting, Visited }
-        let mut state: HashMap<String, NodeState> = HashMap::new();
-        let mut path: Vec<String> = Vec::new();
-
-        fn dfs(
-            node: &str,
-            adj: &HashMap<String, Vec<String>>,
-            state: &mut HashMap<String, NodeState>,
-            path: &mut Vec<String>,
-        ) -> Result<(), String> {
-            state.insert(node.to_string(), NodeState::Visiting);
-            path.push(node.to_string());
-
-            if let Some(neighbors) = adj.get(node) {
-                for next in neighbors {
-                    if !adj.contains_key(next) {
-                        continue;
-                    }
-                    match state.get(next).copied().unwrap_or(NodeState::Unvisited) {
-                        NodeState::Visiting => {
-                            let cycle_start = path.iter().position(|x| x == next).unwrap_or(0);
-                            let cycle = path[cycle_start..].join(" -> ");
-                            return Err(format!("Circular dependency detected in computational graph: {} -> {}", cycle, next));
-                        }
-                        NodeState::Unvisited => {
-                            dfs(next, adj, state, path)?;
-                        }
-                        NodeState::Visited => {}
-                    }
-                }
-            }
-
-            path.pop();
-            state.insert(node.to_string(), NodeState::Visited);
-            Ok(())
-        }
-
-        let keys: Vec<String> = adj.keys().cloned().collect();
-        for node in &keys {
-            if state.get(node).copied().unwrap_or(NodeState::Unvisited) == NodeState::Unvisited {
-                dfs(node, &adj, &mut state, &mut path)?;
-            }
-        }
-
-        Ok(())
-    }
-
     /// Recursively infers and checks tensor shape for a mathematical expression AST
     pub fn infer_shape_expr(
         expr: &MathExpr,
@@ -8858,7 +9259,8 @@ impl MathProgram {
                     if b_shape.is_empty() {
                         errors.push(format!("{}Cannot index into a scalar value", prefix));
                         None
-                    } else if b_shape.len() == 2 && matches!(i_shape, Some(ref is) if is.len() == 1) {
+                    } else if b_shape.len() == 2 && matches!(i_shape, Some(ref is) if is.len() == 1)
+                    {
                         Some(vec![i_shape.unwrap()[0], b_shape[1]])
                     } else {
                         Some(b_shape[1..].to_vec())
@@ -8974,7 +9376,8 @@ impl MathProgram {
                                     ));
                                     None
                                 } else {
-                                    let batch_dims = if nl >= nr { &l[..nl - 2] } else { &r[..nr - 2] };
+                                    let batch_dims =
+                                        if nl >= nr { &l[..nl - 2] } else { &r[..nr - 2] };
                                     let mut out = batch_dims.to_vec();
                                     out.push(l[nl - 2]);
                                     out.push(r[nr - 1]);
@@ -9100,7 +9503,6 @@ impl MathProgram {
                     }
                 }
                 "outer" | "⊗" => {
-
                     if args.len() == 2 {
                         let u = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let v = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
@@ -9220,8 +9622,7 @@ impl MathProgram {
                         } else {
                             0
                         };
-                        if let Some(s) =
-                            Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx)
+                        if let Some(s) = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx)
                         {
                             if s.len() == 2 {
                                 if axis == 0 {
@@ -9448,7 +9849,10 @@ impl MathProgram {
                 subscript_grad if subscript_grad.starts_with("∇_") => {
                     if args.len() == 1 {
                         let wrt = subscript_grad.strip_prefix("∇_").unwrap();
-                        let call = MathExpr::Call("grad".to_string(), vec![args[0].clone(), MathExpr::Var(wrt.to_string())]);
+                        let call = MathExpr::Call(
+                            "grad".to_string(),
+                            vec![args[0].clone(), MathExpr::Var(wrt.to_string())],
+                        );
                         Self::infer_shape_expr(&call, env, fn_sigs, errors, ctx)
                     } else {
                         errors.push(format!(
@@ -9510,8 +9914,10 @@ impl MathProgram {
                         let q_s = Self::infer_shape_expr(&args[0], env, fn_sigs, errors, ctx);
                         let _k_new_s = Self::infer_shape_expr(&args[1], env, fn_sigs, errors, ctx);
                         let _v_new_s = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
-                        let _k_cache_s = Self::infer_shape_expr(&args[3], env, fn_sigs, errors, ctx);
-                        let _v_cache_s = Self::infer_shape_expr(&args[4], env, fn_sigs, errors, ctx);
+                        let _k_cache_s =
+                            Self::infer_shape_expr(&args[3], env, fn_sigs, errors, ctx);
+                        let _v_cache_s =
+                            Self::infer_shape_expr(&args[4], env, fn_sigs, errors, ctx);
                         q_s
                     } else {
                         None
@@ -9912,10 +10318,11 @@ impl MathProgram {
                             if !p.dims.is_empty() {
                                 if let Some(ref ashp) = arg_s {
                                     let dims_match = ashp.len() == p.dims.len()
-                                        && ashp
-                                            .iter()
-                                            .zip(p.dims.iter())
-                                            .all(|(&actual, &expected)| expected == 0 || actual == expected);
+                                        && ashp.iter().zip(p.dims.iter()).all(
+                                            |(&actual, &expected)| {
+                                                expected == 0 || actual == expected
+                                            },
+                                        );
                                     if !dims_match {
                                         errors.push(format!(
                                             "{}Argument for parameter '{}' has shape {:?}, expected shape {:?}",
@@ -10071,7 +10478,11 @@ impl MathProgram {
                             })
                             .collect();
                         p_decls.push(format!("{}* restrict out", r_type));
-                        out.push_str(&format!("CRON_API void {}({}) {{\n", name, p_decls.join(", ")));
+                        out.push_str(&format!(
+                            "CRON_API void {}({}) {{\n",
+                            name,
+                            p_decls.join(", ")
+                        ));
                         out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", m));
                         out.push_str(&format!("        for (int j = 0; j < {}; ++j) {{\n", n));
                         out.push_str("            float acc = 0.0f;\n");
@@ -10081,7 +10492,10 @@ impl MathProgram {
                             a_p.name, k, b_p.name, n
                         ));
                         out.push_str("            }\n");
-                        out.push_str(&format!("            out[i * {} + j] = ({})acc;\n", n, r_type));
+                        out.push_str(&format!(
+                            "            out[i * {} + j] = ({})acc;\n",
+                            n, r_type
+                        ));
                         out.push_str("        }\n    }\n}\n\n");
                         continue;
                     }
@@ -10100,7 +10514,11 @@ impl MathProgram {
                             })
                             .collect();
                         p_decls.push(format!("{}* restrict out", r_type));
-                        out.push_str(&format!("CRON_API void {}({}) {{\n", name, p_decls.join(", ")));
+                        out.push_str(&format!(
+                            "CRON_API void {}({}) {{\n",
+                            name,
+                            p_decls.join(", ")
+                        ));
                         let m = w_p.dims[0];
                         let n = w_p.dims[1];
                         let bias_param = params
@@ -10133,7 +10551,11 @@ impl MathProgram {
                             })
                             .collect();
                         p_decls.push(format!("{}* restrict out", r_type));
-                        out.push_str(&format!("CRON_API void {}({}) {{\n", name, p_decls.join(", ")));
+                        out.push_str(&format!(
+                            "CRON_API void {}({}) {{\n",
+                            name,
+                            p_decls.join(", ")
+                        ));
                         let n = v_p.dims[0];
                         out.push_str(&format!("    for (int i = 0; i < {}; ++i) {{\n", n));
                         let mut body_str = Self::expr_to_c23(&expanded_body);
@@ -10142,11 +10564,7 @@ impl MathProgram {
                                 body_str = body_str.replace(&p.name, &format!("{}[i]", p.name));
                             }
                         }
-                        out.push_str(&format!(
-                            "        out[i] = ({})({});\n",
-                            r_type,
-                            body_str
-                        ));
+                        out.push_str(&format!("        out[i] = ({})({});\n", r_type, body_str));
                         out.push_str("    }\n}\n\n");
                         continue;
                     }
@@ -10173,7 +10591,12 @@ impl MathProgram {
     /// Generates a clean C ABI header (.h) for shared library integration
     pub fn to_c_header(&self, module_name: &str) -> String {
         let prog = self.optimize_tensor_graph();
-        let guard = format!("CRON_{}_H", module_name.to_uppercase().replace(|c: char| !c.is_alphanumeric(), "_"));
+        let guard = format!(
+            "CRON_{}_H",
+            module_name
+                .to_uppercase()
+                .replace(|c: char| !c.is_alphanumeric(), "_")
+        );
         let mut out = String::new();
         out.push_str(&format!("#ifndef {}\n#define {}\n\n", guard, guard));
         out.push_str("#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n\n");
@@ -10189,7 +10612,13 @@ impl MathProgram {
         out.push_str("#endif\n\n");
 
         for item in &prog.items {
-            if let MathItem::Function { name, params, ret_type, .. } = item {
+            if let MathItem::Function {
+                name,
+                params,
+                ret_type,
+                ..
+            } = item
+            {
                 let inferred_ret = Self::infer_return_dtype(params, ret_type);
                 let r_type = inferred_ret.to_c23_type();
                 let has_shaped_params = params.iter().any(|p| !p.dims.is_empty());
@@ -10205,13 +10634,22 @@ impl MathProgram {
                         })
                         .collect();
                     p_decls.push(format!("{}* out", r_type));
-                    out.push_str(&format!("CRON_API void {}({});\n", name, p_decls.join(", ")));
+                    out.push_str(&format!(
+                        "CRON_API void {}({});\n",
+                        name,
+                        p_decls.join(", ")
+                    ));
                 } else {
                     let p_decls: Vec<String> = params
                         .iter()
                         .map(|p| format!("{} {}", p.dtype.to_c23_type(), p.name))
                         .collect();
-                    out.push_str(&format!("CRON_API {} {}({});\n", r_type, name, p_decls.join(", ")));
+                    out.push_str(&format!(
+                        "CRON_API {} {}({});\n",
+                        r_type,
+                        name,
+                        p_decls.join(", ")
+                    ));
                 }
             }
         }
@@ -10410,8 +10848,7 @@ impl MathProgram {
                         } else if let MathExpr::Binary(lhs, MathBinOp::MatMul, rhs) = expr {
                             let l_str = Self::expr_to_c23(lhs);
                             let r_str = Self::expr_to_c23(rhs);
-                            let l_shape =
-                                shapes.get(&l_str).cloned().unwrap_or_else(|| vec![n, n]);
+                            let l_shape = shapes.get(&l_str).cloned().unwrap_or_else(|| vec![n, n]);
                             let k = if l_shape.len() == 2 { l_shape[1] } else { n };
                             out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
                             out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
@@ -10469,7 +10906,10 @@ impl MathProgram {
                                         arg_s, arg_s
                                     ));
                                     out.push_str("        }\n");
-                                    out.push_str(&format!("        {}[_i] = (float)_best_j;\n", name));
+                                    out.push_str(&format!(
+                                        "        {}[_i] = (float)_best_j;\n",
+                                        name
+                                    ));
                                     out.push_str("    }\n");
                                 }
                                 _ => {
@@ -10519,16 +10959,28 @@ impl MathProgram {
                                 "    alignas(64) float {}[{}][{}];\n",
                                 name, rows, cols
                             ));
-                            out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                            out.push_str(&format!(
+                                "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                rows
+                            ));
                             out.push_str(&format!("        int _tok = (int){}[_i];\n", toks_s));
-                            out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
-                            out.push_str(&format!("            {}[_i][_j] = (float){}[_tok][_j];\n", name, table_s));
+                            out.push_str(&format!(
+                                "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                cols
+                            ));
+                            out.push_str(&format!(
+                                "            {}[_i][_j] = (float){}[_tok][_j];\n",
+                                name, table_s
+                            ));
                             out.push_str("        }\n");
                             out.push_str("    }\n");
                         } else if let MathExpr::Binary(lhs, MathBinOp::MatMul, rhs) = expr {
                             let l_str = Self::expr_to_c23(lhs);
                             let r_str = Self::expr_to_c23(rhs);
-                            let l_shape = shapes.get(&l_str).cloned().unwrap_or_else(|| vec![rows, cols]);
+                            let l_shape = shapes
+                                .get(&l_str)
+                                .cloned()
+                                .unwrap_or_else(|| vec![rows, cols]);
                             let k = if l_shape.len() == 2 { l_shape[1] } else { cols };
                             out.push_str(&format!(
                                 "    alignas(64) float {}[{}][{}];\n",
@@ -10536,27 +10988,50 @@ impl MathProgram {
                             ));
                             if rows >= 64 || cols >= 64 || k >= 64 {
                                 out.push_str("    #pragma omp parallel for collapse(2)\n");
-                                out.push_str(&format!("    for (int _ii = 0; _ii < {}; _ii += 32) {{\n", rows));
-                                out.push_str(&format!("        for (int _jj = 0; _jj < {}; _jj += 32) {{\n", cols));
-                                out.push_str(&format!("            for (int _kk = 0; _kk < {}; _kk += 32) {{\n", k));
+                                out.push_str(&format!(
+                                    "    for (int _ii = 0; _ii < {}; _ii += 32) {{\n",
+                                    rows
+                                ));
+                                out.push_str(&format!(
+                                    "        for (int _jj = 0; _jj < {}; _jj += 32) {{\n",
+                                    cols
+                                ));
+                                out.push_str(&format!(
+                                    "            for (int _kk = 0; _kk < {}; _kk += 32) {{\n",
+                                    k
+                                ));
                                 out.push_str(&format!("                for (int _i = _ii; _i < ((_ii + 32 < {}) ? _ii + 32 : {}); ++_i) {{\n", rows, rows));
                                 out.push_str(&format!("                    for (int _j = _jj; _j < ((_jj + 32 < {}) ? _jj + 32 : {}); ++_j) {{\n", cols, cols));
-                                out.push_str("                        float _acc = (_kk == 0) ? 0.0f : ");
+                                out.push_str(
+                                    "                        float _acc = (_kk == 0) ? 0.0f : ",
+                                );
                                 out.push_str(&format!("{}[_i][_j];\n", name));
                                 out.push_str(&format!("                        for (int _k = _kk; _k < ((_kk + 32 < {}) ? _kk + 32 : {}); ++_k) {{\n", k, k));
                                 out.push_str(&format!("                            _acc += (float){}[_i][_k] * (float){}[_k][_j];\n", l_str, r_str));
                                 out.push_str("                        }\n");
-                                out.push_str(&format!("                        {}[_i][_j] = _acc;\n", name));
+                                out.push_str(&format!(
+                                    "                        {}[_i][_j] = _acc;\n",
+                                    name
+                                ));
                                 out.push_str("                    }\n");
                                 out.push_str("                }\n");
                                 out.push_str("            }\n");
                                 out.push_str("        }\n");
                                 out.push_str("    }\n");
                             } else {
-                                out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                out.push_str(&format!(
+                                    "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                    rows
+                                ));
+                                out.push_str(&format!(
+                                    "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                    cols
+                                ));
                                 out.push_str("            float _acc = 0.0f;\n");
-                                out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                                out.push_str(&format!(
+                                    "            for (int _k = 0; _k < {}; ++_k) {{\n",
+                                    k
+                                ));
                                 out.push_str(&format!(
                                     "                _acc += (float){}[_i][_k] * (float){}[_k][_j];\n",
                                     l_str, r_str
@@ -10573,11 +11048,20 @@ impl MathProgram {
                             };
                             let fn_name = Self::expr_to_c23(func);
                             let init_s = Self::expr_to_c23(input);
-                            out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
+                            out.push_str(&format!(
+                                "    alignas(64) float {}[{}][{}];\n",
+                                name, rows, cols
+                            ));
                             out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) for (int _j = 0; _j < {}; ++_j) {}[_i][_j] = (float){}[_i][_j];\n", rows, cols, name, init_s));
                             out.push_str(&format!("    printf(\"  [*] Running {} native silicon training loop iterations ({})\\n\");\n", iters, fn_name));
-                            out.push_str(&format!("    for (int _iter = 0; _iter < {}; ++_iter) {{\n", iters));
-                            out.push_str(&format!("        // Native in-silicon parameter update step: {}\n", fn_name));
+                            out.push_str(&format!(
+                                "    for (int _iter = 0; _iter < {}; ++_iter) {{\n",
+                                iters
+                            ));
+                            out.push_str(&format!(
+                                "        // Native in-silicon parameter update step: {}\n",
+                                fn_name
+                            ));
                             out.push_str("    }\n");
                         } else if let MathExpr::Binary(lhs, op, rhs) = expr {
                             let l_str = Self::expr_to_c23(lhs);
@@ -10594,8 +11078,14 @@ impl MathProgram {
                                 "    alignas(64) float {}[{}][{}];\n",
                                 name, rows, cols
                             ));
-                            out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                            out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                            out.push_str(&format!(
+                                "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                rows
+                            ));
+                            out.push_str(&format!(
+                                "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                cols
+                            ));
                             if r_shape.len() == 1 {
                                 // 2D-1D Broadcasting: [rows, cols] op [cols]
                                 out.push_str(&format!(
@@ -10618,8 +11108,14 @@ impl MathProgram {
                                         "    alignas(64) float {}[{}][{}];\n",
                                         name, rows, cols
                                     ));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
                                     out.push_str(&format!(
                                         "            {}[_i][_j] = (float){}[_j][_i];\n",
                                         name, arg_s
@@ -10634,7 +11130,8 @@ impl MathProgram {
                                     ));
                                     out.push_str(&format!(
                                         "    for (int _i = 0; _i < {}; ++_i) {}[_i][_i] = 1.0f;\n",
-                                        rows.min(cols), name
+                                        rows.min(cols),
+                                        name
                                     ));
                                 }
                                 "zeros" | "O" => {
@@ -10648,16 +11145,31 @@ impl MathProgram {
                                         "    alignas(64) float {}[{}][{}];\n",
                                         name, rows, cols
                                     ));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
-                                    out.push_str(&format!("            {}[_i][_j] = 1.0f;\n", name));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = 1.0f;\n",
+                                        name
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "softmax" | "ρ" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
                                     out.push_str("        float _max_v = -1e30f;\n");
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) if ((float){}[_i][_j] > _max_v) _max_v = (float){}[_i][_j];\n", cols, arg_s, arg_s));
                                     out.push_str("        float _sum_exp = 0.0f;\n");
@@ -10670,16 +11182,37 @@ impl MathProgram {
                                     let q_s = Self::expr_to_c23(&args[0]);
                                     let k_s = Self::expr_to_c23(&args[1]);
                                     let v_s = Self::expr_to_c23(&args[2]);
-                                    let q_shape = shapes.get(&q_s).cloned().unwrap_or_else(|| vec![rows, cols]);
-                                    let k_shape = shapes.get(&k_s).cloned().unwrap_or_else(|| vec![rows, cols]);
+                                    let q_shape = shapes
+                                        .get(&q_s)
+                                        .cloned()
+                                        .unwrap_or_else(|| vec![rows, cols]);
+                                    let k_shape = shapes
+                                        .get(&k_s)
+                                        .cloned()
+                                        .unwrap_or_else(|| vec![rows, cols]);
                                     let dim_k = if q_shape.len() == 2 { q_shape[1] } else { cols };
                                     let seq_k = if k_shape.len() == 2 { k_shape[0] } else { rows };
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    float _scale = 1.0f / sqrtf((float){});\n", dim_k));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        alignas(16) float _scores[{}];\n", seq_k));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    float _scale = 1.0f / sqrtf((float){});\n",
+                                        dim_k
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        alignas(16) float _scores[{}];\n",
+                                        seq_k
+                                    ));
                                     out.push_str("        float _max_s = -1e30f;\n");
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", seq_k));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        seq_k
+                                    ));
                                     if is_causal {
                                         out.push_str("            if (_j > _i) { _scores[_j] = -1e30f; } else {\n");
                                     }
@@ -10693,56 +11226,119 @@ impl MathProgram {
                                     out.push_str("        }\n");
                                     out.push_str("        float _sum_e = 0.0f;\n");
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{ _scores[_j] = expf(_scores[_j] - _max_s); _sum_e += _scores[_j]; }}\n", seq_k));
-                                    out.push_str(&format!("        for (int _d = 0; _d < {}; ++_d) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "        for (int _d = 0; _d < {}; ++_d) {{\n",
+                                        cols
+                                    ));
                                     out.push_str("            float _v_acc = 0.0f;\n");
                                     out.push_str(&format!("            for (int _j = 0; _j < {}; ++_j) _v_acc += (_scores[_j] / _sum_e) * (float){}[_j][_d];\n", seq_k, v_s));
-                                    out.push_str(&format!("            {}[_i][_d] = _v_acc;\n", name));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_d] = _v_acc;\n",
+                                        name
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "silu" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
-                                    out.push_str(&format!("            float _x = (float){}[_i][_j];\n", arg_s));
-                                    out.push_str(&format!("            {}[_i][_j] = _x / (1.0f + expf(-_x));\n", name));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "            float _x = (float){}[_i][_j];\n",
+                                        arg_s
+                                    ));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = _x / (1.0f + expf(-_x));\n",
+                                        name
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "relu" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
-                                    out.push_str(&format!("            float _x = (float){}[_i][_j];\n", arg_s));
-                                    out.push_str(&format!("            {}[_i][_j] = (_x > 0.0f) ? _x : 0.0f;\n", name));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "            float _x = (float){}[_i][_j];\n",
+                                        arg_s
+                                    ));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = (_x > 0.0f) ? _x : 0.0f;\n",
+                                        name
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "gelu" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
-                                    out.push_str(&format!("            float _x = (float){}[_i][_j];\n", arg_s));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "            float _x = (float){}[_i][_j];\n",
+                                        arg_s
+                                    ));
                                     out.push_str(&format!("            {}[_i][_j] = 0.5f * _x * (1.0f + tanhf(0.79788456f * (_x + 0.044715f * _x * _x * _x)));\n", name));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "rope" | "Φ" => {
                                     let arg_s = Self::expr_to_c23(&args[0]);
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
                                     out.push_str("        float _pos = (float)_i;\n");
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; _j += 2) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; _j += 2) {{\n",
+                                        cols
+                                    ));
                                     out.push_str(&format!("            float _freq = 1.0f / powf(10000.0f, (float)_j / (float){});\n", cols));
                                     out.push_str("            float _theta = _pos * _freq;\n");
                                     out.push_str("            float _cos_t = cosf(_theta);\n");
                                     out.push_str("            float _sin_t = sinf(_theta);\n");
-                                    out.push_str(&format!("            float _x0 = (float){}[_i][_j];\n", arg_s));
+                                    out.push_str(&format!(
+                                        "            float _x0 = (float){}[_i][_j];\n",
+                                        arg_s
+                                    ));
                                     out.push_str(&format!("            float _x1 = (_j + 1 < {}) ? (float){}[_i][_j + 1] : 0.0f;\n", cols, arg_s));
-                                    out.push_str(&format!("            {}[_i][_j] = _x0 * _cos_t - _x1 * _sin_t;\n", name));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = _x0 * _cos_t - _x1 * _sin_t;\n",
+                                        name
+                                    ));
                                     out.push_str(&format!("            if (_j + 1 < {}) {}[_i][_j + 1] = _x0 * _sin_t + _x1 * _cos_t;\n", cols, name));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
@@ -10750,19 +11346,44 @@ impl MathProgram {
                                 "bitlinear" => {
                                     let x_s = Self::expr_to_c23(&args[0]);
                                     let w_s = Self::expr_to_c23(&args[1]);
-                                    let gamma_s = if args.len() > 2 { Self::expr_to_c23(&args[2]) } else { "1.0f".to_string() };
-                                    let x_shape = shapes.get(&x_s).cloned().unwrap_or_else(|| vec![rows, cols]);
+                                    let gamma_s = if args.len() > 2 {
+                                        Self::expr_to_c23(&args[2])
+                                    } else {
+                                        "1.0f".to_string()
+                                    };
+                                    let x_shape = shapes
+                                        .get(&x_s)
+                                        .cloned()
+                                        .unwrap_or_else(|| vec![rows, cols]);
                                     let k = if x_shape.len() == 2 { x_shape[1] } else { cols };
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
                                     out.push_str("            float _acc = 0.0f;\n");
-                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
-                                    out.push_str(&format!("                float _wv = (float){}[_j][_k];\n", w_s));
+                                    out.push_str(&format!(
+                                        "            for (int _k = 0; _k < {}; ++_k) {{\n",
+                                        k
+                                    ));
+                                    out.push_str(&format!(
+                                        "                float _wv = (float){}[_j][_k];\n",
+                                        w_s
+                                    ));
                                     out.push_str(&format!("                if (_wv > 0.5f) _acc += (float){}[_i][_k];\n", x_s));
                                     out.push_str(&format!("                else if (_wv < -0.5f) _acc -= (float){}[_i][_k];\n", x_s));
                                     out.push_str("            }\n");
-                                    out.push_str(&format!("            {}[_i][_j] = _acc * (float){};\n", name, gamma_s));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = _acc * (float){};\n",
+                                        name, gamma_s
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
@@ -10772,7 +11393,10 @@ impl MathProgram {
                                         "    alignas(64) float {}[{}][{}];\n",
                                         name, rows, cols
                                     ));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
                                     out.push_str("        float _ss = 0.0f;\n");
                                     out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) _ss += (float){}[_i][_j] * (float){}[_i][_j];\n", cols, arg_s, arg_s));
                                     out.push_str(&format!("        float _scale = 1.0f / sqrtf((_ss / (float){}) + 1e-5f);\n", cols));
@@ -10786,9 +11410,18 @@ impl MathProgram {
                                         "    alignas(64) float {}[{}][{}];\n",
                                         name, rows, cols
                                     ));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
-                                    out.push_str(&format!("            {}[_i][_j] = (float){}[_i] * (float){}[_j];\n", name, u_s, v_s));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = (float){}[_i] * (float){}[_j];\n",
+                                        name, u_s, v_s
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
@@ -10799,10 +11432,22 @@ impl MathProgram {
                                         "    alignas(64) float {}[{}][{}];\n",
                                         name, rows, cols
                                     ));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        int _tok = (int){}[_i];\n", toks_s));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
-                                    out.push_str(&format!("            {}[_i][_j] = (float){}[_tok][_j];\n", name, table_s));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        int _tok = (int){}[_i];\n",
+                                        toks_s
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = (float){}[_tok][_j];\n",
+                                        name, table_s
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
@@ -10810,19 +11455,37 @@ impl MathProgram {
                                     let x_s = Self::expr_to_c23(&args[0]);
                                     let wg_s = Self::expr_to_c23(&args[1]);
                                     let wu_s = Self::expr_to_c23(&args[2]);
-                                    let x_shape = shapes.get(&x_s).cloned().unwrap_or_else(|| vec![rows, cols]);
+                                    let x_shape = shapes
+                                        .get(&x_s)
+                                        .cloned()
+                                        .unwrap_or_else(|| vec![rows, cols]);
                                     let k = if x_shape.len() == 2 { x_shape[1] } else { cols };
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
                                     out.push_str("            float _acc_g = 0.0f;\n");
                                     out.push_str("            float _acc_u = 0.0f;\n");
-                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                                    out.push_str(&format!(
+                                        "            for (int _k = 0; _k < {}; ++_k) {{\n",
+                                        k
+                                    ));
                                     out.push_str(&format!("                _acc_g += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wg_s));
                                     out.push_str(&format!("                _acc_u += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wu_s));
                                     out.push_str("            }\n");
                                     out.push_str("            float _silu_g = _acc_g / (1.0f + expf(-_acc_g));\n");
-                                    out.push_str(&format!("            {}[_i][_j] = _silu_g * _acc_u;\n", name));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = _silu_g * _acc_u;\n",
+                                        name
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
@@ -10831,47 +11494,106 @@ impl MathProgram {
                                     let wg_s = Self::expr_to_c23(&args[1]);
                                     let wu_s = Self::expr_to_c23(&args[2]);
                                     let wd_s = Self::expr_to_c23(&args[3]);
-                                    let x_shape = shapes.get(&x_s).cloned().unwrap_or_else(|| vec![rows, cols]);
-                                    let wg_shape = shapes.get(&wg_s).cloned().unwrap_or_else(|| vec![cols, cols]);
+                                    let x_shape = shapes
+                                        .get(&x_s)
+                                        .cloned()
+                                        .unwrap_or_else(|| vec![rows, cols]);
+                                    let wg_shape = shapes
+                                        .get(&wg_s)
+                                        .cloned()
+                                        .unwrap_or_else(|| vec![cols, cols]);
                                     let k = if x_shape.len() == 2 { x_shape[1] } else { cols };
-                                    let h = if wg_shape.len() == 2 { wg_shape[1] } else { cols };
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        alignas(64) float _h[{}];\n", h));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", h));
+                                    let h = if wg_shape.len() == 2 {
+                                        wg_shape[1]
+                                    } else {
+                                        cols
+                                    };
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        alignas(64) float _h[{}];\n",
+                                        h
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        h
+                                    ));
                                     out.push_str("            float _acc_g = 0.0f;\n");
                                     out.push_str("            float _acc_u = 0.0f;\n");
-                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                                    out.push_str(&format!(
+                                        "            for (int _k = 0; _k < {}; ++_k) {{\n",
+                                        k
+                                    ));
                                     out.push_str(&format!("                _acc_g += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wg_s));
                                     out.push_str(&format!("                _acc_u += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, wu_s));
                                     out.push_str("            }\n");
                                     out.push_str("            float _silu_g = _acc_g / (1.0f + expf(-_acc_g));\n");
                                     out.push_str("            _h[_j] = _silu_g * _acc_u;\n");
                                     out.push_str("        }\n");
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
                                     out.push_str("            float _acc_d = 0.0f;\n");
-                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", h));
-                                    out.push_str(&format!("                _acc_d += _h[_k] * (float){}[_k][_j];\n", wd_s));
+                                    out.push_str(&format!(
+                                        "            for (int _k = 0; _k < {}; ++_k) {{\n",
+                                        h
+                                    ));
+                                    out.push_str(&format!(
+                                        "                _acc_d += _h[_k] * (float){}[_k][_j];\n",
+                                        wd_s
+                                    ));
                                     out.push_str("            }\n");
-                                    out.push_str(&format!("            {}[_i][_j] = _acc_d;\n", name));
+                                    out.push_str(&format!(
+                                        "            {}[_i][_j] = _acc_d;\n",
+                                        name
+                                    ));
                                     out.push_str("        }\n");
                                     out.push_str("    }\n");
                                 }
                                 "fused_linear_relu" | "fused_linear_gelu" | "fused_linear_silu" => {
                                     let x_s = Self::expr_to_c23(&args[0]);
                                     let w_s = Self::expr_to_c23(&args[1]);
-                                    let b_opt = if args.len() > 2 { Some(Self::expr_to_c23(&args[2])) } else { None };
-                                    let x_shape = shapes.get(&x_s).cloned().unwrap_or_else(|| vec![rows, cols]);
+                                    let b_opt = if args.len() > 2 {
+                                        Some(Self::expr_to_c23(&args[2]))
+                                    } else {
+                                        None
+                                    };
+                                    let x_shape = shapes
+                                        .get(&x_s)
+                                        .cloned()
+                                        .unwrap_or_else(|| vec![rows, cols]);
                                     let k = if x_shape.len() == 2 { x_shape[1] } else { cols };
-                                    out.push_str(&format!("    alignas(64) float {}[{}][{}];\n", name, rows, cols));
-                                    out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", rows));
-                                    out.push_str(&format!("        for (int _j = 0; _j < {}; ++_j) {{\n", cols));
+                                    out.push_str(&format!(
+                                        "    alignas(64) float {}[{}][{}];\n",
+                                        name, rows, cols
+                                    ));
+                                    out.push_str(&format!(
+                                        "    for (int _i = 0; _i < {}; ++_i) {{\n",
+                                        rows
+                                    ));
+                                    out.push_str(&format!(
+                                        "        for (int _j = 0; _j < {}; ++_j) {{\n",
+                                        cols
+                                    ));
                                     if let Some(ref b_s) = b_opt {
-                                        out.push_str(&format!("            float _acc = (float){}[_j];\n", b_s));
+                                        out.push_str(&format!(
+                                            "            float _acc = (float){}[_j];\n",
+                                            b_s
+                                        ));
                                     } else {
                                         out.push_str("            float _acc = 0.0f;\n");
                                     }
-                                    out.push_str(&format!("            for (int _k = 0; _k < {}; ++_k) {{\n", k));
+                                    out.push_str(&format!(
+                                        "            for (int _k = 0; _k < {}; ++_k) {{\n",
+                                        k
+                                    ));
                                     out.push_str(&format!("                _acc += (float){}[_i][_k] * (float){}[_k][_j];\n", x_s, w_s));
                                     out.push_str("            }\n");
                                     match func.as_str() {
@@ -10959,14 +11681,20 @@ impl MathProgram {
                 MathItem::Binding { name, expr } => {
                     let id = format!("N{}", node_idx);
                     node_idx += 1;
-                    let shape_desc = shapes.get(name).map(|s| format!("{:?}", s)).unwrap_or_else(|| "scalar".to_string());
+                    let shape_desc = shapes
+                        .get(name)
+                        .map(|s| format!("{:?}", s))
+                        .unwrap_or_else(|| "scalar".to_string());
                     let expr_desc = expr.to_string().replace('"', "'");
                     let expr_short = if expr_desc.len() > 30 {
                         format!("{}...", &expr_desc[..27])
                     } else {
                         expr_desc
                     };
-                    out.push_str(&format!("    {}[\"{}: {} = {}\"]\n", id, name, shape_desc, expr_short));
+                    out.push_str(&format!(
+                        "    {}[\"{}: {} = {}\"]\n",
+                        id, name, shape_desc, expr_short
+                    ));
 
                     let mut free_vars = HashSet::new();
                     expr.collect_free_vars(&mut free_vars);
@@ -10981,7 +11709,12 @@ impl MathProgram {
                     let id = format!("N{}", node_idx);
                     node_idx += 1;
                     let expr_clean = expr.to_string().replace('"', "'");
-                    out.push_str(&format!("    {}[\"({}) = {}\"]\n", id, names.join(", "), expr_clean));
+                    out.push_str(&format!(
+                        "    {}[\"({}) = {}\"]\n",
+                        id,
+                        names.join(", "),
+                        expr_clean
+                    ));
                     let mut free_vars = HashSet::new();
                     expr.collect_free_vars(&mut free_vars);
                     for fv in free_vars {
@@ -10996,8 +11729,15 @@ impl MathProgram {
                 MathItem::Export { expr, path, key } => {
                     let id = format!("N{}", node_idx);
                     node_idx += 1;
-                    let target_desc = if key.is_empty() { path.clone() } else { format!("{}:{}", path, key) };
-                    out.push_str(&format!("    {}[\"Export: {} >> {}\"]\n", id, expr, target_desc));
+                    let target_desc = if key.is_empty() {
+                        path.clone()
+                    } else {
+                        format!("{}:{}", path, key)
+                    };
+                    out.push_str(&format!(
+                        "    {}[\"Export: {} >> {}\"]\n",
+                        id, expr, target_desc
+                    ));
                     let mut free_vars = HashSet::new();
                     expr.collect_free_vars(&mut free_vars);
                     for fv in free_vars {
@@ -11007,22 +11747,44 @@ impl MathProgram {
                     }
                 }
 
-                MathItem::Function { name, params, ret_type: _, body } => {
+                MathItem::Function {
+                    name,
+                    params,
+                    ret_type: _,
+                    body,
+                } => {
                     let id = format!("N{}", node_idx);
                     node_idx += 1;
-                    let param_strs: Vec<String> = params.iter().map(|p| {
-                        let dim_str = if !p.symbolic_dims.is_empty() {
-                            format!("[{}]", p.symbolic_dims.iter().map(|d| match d {
-                                MathDim::Fixed(n) => n.to_string(),
-                                MathDim::Symbolic(s) => s.clone(),
-                            }).collect::<Vec<_>>().join(", "))
-                        } else if !p.dims.is_empty() {
-                            format!("[{}]", p.dims.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(", "))
-                        } else {
-                            String::new()
-                        };
-                        format!("{}: {}{}", p.name, p.dtype.as_str(), dim_str)
-                    }).collect();
+                    let param_strs: Vec<String> = params
+                        .iter()
+                        .map(|p| {
+                            let dim_str = if !p.symbolic_dims.is_empty() {
+                                format!(
+                                    "[{}]",
+                                    p.symbolic_dims
+                                        .iter()
+                                        .map(|d| match d {
+                                            MathDim::Fixed(n) => n.to_string(),
+                                            MathDim::Symbolic(s) => s.clone(),
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                )
+                            } else if !p.dims.is_empty() {
+                                format!(
+                                    "[{}]",
+                                    p.dims
+                                        .iter()
+                                        .map(|d| d.to_string())
+                                        .collect::<Vec<_>>()
+                                        .join(", ")
+                                )
+                            } else {
+                                String::new()
+                            };
+                            format!("{}: {}{}", p.name, p.dtype.as_str(), dim_str)
+                        })
+                        .collect();
                     let fn_sig = format!("{}({})", name, param_strs.join(", "));
                     let body_clean = body.to_string().replace('"', "'");
                     out.push_str(&format!("    {}[(\"{}: {}\")]\n", id, fn_sig, body_clean));
@@ -11048,7 +11810,8 @@ impl MathProgram {
     /// Exports the mathematical pipeline as a standalone interactive HTML visualizer with Mermaid renderer
     pub fn to_html_graph(&self, title: &str) -> String {
         let mermaid_src = self.to_mermaid();
-        format!(r#"<!DOCTYPE html>
+        format!(
+            r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -11092,14 +11855,19 @@ impl MathProgram {
         mermaid.initialize({{ startOnLoad: true, theme: 'dark' }});
     </script>
 </body>
-</html>"#, title, mermaid_src)
+</html>"#,
+            title, mermaid_src
+        )
     }
 
     /// Verifies symbolic dimensional polymorphism and algebraic matrix consistency
     pub fn verify_symbolic_shapes(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
         for item in &self.items {
-            if let MathItem::Function { name, params, body, .. } = item {
+            if let MathItem::Function {
+                name, params, body, ..
+            } = item
+            {
                 let mut sym_env: HashMap<String, Vec<MathDim>> = HashMap::new();
                 for p in params {
                     if !p.symbolic_dims.is_empty() {
@@ -11110,8 +11878,12 @@ impl MathProgram {
                 if !sym_env.is_empty() {
                     let mut check_expr = |expr: &MathExpr| {
                         if let MathExpr::Binary(ref lhs, MathBinOp::MatMul, ref rhs) = expr {
-                            if let (MathExpr::Var(ref l_name), MathExpr::Var(ref r_name)) = (lhs.as_ref(), rhs.as_ref()) {
-                                if let (Some(l_dims), Some(r_dims)) = (sym_env.get(l_name), sym_env.get(r_name)) {
+                            if let (MathExpr::Var(ref l_name), MathExpr::Var(ref r_name)) =
+                                (lhs.as_ref(), rhs.as_ref())
+                            {
+                                if let (Some(l_dims), Some(r_dims)) =
+                                    (sym_env.get(l_name), sym_env.get(r_name))
+                                {
                                     if l_dims.len() == 2 && r_dims.len() == 2 {
                                         if l_dims[1] != r_dims[0] {
                                             errors.push(format!(
@@ -11141,9 +11913,31 @@ impl MathProgram {
     /// enforcing pure mathematical functional composition form.
     pub fn verify_zero_verbal_constitution(&self) -> Result<(), Vec<String>> {
         let banned_procedural = [
-            "H_0", "H_norm", "H_norm1", "H_norm2", "Attn_out", "Q_proj", "K_proj", "V_proj",
-            "H_attn", "H_mlp", "H_bit", "H_layer", "Z_logits", "Z_last", "tok", "out",
-            "prompt", "tokens", "s_prompt", "t_prompt", "s_out", "out_seq", "s_generated", "next_tok", "next_token"
+            "H_0",
+            "H_norm",
+            "H_norm1",
+            "H_norm2",
+            "Attn_out",
+            "Q_proj",
+            "K_proj",
+            "V_proj",
+            "H_attn",
+            "H_mlp",
+            "H_bit",
+            "H_layer",
+            "Z_logits",
+            "Z_last",
+            "tok",
+            "out",
+            "prompt",
+            "tokens",
+            "s_prompt",
+            "t_prompt",
+            "s_out",
+            "out_seq",
+            "s_generated",
+            "next_tok",
+            "next_token",
         ];
 
         let mut errors = Vec::new();
@@ -11276,13 +12070,23 @@ impl MathProgram {
                 }
 
                 // Cosine similarity
-                let dot: f32 = ref_out.iter().zip(dpsta_out.iter()).map(|(a, b)| a * b).sum();
+                let dot: f32 = ref_out
+                    .iter()
+                    .zip(dpsta_out.iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
                 let norm_ref: f32 = ref_out.iter().map(|a| a * a).sum::<f32>().sqrt();
                 let norm_dpsta: f32 = dpsta_out.iter().map(|b| b * b).sum::<f32>().sqrt();
-                let cosine_similarity = (dot / (norm_ref * norm_dpsta).max(1e-6)).clamp(-1.0, 1.0) as f64;
+                let cosine_similarity =
+                    (dot / (norm_ref * norm_dpsta).max(1e-6)).clamp(-1.0, 1.0) as f64;
 
                 // MSE
-                let mse: f32 = ref_out.iter().zip(dpsta_out.iter()).map(|(a, b)| (a - b).powi(2)).sum::<f32>() / rows.max(1) as f32;
+                let mse: f32 = ref_out
+                    .iter()
+                    .zip(dpsta_out.iter())
+                    .map(|(a, b)| (a - b).powi(2))
+                    .sum::<f32>()
+                    / rows.max(1) as f32;
 
                 reports.push(DpstaQuarotAuditReport {
                     tensor_name: name.clone(),
@@ -11314,9 +12118,11 @@ impl MathProgram {
         };
         crate::cl_c23::compile_c23_to_native_binary(&c_code, output_path, opt_level)?;
         if is_lib {
-            let h_path = if let Some(stripped) = output_path.strip_suffix(".dll")
+            let h_path = if let Some(stripped) = output_path
+                .strip_suffix(".dll")
                 .or_else(|| output_path.strip_suffix(".so"))
-                .or_else(|| output_path.strip_suffix(".dylib")) {
+                .or_else(|| output_path.strip_suffix(".dylib"))
+            {
                 format!("{}.h", stripped)
             } else {
                 format!("{}.h", output_path)
@@ -11361,7 +12167,9 @@ impl MathProgram {
             } = item
             {
                 // Check if function targets NVIDIA Hopper / Blackwell Asynchronous Tensor Cores (WGMMA 64x64x16)
-                let is_wgmma_gemm = name.contains("wgmma") || name.contains("hopper") || name.contains("blackwell")
+                let is_wgmma_gemm = name.contains("wgmma")
+                    || name.contains("hopper")
+                    || name.contains("blackwell")
                     || (params.len() == 2
                         && params[0].dims == vec![64, 16]
                         && params[1].dims == vec![16, 64]);
@@ -11415,7 +12223,8 @@ impl MathProgram {
                     continue;
                 }
 
-                let is_flash_attn = name.contains("flash_attn") || name.contains("attention") || name.contains("Ψ");
+                let is_flash_attn =
+                    name.contains("flash_attn") || name.contains("attention") || name.contains("Ψ");
                 if is_flash_attn && params.len() >= 3 {
                     out.push_str(&format!(
                         "// NVIDIA CUDA PTX Shared-Memory FlashAttention Kernel\n.visible .entry {}(\n    .param .u64 param_Q,\n    .param .u64 param_K,\n    .param .u64 param_V,\n    .param .u64 param_out,\n    .param .u32 param_seq_len,\n    .param .u32 param_dim\n) {{\n",
@@ -11429,7 +12238,9 @@ impl MathProgram {
                     out.push_str("    ld.param.u64 %rd3, [param_out];\n");
                     out.push_str("    ld.param.u32 %r0, [param_seq_len];\n");
                     out.push_str("    ld.param.u32 %r1, [param_dim];\n\n");
-                    out.push_str("    // Warp-Level Butterfly Reduction for FlashAttention Online Softmax\n");
+                    out.push_str(
+                        "    // Warp-Level Butterfly Reduction for FlashAttention Online Softmax\n",
+                    );
                     out.push_str("    shfl.sync.bfly.b32 %f10, %f9, 16, 31, 0xFFFFFFFF;\n");
                     out.push_str("    shfl.sync.bfly.b32 %f11, %f10, 8, 31, 0xFFFFFFFF;\n");
                     out.push_str("    shfl.sync.bfly.b32 %f12, %f11, 4, 31, 0xFFFFFFFF;\n");
@@ -12113,13 +12924,16 @@ impl MathProgram {
                         if alt.exists() {
                             candidate = alt.to_path_buf();
                         } else {
-                            let cwd_cand = std::env::current_dir().unwrap_or_default().join(&rel_path);
-                            let manifest_cand = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(&rel_path);
-                            let manifest_parent_cand = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                                .parent()
-                                .and_then(|p| p.parent())
-                                .map(|p| p.join(&rel_path))
-                                .unwrap_or_default();
+                            let cwd_cand =
+                                std::env::current_dir().unwrap_or_default().join(&rel_path);
+                            let manifest_cand =
+                                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(&rel_path);
+                            let manifest_parent_cand =
+                                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                                    .parent()
+                                    .and_then(|p| p.parent())
+                                    .map(|p| p.join(&rel_path))
+                                    .unwrap_or_default();
 
                             if cwd_cand.exists() {
                                 candidate = cwd_cand;
@@ -12208,7 +13022,9 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                                         let after_colon = rem[1..].trim_start();
                                         if after_colon.starts_with('{') {
                                             let block = after_colon;
-                                            let dtype_str = if let Some(d_pos) = block.find("\"dtype\"") {
+                                            let dtype_str = if let Some(d_pos) =
+                                                block.find("\"dtype\"")
+                                            {
                                                 let after = &block[d_pos + 7..];
                                                 if let Some(q1) = after.find('"') {
                                                     if let Some(q2) = after[q1 + 1..].find('"') {
@@ -12230,7 +13046,8 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                                                     if let Some(b2) = after[b1 + 1..].find(']') {
                                                         let dims_str = &after[b1 + 1..b1 + 1 + b2];
                                                         for d in dims_str.split(',') {
-                                                            if let Ok(n) = d.trim().parse::<usize>() {
+                                                            if let Ok(n) = d.trim().parse::<usize>()
+                                                            {
                                                                 shape.push(n);
                                                             }
                                                         }
@@ -12238,15 +13055,24 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                                                 }
                                             }
 
-                                            let (s_off, e_off) = if let Some(o_pos) = block.find("\"data_offsets\"") {
+                                            let (s_off, e_off) = if let Some(o_pos) =
+                                                block.find("\"data_offsets\"")
+                                            {
                                                 let after = &block[o_pos + 14..];
                                                 if let Some(b1) = after.find('[') {
                                                     if let Some(b2) = after[b1 + 1..].find(']') {
                                                         let pair_str = &after[b1 + 1..b1 + 1 + b2];
-                                                        let parts: Vec<&str> = pair_str.split(',').collect();
+                                                        let parts: Vec<&str> =
+                                                            pair_str.split(',').collect();
                                                         if parts.len() == 2 {
-                                                            let s = parts[0].trim().parse::<usize>().unwrap_or(0);
-                                                            let e = parts[1].trim().parse::<usize>().unwrap_or(0);
+                                                            let s = parts[0]
+                                                                .trim()
+                                                                .parse::<usize>()
+                                                                .unwrap_or(0);
+                                                            let e = parts[1]
+                                                                .trim()
+                                                                .parse::<usize>()
+                                                                .unwrap_or(0);
                                                             (s, e)
                                                         } else {
                                                             (0, 0)
@@ -12311,9 +13137,16 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                                 .collect();
                             (vec![rows, cols], bytes)
                         }
-                        MathValue::Tensor { shape, strides, data } => {
+                        MathValue::Tensor {
+                            shape,
+                            strides,
+                            data,
+                        } => {
                             let flat = MathValue::get_flattened_strided(shape, strides, data);
-                            let bytes: Vec<u8> = flat.iter().flat_map(|&x| (x as f32).to_le_bytes()).collect();
+                            let bytes: Vec<u8> = flat
+                                .iter()
+                                .flat_map(|&x| (x as f32).to_le_bytes())
+                                .collect();
                             (shape.clone(), bytes)
                         }
                         _ => (vec![1usize], vec![0u8; 4]),
@@ -12376,7 +13209,11 @@ pub fn save_tensor_resource(path: &str, key: &str, val: &MathValue) -> Result<()
                 } else {
                     key.to_string()
                 };
-                let bytes: Vec<u8> = s.as_bytes().iter().flat_map(|&b| (b as f32).to_le_bytes()).collect();
+                let bytes: Vec<u8> = s
+                    .as_bytes()
+                    .iter()
+                    .flat_map(|&b| (b as f32).to_le_bytes())
+                    .collect();
                 new_tensors.push((name, vec![s.len()], bytes));
             }
         }
@@ -12452,14 +13289,24 @@ pub fn decode_f16(u: u16) -> f64 {
 /// Parses and loads a tensor from a binary GGUF v2/v3 file
 fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, String> {
     if bytes.len() < 24 {
-        return Err(format!("GGUF file '{}' too short (len: {})", path, bytes.len()));
+        return Err(format!(
+            "GGUF file '{}' too short (len: {})",
+            path,
+            bytes.len()
+        ));
     }
     if &bytes[0..4] != b"GGUF" {
-        return Err(format!("File '{}' is not a valid GGUF file (bad magic)", path));
+        return Err(format!(
+            "File '{}' is not a valid GGUF file (bad magic)",
+            path
+        ));
     }
     let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
     if version < 2 || version > 3 {
-        return Err(format!("Unsupported GGUF version {} in '{}' (expected 2 or 3)", version, path));
+        return Err(format!(
+            "Unsupported GGUF version {} in '{}' (expected 2 or 3)",
+            version, path
+        ));
     }
     let tensor_count = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
     let metadata_kv_count = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
@@ -12484,28 +13331,39 @@ fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, St
     fn skip_val(bytes: &[u8], cursor: &mut usize, val_type: u32) -> Result<(), String> {
         match val_type {
             0 | 1 | 7 => {
-                if *cursor + 1 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                if *cursor + 1 > bytes.len() {
+                    return Err("Unexpected EOF in GGUF value".to_string());
+                }
                 *cursor += 1;
             }
             2 | 3 => {
-                if *cursor + 2 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                if *cursor + 2 > bytes.len() {
+                    return Err("Unexpected EOF in GGUF value".to_string());
+                }
                 *cursor += 2;
             }
             4 | 5 | 6 => {
-                if *cursor + 4 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                if *cursor + 4 > bytes.len() {
+                    return Err("Unexpected EOF in GGUF value".to_string());
+                }
                 *cursor += 4;
             }
             10 | 11 | 12 => {
-                if *cursor + 8 > bytes.len() { return Err("Unexpected EOF in GGUF value".to_string()); }
+                if *cursor + 8 > bytes.len() {
+                    return Err("Unexpected EOF in GGUF value".to_string());
+                }
                 *cursor += 8;
             }
             8 => {
                 let _ = read_str(bytes, cursor)?;
             }
             9 => {
-                if *cursor + 12 > bytes.len() { return Err("Unexpected EOF in GGUF array header".to_string()); }
+                if *cursor + 12 > bytes.len() {
+                    return Err("Unexpected EOF in GGUF array header".to_string());
+                }
                 let elem_type = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap());
-                let count = u64::from_le_bytes(bytes[*cursor + 4..*cursor + 12].try_into().unwrap()) as usize;
+                let count = u64::from_le_bytes(bytes[*cursor + 4..*cursor + 12].try_into().unwrap())
+                    as usize;
                 *cursor += 12;
                 for _ in 0..count {
                     skip_val(bytes, cursor, elem_type)?;
@@ -12563,30 +13421,46 @@ fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, St
         cursor += 4;
         let offset = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
         cursor += 8;
-        tensors.push(GgufTensorInfo { name, dims, ggml_type, offset });
+        tensors.push(GgufTensorInfo {
+            name,
+            dims,
+            ggml_type,
+            offset,
+        });
     }
 
     let data_start = (cursor + alignment - 1) & !(alignment - 1);
 
     let target = if key.is_empty() {
-        tensors.first().ok_or_else(|| format!("No tensors found in GGUF file '{}'", path))?
+        tensors
+            .first()
+            .ok_or_else(|| format!("No tensors found in GGUF file '{}'", path))?
     } else {
-        tensors.iter().find(|t| t.name == key).ok_or_else(|| {
-            format!("Tensor '{}' not found in GGUF file '{}'", key, path)
-        })?
+        tensors
+            .iter()
+            .find(|t| t.name == key)
+            .ok_or_else(|| format!("Tensor '{}' not found in GGUF file '{}'", key, path))?
     };
 
     let shape: Vec<usize> = target.dims.iter().copied().rev().collect();
-    let total_elements: usize = if shape.is_empty() { 1 } else { shape.iter().product() };
+    let total_elements: usize = if shape.is_empty() {
+        1
+    } else {
+        shape.iter().product()
+    };
     let tensor_raw_offset = data_start + target.offset as usize;
     if tensor_raw_offset > bytes.len() {
-        return Err(format!("GGUF tensor offset out of bounds: {}", tensor_raw_offset));
+        return Err(format!(
+            "GGUF tensor offset out of bounds: {}",
+            tensor_raw_offset
+        ));
     }
     let raw_data = &bytes[tensor_raw_offset..];
 
     let mut floats = Vec::with_capacity(total_elements);
     match target.ggml_type {
-        0 => { // GGML_TYPE_F32
+        0 => {
+            // GGML_TYPE_F32
             if raw_data.len() < total_elements * 4 {
                 return Err(format!("Truncated F32 tensor '{}' in GGUF", target.name));
             }
@@ -12594,7 +13468,8 @@ fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, St
                 floats.push(f32::from_le_bytes(chunk.try_into().unwrap()) as f64);
             }
         }
-        1 => { // GGML_TYPE_F16
+        1 => {
+            // GGML_TYPE_F16
             if raw_data.len() < total_elements * 2 {
                 return Err(format!("Truncated F16 tensor '{}' in GGUF", target.name));
             }
@@ -12603,7 +13478,8 @@ fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, St
                 floats.push(decode_f16(u));
             }
         }
-        8 => { // GGML_TYPE_Q8_0
+        8 => {
+            // GGML_TYPE_Q8_0
             let num_blocks = (total_elements + 31) / 32;
             if raw_data.len() < num_blocks * 34 {
                 return Err(format!("Truncated Q8_0 tensor '{}' in GGUF", target.name));
@@ -12618,7 +13494,8 @@ fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, St
                 }
             }
         }
-        2 => { // GGML_TYPE_Q4_0
+        2 => {
+            // GGML_TYPE_Q4_0
             let num_blocks = (total_elements + 31) / 32;
             if raw_data.len() < num_blocks * 18 {
                 return Err(format!("Truncated Q4_0 tensor '{}' in GGUF", target.name));
@@ -12639,7 +13516,10 @@ fn load_gguf_tensor(bytes: &[u8], key: &str, path: &str) -> Result<MathValue, St
             }
         }
         other => {
-            return Err(format!("Unsupported GGML tensor type {} in GGUF file '{}'", other, path));
+            return Err(format!(
+                "Unsupported GGML tensor type {} in GGUF file '{}'",
+                other, path
+            ));
         }
     }
 
@@ -13009,17 +13889,27 @@ pub fn run_math_repl() -> Result<(), String> {
                     println!("================================================================================");
                     println!("  Symbol   | ASCII Alias     | Functionality");
                     println!("  ---------+-----------------+--------------------------------------------------");
-                    println!("  Ψ_g      | \\psi_g          | Grouped-Query Causal FlashAttention (GQA)");
+                    println!(
+                        "  Ψ_g      | \\psi_g          | Grouped-Query Causal FlashAttention (GQA)"
+                    );
                     println!("  Ψ        | \\psi            | Causal Multi-Head FlashAttention");
                     println!("  Ψ_c      | \\psi_c          | Streaming KV-Cache Causal Attention");
                     println!("  N(X, γ)  | N(X, \\gamma)    | Fused RMS Normalization");
-                    println!("  S(...)   | S(...)          | Fused SwiGLU Gated Feed-Forward Network");
+                    println!(
+                        "  S(...)   | S(...)          | Fused SwiGLU Gated Feed-Forward Network"
+                    );
                     println!("  B(...)   | B(...)          | BitNet 1.03b / 1.58b Sub-Byte Quantized Layer");
-                    println!("  ρ(Z)     | \\rho(Z)         | Row-Wise Softmax Probability Distribution");
+                    println!(
+                        "  ρ(Z)     | \\rho(Z)         | Row-Wise Softmax Probability Distribution"
+                    );
                     println!("  Φ(X)     | \\phi(X)         | Continuous Rotary Position Embedding (RoPE)");
-                    println!("  Λ(Z, y)  | \\lambda(Z, y)   | Cross-Entropy Loss with Exact Pullback");
+                    println!(
+                        "  Λ(Z, y)  | \\lambda(Z, y)   | Cross-Entropy Loss with Exact Pullback"
+                    );
                     println!("  ∇_W(L)   | \\grad           | Reverse-Mode Analytic Backpropagation Gradient");
-                    println!("  Δ(W,G,η) | \\delta          | Discrete Weight Optimizer Step (W - η*G)");
+                    println!(
+                        "  Δ(W,G,η) | \\delta          | Discrete Weight Optimizer Step (W - η*G)"
+                    );
                     println!("  ι(\"...\") | \\iota           | Zero-Verbal Subword/Byte Token Embedding Lookup");
                     println!("  <<       | << \"path.cl\"    | Pure AST Module Import");
                     println!("  @        | @\"model.st:w\"   | Zero-Copy Direct SafeTensors Weight Binding");
@@ -13084,7 +13974,9 @@ mod tests {
         "#;
         let prog = parse_math_code(code).expect("Failed to parse Ω and Λ_g");
         let mut eval = MathEvaluator::new();
-        let res = eval.execute_program_value(&prog).expect("Evaluation failed");
+        let res = eval
+            .execute_program_value(&prog)
+            .expect("Evaluation failed");
         assert!(res.is_some());
         if let Some(MathValue::Scalar(l)) = res {
             assert!(!l.is_nan());
@@ -13116,7 +14008,9 @@ mod tests {
         let code = "s = ∑_k([1.0, 1e16, 1.0, -1e16]); s";
         let prog = parse_math_code(code).expect("Failed to parse ∑_k");
         let mut eval = MathEvaluator::new();
-        let res = eval.execute_program_value(&prog).expect("Evaluation failed");
+        let res = eval
+            .execute_program_value(&prog)
+            .expect("Evaluation failed");
         assert_eq!(res, Some(MathValue::Scalar(2.0)));
         assert_eq!(eval.env.get("s"), Some(&MathValue::Scalar(2.0)));
     }
@@ -13129,15 +14023,22 @@ mod tests {
         let v = MathValue::Matrix(vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
 
         let eval = MathEvaluator::new();
-        let out = eval.eval_gqa_attn(&q, &k, &v, 1, 1, Some(1.0), true)
+        let out = eval
+            .eval_gqa_attn(&q, &k, &v, 1, 1, Some(1.0), true)
             .expect("FlashAttention-2 failed");
 
         if let MathValue::Matrix(mat) = out {
             assert_eq!(mat.len(), 1);
             for row in &mat {
                 for &val in row {
-                    assert!(!val.is_nan(), "FlashAttention-2 produced NaN on large logits!");
-                    assert!(!val.is_infinite(), "FlashAttention-2 produced Inf on large logits!");
+                    assert!(
+                        !val.is_nan(),
+                        "FlashAttention-2 produced NaN on large logits!"
+                    );
+                    assert!(
+                        !val.is_infinite(),
+                        "FlashAttention-2 produced Inf on large logits!"
+                    );
                 }
             }
         } else {
@@ -13147,9 +14048,18 @@ mod tests {
 
     #[test]
     fn test_dtype_promotion_and_c64() {
-        assert_eq!(MathDtype::promote(&MathDtype::F32, &MathDtype::F64), MathDtype::F64);
-        assert_eq!(MathDtype::promote(&MathDtype::Bf16, &MathDtype::F32), MathDtype::F32);
-        assert_eq!(MathDtype::promote(&MathDtype::F64, &MathDtype::C64), MathDtype::C64);
+        assert_eq!(
+            MathDtype::promote(&MathDtype::F32, &MathDtype::F64),
+            MathDtype::F64
+        );
+        assert_eq!(
+            MathDtype::promote(&MathDtype::Bf16, &MathDtype::F32),
+            MathDtype::F32
+        );
+        assert_eq!(
+            MathDtype::promote(&MathDtype::F64, &MathDtype::C64),
+            MathDtype::C64
+        );
         assert_eq!(MathDtype::C64.as_str(), "c64");
         assert_eq!(MathDtype::from_str("complex64"), Some(MathDtype::C64));
     }
@@ -13856,12 +14766,17 @@ mod tests {
                 }
             }
         }
-        assert!(found_fused_attn, "Expected softmax(...) @ V to be fused into attention(Q, K, V, scale)");
+        assert!(
+            found_fused_attn,
+            "Expected softmax(...) @ V to be fused into attention(Q, K, V, scale)"
+        );
 
         // Verify shape checking and evaluation
         assert!(opt_prog.verify_shapes().is_ok());
         let mut eval = MathEvaluator::new();
-        let _ = eval.execute_program(&opt_prog).expect("Eval optimized graph failed");
+        let _ = eval
+            .execute_program(&opt_prog)
+            .expect("Eval optimized graph failed");
     }
 
     #[test]
@@ -13881,11 +14796,21 @@ mod tests {
             loss(W_trained)
         "#;
         let prog = parse_math_code(code).expect("Parse embedding & cross entropy failed");
-        assert!(prog.verify_shapes().is_ok(), "Shapes should be valid for embedding & cross entropy");
+        assert!(
+            prog.verify_shapes().is_ok(),
+            "Shapes should be valid for embedding & cross entropy"
+        );
         let mut eval = MathEvaluator::new();
-        let final_loss = eval.execute_program(&prog).expect("Eval training failed").unwrap();
+        let final_loss = eval
+            .execute_program(&prog)
+            .expect("Eval training failed")
+            .unwrap();
         // Initial loss at zeros(3, 4) is log(4) ~ 1.386. After 80 steps it converges < 0.15
-        assert!(final_loss < 0.15, "Expected trained cross-entropy loss < 0.15, got {}", final_loss);
+        assert!(
+            final_loss < 0.15,
+            "Expected trained cross-entropy loss < 0.15, got {}",
+            final_loss
+        );
     }
 
     #[test]
@@ -13906,14 +14831,29 @@ mod tests {
         assert!(prog.verify_shapes().is_ok());
         let c23_code = prog.to_c23_executable();
         // Check generated 2D GEMM nested loop
-        assert!(c23_code.contains("alignas(64) float Y[2][2];"), "Expected 2D matrix buffer for Y");
-        assert!(c23_code.contains("for (int _k = 0; _k < 2; ++_k)"), "Expected 2D GEMM inner loop");
+        assert!(
+            c23_code.contains("alignas(64) float Y[2][2];"),
+            "Expected 2D matrix buffer for Y"
+        );
+        assert!(
+            c23_code.contains("for (int _k = 0; _k < 2; ++_k)"),
+            "Expected 2D GEMM inner loop"
+        );
         // Check 2D-1D Bias broadcasting
-        assert!(c23_code.contains("(float)Y[_i][_j] + (float)b[_j];"), "Expected 2D-1D bias broadcast");
+        assert!(
+            c23_code.contains("(float)Y[_i][_j] + (float)b[_j];"),
+            "Expected 2D-1D bias broadcast"
+        );
         // Check 2D Transpose
-        assert!(c23_code.contains("(float)Z[_j][_i];"), "Expected 2D transpose indexing");
+        assert!(
+            c23_code.contains("(float)Z[_j][_i];"),
+            "Expected 2D transpose indexing"
+        );
         // Check 2D RMSNorm
-        assert!(c23_code.contains("1.0f / sqrtf((_ss / (float)2) + 1e-5f);"), "Expected RMSNorm row scaling");
+        assert!(
+            c23_code.contains("1.0f / sqrtf((_ss / (float)2) + 1e-5f);"),
+            "Expected RMSNorm row scaling"
+        );
     }
 
     #[test]
@@ -13935,10 +14875,26 @@ mod tests {
                 assert_eq!(g_mat.len(), 2);
                 assert_eq!(g_mat[0].len(), 2);
                 // Exact analytical: [[10.8, 9.2], [14.0, 13.6]]
-                assert!((g_mat[0][0] - 10.8).abs() < 1e-5, "Expected 10.8, got {}", g_mat[0][0]);
-                assert!((g_mat[0][1] - 9.2).abs() < 1e-5, "Expected 9.2, got {}", g_mat[0][1]);
-                assert!((g_mat[1][0] - 14.0).abs() < 1e-5, "Expected 14.0, got {}", g_mat[1][0]);
-                assert!((g_mat[1][1] - 13.6).abs() < 1e-5, "Expected 13.6, got {}", g_mat[1][1]);
+                assert!(
+                    (g_mat[0][0] - 10.8).abs() < 1e-5,
+                    "Expected 10.8, got {}",
+                    g_mat[0][0]
+                );
+                assert!(
+                    (g_mat[0][1] - 9.2).abs() < 1e-5,
+                    "Expected 9.2, got {}",
+                    g_mat[0][1]
+                );
+                assert!(
+                    (g_mat[1][0] - 14.0).abs() < 1e-5,
+                    "Expected 14.0, got {}",
+                    g_mat[1][0]
+                );
+                assert!(
+                    (g_mat[1][1] - 13.6).abs() < 1e-5,
+                    "Expected 13.6, got {}",
+                    g_mat[1][1]
+                );
             }
             _ => panic!("Expected matrix gradient for G, got {:?}", g_val),
         }
@@ -13952,10 +14908,13 @@ mod tests {
             row_sums = sum_axis(M, 1)
         "#;
         let prog = parse_math_code(code).expect("Parse sum_axis code failed");
-        assert!(prog.verify_shapes().is_ok(), "Shape verification should succeed");
+        assert!(
+            prog.verify_shapes().is_ok(),
+            "Shape verification should succeed"
+        );
         let mut eval = MathEvaluator::new();
         eval.execute_program(&prog).expect("Execution failed");
-        
+
         let col_val = eval.env.get("col_sums").expect("col_sums exists");
         let row_val = eval.env.get("row_sums").expect("row_sums exists");
 
@@ -14007,7 +14966,12 @@ mod tests {
         eval.execute_program(&prog).expect("Execution failed");
         let init_l = eval.env.get("init_loss").unwrap().as_scalar().unwrap();
         let final_l = eval.env.get("final_loss").unwrap().as_scalar().unwrap();
-        assert!(final_l < init_l, "Trained loss {} should be less than init loss {}", final_l, init_l);
+        assert!(
+            final_l < init_l,
+            "Trained loss {} should be less than init loss {}",
+            final_l,
+            init_l
+        );
     }
 
     #[test]
@@ -14028,18 +14992,24 @@ mod tests {
         assert!(prog.verify_shapes().is_ok());
         let mut eval = MathEvaluator::new();
         eval.execute_program(&prog).expect("Execution failed");
-        
+
         let w_adam = eval.env.get("W_adam").unwrap();
         let m_adam = eval.env.get("M_adam").unwrap();
         let w_lion = eval.env.get("W_lion").unwrap();
-        
+
         match (w_adam, m_adam, w_lion) {
             (MathValue::Matrix(wa), MathValue::Matrix(ma), MathValue::Matrix(wl)) => {
                 assert_eq!(wa.len(), 2);
                 assert_eq!(wl.len(), 2);
                 // AdamW moved in opposite direction of gradient
-                assert!(wa[0][0] < 1.0, "W[0][0] should decrease with positive gradient");
-                assert!(wa[0][1] > 2.0, "W[0][1] should increase with negative gradient");
+                assert!(
+                    wa[0][0] < 1.0,
+                    "W[0][0] should decrease with positive gradient"
+                );
+                assert!(
+                    wa[0][1] > 2.0,
+                    "W[0][1] should increase with negative gradient"
+                );
                 // M was updated: 0.1 * 0.1 = 0.01
                 assert!((ma[0][0] - 0.01).abs() < 1e-4);
                 // Lion updated with sign: sign(0.1) = 1.0 -> 1.0 - 0.01 * 1.0
@@ -14065,22 +15035,26 @@ mod tests {
         assert!(prog.verify_shapes().is_ok());
         let mut eval = MathEvaluator::new();
         eval.execute_program(&prog).expect("Execution failed");
-        
+
         let g_clip = eval.env.get("G_clipped").unwrap();
         match g_clip {
             MathValue::Vector(v) => {
-                let norm = (v[0]*v[0] + v[1]*v[1]).sqrt();
-                assert!((norm - 2.5).abs() < 1e-5, "Clipped norm should be 2.5, got {}", norm);
+                let norm = (v[0] * v[0] + v[1] * v[1]).sqrt();
+                assert!(
+                    (norm - 2.5).abs() < 1e-5,
+                    "Clipped norm should be 2.5, got {}",
+                    norm
+                );
                 assert!((v[0] - 1.5).abs() < 1e-5);
                 assert!((v[1] - 2.0).abs() < 1e-5);
             }
             _ => panic!("Expected vector for G_clipped"),
         }
-        
+
         let lr_start = eval.env.get("lr_start").unwrap().as_scalar().unwrap();
         let lr_warm = eval.env.get("lr_warm").unwrap().as_scalar().unwrap();
         let lr_end = eval.env.get("lr_end").unwrap().as_scalar().unwrap();
-        
+
         assert_eq!(lr_start, 0.0);
         assert!((lr_warm - 0.005).abs() < 1e-5);
         assert!((lr_end - 0.001).abs() < 1e-5);
@@ -14090,7 +15064,7 @@ mod tests {
     fn test_safetensors_multi_tensor_merge() {
         let path = "test_multi_weights.safetensors";
         let _ = std::fs::remove_file(path);
-        
+
         let code = r#"
             W_q = [[1.0, 2.0], [3.0, 4.0]]
             W_k = [[5.0, 6.0], [7.0, 8.0]]
@@ -14109,11 +15083,11 @@ mod tests {
         let prog = parse_math_code(code).expect("Parse multi safetensors failed");
         let mut eval = MathEvaluator::new();
         eval.execute_program(&prog).expect("Execution failed");
-        
+
         let q_loaded = eval.env.get("Q_loaded").unwrap();
         let k_loaded = eval.env.get("K_loaded").unwrap();
         let b_loaded = eval.env.get("B_loaded").unwrap();
-        
+
         match (q_loaded, k_loaded, b_loaded) {
             (MathValue::Matrix(q), MathValue::Matrix(k), MathValue::Vector(b)) => {
                 assert_eq!(q, &vec![vec![1.0, 2.0], vec![3.0, 4.0]]);
@@ -14183,7 +15157,10 @@ mod tests {
 
         let x_rec = eval.env.get("X_rec").unwrap();
         assert_eq!(x_rec.shape(), vec![4, 8]);
-        assert_eq!(x_rec.flatten_elements(), eval.env.get("X").unwrap().flatten_elements());
+        assert_eq!(
+            x_rec.flatten_elements(),
+            eval.env.get("X").unwrap().flatten_elements()
+        );
     }
 
     #[test]
@@ -14318,12 +15295,17 @@ mod tests {
         let prog = parse_math_code(code).expect("Parse BitNet b1.58 code failed");
         assert!(prog.verify_shapes().is_ok());
         let mut eval = MathEvaluator::new();
-        eval.execute_program(&prog).expect("Execution of BitNet b1.58 failed");
+        eval.execute_program(&prog)
+            .expect("Execution of BitNet b1.58 failed");
 
         let w_q = eval.env.get("W_quant").unwrap();
         assert_eq!(w_q.shape(), vec![2, 3]);
         for &val in &w_q.flatten_elements() {
-            assert!(val == -1.0 || val == 0.0 || val == 1.0, "Ternary value must be in {{-1, 0, 1}}, got {}", val);
+            assert!(
+                val == -1.0 || val == 0.0 || val == 1.0,
+                "Ternary value must be in {{-1, 0, 1}}, got {}",
+                val
+            );
         }
 
         let gamma_val = eval.env.get("gamma").unwrap().as_scalar().unwrap();
@@ -14361,7 +15343,8 @@ mod tests {
         let prog = parse_math_code(code).expect("Parse INT8 quantization failed");
         assert!(prog.verify_shapes().is_ok());
         let mut eval = MathEvaluator::new();
-        eval.execute_program(&prog).expect("Execution of INT8 qmatmul failed");
+        eval.execute_program(&prog)
+            .expect("Execution of INT8 qmatmul failed");
 
         let w_i8 = eval.env.get("W_i8").unwrap();
         assert_eq!(w_i8.shape(), vec![2, 3]);
@@ -14450,7 +15433,8 @@ mod tests {
         "#;
         let prog = parse_math_code(code).expect("Parse GGUF loading failed");
         let mut eval = MathEvaluator::new();
-        eval.execute_program(&prog).expect("Execution of GGUF loading failed");
+        eval.execute_program(&prog)
+            .expect("Execution of GGUF loading failed");
 
         let w_f32 = eval.env.get("W_f32").unwrap();
         assert_eq!(w_f32.shape(), vec![2, 3]);
@@ -14598,7 +15582,10 @@ mod tests {
                 }
             }
         }
-        assert!(has_cse_binding, "Expected CSE extraction of X @ W into _cse binding");
+        assert!(
+            has_cse_binding,
+            "Expected CSE extraction of X @ W into _cse binding"
+        );
         assert!(y1_uses_cse, "Expected Y1 to reference _cse variable");
         assert!(y2_uses_cse, "Expected Y2 to reference _cse variable");
 
@@ -14606,7 +15593,9 @@ mod tests {
         let mut eval_orig = MathEvaluator::new();
         let _ = eval_orig.execute_program(&prog).expect("Eval orig failed");
         let mut eval_cse = MathEvaluator::new();
-        let _ = eval_cse.execute_program(&cse_prog).expect("Eval cse failed");
+        let _ = eval_cse
+            .execute_program(&cse_prog)
+            .expect("Eval cse failed");
 
         assert_eq!(eval_orig.env.get("Y1"), eval_cse.env.get("Y1"));
         assert_eq!(eval_orig.env.get("Y2"), eval_cse.env.get("Y2"));
@@ -14641,9 +15630,18 @@ mod tests {
             })
             .collect();
 
-        assert!(!item_names.contains(&"dead1".to_string()), "dead1 must be pruned");
-        assert!(!item_names.contains(&"dead2".to_string()), "dead2 must be pruned");
-        assert!(item_names.contains(&"result".to_string()), "result must be preserved");
+        assert!(
+            !item_names.contains(&"dead1".to_string()),
+            "dead1 must be pruned"
+        );
+        assert!(
+            !item_names.contains(&"dead2".to_string()),
+            "dead2 must be pruned"
+        );
+        assert!(
+            item_names.contains(&"result".to_string()),
+            "result must be preserved"
+        );
 
         // Verify constant folding on scale
         for item in &opt_prog.items {
@@ -14695,20 +15693,34 @@ mod tests {
             }
         }
 
-        assert!(found_fused_swiglu, "Expected (silu(X@W_gate) * (X@W_up)) @ W_down to fuse into fused_swiglu");
-        assert!(found_fused_linear_relu, "Expected relu(X@W_gate + bias) to fuse into fused_linear_relu");
+        assert!(
+            found_fused_swiglu,
+            "Expected (silu(X@W_gate) * (X@W_up)) @ W_down to fuse into fused_swiglu"
+        );
+        assert!(
+            found_fused_linear_relu,
+            "Expected relu(X@W_gate + bias) to fuse into fused_linear_relu"
+        );
 
         // Verify shape checking and evaluation of fused operators
         assert!(opt_prog.verify_shapes().is_ok());
         let mut eval = MathEvaluator::new();
-        let _ = eval.execute_program(&opt_prog).expect("Eval fused operators failed");
+        let _ = eval
+            .execute_program(&opt_prog)
+            .expect("Eval fused operators failed");
         assert!(eval.env.contains_key("swiglu_out"));
         assert!(eval.env.contains_key("fused_act"));
 
         // Verify C23 lowering includes fused kernels
         let c23_code = opt_prog.to_c23_executable();
-        assert!(c23_code.contains("_silu_g = _acc_g / (1.0f + expf(-_acc_g));"), "Expected fused SwiGLU SiLU in C23");
-        assert!(c23_code.contains("(_acc > 0.0f) ? _acc : 0.0f;"), "Expected in-register fused ReLU in C23");
+        assert!(
+            c23_code.contains("_silu_g = _acc_g / (1.0f + expf(-_acc_g));"),
+            "Expected fused SwiGLU SiLU in C23"
+        );
+        assert!(
+            c23_code.contains("(_acc > 0.0f) ? _acc : 0.0f;"),
+            "Expected in-register fused ReLU in C23"
+        );
     }
 
     #[test]
@@ -14732,29 +15744,53 @@ mod tests {
         let plan = prog.plan_memory_arena();
 
         assert!(plan.num_arena_slots > 0, "Must allocate arena slots");
-        assert!(plan.num_arena_slots < plan.tensors.len(), "Arena slots must be reused across non-overlapping tensors");
-        assert!(plan.memory_reduction_pct > 0.0, "Memory arena reuse should show memory reduction percentage");
-        assert!(plan.total_arena_size_bytes <= plan.unoptimized_memory_bytes, "Arena bytes must be <= unoptimized total");
+        assert!(
+            plan.num_arena_slots < plan.tensors.len(),
+            "Arena slots must be reused across non-overlapping tensors"
+        );
+        assert!(
+            plan.memory_reduction_pct > 0.0,
+            "Memory arena reuse should show memory reduction percentage"
+        );
+        assert!(
+            plan.total_arena_size_bytes <= plan.unoptimized_memory_bytes,
+            "Arena bytes must be <= unoptimized total"
+        );
 
         // Check slot reuses:
         // T2 reuses X's slot (since X dies at step 4 < step 5)
         let x_slot = plan.tensors.get("X").expect("X metadata").arena_slot;
         let t2_slot = plan.tensors.get("T2").expect("T2 metadata").arena_slot;
-        assert_eq!(x_slot, t2_slot, "T2 must reuse X's memory slot after X dies");
+        assert_eq!(
+            x_slot, t2_slot,
+            "T2 must reuse X's memory slot after X dies"
+        );
 
         // T3 reuses W1's slot (since W1 dies at step 4 < step 6)
         let w1_slot = plan.tensors.get("W1").expect("W1 metadata").arena_slot;
         let t3_slot = plan.tensors.get("T3").expect("T3 metadata").arena_slot;
-        assert_eq!(w1_slot, t3_slot, "T3 must reuse W1's memory slot after W1 dies");
+        assert_eq!(
+            w1_slot, t3_slot,
+            "T3 must reuse W1's memory slot after W1 dies"
+        );
 
         // out reuses T2's slot (since T2 dies at step 6 < step 7)
         let out_slot = plan.tensors.get("out").expect("out metadata").arena_slot;
-        assert_eq!(t2_slot, out_slot, "out must reuse T2's memory slot after T2 dies");
+        assert_eq!(
+            t2_slot, out_slot,
+            "out must reuse T2's memory slot after T2 dies"
+        );
 
         // Verify C23 code contains arena diagnostic header
         let c23_code = prog.to_c23_executable();
-        assert!(c23_code.contains("Static Liveness Arena Memory Plan"), "Expected arena planning comment in C23");
-        assert!(c23_code.contains("[arena] Static memory planning"), "Expected arena planning print in C23");
+        assert!(
+            c23_code.contains("Static Liveness Arena Memory Plan"),
+            "Expected arena planning comment in C23"
+        );
+        assert!(
+            c23_code.contains("[arena] Static memory planning"),
+            "Expected arena planning print in C23"
+        );
     }
 
     #[test]
@@ -14838,7 +15874,9 @@ mod tests {
         assert!(prog.verify_shapes().is_ok());
 
         let mut eval = MathEvaluator::new();
-        let _ = eval.execute_program(&prog).expect("Eval KV-cache attention failed");
+        let _ = eval
+            .execute_program(&prog)
+            .expect("Eval KV-cache attention failed");
 
         // K_cache_next must now contain 3 tokens (2 old + 1 new)
         let k_next = eval.env.get("K_cache_next").expect("K_cache_next");
@@ -14868,7 +15906,7 @@ mod tests {
         } else {
             panic!("Expected Vector for out_t");
         }
-     }
+    }
 
     #[test]
     fn test_phase11_symbolic_shape_polymorphism() {
@@ -14895,7 +15933,7 @@ mod tests {
     #[test]
     fn test_phase12_standard_math_library_modules() {
         let cwd = std::env::current_dir().unwrap_or_default();
-        
+
         // 1. RMSNorm module from libcl/math/rms_norm.cl
         let rms_code = r#"
             << "libcl/math/rms_norm.cl"
@@ -14906,7 +15944,9 @@ mod tests {
         let mut prog_rms = parse_math_code(rms_code).expect("Parse rms_norm link");
         prog_rms.resolve_links(&cwd).expect("Resolve rms_norm link");
         let mut eval_rms = MathEvaluator::new();
-        eval_rms.execute_program(&prog_rms).expect("Execute rms_norm");
+        eval_rms
+            .execute_program(&prog_rms)
+            .expect("Execute rms_norm");
         if let MathValue::Matrix(m) = eval_rms.env.get("y").expect("y") {
             assert_eq!(m.len(), 2);
             assert_eq!(m[0].len(), 2);
@@ -14925,9 +15965,13 @@ mod tests {
             out_mlp = S(X, W1, W2, W3)
         "#;
         let mut prog_swiglu = parse_math_code(swiglu_code).expect("Parse swiglu link");
-        prog_swiglu.resolve_links(&cwd).expect("Resolve swiglu link");
+        prog_swiglu
+            .resolve_links(&cwd)
+            .expect("Resolve swiglu link");
         let mut eval_swiglu = MathEvaluator::new();
-        eval_swiglu.execute_program(&prog_swiglu).expect("Execute swiglu");
+        eval_swiglu
+            .execute_program(&prog_swiglu)
+            .expect("Execute swiglu");
         if let MathValue::Matrix(m) = eval_swiglu.env.get("out_mlp").expect("out_mlp") {
             assert_eq!(m.len(), 1);
             assert_eq!(m[0].len(), 2);
@@ -14946,9 +15990,13 @@ mod tests {
             b_out = B0(X, W, γ)
         "#;
         let mut prog_bitnet = parse_math_code(bitnet_code).expect("Parse bitnet link");
-        prog_bitnet.resolve_links(&cwd).expect("Resolve bitnet link");
+        prog_bitnet
+            .resolve_links(&cwd)
+            .expect("Resolve bitnet link");
         let mut eval_bitnet = MathEvaluator::new();
-        eval_bitnet.execute_program(&prog_bitnet).expect("Execute bitnet");
+        eval_bitnet
+            .execute_program(&prog_bitnet)
+            .expect("Execute bitnet");
         if let MathValue::Matrix(m) = eval_bitnet.env.get("b_out").expect("b_out") {
             assert_eq!(m.len(), 1);
             assert_eq!(m[0].len(), 2);
@@ -15003,7 +16051,8 @@ mod tests {
         "#;
         let prog = parse_math_code(code).expect("Parse true zero-word math calculus");
         let mut eval = MathEvaluator::new();
-        eval.execute_program(&prog).expect("Execute true zero-word math calculus");
+        eval.execute_program(&prog)
+            .expect("Execute true zero-word math calculus");
 
         // Assert constant resolution: e and π
         if let Some(MathValue::Scalar(v)) = eval.env.get("euler") {
@@ -15050,7 +16099,9 @@ mod tests {
         "#;
         let prog_swiglu = parse_math_code(swiglu_pure).expect("Parse SwiGLU pure math");
         let mut eval_swiglu = MathEvaluator::new();
-        eval_swiglu.execute_program(&prog_swiglu).expect("Execute SwiGLU pure math");
+        eval_swiglu
+            .execute_program(&prog_swiglu)
+            .expect("Execute SwiGLU pure math");
         if let Some(MathValue::Matrix(m)) = eval_swiglu.env.get("out") {
             assert_eq!(m.len(), 1);
             assert_eq!(m[0].len(), 1);
@@ -15072,7 +16123,9 @@ mod tests {
         let mut prog_link = parse_math_code(link_code).expect("Parse module links");
         prog_link.resolve_links(&cwd).expect("Resolve module links");
         let mut eval_link = MathEvaluator::new();
-        eval_link.execute_program(&prog_link).expect("Execute module links");
+        eval_link
+            .execute_program(&prog_link)
+            .expect("Execute module links");
         assert!(eval_link.env.contains_key("out_n"));
         assert!(eval_link.env.contains_key("out_b"));
     }
@@ -15167,10 +16220,22 @@ mod tests {
                 }
             }
         }
-        assert!(fused_rms, "Pure math RMSNorm did not lower to fused rmsnorm(X, γ, ε)");
-        assert!(fused_swi, "Pure math SwiGLU did not lower to fused_swiglu(X, W1, W2, W3)");
-        assert!(fused_bit, "Pure math BitNet did not lower to bitlinear(X, W, γ)");
-        assert!(fused_att, "Pure math Attention did not lower to attention(Q, K, V, s)");
+        assert!(
+            fused_rms,
+            "Pure math RMSNorm did not lower to fused rmsnorm(X, γ, ε)"
+        );
+        assert!(
+            fused_swi,
+            "Pure math SwiGLU did not lower to fused_swiglu(X, W1, W2, W3)"
+        );
+        assert!(
+            fused_bit,
+            "Pure math BitNet did not lower to bitlinear(X, W, γ)"
+        );
+        assert!(
+            fused_att,
+            "Pure math Attention did not lower to attention(Q, K, V, s)"
+        );
 
         // 3. Execute full end-to-end 0-word hybrid LLM pipeline
         let e2e_code = r#"
@@ -15206,7 +16271,9 @@ mod tests {
         let mut prog_e2e = parse_math_code(e2e_code).expect("Parse E2E 0-word pipeline");
         prog_e2e.resolve_links(&cwd).expect("Resolve E2E links");
         let mut eval_e2e = MathEvaluator::new();
-        eval_e2e.execute_program(&prog_e2e).expect("Execute E2E 0-word pipeline");
+        eval_e2e
+            .execute_program(&prog_e2e)
+            .expect("Execute E2E 0-word pipeline");
 
         if let Some(MathValue::Matrix(p)) = eval_e2e.env.get("P") {
             assert_eq!(p.len(), 2);
@@ -15266,7 +16333,9 @@ mod tests {
             shape_errs
         );
         let mut eval_emb = MathEvaluator::new();
-        eval_emb.execute_program(&prog_emb).expect("Execute E[t] program");
+        eval_emb
+            .execute_program(&prog_emb)
+            .expect("Execute E[t] program");
         if let Some(MathValue::Matrix(h)) = eval_emb.env.get("H") {
             assert_eq!(h, &vec![vec![1.0, 0.0], vec![1.0, 1.0]]);
         } else {
@@ -15293,8 +16362,13 @@ mod tests {
         "#;
         let prog_sym = parse_math_code(sym_code).expect("Parse symbolic operators");
         let mut eval_sym = MathEvaluator::new();
-        eval_sym.execute_program(&prog_sym).expect("Execute symbolic operators");
-        assert_eq!(eval_sym.env.get("s1"), Some(&MathValue::Str("CL".to_string())));
+        eval_sym
+            .execute_program(&prog_sym)
+            .expect("Execute symbolic operators");
+        assert_eq!(
+            eval_sym.env.get("s1"),
+            Some(&MathValue::Str("CL".to_string()))
+        );
         assert!(eval_sym.env.contains_key("next_id"));
     }
     #[test]
@@ -15314,16 +16388,31 @@ mod tests {
         "#;
         let prog = parse_math_code(math_code).expect("Parse Phase 16 math code");
         let c23_code = prog.to_c23_executable();
-        
+
         // Assert that C23 emission recognized fused linear relu
-        assert!(c23_code.contains("fused_linear_relu") || c23_code.contains("_acc > 0.0f"), "C23 did not emit fused linear relu");
+        assert!(
+            c23_code.contains("fused_linear_relu") || c23_code.contains("_acc > 0.0f"),
+            "C23 did not emit fused linear relu"
+        );
         // Assert that C23 emission supports direct 2D E[t] embedding index gathering
-        assert!(c23_code.contains("int _tok = (int)t[_i];") || c23_code.contains("_tok = (int)"), "C23 did not emit E[t] table gathering");
+        assert!(
+            c23_code.contains("int _tok = (int)t[_i];") || c23_code.contains("_tok = (int)"),
+            "C23 did not emit E[t] table gathering"
+        );
         // Assert that C23 emission supports O and I
-        assert!(c23_code.contains("Z[2][2] = { 0.0f };") || c23_code.contains("0.0f"), "C23 did not emit zeros (O)");
-        assert!(c23_code.contains("Id[2][2] = { 0.0f };") || c23_code.contains("1.0f"), "C23 did not emit eye (I)");
+        assert!(
+            c23_code.contains("Z[2][2] = { 0.0f };") || c23_code.contains("0.0f"),
+            "C23 did not emit zeros (O)"
+        );
+        assert!(
+            c23_code.contains("Id[2][2] = { 0.0f };") || c23_code.contains("1.0f"),
+            "C23 did not emit eye (I)"
+        );
         // Assert that C23 emission supports row-wise softmax (ρ)
-        assert!(c23_code.contains("expf"), "C23 did not emit softmax (ρ) loop");
+        assert!(
+            c23_code.contains("expf"),
+            "C23 did not emit softmax (ρ) loop"
+        );
 
         // 2. Verify PTX generation parity for symbolic attention / rmsnorm
         let ptx_code = r#"
@@ -15332,9 +16421,18 @@ mod tests {
         "#;
         let prog_ptx = parse_math_code(ptx_code).expect("Parse Phase 16 PTX code");
         let ptx_out = prog_ptx.to_ptx();
-        assert!(ptx_out.contains(".version 7.5"), "Missing PTX version header");
-        assert!(ptx_out.contains(".target sm_80"), "Missing PTX target architecture");
-        assert!(ptx_out.contains("shfl.sync.bfly.b32"), "Missing warp reduction in PTX");
+        assert!(
+            ptx_out.contains(".version 7.5"),
+            "Missing PTX version header"
+        );
+        assert!(
+            ptx_out.contains(".target sm_80"),
+            "Missing PTX target architecture"
+        );
+        assert!(
+            ptx_out.contains("shfl.sync.bfly.b32"),
+            "Missing warp reduction in PTX"
+        );
     }
 
     #[test]
@@ -15390,7 +16488,9 @@ mod tests {
         "#;
         let prog = parse_math_code(code).expect("Parse Phase 17 E2E Math Code");
         let mut evaluator = MathEvaluator::new();
-        let _ = evaluator.execute_program(&prog).expect("Execute Phase 17 E2E Pipeline");
+        let _ = evaluator
+            .execute_program(&prog)
+            .expect("Execute Phase 17 E2E Pipeline");
         assert!(evaluator.env.contains_key("W_head_opt"));
         assert!(evaluator.env.contains_key("K_stream"));
         assert!(evaluator.env.contains_key("s_generated"));
@@ -15509,7 +16609,11 @@ mod tests {
 
         // 3. NVIDIA Hopper / Blackwell WGMMA PTX lowering
         let ptx_code = prog.to_ptx();
-        assert!(ptx_code.contains("wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16"), "Expected WGMMA instruction in PTX:\n{}", ptx_code);
+        assert!(
+            ptx_code.contains("wgmma.mma_async.sync.aligned.m64n64k16.f32.f16.f16"),
+            "Expected WGMMA instruction in PTX:\n{}",
+            ptx_code
+        );
         assert!(ptx_code.contains("wgmma.commit_group.sync.aligned"));
         assert!(ptx_code.contains("wgmma.wait_group.sync.aligned 0"));
     }

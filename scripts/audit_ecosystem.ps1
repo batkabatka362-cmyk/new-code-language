@@ -12,3 +12,4 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Ecosystem audit failed." -ForegroundColor Red
     exit $LASTEXITCODE
 }
+
