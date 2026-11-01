@@ -1,5 +1,5 @@
-; VLIW Microcode Kernel: gqa_kernel
-@kernel gqa_kernel
+; Auto-Vectorized VLIW Microcode Kernel: grouped_query_attention
+@kernel grouped_query_attention
 .target silicon.4d_torus_simd
 .ipc_target 4.0
 
