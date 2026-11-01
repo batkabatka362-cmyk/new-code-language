@@ -1,13 +1,11 @@
-// ════════════════════════════════════════════════════════════════════════════
-// CRON Post-Human AI Architecture: DeepSeek-V3 Multi-Head Latent Attention (MLA)
-// Level 1A: Zero-Verbal Mathematical Calculus
-// ════════════════════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+// Ψ_m : x -> c -> (q, k, v) -> Ψ
+// ────────────────────────────────────────────────────────────────────────────
 
-c_q(x, W_dq) = x @ W_dq
-q(c, W_uq)   = c @ W_uq
-
-c_kv(x, W_dk) = x @ W_dk
-k(c, W_uk)    = c @ W_uk
-v(c, W_uv)    = c @ W_uv
+c(x, W_d) = x @ W_d
+q(c, W_q) = c @ W_q
+k(c, W_k) = c @ W_k
+v(c, W_v) = c @ W_v
 
 Ψ(q, k, v) = ρ((q @ k^T) * 0.125) @ v
+Ψ_m(x, W_d, W_q, W_k, W_v) = Ψ(q(c(x, W_d), W_q), k(c(x, W_d), W_k), v(c(x, W_d), W_v))
