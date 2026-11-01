@@ -2827,33 +2827,112 @@ impl MathParser {
         }
     }
 
-    fn desugar_pipe_step(input: MathExpr, target: MathExpr) -> MathExpr {
-        match target {
-            MathExpr::Binary(func, MathBinOp::Pow, count) => {
-                // Functional power / iteration: x -> f^N
-                MathExpr::Iterate {
-                    input: Box::new(input),
-                    func,
-                    count,
-                }
+    fn substitute_placeholder(expr: &MathExpr, input: &MathExpr) -> (MathExpr, bool) {
+        match expr {
+            MathExpr::Placeholder => (input.clone(), true),
+            MathExpr::Unary(op, inner) => {
+                let (new_inner, found) = Self::substitute_placeholder(inner, input);
+                (MathExpr::Unary(*op, Box::new(new_inner)), found)
             }
-            MathExpr::Var(func_name) => MathExpr::Call(func_name, vec![input]),
-            MathExpr::Call(func_name, mut args) => {
-                let mut found_placeholder = false;
-                for arg in args.iter_mut() {
-                    if let MathExpr::Placeholder = arg {
-                        *arg = input.clone();
-                        found_placeholder = true;
-                        break;
+            MathExpr::Binary(l, op, r) => {
+                let (new_l, found_l) = Self::substitute_placeholder(l, input);
+                let (new_r, found_r) = Self::substitute_placeholder(r, input);
+                (
+                    MathExpr::Binary(Box::new(new_l), *op, Box::new(new_r)),
+                    found_l || found_r,
+                )
+            }
+            MathExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                let (c, fc) = Self::substitute_placeholder(cond, input);
+                let (t, ft) = Self::substitute_placeholder(then_expr, input);
+                let (e, fe) = Self::substitute_placeholder(else_expr, input);
+                (
+                    MathExpr::Ternary {
+                        cond: Box::new(c),
+                        then_expr: Box::new(t),
+                        else_expr: Box::new(e),
+                    },
+                    fc || ft || fe,
+                )
+            }
+            MathExpr::Call(name, args) => {
+                let mut found_any = false;
+                let mut new_args = Vec::with_capacity(args.len());
+                for a in args {
+                    let (new_a, found) = Self::substitute_placeholder(a, input);
+                    if found {
+                        found_any = true;
                     }
+                    new_args.push(new_a);
                 }
-                if !found_placeholder {
-                    args.insert(0, input);
-                }
-                MathExpr::Call(func_name, args)
+                (MathExpr::Call(name.clone(), new_args), found_any)
             }
-            other => MathExpr::Binary(Box::new(input), MathBinOp::MatMul, Box::new(other)),
+            MathExpr::Array(elems) => {
+                let mut found_any = false;
+                let mut new_elems = Vec::with_capacity(elems.len());
+                for e in elems {
+                    let (new_e, found) = Self::substitute_placeholder(e, input);
+                    if found {
+                        found_any = true;
+                    }
+                    new_elems.push(new_e);
+                }
+                (MathExpr::Array(new_elems), found_any)
+            }
+            MathExpr::Tuple(items) => {
+                let mut found_any = false;
+                let mut new_items = Vec::with_capacity(items.len());
+                for it in items {
+                    let (new_it, found) = Self::substitute_placeholder(it, input);
+                    if found {
+                        found_any = true;
+                    }
+                    new_items.push(new_it);
+                }
+                (MathExpr::Tuple(new_items), found_any)
+            }
+            MathExpr::Index(b, idx) => {
+                let (new_b, fb) = Self::substitute_placeholder(b, input);
+                let (new_idx, fi) = Self::substitute_placeholder(idx, input);
+                (MathExpr::Index(Box::new(new_b), Box::new(new_idx)), fb || fi)
+            }
+            other => (other.clone(), false),
         }
+    }
+
+    fn desugar_pipe_step(input: MathExpr, target: MathExpr) -> MathExpr {
+        // 1. Recursive placeholder substitution: x -> _ + b, x -> W @ _, x -> cos_sim(_, v)
+        let (substituted, found_placeholder) = Self::substitute_placeholder(&target, &input);
+        if found_placeholder {
+            return substituted;
+        }
+
+        // 2. Functional iteration: x -> f^N
+        if let MathExpr::Binary(func, MathBinOp::Pow, count) = target {
+            return MathExpr::Iterate {
+                input: Box::new(input),
+                func,
+                count,
+            };
+        }
+
+        // 3. Simple function identifier: x -> norm => norm(x)
+        if let MathExpr::Var(func_name) = target {
+            return MathExpr::Call(func_name, vec![input]);
+        }
+
+        // 4. Function call without placeholder: x -> f(y) => f(x, y)
+        if let MathExpr::Call(func_name, mut args) = target {
+            args.insert(0, input);
+            return MathExpr::Call(func_name, args);
+        }
+
+        // 5. Binary tensor multiply: x -> W => x @ W
+        MathExpr::Binary(Box::new(input), MathBinOp::MatMul, Box::new(target))
     }
 
     fn parse_ternary(&mut self) -> Result<MathExpr, String> {
@@ -3042,6 +3121,53 @@ impl MathParser {
                 }
             }
             Some(Token::LParen) => {
+                // Support operator sections for pipeline chaining: (+ b), (* c), (/ d), (@ W), (^ p)
+                if self.match_tok(&Token::Plus) {
+                    let rhs = self.parse_expr()?;
+                    self.expect(&Token::RParen)?;
+                    return Ok(MathExpr::Binary(
+                        Box::new(MathExpr::Placeholder),
+                        MathBinOp::Add,
+                        Box::new(rhs),
+                    ));
+                }
+                if self.match_tok(&Token::Star) {
+                    let rhs = self.parse_expr()?;
+                    self.expect(&Token::RParen)?;
+                    return Ok(MathExpr::Binary(
+                        Box::new(MathExpr::Placeholder),
+                        MathBinOp::Mul,
+                        Box::new(rhs),
+                    ));
+                }
+                if self.match_tok(&Token::Slash) {
+                    let rhs = self.parse_expr()?;
+                    self.expect(&Token::RParen)?;
+                    return Ok(MathExpr::Binary(
+                        Box::new(MathExpr::Placeholder),
+                        MathBinOp::Div,
+                        Box::new(rhs),
+                    ));
+                }
+                if self.match_tok(&Token::At) {
+                    let rhs = self.parse_expr()?;
+                    self.expect(&Token::RParen)?;
+                    return Ok(MathExpr::Binary(
+                        Box::new(MathExpr::Placeholder),
+                        MathBinOp::MatMul,
+                        Box::new(rhs),
+                    ));
+                }
+                if self.match_tok(&Token::Caret) {
+                    let rhs = self.parse_expr()?;
+                    self.expect(&Token::RParen)?;
+                    return Ok(MathExpr::Binary(
+                        Box::new(MathExpr::Placeholder),
+                        MathBinOp::Pow,
+                        Box::new(rhs),
+                    ));
+                }
+
                 let expr = self.parse_expr()?;
                 if self.match_tok(&Token::Comma) {
                     let mut items = vec![expr];
@@ -18572,5 +18698,82 @@ mod tests {
         } else {
             panic!("Expected Matrix for M_next");
         }
+    }
+
+    #[test]
+    fn test_compositional_algebra_and_pipeline_chaining() {
+        let mut eval = MathEvaluator::new();
+
+        // 1. Pipeline chaining of atomic operators: x -> minmax -> chebyshev(2) -> (@ W) -> (+ b) -> mish
+        let code1 = r#"
+            x = [0.0, 5.0, 10.0]
+            W = [[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]]
+            b = [0.1, -0.1]
+            y = x -> minmax -> chebyshev(2) -> (@ W) -> (+ b) -> mish
+        "#;
+        let prog1 = parse_math_code(code1).expect("Parse pipeline composition 1 failed");
+        eval.execute_program_value(&prog1).expect("Eval pipeline composition 1 failed");
+        let y_val = eval.env.get("y").expect("y must be defined");
+        if let MathValue::Vector(y_vec) = y_val {
+            assert_eq!(y_vec.len(), 2);
+            for v in y_vec {
+                assert!(!v.is_nan());
+            }
+        } else {
+            panic!("Expected Vector for y");
+        }
+
+        // 2. User-defined modular composition & nesting (Norm -> KAN -> Activation -> Dense)
+        let code2 = r#"
+            norm_layer(z) = z -> standardize -> minmax
+            kan_edge(z, W_k) = chebyshev_basis(z, 2) @ W_k
+            custom_mlp(z, W_k, b_k, W_out) = z -> norm_layer -> kan_edge(W_k) -> (+ b_k) -> mish -> (@ W_out)
+
+            inp = [1.0, 2.0, 3.0]
+            W_k = [[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]]
+            b_k = [0.05, -0.05]
+            W_out = [[2.0], [1.0]]
+            out = custom_mlp(inp, W_k, b_k, W_out)
+        "#;
+        let prog2 = parse_math_code(code2).expect("Parse modular composition failed");
+        eval.execute_program_value(&prog2).expect("Eval modular composition failed");
+        let out_val = eval.env.get("out").expect("out must be defined");
+        if let MathValue::Matrix(out_mat) = out_val {
+            assert_eq!(out_mat.len(), 3); // 3 batch rows from chebyshev_basis @ W_k
+            assert_eq!(out_mat[0].len(), 1);
+        } else {
+            panic!("Expected Matrix for out, got {:?}", out_val);
+        }
+
+        // 3. Autodiff through a chained pipeline expression
+        let code3 = r#"
+            x = [1.0, 2.0]
+            W = [[2.0, 0.5], [0.5, 1.0]]
+            g_W = ∇_W (x -> (@ W) -> sum)
+        "#;
+        let prog3 = parse_math_code(code3).expect("Parse pipeline autodiff failed");
+        eval.execute_program_value(&prog3).expect("Eval pipeline autodiff failed");
+        let g_w = eval.env.get("g_W").expect("g_W must be computed");
+        if let MathValue::Matrix(gw_mat) = g_w {
+            println!("gw_mat: {:?}", gw_mat);
+            assert_eq!(gw_mat.len(), 2);
+            assert_eq!(gw_mat[0].len(), 2);
+            // d(sum(x @ W))/dW = x^T @ ones = [[1, 1], [2, 2]]
+            assert!((gw_mat[0][0] - 1.0).abs() < 1e-4);
+            assert!((gw_mat[0][1] - 1.0).abs() < 1e-4);
+            assert!((gw_mat[1][0] - 2.0).abs() < 1e-4);
+            assert!((gw_mat[1][1] - 2.0).abs() < 1e-4);
+        } else {
+            panic!("Expected Matrix for g_W");
+        }
+
+        // 4. Standalone ISO C23 and CUDA lowering of chained compositions
+        let code_c23 = r#"
+            layer(x: f32[3], W: f32[3, 2], b: f32[2]) = x -> minmax -> chebyshev(2) -> (@ W) -> (+ b) -> mish
+        "#;
+        let prog_c23 = parse_math_code(code_c23).expect("Parse c23 code failed");
+        let c23_out = prog_c23.to_c23();
+        assert!(c23_out.contains("layer"));
+        assert!(c23_out.contains("CRON_API"));
     }
 }
