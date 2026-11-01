@@ -56,6 +56,7 @@ fn print_help() {
     println!("    verilog <file.cl> [-o <out.v>] Synthesize IEEE 1364-2001 Verilog RTL core");
     println!("    fpga <file.cl> [opts]          Synthesize & package FPGA bitstream (Artix-7, iCE40, ECP5)");
     println!("    tapeout <file.cl> [opts]       OpenLane SkyWater 130nm / TSMC N5 ASIC tape-out flow");
+    println!("    synth <file.cl> [opts]         1-Click Verilog RTL, Testbench, SDC/XDC & OpenLane ASIC Synthesis Package");
     println!("    flash <file.cl> [opts]         Generate physical hardware synthesis package & drivers");
     println!("    cl-vcd <file.cl> [-o out.vcd]  Dump IEEE 1364-2001 VCD trace & ASCII pipeline timing diagram");
     println!("    cl-router [inspect|synth|sim]  4D-Torus 9-Port Virtual Channel Router Micro-Architecture & Verilog");
@@ -63,6 +64,7 @@ fn print_help() {
     println!("════════════════════════════════════════════════════════════════════════════════");
     println!(" [3] AI MODELS, DISCRETE LORA & WEIGHT CYCLES");
     println!("════════════════════════════════════════════════════════════════════════════════");
+    println!("    train [model.cl] [opts]        Autonomous Zero-Python In-Silicon Training & Safetensors Export");
     println!("    finetune <dataset> [opts]      On-device sub-byte CL-LoRA fine-tuning (<4.1KB L1, 0-FLOP backprop)");
     println!("    lora-merge <base> <lora> [opt] Bidirectional Weight Cycle: Merge discrete CL-LoRA into SafeTensors");
     println!("    model-expand <lora> [-o out]   De-quantize discrete adapter into full-rank dense FP32 SafeTensors");
@@ -304,9 +306,10 @@ fn print_subcommand_help(cmd: &str) {
             println!("OPTIONS:\n    -o <path>       Output .dpdata binary path (default: corpus.dpdata)\n    --vault <path>  Output .cldb crystalline vault snapshot path\n    --name <s>      Vault name\n    --json          Output in structured JSON\n    -h, --help      Display this help message\n");
         }
         "cl-train" | "train-cl" | "train" => {
-            println!("USAGE:\n    cron cl-train [dataset.dpdata] [OPTIONS]\n");
-            println!("DESCRIPTION:\n    In-Silicon Autograd & Deep Learning Training Engine (AdamW, QAT, 4D-Torus AllReduce).\n");
-            println!("OPTIONS:\n    --epochs <N>        Number of training epochs (default: 20)\n    --lr <float>        Learning rate (default: 0.05)\n    --batch <N>         Batch size (default: 8)\n    --seq-len <N>       Sequence length / input dimension (default: 8)\n    --hidden <N>        Hidden layer dimension (default: 16)\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization (256 cores)\n    --synth <file.cl>   Synthesize hazard-free .cl training microcode to file\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
+            println!("USAGE:\n    cron train [model.cl] [OPTIONS]\n    cron cl-train [dataset.dpdata] [OPTIONS]\n");
+            println!("DESCRIPTION:\n    CRON Autonomous Zero-Python In-Silicon Training Pipeline & Autograd Engine.\n    Ingests raw text corpus, executes causal LM forward pass, computes exact\n    analytical reverse-mode VJP autodiff gradients, optimizes parameters with\n    AdamW or Lion, and exports IEEE 754 Safetensors checkpoints.\n    Zero Python, Zero PyTorch, Zero external C++ runtime required.\n");
+            println!("OPTIONS:\n    --data, -d <path>   Path to raw text training corpus or token stream\n    --steps, -s <N>     Number of training optimization steps (default: 50)\n    --lr <float>        Learning rate (default: 0.01)\n    --batch, -b <N>     Batch size (default: 4)\n    --seq-len, -l <N>   Sequence length (default: 16)\n    --dim <N>           Hidden dimension (default: 32)\n    --optimizer <opt>   Optimizer algorithm: adamw, lion, sgd (default: adamw)\n    -o, --out <path>    Output Safetensors checkpoint path (default: checkpoint.safetensors)\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
+            println!("EXAMPLES:\n    cron train model.cl --data corpus.txt --steps 100 --lr 0.01 -o model.safetensors\n    cron train --data mongol_text.txt --optimizer lion --steps 50\n    cron train --steps 30 --lr 0.02 -o trained.safetensors");
         }
         "cl-sovereign" | "sovereign" => {
             println!("USAGE:\n    cron cl-sovereign <chat|stats|export|corpus> [OPTIONS]\n");
@@ -358,6 +361,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("DESCRIPTION:\n    Synthesizes complete FPGA/ASIC hardware deployment package with Verilog RTL, Vivado/Quartus/OpenLane synthesis scripts, PCIe Gen5 DMA drivers, and automated bitstream runners.\n");
             println!("OPTIONS:\n    --board, -b <board>   Target FPGA board: icebreaker, colorlight-i5, arty-a7, generic-ecp5, generic-ice40\n    --target, --pdk <t>   Target silicon: openlane_sky130, yosys_nextpnr, xilinx_u280, intel_stratix10, asic_tapeout\n    --interface <bus>     Host bus: pcie_gen5_x16, uart_115200, jtag_axi\n    -o, --out-dir <dir>   Output directory (default: fpga_deployment / asic_tapeout / silicon_deployment)\n    --dry-run             Perform package generation without touching physical hardware\n    --build, --synth      Trigger automated Vivado or Yosys bitstream synthesis runner\n    --flash               Trigger 1-click physical FPGA flashing tool\n    --json                Output structured JSON hardware manifest\n    -h, --help            Display this help message\n");
             println!("EXAMPLES:\n    cron fpga kernel.cl --board icebreaker\n    cron fpga kernel.cl --board colorlight-i5 --build\n    cron tapeout kernel.cl --pdk sky130 -o asic_run\n    cron flash model.cl --target xilinx_u280 -o build_hw");
+        }
+        "synth" | "cl-synth" => {
+            println!("USAGE:\n    cron synth [file.cl] [OPTIONS]\n");
+            println!("DESCRIPTION:\n    1-Click FPGA & OpenLane ASIC Silicon Synthesis Suite.\n    Generates synthesizable Verilog HDL, automated self-checking testbench,\n    SDC/XDC timing constraints, and OpenLane SkyWater 130nm config.\n");
+            println!("OPTIONS:\n    --target <t>       Target silicon: sky130, ice40, artix7, tsmc (default: sky130)\n    --freq <mhz>       Target clock frequency in MHz (default: 500.0)\n    --in-dim <n>       Input vector dimension (default: 16)\n    --out-dim <n>      Output vector dimension (default: 16)\n    -o, --out-dir <d>  Output directory (default: silicon_synth_out)\n    --json             Output structured manifest in JSON\n    -h, --help         Display this help message\n");
+            println!("EXAMPLES:\n    cron synth model.cl --target sky130 --freq 500 -o asic_pkg\n    cron synth kernel.cl --target artix7 --freq 100 -o fpga_pkg");
         }
         "bootstrap" | "cl-bootstrap" => {
             println!("USAGE:\n    cron bootstrap [OPTIONS]\n");
@@ -1305,6 +1314,9 @@ fn main() {
         }
         "cl-fix" | "fix-cl" => {
             handle_cl_fix_command(&args[2..]);
+        }
+        "synth" | "cl-synth" => {
+            handle_synth_command(&args[2..]);
         }
         "cl-train" | "train-cl" | "train" => {
             handle_cl_train_command(&args[2..]);
@@ -5301,7 +5313,7 @@ fn main() {
                 println!("[SUCCESS] Synthesized polyhedral tiled .cl machine code written to '{}'", path);
             }
         }
-        "cl-cluster" => {
+        "cl-cluster" | "cl-distributed" | "distributed" => {
             handle_cl_cluster_command(&args[2..]);
         }
         "cl-sparse" => {
@@ -7187,59 +7199,6 @@ fn main() {
                 }
             }
         }
-        "synth" => {
-            if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron synth <file.cl> [-t vivado|yosys]");
-                std::process::exit(1);
-            }
-            let input_path = &args[2];
-            let mut tool = "vivado";
-            if args.len() >= 5 && args[3] == "-t" {
-                tool = &args[4];
-            }
-
-            let content = match fs::read_to_string(input_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Error reading '{}': {}", input_path, e);
-                    std::process::exit(1);
-                }
-            };
-
-            println!("[CRON SYNTH] Synthesizing IEEE 1364-2001 Verilog from '{}'...", input_path);
-            let v_output = match cronc::compile_to_verilog(&content, "cksl_core") {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("RTL generation failed: {}", e);
-                    std::process::exit(1);
-                }
-            };
-
-            let synth_dir = Path::new("synth");
-            let out_v = if synth_dir.exists() { "synth/cksl_core.v" } else { "cksl_core.v" };
-            if let Err(e) = fs::write(out_v, &v_output) {
-                eprintln!("Error writing '{}': {}", out_v, e);
-                std::process::exit(1);
-            }
-            println!("[SUCCESS] Generated Verilog core: '{}'", out_v);
-
-            println!("[CRON SYNTH] Target Toolchain: {}", tool.to_uppercase());
-            match tool {
-                "vivado" => {
-                    println!("Synthesis Batch Command: vivado -mode batch -nojournal -nolog -source synth/vivado_synth.tcl");
-                    println!("Timing & Physical Constraints: synth/cron_core_constraints.xdc (1.2 GHz)");
-                    println!("Target Device: AMD Xilinx UltraScale+ (xcu250-figd2104-2L-e)");
-                }
-                "yosys" => {
-                    println!("Synthesis Script: yosys -s synth/yosys_synth.tcl");
-                    println!("Technology Mapping: Lattice ECP5 FPGA / SkyWater 130nm ASIC");
-                }
-                _ => {
-                    eprintln!("Unknown synthesis tool '{}'. Available: vivado, yosys", tool);
-                    std::process::exit(1);
-                }
-            }
-        }
         "native" => {
             if args.len() < 3 {
                 eprintln!("Error: Missing input file. Usage: cron native <file.cl> [-o <out>]");
@@ -8384,6 +8343,8 @@ fn handle_cl_cluster_command(args: &[String]) {
         println!("    verilog [--chips <N>] [-o <tb.v>] Emit synthesizable Verilog multi-core co-emulation testbench");
         println!("    sim-hw [--chips <N>] [-o <tb.v>] [--json] Automated hardware RTL co-simulation runner (Icarus/vvp)");
         println!("    synth [--chips <N>] [--target <t>] [--json] Silicon/FPGA synthesis estimator & Yosys/OpenLane script gen");
+        println!("    tp [--chips <N>] [--json]         Execute Megatron-style Column/Row Tensor Parallelism with Ring AllReduce");
+        println!("    c23-tp [--chips <N>] [-o <out.c>] Emit Multi-Device C23 pthread execution harness");
         println!("    run <file.cl> [--chips <N>]       Execute on distributed multi-die simulator");
         return;
     }
@@ -8420,6 +8381,39 @@ fn handle_cl_cluster_command(args: &[String]) {
     }
 
     match action.as_str() {
+        "tp" | "tensor-parallel" => {
+            let world_size = num_chips;
+            let d_in = 16;
+            let d_hidden = 32;
+            let d_out = 16;
+            let batch_size = 4;
+            let input = vec![1.0f32; batch_size * d_in];
+            let w1 = vec![0.1f32; d_in * d_hidden];
+            let w2 = vec![0.1f32; d_hidden * d_out];
+            match cronc::cl_distributed::execute_distributed_megatron_mlp(
+                &input, &w1, &w2, d_in, d_hidden, d_out, batch_size, world_size,
+            ) {
+                Ok(out) => {
+                    if emit_json {
+                        println!(r#"{{"status":"ok","world_size":{},"elements":{}}}"#, world_size, out.len());
+                    } else {
+                        println!("[SUCCESS] Distributed Megatron TP executed across {} ranks. Output elements: {}", world_size, out.len());
+                    }
+                }
+                Err(e) => eprintln!("[ERROR] TP execution failed: {}", e),
+            }
+        }
+        "c23-tp" => {
+            let harness = cronc::cl_distributed::synthesize_distributed_c23_harness(
+                "cron_distributed_tp", num_chips, num_chips, 16, 64, 16,
+            );
+            if let Some(ref p) = out_file {
+                let _ = fs::write(p, &harness);
+                println!("[SUCCESS] Distributed C23 harness written to '{}'", p);
+            } else {
+                println!("{}", harness);
+            }
+        }
         "topology" | "info" => {
             if emit_json {
                 println!("{{\n  \"num_dies\": {},\n  \"total_cores\": {},\n  \"interconnect\": \"DWDM Optical Waveguide Rings (800 Gbps/link)\"\n}}", num_chips, num_chips * 256);
@@ -12136,85 +12130,266 @@ fn handle_cl_train_command(args: &[String]) {
     }
 
     let mut dataset_path: Option<String> = None;
-    let mut epochs = 20usize;
-    let mut lr = 0.05f32;
-    let mut batch_size = 8usize;
-    let mut seq_len = 8usize;
-    let mut hidden_dim = 16usize;
+    let mut epochs = 50usize;
+    let mut lr = 0.01f32;
+    let mut batch_size = 4usize;
+    let mut seq_len = 16usize;
+    let mut hidden_dim = 64usize;
     let mut qat = false;
     let mut torus_allreduce = false;
     let mut synth_path = None;
     let mut emit_json = false;
+    let mut checkpoint_out: Option<String> = Some("checkpoint.safetensors".to_string());
+    let mut optimizer_type = cronc::cl_train_pipeline::TrainingOptimizer::AdamW;
+    let mut profile_type = "max-quality".to_string();
 
     let mut i = 0;
     while i < args.len() {
-        if (args[i] == "--epochs" || args[i] == "-e") && i + 1 < args.len() {
-            if let Ok(e) = args[i + 1].parse::<usize>() { epochs = e; }
-            i += 2;
-        } else if args[i] == "--lr" && i + 1 < args.len() {
-            if let Ok(l) = args[i + 1].parse::<f32>() { lr = l; }
-            i += 2;
-        } else if args[i] == "--batch" && i + 1 < args.len() {
-            if let Ok(b) = args[i + 1].parse::<usize>() { batch_size = b; }
-            i += 2;
-        } else if args[i] == "--seq-len" && i + 1 < args.len() {
-            if let Ok(s) = args[i + 1].parse::<usize>() { seq_len = s; }
-            i += 2;
-        } else if args[i] == "--hidden" && i + 1 < args.len() {
-            if let Ok(h) = args[i + 1].parse::<usize>() { hidden_dim = h; }
-            i += 2;
-        } else if args[i] == "--qat" {
-            qat = true;
-            i += 1;
-        } else if args[i] == "--torus-allreduce" {
-            torus_allreduce = true;
-            i += 1;
-        } else if args[i] == "--synth" && i + 1 < args.len() {
-            synth_path = Some(args[i + 1].clone());
-            i += 2;
-        } else if args[i] == "--json" {
-            emit_json = true;
-            i += 1;
-        } else if !args[i].starts_with("--") && dataset_path.is_none() {
-            dataset_path = Some(args[i].clone());
-            i += 1;
+        match args[i].as_str() {
+            "--epochs" | "-e" | "--steps" | "-s" if i + 1 < args.len() => {
+                if let Ok(e) = args[i + 1].parse::<usize>() { epochs = e; }
+                i += 2;
+            }
+            "--lr" if i + 1 < args.len() => {
+                if let Ok(l) = args[i + 1].parse::<f32>() { lr = l; }
+                i += 2;
+            }
+            "--batch" | "--batch-size" | "-b" if i + 1 < args.len() => {
+                if let Ok(b) = args[i + 1].parse::<usize>() { batch_size = b; }
+                i += 2;
+            }
+            "--seq-len" | "-l" if i + 1 < args.len() => {
+                if let Ok(s) = args[i + 1].parse::<usize>() { seq_len = s; }
+                i += 2;
+            }
+            "--hidden" | "--dim" if i + 1 < args.len() => {
+                if let Ok(h) = args[i + 1].parse::<usize>() { hidden_dim = h; }
+                i += 2;
+            }
+            "--data" | "-d" if i + 1 < args.len() => {
+                dataset_path = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--optimizer" | "--opt" if i + 1 < args.len() => {
+                optimizer_type = cronc::cl_train_pipeline::TrainingOptimizer::from_str(&args[i + 1]);
+                i += 2;
+            }
+            "--out" | "-o" if i + 1 < args.len() => {
+                checkpoint_out = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--profile" if i + 1 < args.len() => {
+                profile_type = args[i + 1].clone();
+                i += 2;
+            }
+            "--qat" => {
+                qat = true;
+                i += 1;
+            }
+            "--torus-allreduce" => {
+                torus_allreduce = true;
+                i += 1;
+            }
+            "--synth" if i + 1 < args.len() => {
+                synth_path = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--json" => {
+                emit_json = true;
+                i += 1;
+            }
+            other => {
+                if !other.starts_with('-') && dataset_path.is_none() {
+                    dataset_path = Some(other.to_string());
+                }
+                i += 1;
+            }
+        }
+    }
+
+    if dataset_path.as_deref().map_or(false, |p| p.ends_with(".dpdata")) {
+        let p_ref = dataset_path.as_ref().map(std::path::Path::new);
+        let report = match cronc::train_cl_dataset(p_ref, epochs, lr, batch_size, seq_len, hidden_dim, qat, torus_allreduce) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[ERROR] In-silicon training failed: {}", e);
+                return;
+            }
+        };
+
+        if let Some(p) = synth_path {
+            let microcode = cronc::cl_autograd::synthesize_training_microcode("in_silicon_autograd", hidden_dim, seq_len);
+            match std::fs::write(&p, &microcode) {
+                Ok(_) => println!("[CL-TRAIN] Synthesized training microcode saved to '{}'", p),
+                Err(e) => eprintln!("[ERROR] Could not write '{}': {}", p, e),
+            }
+        }
+
+        if emit_json {
+            println!(
+                r#"{{"epochs":{},"initial_loss":{:.6},"final_loss":{:.6},"converged":{},"total_parameters":{},"peak_ipc":{:.2},"average_power_watts":{:.1},"qat":{},"torus_allreduce":{}}}"#,
+                report.epochs, report.initial_loss, report.final_loss, report.converged,
+                report.total_parameters, report.peak_ipc, report.average_power_watts, qat, torus_allreduce
+            );
         } else {
-            i += 1;
+            print!("{}", report.render_ascii_hud());
+            if qat {
+                println!("• Quantization-Aware Training (QAT): ACTIVE (Ternary Weights Clamped with STE)");
+            }
+            if torus_allreduce {
+                println!("• Distributed 4D-Torus Ring AllReduce: ACTIVE (256 Silicon Cores Synchronized)");
+            }
+            println!();
         }
+        return;
     }
 
-    let p_ref = dataset_path.as_ref().map(std::path::Path::new);
-    let report = match cronc::train_cl_dataset(p_ref, epochs, lr, batch_size, seq_len, hidden_dim, qat, torus_allreduce) {
-        Ok(r) => r,
+    // Default: Autonomous Zero-Python In-Silicon Training Pipeline
+    let mut auto_cfg = cronc::cl_train_pipeline::TrainingConfig::default();
+    auto_cfg.data_path = dataset_path;
+    auto_cfg.steps = epochs;
+    auto_cfg.learning_rate = lr;
+    auto_cfg.batch_size = batch_size;
+    auto_cfg.seq_len = seq_len;
+    auto_cfg.hidden_dim = hidden_dim;
+    auto_cfg.optimizer = optimizer_type;
+    auto_cfg.checkpoint_out = checkpoint_out;
+    auto_cfg.profile = profile_type;
+
+    println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
+    println!("║   CRON AUTONOMOUS ZERO-PYTHON IN-SILICON TRAINING PIPELINE (cron train)               ║");
+    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+    println!("║ Optimizer  : {:<73} ║", format!("{:?} (Decoupled Weight Decay)", auto_cfg.optimizer));
+    println!("║ Steps      : {:<73} ║", format!("{} Steps | LR: {:.4}", auto_cfg.steps, auto_cfg.learning_rate));
+    println!("║ Batch/Seq  : {:<73} ║", format!("Batch: {} | Seq Len: {} | Dim: {}", auto_cfg.batch_size, auto_cfg.seq_len, auto_cfg.dim));
+    println!("║ Dataset    : {:<73} ║", auto_cfg.data_path.as_deref().unwrap_or("CRON Sovereign Foundation Corpus"));
+    println!("║ Checkpoint : {:<73} ║", auto_cfg.checkpoint_out.as_deref().unwrap_or("None"));
+    println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+
+    let total_steps = auto_cfg.steps;
+    let callback = Box::new(move |rep: &cronc::cl_train_pipeline::TrainingStepReport| {
+        if rep.step == 1 || rep.step % 10 == 0 || rep.step == total_steps {
+            println!(
+                "  [STEP {:4}/{}] Loss: {:.4} | PPL: {:7.2} | LR: {:.6} | |Grad|: {:.4} | Time: {:.2}ms",
+                rep.step, total_steps, rep.loss, rep.perplexity, rep.lr, rep.grad_norm, rep.elapsed_ms
+            );
+        }
+    });
+
+    match cronc::cl_train_pipeline::train_autonomous_model(auto_cfg, Some(callback)) {
+        Ok(summary) => {
+            if emit_json {
+                println!(
+                    r#"{{"initial_loss":{:.6},"final_loss":{:.6},"reduction_pct":{:.2},"perplexity":{:.2},"tokens":{},"tokens_per_sec":{:.1},"duration_secs":{:.2},"checkpoint":"{}"}}"#,
+                    summary.initial_loss, summary.final_loss, summary.loss_reduction_pct,
+                    summary.final_perplexity, summary.total_tokens, summary.tokens_per_sec,
+                    summary.total_duration_secs, summary.checkpoint_saved_to.as_deref().unwrap_or("")
+                );
+            } else {
+                println!("─────────────────────────────────────────────────────────────────────────────────────────");
+                println!(" [SUCCESS] Autonomous In-Silicon Training Finished!");
+                println!("   • Initial Loss:      {:.4}", summary.initial_loss);
+                println!("   • Final Loss:        {:.4} ({:.2}% reduction)", summary.final_loss, summary.loss_reduction_pct);
+                println!("   • Final Perplexity:  {:.2}", summary.final_perplexity);
+                println!("   • Processed Tokens:  {} tokens ({:.1} tok/sec)", summary.total_tokens, summary.tokens_per_sec);
+                println!("   • Total Duration:    {:.2}s", summary.total_duration_secs);
+                if let Some(ref path) = summary.checkpoint_saved_to {
+                    println!("   • Checkpoint Saved:  {} (Standard IEEE 754 SafeTensors)", path);
+                }
+                println!("═════════════════════════════════════════════════════════════════════════════════════════");
+            }
+        }
         Err(e) => {
-            eprintln!("[ERROR] In-silicon training failed: {}", e);
-            return;
+            eprintln!("[ERROR] Autonomous training failed: {}", e);
+            std::process::exit(1);
         }
-    };
+    }
+}
 
-    if let Some(p) = synth_path {
-        let microcode = cronc::cl_autograd::synthesize_training_microcode("in_silicon_autograd", hidden_dim, seq_len);
-        match std::fs::write(&p, &microcode) {
-            Ok(_) => println!("[CL-TRAIN] Synthesized training microcode saved to '{}'", p),
-            Err(e) => eprintln!("[ERROR] Could not write '{}': {}", p, e),
+fn handle_synth_command(args: &[String]) {
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        print_subcommand_help("synth");
+        return;
+    }
+
+    let mut cfg = cronc::cl_silicon_tapeout::SiliconSynthConfig::default();
+    let mut emit_json = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--target" | "--pdk" if i + 1 < args.len() => {
+                cfg.target = cronc::cl_silicon_tapeout::SiliconTarget::from_str(&args[i + 1]);
+                i += 2;
+            }
+            "--freq" if i + 1 < args.len() => {
+                if let Ok(f) = args[i + 1].parse::<f64>() {
+                    cfg.clock_freq_mhz = f;
+                }
+                i += 2;
+            }
+            "--in-dim" if i + 1 < args.len() => {
+                if let Ok(d) = args[i + 1].parse::<usize>() {
+                    cfg.in_dim = d;
+                }
+                i += 2;
+            }
+            "--out-dim" if i + 1 < args.len() => {
+                if let Ok(d) = args[i + 1].parse::<usize>() {
+                    cfg.out_dim = d;
+                }
+                i += 2;
+            }
+            "-o" | "--out-dir" if i + 1 < args.len() => {
+                cfg.out_dir = args[i + 1].clone();
+                i += 2;
+            }
+            "--json" => {
+                emit_json = true;
+                i += 1;
+            }
+            other => {
+                if !other.starts_with('-') {
+                    cfg.design_name = other.replace(".cl", "").replace(['/', '\\'], "_");
+                }
+                i += 1;
+            }
         }
     }
 
-    if emit_json {
-        println!(
-            r#"{{"epochs":{},"initial_loss":{:.6},"final_loss":{:.6},"converged":{},"total_parameters":{},"peak_ipc":{:.2},"average_power_watts":{:.1},"qat":{},"torus_allreduce":{}}}"#,
-            report.epochs, report.initial_loss, report.final_loss, report.converged,
-            report.total_parameters, report.peak_ipc, report.average_power_watts, qat, torus_allreduce
-        );
-    } else {
-        print!("{}", report.render_ascii_hud());
-        if qat {
-            println!("• Quantization-Aware Training (QAT): ACTIVE (Ternary Weights Clamped with STE)");
+    match cronc::cl_silicon_tapeout::generate_silicon_synth_package(&cfg) {
+        Ok(manifest) => {
+            if emit_json {
+                println!(
+                    r#"{{"design_name":"{}","target":"{}","freq_mhz":{:.1},"period_ns":{:.3},"luts":{},"ffs":{},"dsps":{},"area_um2":{:.2},"power_mw":{:.3}}}"#,
+                    manifest.design_name, manifest.target_platform, manifest.target_clock_mhz,
+                    manifest.clock_period_ns, manifest.estimated_luts, manifest.estimated_ffs,
+                    manifest.estimated_dsps, manifest.estimated_die_area_um2, manifest.dynamic_power_mw
+                );
+            } else {
+                println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
+                println!("║   CRON 1-CLICK SILICON HARDWARE SYNTHESIS & TAPEOUT PACKAGE (cron synth)              ║");
+                println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Design Name  : {:<71} ║", manifest.design_name);
+                println!("║ Target PDK   : {:<71} ║", manifest.target_platform);
+                println!("║ Clock Freq   : {:<71} ║", format!("{:.1} MHz (Period: {:.3} ns)", manifest.target_clock_mhz, manifest.clock_period_ns));
+                println!("║ Logic LUTs   : {:<71} ║", format!("{} LUTs", manifest.estimated_luts));
+                println!("║ Registers    : {:<71} ║", format!("{} FFs (Pipelined State)", manifest.estimated_ffs));
+                println!("║ DSP Blocks   : {:<71} ║", format!("{} DSP Slices", manifest.estimated_dsps));
+                println!("║ Die Area     : {:<71} ║", format!("{:.2} μm²", manifest.estimated_die_area_um2));
+                println!("║ Dynamic Pwr  : {:<71} ║", format!("{:.3} mW", manifest.dynamic_power_mw));
+                println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+                println!("║ Generated Package Artifacts in '{}':", cfg.out_dir);
+                for f in &manifest.generated_files {
+                    println!("║   • {:<73} ║", f);
+                }
+                println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+            }
         }
-        if torus_allreduce {
-            println!("• Distributed 4D-Torus Ring AllReduce: ACTIVE (256 Silicon Cores Synchronized)");
+        Err(e) => {
+            eprintln!("[ERROR] Silicon synthesis failed: {}", e);
+            std::process::exit(1);
         }
-        println!();
     }
 }
 

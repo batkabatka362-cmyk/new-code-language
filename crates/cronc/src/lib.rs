@@ -16,6 +16,7 @@ pub mod cl_math;
 pub mod cl_tensor_engine;
 pub mod cl_verify_math;
 pub mod fusion;
+pub mod cl_train_pipeline;
 
 // ============================================================================
 // [2] SILICON MICROCODE & 128-BIT VLIW HARDWARE CORE (Level 2)
@@ -80,6 +81,7 @@ pub mod cl_sphere_infer;
 pub mod cl_sphere_fpga;
 pub mod cl_rtl_export;
 pub mod cl_rtl_dpsta;
+pub mod cl_silicon_tapeout;
 pub mod silicon_flash;
 pub mod cl_power;
 pub mod cl_balance;
@@ -144,6 +146,7 @@ pub mod cl_swarm_wafer;
 pub mod cl_multi_wafer;
 pub mod cl_cluster;
 pub mod cl_cluster_net;
+pub mod cl_distributed;
 pub mod cl_router;
 pub mod cl_wafer_scale;
 pub mod cl_net;
