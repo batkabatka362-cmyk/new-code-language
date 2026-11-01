@@ -1750,6 +1750,53 @@ impl MathExpr {
             MathExpr::Binary(lhs, op, rhs) => {
                 let l = lhs.optimize_tensor_graph();
                 let r = rhs.optimize_tensor_graph();
+
+                // Algebraic Constant Folding for scalars
+                if let (MathExpr::Num(a), MathExpr::Num(b)) = (&l, &r) {
+                    match op {
+                        MathBinOp::Add => return MathExpr::Num(a + b),
+                        MathBinOp::Sub => return MathExpr::Num(a - b),
+                        MathBinOp::Mul => return MathExpr::Num(a * b),
+                        MathBinOp::Div if b.abs() > 1e-12 => return MathExpr::Num(a / b),
+                        MathBinOp::Pow => return MathExpr::Num(a.powf(*b)),
+                        _ => {}
+                    }
+                }
+
+                // Algebraic Scalar Identity Folding
+                if *op == MathBinOp::Add {
+                    if matches!(&r, MathExpr::Num(n) if n.abs() < 1e-12) {
+                        return l;
+                    }
+                    if matches!(&l, MathExpr::Num(n) if n.abs() < 1e-12) {
+                        return r;
+                    }
+                }
+                if *op == MathBinOp::Sub {
+                    if matches!(&r, MathExpr::Num(n) if n.abs() < 1e-12) {
+                        return l;
+                    }
+                }
+                if *op == MathBinOp::Mul {
+                    if matches!(&r, MathExpr::Num(n) if (n - 1.0).abs() < 1e-12) {
+                        return l;
+                    }
+                    if matches!(&l, MathExpr::Num(n) if (n - 1.0).abs() < 1e-12) {
+                        return r;
+                    }
+                    if matches!(&r, MathExpr::Num(n) if n.abs() < 1e-12) {
+                        return MathExpr::Num(0.0);
+                    }
+                    if matches!(&l, MathExpr::Num(n) if n.abs() < 1e-12) {
+                        return MathExpr::Num(0.0);
+                    }
+                }
+                if *op == MathBinOp::Div {
+                    if matches!(&r, MathExpr::Num(n) if (n - 1.0).abs() < 1e-12) {
+                        return l;
+                    }
+                }
+
                 // Rule 2: Identity MatMul: X @ eye(N) -> X, eye(N) @ X -> X
                 if *op == MathBinOp::MatMul {
                     if let MathExpr::Call(ref name, _) = r {
@@ -10056,7 +10103,11 @@ impl MathProgram {
                         let _ = Self::infer_shape_expr(&args[2], env, fn_sigs, errors, ctx);
                         if let (Some(x_s), Some(wg_s)) = (x, wg) {
                             if x_s.len() >= 2 && wg_s.len() >= 2 {
-                                Some(vec![x_s[0], wg_s[1]])
+                                let mut out = x_s[..x_s.len() - 1].to_vec();
+                                out.push(wg_s[wg_s.len() - 1]);
+                                Some(out)
+                            } else if x_s.len() == 1 && wg_s.len() >= 2 {
+                                Some(vec![wg_s[wg_s.len() - 1]])
                             } else {
                                 None
                             }
@@ -10075,7 +10126,11 @@ impl MathProgram {
                         let wd = Self::infer_shape_expr(&args[3], env, fn_sigs, errors, ctx);
                         if let (Some(x_s), Some(wd_s)) = (x, wd) {
                             if x_s.len() >= 2 && wd_s.len() >= 2 {
-                                Some(vec![x_s[0], wd_s[1]])
+                                let mut out = x_s[..x_s.len() - 1].to_vec();
+                                out.push(wd_s[wd_s.len() - 1]);
+                                Some(out)
+                            } else if x_s.len() == 1 && wd_s.len() >= 2 {
+                                Some(vec![wd_s[wd_s.len() - 1]])
                             } else {
                                 None
                             }
@@ -10095,7 +10150,15 @@ impl MathProgram {
                         }
                         if let (Some(x_s), Some(w_s)) = (x, w) {
                             if x_s.len() >= 2 && w_s.len() >= 2 {
-                                Some(vec![x_s[0], w_s[1]])
+                                let mut out = x_s[..x_s.len() - 1].to_vec();
+                                out.push(w_s[w_s.len() - 1]);
+                                Some(out)
+                            } else if x_s.len() == 1 && w_s.len() >= 2 {
+                                Some(vec![w_s[w_s.len() - 1]])
+                            } else if x_s.len() >= 2 && w_s.len() == 1 {
+                                Some(x_s[..x_s.len() - 1].to_vec())
+                            } else if x_s.len() == 1 && w_s.len() == 1 {
+                                Some(vec![])
                             } else {
                                 None
                             }
@@ -10979,8 +11042,21 @@ impl MathProgram {
                         pre_stmts.push(format!("    {} += (float)({}) * (float)({});", acc_name, l_val, r_val));
                         pre_stmts.push("}".to_string());
                     } else if indices.len() == 1 {
-                        let l_val = Self::eval_expr_indexed(lhs, &[indices[0], &k_var], shapes, pre_stmts, acc_counter);
-                        let r_val = Self::eval_expr_indexed(rhs, &[&k_var], shapes, pre_stmts, acc_counter);
+                        let l_rank = l_shape.as_ref().map(|s| s.len()).unwrap_or(0);
+                        let r_rank = r_shape.as_ref().map(|s| s.len()).unwrap_or(0);
+                        let (l_val, r_val) = if l_rank == 1 && r_rank >= 2 {
+                            // Row vector @ Matrix: v @ M -> out[j] = sum_k v[k] * M[k][j]
+                            (
+                                Self::eval_expr_indexed(lhs, &[&k_var], shapes, pre_stmts, acc_counter),
+                                Self::eval_expr_indexed(rhs, &[&k_var, indices[0]], shapes, pre_stmts, acc_counter),
+                            )
+                        } else {
+                            // Matrix @ Column vector: M @ v -> out[i] = sum_k M[i][k] * v[k]
+                            (
+                                Self::eval_expr_indexed(lhs, &[indices[0], &k_var], shapes, pre_stmts, acc_counter),
+                                Self::eval_expr_indexed(rhs, &[&k_var], shapes, pre_stmts, acc_counter),
+                            )
+                        };
                         pre_stmts.push(format!("float {} = 0.0f;", acc_name));
                         pre_stmts.push(format!("for (int {} = 0; {} < {}; ++{}) {{", k_var, k_var, k, k_var));
                         pre_stmts.push(format!("    {} += (float)({}) * (float)({});", acc_name, l_val, r_val));
@@ -11062,6 +11138,66 @@ impl MathProgram {
                             "0.0f".to_string()
                         };
                         format!("(({0}) / (1.0f + expf(-({0}))))", a0)
+                    }
+                    "swiglu" if args.len() >= 3 => {
+                        let gate = MathExpr::Call(
+                            "silu".to_string(),
+                            vec![MathExpr::Binary(
+                                Box::new(args[0].clone()),
+                                MathBinOp::MatMul,
+                                Box::new(args[1].clone()),
+                            )],
+                        );
+                        let up = MathExpr::Binary(
+                            Box::new(args[0].clone()),
+                            MathBinOp::MatMul,
+                            Box::new(args[2].clone()),
+                        );
+                        let combined = MathExpr::Binary(Box::new(gate), MathBinOp::Mul, Box::new(up));
+                        Self::eval_expr_indexed(&combined, indices, shapes, pre_stmts, acc_counter)
+                    }
+                    "fused_swiglu" if args.len() >= 4 => {
+                        let gate = MathExpr::Call(
+                            "silu".to_string(),
+                            vec![MathExpr::Binary(
+                                Box::new(args[0].clone()),
+                                MathBinOp::MatMul,
+                                Box::new(args[1].clone()),
+                            )],
+                        );
+                        let up = MathExpr::Binary(
+                            Box::new(args[0].clone()),
+                            MathBinOp::MatMul,
+                            Box::new(args[2].clone()),
+                        );
+                        let swiglu_out = MathExpr::Binary(Box::new(gate), MathBinOp::Mul, Box::new(up));
+                        let down = MathExpr::Binary(
+                            Box::new(swiglu_out),
+                            MathBinOp::MatMul,
+                            Box::new(args[3].clone()),
+                        );
+                        Self::eval_expr_indexed(&down, indices, shapes, pre_stmts, acc_counter)
+                    }
+                    "fused_linear_relu" | "fused_linear_silu" | "fused_linear_gelu" if args.len() >= 2 => {
+                        let mut linear_expr = MathExpr::Binary(
+                            Box::new(args[0].clone()),
+                            MathBinOp::MatMul,
+                            Box::new(args[1].clone()),
+                        );
+                        if args.len() > 2 {
+                            linear_expr = MathExpr::Binary(
+                                Box::new(linear_expr),
+                                MathBinOp::Add,
+                                Box::new(args[2].clone()),
+                            );
+                        }
+                        let z_str = Self::eval_expr_indexed(&linear_expr, indices, shapes, pre_stmts, acc_counter);
+                        match func.as_str() {
+                            "fused_linear_relu" => format!("((({0}) > 0.0f) ? ({0}) : 0.0f)", z_str),
+                            "fused_linear_silu" => format!("(({0}) / (1.0f + expf(-({0}))))", z_str),
+                            "fused_linear_gelu" => format!("(0.5f * ({0}) * (1.0f + tanhf(0.79788456f * (({0}) + 0.044715f * (({0}) * ({0}) * ({0}))))))", z_str),
+                            _ => z_str,
+                        }
                     }
                     "relu" => {
                         let a0 = if !args.is_empty() {
@@ -11326,32 +11462,6 @@ impl MathProgram {
                             n,
                             elem_strs.join(", ")
                         ));
-                    } else if let MathExpr::Binary(lhs, MathBinOp::MatMul, rhs) = expr {
-                        let l_str = Self::expr_to_c23(lhs);
-                        let r_str = Self::expr_to_c23(rhs);
-                        let l_shape = shapes.get(&l_str).cloned().unwrap_or_else(|| vec![n, n]);
-                        let k = if l_shape.len() == 2 { l_shape[1] } else { n };
-                        out.push_str(&format!("    alignas(64) float {}[{}];\n", name, n));
-                        out.push_str(&format!("    for (int _i = 0; _i < {}; ++_i) {{\n", n));
-                        out.push_str("        float _acc = 0.0f;\n");
-                        out.push_str(&format!(
-                            "        for (int _j = 0; _j < {}; ++_j) {{\n",
-                            k
-                        ));
-                        if l_shape.len() == 2 {
-                            out.push_str(&format!(
-                                "            _acc += (float){}[_i][_j] * (float){}[_j];\n",
-                                l_str, r_str
-                            ));
-                        } else {
-                            out.push_str(&format!(
-                                "            _acc += (float){}[_i * {} + _j] * (float){}[_j];\n",
-                                l_str, k, r_str
-                            ));
-                        }
-                        out.push_str("        }\n");
-                        out.push_str(&format!("        {}[_i] = _acc;\n", name));
-                        out.push_str("    }\n");
                     } else if let MathExpr::Call(func, args) = expr {
                         match func.as_str() {
                             "zeros" | "O" => {
