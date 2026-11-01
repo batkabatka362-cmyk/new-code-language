@@ -11,7 +11,7 @@
 
     Xt ↦ Xnext :
         Step := .op.ode_dormand_prince(Vpred, dt=0.05)
-        Mod := rmsnorm(Xt + Step)
+        Mod := N(Xt + Step)
         Xnext := Mod ~*~ Noise
 }
 

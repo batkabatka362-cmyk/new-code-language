@@ -11,7 +11,7 @@
 
     X ↦ Y :
         S := ssd(X >>= DeltaT, H)
-        N := rmsnorm(S)
+        N := N(S)
         Y := silu((N <~> S) ~*~ S)
 }
 

@@ -10,7 +10,7 @@
     HnswGraph: T[16×16:FP32], QuantCode: T[16×16:FP32]
 
     Query ↦ SimScores :
-        NormQ := rmsnorm(Query)
+        NormQ := N(Query)
         Dot := NormQ <~> Candidates
         Score := Dot * QuantCode
         SimScores := silu(Score)

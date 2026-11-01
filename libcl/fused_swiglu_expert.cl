@@ -1,5 +1,5 @@
-; Auto-Vectorized VLIW Microcode Kernel: fused_swiglu_expert
-@kernel fused_swiglu_expert
+; VLIW Microcode Kernel: f_sw_expert
+@kernel f_sw_expert
 .target silicon.4d_torus_simd
 .ipc_target 4.0
 

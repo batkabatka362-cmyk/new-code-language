@@ -10,7 +10,7 @@
     W: T[16×16:FP32], Lim: T[16×16:FP32]
 
     Proprio ↦ Action :
-        Fused := rmsnorm(Proprio <~> Goal)
+        Fused := N(Proprio <~> Goal)
         Vel := .op.nvfp4_gemm(Fused, W)
         Int := .op.ode_dormand_prince(Vel, dt=0.01)
         Action := silu(Int) + Fused

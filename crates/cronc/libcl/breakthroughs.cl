@@ -11,8 +11,8 @@
 
     X ↦ Y :
         KanSpline := X <~> BSplineWeights
-        BitnetPop := KanSpline * BSplineWeights
-        Norm := rmsnorm(BitnetPop)
+        B_pop := KanSpline * BSplineWeights
+        Norm := N(B_pop)
         Y := silu(Norm)
 }
 

@@ -12,7 +12,7 @@
     LocalTokensFP8 ↦ DispatchedMoE :
         RoutedGated := LocalTokensFP8 <~> ExpertGateMatrix
         ForwardedStream := RoutedGated * AsymInterconnect
-        NormedAccum := rmsnorm(ForwardedStream)
+        NormedAccum := N(ForwardedStream)
         DispatchedMoE := silu(NormedAccum)
 }
 

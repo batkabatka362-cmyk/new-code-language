@@ -95,7 +95,7 @@ B0080: `C4]]1Y+44 `R6]]3Y+55 `g5]j2Y^63 `w5j]4Y+72
 
 ; ------------------------------------------------------------------------------
 ; PHASE 4: Discrete Spherical Curvature Contraction (Cycles 81..115)
-; Curvature Metric: R=W, ((X+Z)/32)+1 scales steps across equator & poles
+; Curvature Metric: R=W, ((X+Z)/32)+1 steps across equator & poles
 ; Multiplier-free geometric weight accumulation across all 4 quadrants
 ; ------------------------------------------------------------------------------
 B0081: `A2KU10+01 `Q2UK30-11 `g2KK20*21 `w2UU40^31

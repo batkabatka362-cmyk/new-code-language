@@ -11,8 +11,8 @@
 
     X ↦ Assignments :
         DistMatrix := X ⊗ C
-        NormalizedDist := rmsnorm(DistMatrix)
-        CorePoints := silu(NormalizedDist)
+        Norm_D := N(DistMatrix)
+        CorePoints := silu(Norm_D)
         Assignments := CorePoints * X
 }
 

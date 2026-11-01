@@ -12,7 +12,7 @@
     Nodes ↦ Effect :
         Intervened := (Nodes * DoMask) + W
         Mess := Intervened <~> Adj
-        Norm := rmsnorm(Mess)
+        Norm := N(Mess)
         Effect := silu(Norm)
 }
 

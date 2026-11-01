@@ -11,7 +11,7 @@
 
     BaseHidden ↦ AcceptedTokens :
         FuturePred := BaseHidden <~> MtpLookahead
-        Norm := rmsnorm(FuturePred)
+        Norm := N(FuturePred)
         Scored := Norm * SpecScore
         AcceptedTokens := silu(Scored)
 }

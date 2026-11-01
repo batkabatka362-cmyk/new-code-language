@@ -11,7 +11,7 @@
 
     DomainLatents ↦ SynthesizedOut :
         GuidedFlow := DomainLatents <~> AutoGuidanceField
-        Norm := rmsnorm(GuidedFlow)
+        Norm := N(GuidedFlow)
         Curves := Norm * BezierSplines
         SynthesizedOut := silu(Curves)
 }

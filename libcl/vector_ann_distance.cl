@@ -7,12 +7,12 @@
 }
 
 §VectorMetricBlock[16×16:FP32] {
-    Scale: T[16×16:FP32]
+    S: T[16×16:FP32]
 
     Q ↦ Distances :
         DotProd := Q ⊗ K
-        NormQ := rmsnorm(Q)
-        NormK := rmsnorm(K)
+        NormQ := N(Q)
+        NormK := N(K)
         CosineDist := DotProd * NormQ
         Distances := silu(CosineDist)
 }

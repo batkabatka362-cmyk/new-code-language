@@ -11,7 +11,7 @@
 
     NodeFeatures ↦ UpdatedNodes :
         Mess := NodeFeatures <~> AdjMatrix
-        Norm := rmsnorm(Mess)
+        Norm := N(Mess)
         Gated := Norm * Weight
         UpdatedNodes := silu(Gated)
 }

@@ -11,7 +11,7 @@
 
     Tokens ↦ Hidden :
         Latent := Tokens <~> ExpertRouter
-        Norm := rmsnorm(Latent)
+        Norm := N(Latent)
         Routed := .op.nvfp4_gemm(Norm, W)
         Hidden := silu(Routed)
 }

@@ -12,7 +12,7 @@
     V ↦ Vrot :
         Half := R ^ V
         Full := Half ^ ~R
-        Norm := rmsnorm(Full)
+        Norm := N(Full)
         Vrot := silu(Norm)
 }
 

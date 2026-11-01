@@ -7,12 +7,12 @@
 }
 
 §DataScalingBlock[16×16:FP32] {
-    ScaleFactor: T[16×16:FP32], MinVal: T[16×16:FP32]
+    S_Factor: T[16×16:FP32], MinVal: T[16×16:FP32]
 
     FeatureBatch ↦ Normalized :
         Centered := FeatureBatch - MinVal
-        Scaled := Centered * ScaleFactor
-        Normed := rmsnorm(Scaled)
+        Y_s := Centered * S_Factor
+        Normed := N(Y_s)
         Normalized := silu(Normed)
 }
 

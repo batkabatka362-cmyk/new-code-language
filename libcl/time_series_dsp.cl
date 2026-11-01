@@ -7,13 +7,13 @@
 }
 
 §FourierWaveletBlock[16×16:FP32] {
-    AlphaEMA: T[16×16:FP32], WaveletScale: T[16×16:FP32]
+    AlphaEMA: T[16×16:FP32], Wavelet_S: T[16×16:FP32]
 
     SignalIn ↦ FilteredSpectrum :
         EmaSmoothed := SignalIn * AlphaEMA
         FreqDomain := EmaSmoothed ⊗ TwiddleFactors
-        NormalizedFreq := rmsnorm(FreqDomain)
-        FilteredSpectrum := silu(NormalizedFreq)
+        Norm_Freq := N(FreqDomain)
+        FilteredSpectrum := silu(Norm_Freq)
 }
 
 §ControlFlow {

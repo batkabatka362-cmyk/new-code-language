@@ -7,11 +7,11 @@
 }
 
 §VideoDitBlock[16×16:FP16] {
-    Causal3DVae: T[16×16:FP16], TileAttention: T[16×16:FP16]
+    Causal3DVae: T[16×16:FP16], Tile_Ψ: T[16×16:FP16]
 
     VideoPixels ↦ LatentFrames :
         CausalEncoded := VideoPixels <~> Causal3DVae
-        Norm := rmsnorm(CausalEncoded)
+        Norm := N(CausalEncoded)
         FlowStep := Norm * FlowField
         LatentFrames := silu(FlowStep)
 }

@@ -11,8 +11,8 @@
 
     FeatureBins ↦ LeafOutputs :
         GradScores := FeatureBins ⊗ HessianGrads
-        NormalizedGrad := rmsnorm(GradScores)
-        OptimalSplit := NormalizedGrad + RegularizationL2
+        Norm_G := N(GradScores)
+        OptimalSplit := Norm_G + RegularizationL2
         LeafOutputs := silu(OptimalSplit)
 }
 

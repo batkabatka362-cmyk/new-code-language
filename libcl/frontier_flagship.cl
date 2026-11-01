@@ -11,7 +11,7 @@
 
     Tokens ↦ Output :
         EngramFused := Tokens <~> EngramStaticMem
-        Norm := rmsnorm(EngramFused)
+        Norm := N(EngramFused)
         ReasoningGate := Norm * HybridWeight
         Output := silu(ReasoningGate)
 }

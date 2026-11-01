@@ -12,8 +12,8 @@
     RawBytes ↦ TokenIds :
         MergedPairs := RawBytes ⊗ MergeTrie
         ScoredTokens := MergedPairs * FreqWeight
-        NormTokens := rmsnorm(ScoredTokens)
-        TokenIds := silu(NormTokens)
+        Norm_Tok := N(ScoredTokens)
+        TokenIds := silu(Norm_Tok)
 }
 
 §ControlFlow {

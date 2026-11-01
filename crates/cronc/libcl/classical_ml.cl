@@ -13,7 +13,7 @@
         Grad := X <~> W
         Hess := Grad * Grad
         Residual := TargetY - Grad
-        Norm := rmsnorm(Residual)
+        Norm := N(Residual)
         Pred := silu(Norm)
 }
 

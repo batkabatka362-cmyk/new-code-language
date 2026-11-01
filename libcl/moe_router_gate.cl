@@ -12,8 +12,8 @@
     H ↦ ExpertWeights :
         Logits := H ⊗ WGate
         BiasedLogits := Logits + ExpertBias
-        NormalizedLogits := rmsnorm(BiasedLogits)
-        ExpertWeights := silu(NormalizedLogits)
+        Norm_L := N(BiasedLogits)
+        ExpertWeights := silu(Norm_L)
 }
 
 §ControlFlow {

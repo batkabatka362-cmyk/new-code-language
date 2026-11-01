@@ -7,12 +7,12 @@
 }
 
 §ThunderKittensTmaBlock[16×16:FP32] {
-    TmaScale: T[16×16:FP32], SwizzleMask: T[16×16:FP32]
+    Tma_S: T[16×16:FP32], SwizzleMask: T[16×16:FP32]
 
     TileA ↦ TileAccum :
         AsyncTileFused := TileA <~> TileB
-        SaturatedCore := AsyncTileFused * TmaScale
-        NormedAccum := rmsnorm(SaturatedCore)
+        SaturatedCore := AsyncTileFused * Tma_S
+        NormedAccum := N(SaturatedCore)
         TileAccum := silu(NormedAccum)
 }
 

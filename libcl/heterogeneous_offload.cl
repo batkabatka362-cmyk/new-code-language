@@ -11,7 +11,7 @@
 
     GpuTokens ↦ FusedHidden :
         Overlapped := GpuTokens <~> CpuAmxWeight
-        Norm := rmsnorm(Overlapped)
+        Norm := N(Overlapped)
         ExpertVal := Norm * BlockSparseKv
         FusedHidden := silu(ExpertVal)
 }

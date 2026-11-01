@@ -12,7 +12,7 @@
     VisualLatent ↦ VelocityFlow :
         ConditionedAction := VisualLatent <~> JointState14D
         TrajectoryTangent := ConditionedAction * VlaProjection
-        NormedFlow := rmsnorm(TrajectoryTangent)
+        NormedFlow := N(TrajectoryTangent)
         VelocityFlow := silu(NormedFlow)
 }
 

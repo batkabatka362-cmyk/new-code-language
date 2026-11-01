@@ -12,7 +12,7 @@
     Flit ↦ Routed :
         Route := Flit ^ Dst
         Mzi := Route <~> Phase
-        Norm := rmsnorm(Mzi)
+        Norm := N(Mzi)
         Routed := silu(Norm)
 }
 

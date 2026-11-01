@@ -12,8 +12,8 @@
     ParentFlow ↦ ChildFlow :
         DagCoupled := ParentFlow <~> RewardState
         TrajectoryBalance := DagCoupled * ForwardPolicy
-        NormalizedFlow := rmsnorm(TrajectoryBalance)
-        ChildFlow := silu(NormalizedFlow)
+        Norm_F := N(TrajectoryBalance)
+        ChildFlow := silu(Norm_F)
 }
 
 §ControlFlow {

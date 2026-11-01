@@ -73,7 +73,7 @@ B0068: `C58FA14+0 `R58AK34+1 `g58KF24*2 `0585544+3
 B0069: `C59FA15+0 `R59AK35+1 `g59KF25*2 `0595545+3
 B0070: `C60FA16+0 `R60AK36+1 `g60KF26*2 `0605546+3
 
-; --- PHASE 3: Wave Interference Attention & 4D Non-Collision Braid (Cycles 71..140) ---
+; --- PHASE 3: Wave Interference Interference & 4D Non-Collision Braid (Cycles 71..140) ---
 B0071: _TP07$100> _WF07$THG> _CN07$000> _HP07$PAR>
 B0072: _TP00$100> _WF00$THG> _CN00$000> _HP00$PAR>
 B0073: _TP01$100> _WF01$THG> _CN01$000> _HP01$PAR>

@@ -12,7 +12,7 @@
     X ↦ Y :
         R := X <~> H
         Q := .op.nvfp4_gemm(R, W)
-        N := rmsnorm(Q)
+        N := N(Q)
         Y := silu(N)
 }
 

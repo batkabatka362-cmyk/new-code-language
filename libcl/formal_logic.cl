@@ -12,7 +12,7 @@
     Hypothesis ↦ Proof :
         Unified := Hypothesis <~> Axioms
         Learnt := Unified ^ Trail
-        Norm := rmsnorm(Learnt)
+        Norm := N(Learnt)
         Proof := silu(Norm)
 }
 
