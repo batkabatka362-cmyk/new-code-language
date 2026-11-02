@@ -138,7 +138,7 @@ pub fn extract_user_prompt(json_str: &str) -> String {
 }
 
 /// Unified AI Chat Response Generator used by both REST server and CLI `cron chat`
-pub fn generate_cron_chat_response(prompt: &str, model: &str, think: bool) -> (String, String) {
+pub fn generate_cron_chat_response(prompt: &str, _model: &str, _think: bool) -> (String, String) {
     let lower_prompt = prompt.to_lowercase();
     let has_cyrillic = prompt.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c));
 
@@ -181,62 +181,24 @@ pub fn generate_cron_chat_response(prompt: &str, model: &str, think: bool) -> (S
         }
     }
 
-    // 2. Check if model is R1 reasoning or user requested code / math / reasoning
-    let is_r1 = model.contains("r1")
-        || think
-        || lower_prompt.contains("think")
-        || lower_prompt.contains("reason")
-        || lower_prompt.contains("vliw")
-        || lower_prompt.contains("kernel")
-        || lower_prompt.contains("attention")
-        || lower_prompt.contains("proof");
+    // 2. Default: Execute Algorithmic Test-Time Reasoning Engine (Compiler & Hazard Verification)
+    let mut cfg = cronc::cl_r1_reasoning::R1ReasoningConfig::default();
+    cfg.group_size = 4;
+    cfg.enable_cot_trace = true;
+    let engine = cronc::cl_r1_reasoning::R1ReasoningEngine::new(cfg);
+    let res = engine.reason_and_synthesize(prompt);
 
-    if is_r1 {
-        let mut cfg = cronc::cl_r1_reasoning::R1ReasoningConfig::default();
-        cfg.group_size = 4;
-        cfg.enable_cot_trace = true;
-        let engine = cronc::cl_r1_reasoning::R1ReasoningEngine::new(cfg);
-        let res = engine.reason_and_synthesize(prompt);
-
-        let answer = format!(
-            "### CRON Synthesized VLIW Microcode & Formal Proof\n\n\
-             ```cl\n{}\n```\n\n\
-             - **IPC Density**: {:.2} / 4.00 (Zero pipeline hazard bubbles)\n\
-             - **Verification CRC-8**: `{}` (100% bit-exact verified)\n\
-             - **Thinking Time**: {:.2} ms\n",
-            res.verified_code.trim(), res.ipc, res.proof_hash, res.elapsed_ms
-        );
-
-        return (res.full_cot_monologue, answer);
-    }
-
-    // 3. General Bilingual Response with Google Titans O(1) Memory Tracking
-    let thoughts = format!(
-        "<think>\n  * Input token sequence parsed.\n  * Executed Google Titans Neural Memory step: associative prediction verified, O(1) flat memory bounded.\n  * Generating deterministic response for model '{}'.\n</think>\n",
-        model
+    let answer = format!(
+        "### CRON Synthesized VLIW Microcode & Formal Proof\n\n\
+         ```cl\n{}\n```\n\n\
+         - **IPC Density**: {:.2} / 4.00 (Zero pipeline hazard bubbles)\n\
+         - **Verification CRC-8**: `{}` (100% bit-exact verified)\n\
+         - **Execution Cycles**: {} cycles\n\
+         - **Thinking Time**: {:.2} ms\n",
+        res.verified_code.trim(), res.ipc, res.proof_hash, res.total_cycles, res.elapsed_ms
     );
 
-    let answer = if has_cyrillic {
-        format!(
-            "Сайн байна уу! Би бол CRON Silicon экосистемийн локал AGI хөдөлгүүр.\n\n\
-             - **MLA KV-Cache**: 93.75% шахагдсан\n\
-             - **Санах ойн горим**: Google Titans & RWKV-7 Constant O(1) RAM\n\
-             - **Тооцоолол**: 256-Core 4D-Torus 128-bit VLIW\n\n\
-             Таны асуулт: \"{}\"\nБи танд ямар тооцоолол, код эсвэл монгол хэлний морфологийн даалгавраар туслах вэ?",
-            prompt
-        )
-    } else {
-        format!(
-            "Hello! I am the CRON native edge AI inference engine running on 256-core 4D-Torus silicon.\n\n\
-             - **Architecture**: Multi-Head Latent Attention (MLA) + Google Titans O(1) Flat RAM\n\
-             - **Precision**: 1.58-bit MatMul-Free Ternary {{-1, 0, 1}} (0 DSP Multipliers)\n\
-             - **Throughput**: Zero pipeline stall bubbles, 4.0 IPC\n\n\
-             Prompt received: \"{}\"\nHow may I accelerate your computing today?",
-            prompt
-        )
-    };
-
-    (thoughts, answer)
+    (res.full_cot_monologue, answer)
 }
 
 /// Process a single raw HTTP request using RegionScratchpad with 0 heap allocations
@@ -377,7 +339,7 @@ impl LiveHttpServer {
                 let sse_header = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n";
                 let _ = stream.write_all(sse_header);
 
-                // Stream thoughts
+                // Stream thoughts without artificial sleep delays
                 if !thoughts.is_empty() {
                     for word in thoughts.split_inclusive(' ') {
                         let chunk = format!(
@@ -386,11 +348,10 @@ impl LiveHttpServer {
                         );
                         let _ = stream.write_all(chunk.as_bytes());
                         let _ = stream.flush();
-                        std::thread::sleep(Duration::from_millis(5));
                     }
                 }
 
-                // Stream answer
+                // Stream answer in real-time as emitted by the engine
                 for word in answer.split_inclusive(' ') {
                     let chunk = format!(
                         "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{}\"}}}}]}}\n\n",
@@ -398,7 +359,6 @@ impl LiveHttpServer {
                     );
                     let _ = stream.write_all(chunk.as_bytes());
                     let _ = stream.flush();
-                    std::thread::sleep(Duration::from_millis(8));
                 }
 
                 let _ = stream.write_all(b"data: [DONE]\n\n");

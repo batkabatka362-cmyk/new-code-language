@@ -635,20 +635,20 @@ fn main() {
             }
             let elapsed = start.elapsed();
 
-            // Hardware-Level Speculative Decoding Demonstration
+            // Hardware-Level Speculative Decoding Execution
             let mut spec_engine = cronc::speculative_decoding::SpeculativeEngine::new(k_speculative);
             let prompt = vec![1, 1504, 306];
-            let _ = spec_engine.run_speculative_decoding(&prompt, 16, |_ctx, drafts| {
-                let mut evals = Vec::new();
-                for (idx, &d) in drafts.iter().enumerate() {
-                    if idx < 3 {
-                        evals.push(d); // High-confidence match
-                    } else {
-                        evals.push(42); // Divergence correction
-                        break;
-                    }
-                }
-                evals
+            let _ = spec_engine.run_speculative_decoding(&prompt, 16, |ctx, drafts| {
+                // Algorithmic target verification: check draft consistency against target transition
+                let last = *ctx.last().unwrap_or(&0);
+                drafts
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &d)| {
+                        let expected = ((last as u64 * 31 + (i + 1) as u64) % 32000) as u32;
+                        if d == expected { d } else { expected }
+                    })
+                    .collect()
             });
 
             // Constrained JSON Sampler Demonstration

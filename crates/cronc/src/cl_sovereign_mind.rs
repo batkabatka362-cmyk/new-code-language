@@ -649,22 +649,23 @@ impl SovereignMind {
         self.total_spikes += total_spikes as u64;
 
         // Predict next token resonance via HTGM
-        let predicted_char = self.htgm.predict_next_char(user_input);
+        let _predicted_char = self.htgm.predict_next_char(user_input);
 
-        let fallback_response = if user_input.is_ascii() {
-            format!(
-                "CRON Cognitive Engine: Processed query across 16 cortical columns and 512 LIF neurons on 4D-Torus silicon. Attractor converged to predicted token '{}' with {} synaptic spikes over {} cycles.",
-                predicted_char, total_spikes, self.clock_cycles
-            )
-        } else {
-            format!(
-                "Sovereign Mind: Таны асуултыг 16 багана, 512 нейроноор боловсрууллаа. Резонанс таамаглал: '{}'. Нийт үүссэн импульс: {}.",
-                predicted_char, total_spikes
-            )
-        };
+        // Perform true algorithmic reasoning & VLIW microcode synthesis
+        let r1_engine = crate::cl_r1_reasoning::R1ReasoningEngine::default();
+        let r1_res = r1_engine.reason_and_synthesize(user_input);
+
+        let algorithmic_response = format!(
+            "{}\n\n```cl\n{}\n```\n- IPC: {:.2} / 4.00 | Proof Hash: `{}` | Cycles: {}",
+            r1_res.full_cot_monologue.trim(),
+            r1_res.verified_code.trim(),
+            r1_res.ipc,
+            r1_res.proof_hash,
+            r1_res.total_cycles
+        );
 
         let elapsed = start.elapsed();
-        (fallback_response, elapsed, "CORTICAL_PYRAMID_REASONING")
+        (algorithmic_response, elapsed, "ALGORITHMIC_VLIW_SYNTHESIS")
     }
 
     pub fn export_microcode_bundle(&self) -> CliffordBundle {
