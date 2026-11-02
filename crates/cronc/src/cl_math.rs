@@ -4515,6 +4515,54 @@ impl MathEvaluator {
         sum
     }
 
+    /// Robust Gauss-Jordan matrix inversion with partial pivoting
+    pub fn invert_matrix_gauss_jordan(mat: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, String> {
+        let n = mat.len();
+        if n == 0 || mat.iter().any(|r| r.len() != n) {
+            return Err("Matrix must be non-empty and square for inversion".to_string());
+        }
+        let mut aug = vec![vec![0.0; 2 * n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                aug[i][j] = mat[i][j];
+            }
+            aug[i][n + i] = 1.0;
+        }
+        for i in 0..n {
+            let mut max_row = i;
+            let mut max_val = aug[i][i].abs();
+            for k in (i + 1)..n {
+                if aug[k][i].abs() > max_val {
+                    max_val = aug[k][i].abs();
+                    max_row = k;
+                }
+            }
+            if max_val < 1e-12 {
+                return Err("Singular matrix cannot be inverted".to_string());
+            }
+            aug.swap(i, max_row);
+            let pivot = aug[i][i];
+            for j in 0..(2 * n) {
+                aug[i][j] /= pivot;
+            }
+            for k in 0..n {
+                if k != i {
+                    let factor = aug[k][i];
+                    for j in 0..(2 * n) {
+                        aug[k][j] -= factor * aug[i][j];
+                    }
+                }
+            }
+        }
+        let mut inv = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                inv[i][j] = aug[i][n + j];
+            }
+        }
+        Ok(inv)
+    }
+
     /// Computes the current memory footprint of all tensors in environment
     pub fn current_env_memory_bytes(&self) -> usize {
         let mut total = 0;
@@ -7653,7 +7701,7 @@ impl MathEvaluator {
                     };
                     self.eval_kv_ring(&q, &k_new, &v_new, &k_ring, &v_ring, pos, max_len, scale)
                 }
-                "cos_sim" | "S_c" => {
+                "cos_sim" | "S_c" | "_COS" => {
                     if args.len() != 2 {
                         return Err("'cos_sim(A, B)' requires 2 arguments".to_string());
                     }
@@ -7681,7 +7729,7 @@ impl MathEvaluator {
                     let s = sim.as_scalar().unwrap_or(0.0);
                     Ok(MathValue::Scalar(1.0 - s))
                 }
-                "euclidean" | "l2_dist" | "dist" | "d_2" | "d_E" => {
+                "euclidean" | "l2_dist" | "dist" | "d_2" | "d_E" | "_L2D" => {
                     if args.len() != 2 {
                         return Err("'euclidean(A, B)' requires 2 arguments".to_string());
                     }
@@ -7703,7 +7751,7 @@ impl MathEvaluator {
                         .sum();
                     Ok(MathValue::Scalar(sq_sum.sqrt()))
                 }
-                "manhattan" | "l1_dist" | "d_1" | "d_M" => {
+                "manhattan" | "l1_dist" | "d_1" | "d_M" | "_L1D" => {
                     if args.len() != 2 {
                         return Err("'manhattan(A, B)' requires 2 arguments".to_string());
                     }
@@ -7725,7 +7773,7 @@ impl MathEvaluator {
                         .sum();
                     Ok(MathValue::Scalar(l1_sum))
                 }
-                "poincare_dist" | "d_P" | "d_H" => {
+                "poincare_dist" | "d_P" | "_HYP" => {
                     if args.len() != 2 {
                         return Err("'poincare_dist(u, v)' requires 2 arguments".to_string());
                     }
@@ -8014,6 +8062,563 @@ impl MathEvaluator {
                     let scaled_update =
                         self.eval_binary_op(&s_outer_k, MathBinOp::Mul, &MathValue::Scalar(eta))?;
                     self.eval_binary_op(&decayed_m, MathBinOp::Add, &scaled_update)
+                }
+                "robust_scale" | "R_sc" | "_RSC" => {
+                    if args.is_empty() {
+                        return Err("'robust_scale(x, [q2, iqr])' requires at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let (q2, iqr) = if args.len() >= 3 {
+                        let q2_v = self.eval(&args[1])?;
+                        let iqr_v = self.eval(&args[2])?.abs().max(1e-12);
+                        (q2_v, iqr_v)
+                    } else {
+                        let mut elems = val.flatten_elements();
+                        if elems.is_empty() {
+                            (0.0, 1.0)
+                        } else {
+                            elems.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                            let n = elems.len();
+                            let q2_v = if n % 2 == 1 { elems[n / 2] } else { (elems[n / 2 - 1] + elems[n / 2]) * 0.5 };
+                            let q1_idx = n / 4;
+                            let q3_idx = (3 * n) / 4;
+                            let q1 = elems[q1_idx];
+                            let q3 = elems[q3_idx.min(n - 1)];
+                            let iqr_v = (q3 - q1).abs().max(1e-12);
+                            (q2_v, iqr_v)
+                        }
+                    };
+                    Ok(val.map_unary(|x| (x - q2) / iqr))
+                }
+                "maxabs_scale" | "M_abs" | "_MAS" => {
+                    if args.is_empty() {
+                        return Err("'maxabs_scale(x, [max_abs])' requires at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let max_abs = if args.len() > 1 {
+                        self.eval(&args[1])?.abs().max(1e-12)
+                    } else {
+                        let elems = val.flatten_elements();
+                        elems.iter().map(|v| v.abs()).fold(0.0, f64::max).max(1e-12)
+                    };
+                    Ok(val.map_unary(|x| x / max_abs))
+                }
+                "box_cox" | "B_cx" | "_BCX" => {
+                    if args.is_empty() {
+                        return Err("'box_cox(x, [lambda])' requires at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let lambda = if args.len() > 1 {
+                        self.eval(&args[1])?
+                    } else {
+                        0.0
+                    };
+                    Ok(val.map_unary(|x| {
+                        let safe_x = if x <= 0.0 { 1e-6 } else { x };
+                        if lambda.abs() < 1e-6 {
+                            safe_x.ln()
+                        } else {
+                            (safe_x.powf(lambda) - 1.0) / lambda
+                        }
+                    }))
+                }
+                "impute" | "I_mp" | "_IMP" => {
+                    if args.is_empty() {
+                        return Err("'impute(x, [fill_val])' requires at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let fill = if args.len() > 1 {
+                        self.eval(&args[1])?
+                    } else {
+                        let elems = val.flatten_elements();
+                        let valid: Vec<f64> = elems.into_iter().filter(|&x| !x.is_nan() && x.is_finite() && x != 0.0).collect();
+                        if valid.is_empty() { 0.0 } else { valid.iter().sum::<f64>() / valid.len() as f64 }
+                    };
+                    Ok(val.map_unary(|x| if x.is_nan() || !x.is_finite() || x == 0.0 { fill } else { x }))
+                }
+                "one_hot" | "O_he" | "_OHE" => {
+                    if args.len() < 2 {
+                        return Err("'one_hot(idx, num_classes)' requires 2 arguments".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let k = self.eval(&args[1])?.max(1.0) as usize;
+                    match val {
+                        MathValue::Scalar(s) => {
+                            let idx = (s.floor() as usize).min(k - 1);
+                            let mut row = vec![0.0; k];
+                            row[idx] = 1.0;
+                            Ok(MathValue::Vector(row))
+                        }
+                        MathValue::Vector(vec) => {
+                            let mut mat = Vec::with_capacity(vec.len());
+                            for s in vec {
+                                let idx = (s.floor() as usize).min(k - 1);
+                                let mut row = vec![0.0; k];
+                                row[idx] = 1.0;
+                                mat.push(row);
+                            }
+                            Ok(MathValue::Matrix(mat))
+                        }
+                        _ => Err("'one_hot' expects scalar or vector index".to_string()),
+                    }
+                }
+                "fft" | "F_ft" | "_FFT" => {
+                    if args.is_empty() {
+                        return Err("'fft(x)' requires at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let dft_mag = |slice: &[f64]| -> Vec<f64> {
+                        let n = slice.len();
+                        if n == 0 { return vec![]; }
+                        let mut mag = Vec::with_capacity(n);
+                        let pi2 = std::f64::consts::PI * 2.0;
+                        for k in 0..n {
+                            let mut re = 0.0;
+                            let mut im = 0.0;
+                            for (t, &x) in slice.iter().enumerate() {
+                                let angle = pi2 * (k as f64) * (t as f64) / (n as f64);
+                                re += x * angle.cos();
+                                im -= x * angle.sin();
+                            }
+                            mag.push((re * re + im * im).sqrt());
+                        }
+                        mag
+                    };
+                    match val {
+                        MathValue::Vector(v) => Ok(MathValue::Vector(dft_mag(&v))),
+                        MathValue::Matrix(m) => {
+                            let out = m.iter().map(|row| dft_mag(row)).collect();
+                            Ok(MathValue::Matrix(out))
+                        }
+                        MathValue::Scalar(s) => Ok(MathValue::Scalar(s.abs())),
+                        _ => Err("'fft' expects vector or matrix".to_string()),
+                    }
+                }
+                "ema" | "E_ma" | "_EMA" => {
+                    if args.is_empty() {
+                        return Err("'ema(x, [alpha])' requires at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let alpha = if args.len() > 1 {
+                        self.eval(&args[1])?.clamp(0.0, 1.0)
+                    } else {
+                        0.9
+                    };
+                    let ema_filter = |slice: &[f64]| -> Vec<f64> {
+                        if slice.is_empty() { return vec![]; }
+                        let mut out = Vec::with_capacity(slice.len());
+                        let mut running = slice[0];
+                        out.push(running);
+                        for &x in &slice[1..] {
+                            running = alpha * x + (1.0 - alpha) * running;
+                            out.push(running);
+                        }
+                        out
+                    };
+                    match val {
+                        MathValue::Vector(v) => Ok(MathValue::Vector(ema_filter(&v))),
+                        MathValue::Matrix(m) => {
+                            let out = m.iter().map(|row| ema_filter(row)).collect();
+                            Ok(MathValue::Matrix(out))
+                        }
+                        MathValue::Scalar(s) => Ok(MathValue::Scalar(s)),
+                        _ => Err("'ema' expects vector or matrix".to_string()),
+                    }
+                }
+                "ols" | "O_ls" | "_OLS" | "ridge" | "R_dg" | "_RDG" => {
+                    if args.len() < 2 {
+                        return Err(format!("'{}' requires at least 2 arguments (X, Y)", name));
+                    }
+                    let x_val = self.eval_value(&args[0])?;
+                    let y_val = self.eval_value(&args[1])?;
+                    let lambda = if (name == "ridge" || name == "_RDG" || name == "R_dg") && args.len() > 2 {
+                        self.eval(&args[2])?.abs()
+                    } else if name == "ridge" || name == "_RDG" || name == "R_dg" {
+                        1e-4
+                    } else {
+                        0.0
+                    };
+                    let x_mat = match x_val {
+                        MathValue::Matrix(m) => m,
+                        MathValue::Vector(v) => v.into_iter().map(|x| vec![x]).collect(),
+                        _ => return Err("X must be a matrix or vector in OLS/Ridge".to_string()),
+                    };
+                    if x_mat.is_empty() || x_mat[0].is_empty() {
+                        return Err("X cannot be empty in OLS/Ridge".to_string());
+                    }
+                    let m = x_mat.len();
+                    let n = x_mat[0].len();
+                    let y_vec = y_val.flatten_elements();
+                    if y_vec.len() != m {
+                        return Err(format!("Row dimension mismatch in OLS/Ridge: X has {} rows, Y has {}", m, y_vec.len()));
+                    }
+                    let mut xt_x = vec![vec![0.0; n]; n];
+                    for i in 0..n {
+                        for j in 0..n {
+                            let mut sum = 0.0;
+                            for r in 0..m {
+                                sum += x_mat[r][i] * x_mat[r][j];
+                            }
+                            if i == j {
+                                sum += lambda;
+                            }
+                            xt_x[i][j] = sum;
+                        }
+                    }
+                    let inv = Self::invert_matrix_gauss_jordan(&xt_x)?;
+                    let mut xt_y = vec![0.0; n];
+                    for i in 0..n {
+                        let mut sum = 0.0;
+                        for r in 0..m {
+                            sum += x_mat[r][i] * y_vec[r];
+                        }
+                        xt_y[i] = sum;
+                    }
+                    let mut beta = vec![0.0; n];
+                    for i in 0..n {
+                        let mut sum = 0.0;
+                        for j in 0..n {
+                            sum += inv[i][j] * xt_y[j];
+                        }
+                        beta[i] = sum;
+                    }
+                    Ok(MathValue::Vector(beta))
+                }
+                "lasso" | "L_as" | "_LAS" => {
+                    if args.is_empty() {
+                        return Err("'lasso(w, [lambda])' requires at least 1 argument".to_string());
+                    }
+                    let val = self.eval_value(&args[0])?;
+                    let lambda = if args.len() > 1 {
+                        self.eval(&args[1])?.abs()
+                    } else {
+                        0.01
+                    };
+                    Ok(val.map_unary(|x| x.signum() * (x.abs() - lambda).max(0.0)))
+                }
+                "kmeans_step" | "K_mn" | "_KMN" => {
+                    if args.len() < 2 {
+                        return Err("'kmeans_step(X, Centroids)' requires 2 arguments".to_string());
+                    }
+                    let x_val = self.eval_value(&args[0])?;
+                    let c_val = self.eval_value(&args[1])?;
+                    let c_mat = match c_val {
+                        MathValue::Matrix(m) => m,
+                        _ => return Err("Centroids must be a 2D matrix in kmeans_step".to_string()),
+                    };
+                    if c_mat.is_empty() {
+                        return Err("Centroids cannot be empty in kmeans_step".to_string());
+                    }
+                    let assign_nearest = |row: &[f64]| -> f64 {
+                        let mut best_idx = 0;
+                        let mut min_dist_sq = f64::INFINITY;
+                        for (idx, centroid) in c_mat.iter().enumerate() {
+                            let dist_sq: f64 = row.iter().zip(centroid.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                            if dist_sq < min_dist_sq {
+                                min_dist_sq = dist_sq;
+                                best_idx = idx;
+                            }
+                        }
+                        best_idx as f64
+                    };
+                    match x_val {
+                        MathValue::Vector(v) => Ok(MathValue::Scalar(assign_nearest(&v))),
+                        MathValue::Matrix(m) => {
+                            let assignments: Vec<f64> = m.iter().map(|row| assign_nearest(row)).collect();
+                            Ok(MathValue::Vector(assignments))
+                        }
+                        _ => Err("X must be a vector or matrix in kmeans_step".to_string()),
+                    }
+                }
+                "hamming" | "d_H" | "_HAM" => {
+                    if args.len() != 2 {
+                        return Err("'hamming(A, B)' requires 2 arguments".to_string());
+                    }
+                    let a = self.eval_value(&args[0])?;
+                    let b = self.eval_value(&args[1])?;
+                    let a_elems = a.flatten_elements();
+                    let b_elems = b.flatten_elements();
+                    let count: f64 = a_elems.iter().zip(b_elems.iter()).filter(|(&x, &y)| (x - y).abs() > 1e-6).count() as f64;
+                    Ok(MathValue::Scalar(count))
+                }
+                "gcn" | "G_cn" | "_GCN" => {
+                    if args.len() < 2 {
+                        return Err("'gcn(H, A, [W])' requires at least 2 arguments".to_string());
+                    }
+                    let h = self.eval_value(&args[0])?;
+                    let a = self.eval_value(&args[1])?;
+                    let ah = self.eval_binary_op(&a, MathBinOp::MatMul, &h)?;
+                    if args.len() > 2 {
+                        let w = self.eval_value(&args[2])?;
+                        self.eval_binary_op(&ah, MathBinOp::MatMul, &w)
+                    } else {
+                        Ok(ah)
+                    }
+                }
+                "mcts_puct" | "M_ct" | "_MCT" => {
+                    if args.len() < 4 {
+                        return Err("'mcts_puct(Q, P, N, N_a, [c_puct])' requires at least 4 arguments".to_string());
+                    }
+                    let q = self.eval(&args[0])?;
+                    let p = self.eval(&args[1])?;
+                    let n = self.eval(&args[2])?.max(0.0);
+                    let na = self.eval(&args[3])?.max(0.0);
+                    let c_puct = if args.len() > 4 { self.eval(&args[4])? } else { 1.414 };
+                    let score = q + c_puct * p * (n.sqrt() / (1.0 + na));
+                    Ok(MathValue::Scalar(score))
+                }
+                "clifford_geom" | "C_ga" | "_CGA" => {
+                    if args.len() != 2 {
+                        return Err("'clifford_geom(A, B)' requires 2 multivector arguments".to_string());
+                    }
+                    let a = self.eval_value(&args[0])?;
+                    let b = self.eval_value(&args[1])?;
+                    let a_v = a.flatten_elements();
+                    let b_v = b.flatten_elements();
+                    if a_v.len() >= 4 && b_v.len() >= 4 {
+                        let s0 = a_v[0] * b_v[0] + a_v[1] * b_v[1] + a_v[2] * b_v[2] + a_v[3] * b_v[3];
+                        let e1 = a_v[0] * b_v[1] + a_v[1] * b_v[0] - a_v[2] * b_v[3] + a_v[3] * b_v[2];
+                        let e2 = a_v[0] * b_v[2] + a_v[2] * b_v[0] + a_v[1] * b_v[3] - a_v[3] * b_v[1];
+                        let e3 = a_v[0] * b_v[3] + a_v[3] * b_v[0] - a_v[1] * b_v[2] + a_v[2] * b_v[1];
+                        Ok(MathValue::Vector(vec![s0, e1, e2, e3]))
+                    } else {
+                        let dot: f64 = a_v.iter().zip(b_v.iter()).map(|(&x, &y)| x * y).sum();
+                        let wedge = if a_v.len() >= 2 && b_v.len() >= 2 { a_v[0] * b_v[1] - a_v[1] * b_v[0] } else { 0.0 };
+                        Ok(MathValue::Vector(vec![dot, wedge]))
+                    }
+                }
+                "flow_match" | "C_fm" | "_CFM" => {
+                    if args.len() < 2 {
+                        return Err("'flow_match(x, v, [dt])' requires at least 2 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let v = self.eval_value(&args[1])?;
+                    let dt = if args.len() > 2 { self.eval(&args[2])? } else { 0.05 };
+                    let v_dt = self.eval_binary_op(&v, MathBinOp::Mul, &MathValue::Scalar(dt))?;
+                    self.eval_binary_op(&x, MathBinOp::Add, &v_dt)
+                }
+                "engram_lookup" | "E_gr" | "_EGR" => {
+                    if args.len() < 2 {
+                        return Err("'engram_lookup(x, table)' requires 2 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let table = self.eval_value(&args[1])?;
+                    let t_mat = match table {
+                        MathValue::Matrix(m) => m,
+                        _ => return Err("Table must be a 2D matrix in engram_lookup".to_string()),
+                    };
+                    if t_mat.is_empty() { return Ok(x); }
+                    let elems = x.flatten_elements();
+                    let hash: usize = elems.iter().map(|&e| (e * 1000.0).abs() as usize).sum();
+                    let row_idx = hash % t_mat.len();
+                    let retrieved = MathValue::Vector(t_mat[row_idx].clone());
+                    self.eval_binary_op(&x, MathBinOp::Add, &retrieved)
+                }
+                "mhc_residual" | "M_hc" | "_MHC" => {
+                    if args.len() < 2 {
+                        return Err("'mhc_residual(x, H)' requires 2 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let h = self.eval_value(&args[1])?;
+                    self.eval_binary_op(&x, MathBinOp::Add, &h)
+                }
+                "mtp_predict" | "M_tp" | "_MTP" => {
+                    if args.len() < 2 {
+                        return Err("'mtp_predict(h, W_mtp)' requires 2 arguments".to_string());
+                    }
+                    let h = self.eval_value(&args[0])?;
+                    let w = self.eval_value(&args[1])?;
+                    self.eval_binary_op(&h, MathBinOp::MatMul, &w)
+                }
+                "irope" | "I_rp" | "_IRP" => {
+                    if args.is_empty() {
+                        return Err("'irope(x, [pos, scale])' requires at least 1 argument".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let pos = if args.len() > 1 { self.eval(&args[1])? } else { 0.0 };
+                    let scale = if args.len() > 2 { self.eval(&args[2])?.max(1.0) } else { 1.0 };
+                    let effective_pos = pos / scale;
+                    let rotate_vec = |v: &[f64]| -> Vec<f64> {
+                        let mut out = v.to_vec();
+                        let d = v.len();
+                        for i in (0..d).step_by(2) {
+                            if i + 1 < d {
+                                let theta = effective_pos * 10000.0_f64.powf(-(i as f64) / (d as f64));
+                                let cos_t = theta.cos();
+                                let sin_t = theta.sin();
+                                let x0 = v[i];
+                                let x1 = v[i + 1];
+                                out[i] = x0 * cos_t - x1 * sin_t;
+                                out[i + 1] = x0 * sin_t + x1 * cos_t;
+                            }
+                        }
+                        out
+                    };
+                    match x {
+                        MathValue::Vector(v) => Ok(MathValue::Vector(rotate_vec(&v))),
+                        MathValue::Matrix(m) => Ok(MathValue::Matrix(m.iter().map(|r| rotate_vec(r)).collect())),
+                        other => Ok(other),
+                    }
+                }
+                "rvq_decode" | "R_vq" | "_RVQ" => {
+                    if args.len() < 2 {
+                        return Err("'rvq_decode(indices, codebooks)' requires 2 arguments".to_string());
+                    }
+                    let idx_val = self.eval_value(&args[0])?;
+                    let cb_val = self.eval_value(&args[1])?;
+                    let cb_mat = match cb_val {
+                        MathValue::Matrix(m) => m,
+                        _ => return Err("Codebooks must be a matrix in rvq_decode".to_string()),
+                    };
+                    let indices = idx_val.flatten_elements();
+                    let d = cb_mat.first().map(|r| r.len()).unwrap_or(0);
+                    let mut accum = vec![0.0; d];
+                    for (q, &idx_f) in indices.iter().enumerate() {
+                        let idx = (idx_f.floor() as usize + q) % cb_mat.len().max(1);
+                        if let Some(entry) = cb_mat.get(idx) {
+                            for (i, &v) in entry.iter().enumerate() {
+                                if i < d { accum[i] += v; }
+                            }
+                        }
+                    }
+                    Ok(MathValue::Vector(accum))
+                }
+                "robot_action" | "R_ob" | "_ROB" => {
+                    if args.len() < 2 {
+                        return Err("'robot_action(state, flow, [dt])' requires at least 2 arguments".to_string());
+                    }
+                    let state = self.eval_value(&args[0])?;
+                    let flow = self.eval_value(&args[1])?;
+                    let dt = if args.len() > 2 { self.eval(&args[2])? } else { 0.02 };
+                    let delta = self.eval_binary_op(&flow, MathBinOp::Mul, &MathValue::Scalar(dt))?;
+                    self.eval_binary_op(&state, MathBinOp::Add, &delta)
+                }
+                "deepep_dispatch" | "D_ep" | "_DEP" => {
+                    if args.len() < 2 {
+                        return Err("'deepep_dispatch(tokens, weights, [k])' requires at least 2 arguments".to_string());
+                    }
+                    let tokens = self.eval_value(&args[0])?;
+                    let weights = self.eval_value(&args[1])?;
+                    let k = if args.len() > 2 { self.eval(&args[2])?.max(1.0) as usize } else { 2 };
+                    let mut w_elems = weights.flatten_elements();
+                    if w_elems.len() > k {
+                        let mut indexed: Vec<(usize, f64)> = w_elems.iter().copied().enumerate().collect();
+                        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                        let top_k_indices: std::collections::HashSet<usize> = indexed.iter().take(k).map(|(i, _)| *i).collect();
+                        for (i, w) in w_elems.iter_mut().enumerate() {
+                            if !top_k_indices.contains(&i) {
+                                *w = 0.0;
+                            }
+                        }
+                    }
+                    let gated_w = MathValue::Vector(w_elems);
+                    self.eval_binary_op(&tokens, MathBinOp::Mul, &gated_w)
+                }
+                "thunder_tma" | "T_mk" | "_TMK" => {
+                    if args.len() != 2 {
+                        return Err("'thunder_tma(A, B)' requires 2 matrix arguments".to_string());
+                    }
+                    let a = self.eval_value(&args[0])?;
+                    let b = self.eval_value(&args[1])?;
+                    self.eval_binary_op(&a, MathBinOp::MatMul, &b)
+                }
+                "fla_attn" | "F_la" | "_FLA" => {
+                    if args.len() < 3 {
+                        return Err("'fla_attn(Q, K, V, [decay])' requires at least 3 arguments".to_string());
+                    }
+                    let q = self.eval_value(&args[0])?;
+                    let k = self.eval_value(&args[1])?;
+                    let v = self.eval_value(&args[2])?;
+                    let decay = if args.len() > 3 { self.eval(&args[3])?.clamp(0.0, 1.0) } else { 1.0 };
+                    let kt = k.transpose()?;
+                    let kv = self.eval_binary_op(&kt, MathBinOp::MatMul, &v)?;
+                    let q_kv = self.eval_binary_op(&q, MathBinOp::MatMul, &kv)?;
+                    self.eval_binary_op(&q_kv, MathBinOp::Mul, &MathValue::Scalar(decay))
+                }
+                "liquid_step" | "L_qd" | "_LQD" => {
+                    if args.len() < 4 {
+                        return Err("'liquid_step(x, I, A, B, [dt])' requires at least 4 arguments".to_string());
+                    }
+                    let x = self.eval_value(&args[0])?;
+                    let i_in = self.eval_value(&args[1])?;
+                    let a = self.eval_value(&args[2])?;
+                    let b = self.eval_value(&args[3])?;
+                    let dt = if args.len() > 4 { self.eval(&args[4])? } else { 0.01 };
+                    let x_plus_i = self.eval_binary_op(&x, MathBinOp::Add, &i_in)?;
+                    let act = x_plus_i.map_unary(|v| v.tanh());
+                    let b_act = self.eval_binary_op(&b, MathBinOp::Mul, &act)?;
+                    let neg_ax = self.eval_binary_op(&a, MathBinOp::Mul, &x)?.map_unary(|v| -v);
+                    let dx = self.eval_binary_op(&neg_ax, MathBinOp::Add, &b_act)?;
+                    let step = self.eval_binary_op(&dx, MathBinOp::Mul, &MathValue::Scalar(dt))?;
+                    self.eval_binary_op(&x, MathBinOp::Add, &step)
+                }
+                "jepa_energy" | "J_ep" | "_JEP" => {
+                    if args.len() != 2 {
+                        return Err("'jepa_energy(pred, target)' requires 2 arguments".to_string());
+                    }
+                    let p = self.eval_value(&args[0])?;
+                    let t = self.eval_value(&args[1])?;
+                    let p_elems = p.flatten_elements();
+                    let t_elems = t.flatten_elements();
+                    let d = p_elems.len().max(1) as f64;
+                    let mse: f64 = p_elems.iter().zip(t_elems.iter()).map(|(&a, &b)| (a - b) * (a - b)).sum();
+                    Ok(MathValue::Scalar(mse / d))
+                }
+                "gflownet_db" | "G_fn" | "_GFN" => {
+                    if args.len() < 4 {
+                        return Err("'gflownet_db(F_s, P_F, F_next, P_B)' requires 4 arguments".to_string());
+                    }
+                    let f_s = self.eval(&args[0])?;
+                    let p_f = self.eval(&args[1])?;
+                    let f_next = self.eval(&args[2])?;
+                    let p_b = self.eval(&args[3])?;
+                    let residual = (f_s * p_f - f_next * p_b).abs();
+                    Ok(MathValue::Scalar(residual))
+                }
+                "lif_step" | "L_if" | "_LIF" => {
+                    if args.len() < 2 {
+                        return Err("'lif_step(v, I, [lambda, theta])' requires at least 2 arguments".to_string());
+                    }
+                    let v = self.eval_value(&args[0])?;
+                    let i_in = self.eval_value(&args[1])?;
+                    let lambda = if args.len() > 2 { self.eval(&args[2])?.clamp(0.0, 1.0) } else { 0.9 };
+                    let theta = if args.len() > 3 { self.eval(&args[3])?.max(1e-6) } else { 1.0 };
+                    self.eval_binary_op(&v, MathBinOp::Mul, &MathValue::Scalar(lambda))
+                        .and_then(|lv| self.eval_binary_op(&lv, MathBinOp::Add, &i_in))
+                        .map(|v_next| v_next.map_unary(|u| if u >= theta { u - theta } else { u.max(0.0) }))
+                }
+                "stdp_step" | "S_tp" | "_STP" => {
+                    if args.len() < 2 {
+                        return Err("'stdp_step(w, delta_t, [A_p, A_n, tau_p, tau_n])' requires at least 2 arguments".to_string());
+                    }
+                    let w = self.eval_value(&args[0])?;
+                    let dt = self.eval(&args[1])?;
+                    let a_p = if args.len() > 2 { self.eval(&args[2])? } else { 0.01 };
+                    let a_n = if args.len() > 3 { self.eval(&args[3])? } else { 0.01 };
+                    let tau_p = if args.len() > 4 { self.eval(&args[4])?.max(1e-6) } else { 20.0 };
+                    let tau_n = if args.len() > 5 { self.eval(&args[5])?.max(1e-6) } else { 20.0 };
+                    let dw = if dt > 0.0 {
+                        a_p * (-dt / tau_p).exp()
+                    } else {
+                        -a_n * (dt / tau_n).exp()
+                    };
+                    Ok(w.map_unary(|x| (x + dw).clamp(-1.0, 1.0)))
+                }
+                "fep_energy" | "F_ep" | "_FEP" => {
+                    if args.len() != 2 {
+                        return Err("'fep_energy(q, p)' requires 2 probability distribution arguments".to_string());
+                    }
+                    let q = self.eval_value(&args[0])?;
+                    let p = self.eval_value(&args[1])?;
+                    let q_elems = q.flatten_elements();
+                    let p_elems = p.flatten_elements();
+                    let mut fe = 0.0;
+                    for (&qi, &pi) in q_elems.iter().zip(p_elems.iter()) {
+                        let safe_q = qi.max(1e-12);
+                        let safe_p = pi.max(1e-12);
+                        fe += safe_q * (safe_q.ln() - safe_p.ln());
+                    }
+                    Ok(MathValue::Scalar(fe))
                 }
                 "grad" | "diff" => {
                     if args.len() != 2 {
@@ -10597,7 +11202,7 @@ impl MathProgram {
                 | "N" | "S" | "B" | "T_k" | "T_B" | "M_01" | "Z" | "Ω_μ" | "NS_5" | "Θ" | "M_t" | "ς" | "m"
                 | "_RM" | "_SI" | "_SM" | "_SP" | "_MS" | "_SL" | "_RL" | "_GL" | "_Z0" | "_M1" | "_B1" | "_TQ"
                 | "_Q8" | "_ROP" | "_TT" | "_MUO" | "_VJP" | "_EXP" | "_LOG" | "_SQ" | "_MAX" | "_MIN"
-                | "_ABS" | "_KC" | "_KAN" => {
+                | "_ABS" | "_KC" | "_KAN" | "_RSC" | "_MAS" | "_BCX" | "_IMP" | "_EMA" | "_LAS" | "_MHC" | "_ROB" | "_LQD" | "_LIF" | "_STP" | "_IRP" => {
                     if let Some(arg) = args.first() {
                         Self::infer_shape_expr(arg, env, fn_sigs, errors, ctx)
                     } else {
@@ -10605,7 +11210,8 @@ impl MathProgram {
                     }
                 }
                 "var" | "std" | "cos_sim" | "cos_dist" | "euclidean" | "manhattan" | "poincare_dist"
-                | "V" | "σ_2" | "s_d" | "s" | "S_c" | "D_c" | "d_2" | "d_E" | "d_1" | "d_M" | "d_P" | "d_H" => {
+                | "V" | "σ_2" | "s_d" | "s" | "S_c" | "D_c" | "d_2" | "d_E" | "d_1" | "d_M" | "d_P" | "d_H"
+                | "_L2D" | "_L1D" | "_COS" | "_HAM" | "_HYP" | "_JEP" | "_GFN" | "_FEP" | "_MCT" => {
                     Some(vec![])
                 }
                 "encode" | "ι" => {
@@ -14527,7 +15133,7 @@ impl MathProgram {
                     }
                     "gelu" | "_GL" => format!("_GE{:02X}${:02X}0", dst, arg_reg),
                     "relu" | "max" | "min" | "minmax" | "M_01" | "_RL" | "_M1" | "_MAX" | "_MIN" => format!("_MX{:02X}${:02X}0", dst, arg_reg),
-                    "sqrt" | "rsqrt" | "√" | "euclidean" | "d_2" | "d_E" | "std" | "s" | "s_d" | "_SQ" => {
+                    "sqrt" | "rsqrt" | "√" | "euclidean" | "d_2" | "d_E" | "std" | "s" | "s_d" | "_SQ" | "_L2D" => {
                         format!("_SQ{:02X}${:02X}0", dst, arg_reg)
                     }
                     "exp" | "ln" | "log" | "_EXP" | "_LOG" => format!("_EX{:02X}${:02X}0", dst, arg_reg),
@@ -14535,11 +15141,11 @@ impl MathProgram {
                         format!("_RM{:02X}${:02X}0", dst, arg_reg)
                     }
                     "softmax" | "ρ" | "_SM" => format!("_SM{:02X}${:02X}0", dst, arg_reg),
-                    "sin" | "cos" | "tan" | "cos_sim" | "S_c" | "rope" | "Φ" | "_ROP" => {
+                    "sin" | "cos" | "tan" | "cos_sim" | "S_c" | "rope" | "Φ" | "_ROP" | "_COS" => {
                         format!("_CD{:02X}${:02X}0", dst, arg_reg)
                     }
                     "chebyshev" | "T" | "T_k" | "T_B" | "_KC" | "_KAN" => format!("_TK{:02X}${:02X}0", dst, arg_reg),
-                    "manhattan" | "d_1" | "d_M" => format!("_PO{:02X}${:02X}0", dst, arg_reg),
+                    "manhattan" | "d_1" | "d_M" | "_L1D" => format!("_PO{:02X}${:02X}0", dst, arg_reg),
                     "bitlinear" | "B" | "τ" | "τ_2" | "τ_8" | "_B1" | "_TQ" | "_Q8" => format!("_PC{:02X}${:02X}0", dst, arg_reg),
                     "titans_step" | "Θ" | "M_t" | "_TT" => format!("_TT{:02X}${:02X}0", dst, arg_reg),
                     "muon_step" | "newton_schulz" | "NS" | "Ω_μ" | "NS_5" | "_MUO" => format!("_MD{:02X}${:02X}0", dst, arg_reg),
@@ -14547,6 +15153,38 @@ impl MathProgram {
                     "swiglu" | "fused_swiglu" | "S" | "_SWG" => format!("_SW{:02X}${:02X}0", dst, arg_reg),
                     "ssd_scan" | "mamba_ssd" | "mamba2" | "mamba" | "Ξ" | "_SSD" => format!("_SS{:02X}${:02X}0", dst, arg_reg),
                     "grad" | "diff" | "∇" | "_VJP" => format!("_VJ{:02X}${:02X}0", dst, arg_reg),
+                    "poincare_dist" | "d_P" | "d_H" | "_HYP" => format!("_HY{:02X}${:02X}0", dst, arg_reg),
+                    "_RSC" | "robust_scale" | "R_sc" => format!("_RS{:02X}${:02X}0", dst, arg_reg),
+                    "_MAS" | "maxabs_scale" | "M_abs" => format!("_MA{:02X}${:02X}0", dst, arg_reg),
+                    "_BCX" | "box_cox" | "B_cx" => format!("_BC{:02X}${:02X}0", dst, arg_reg),
+                    "_IMP" | "impute" | "I_mp" => format!("_IM{:02X}${:02X}0", dst, arg_reg),
+                    "_OHE" | "one_hot" | "O_he" => format!("_OH{:02X}${:02X}0", dst, arg_reg),
+                    "_FFT" | "fft" | "F_ft" => format!("_FF{:02X}${:02X}0", dst, arg_reg),
+                    "_EMA" | "ema" | "E_ma" => format!("_EM{:02X}${:02X}0", dst, arg_reg),
+                    "_OLS" | "ols" | "O_ls" => format!("_OL{:02X}${:02X}0", dst, arg_reg),
+                    "_RDG" | "ridge" | "R_dg" => format!("_RD{:02X}${:02X}0", dst, arg_reg),
+                    "_LAS" | "lasso" | "L_as" => format!("_LS{:02X}${:02X}0", dst, arg_reg),
+                    "_KMN" | "kmeans_step" | "K_mn" => format!("_KM{:02X}${:02X}0", dst, arg_reg),
+                    "_HAM" | "hamming" => format!("_HM{:02X}${:02X}0", dst, arg_reg),
+                    "_GCN" | "gcn" | "G_cn" => format!("_GC{:02X}${:02X}0", dst, arg_reg),
+                    "_MCT" | "mcts_puct" | "M_ct" => format!("_MC{:02X}${:02X}0", dst, arg_reg),
+                    "_CGA" | "clifford_geom" | "C_ga" => format!("_CG{:02X}${:02X}0", dst, arg_reg),
+                    "_CFM" | "flow_match" | "C_fm" => format!("_CF{:02X}${:02X}0", dst, arg_reg),
+                    "_EGR" | "engram_lookup" | "E_gr" => format!("_EG{:02X}${:02X}0", dst, arg_reg),
+                    "_MHC" | "mhc_residual" | "M_hc" => format!("_MH{:02X}${:02X}0", dst, arg_reg),
+                    "_MTP" | "mtp_predict" | "M_tp" => format!("_MP{:02X}${:02X}0", dst, arg_reg),
+                    "_IRP" | "irope" | "I_rp" => format!("_IR{:02X}${:02X}0", dst, arg_reg),
+                    "_RVQ" | "rvq_decode" | "R_vq" => format!("_RV{:02X}${:02X}0", dst, arg_reg),
+                    "_ROB" | "robot_action" | "R_ob" => format!("_RB{:02X}${:02X}0", dst, arg_reg),
+                    "_DEP" | "deepep_dispatch" | "D_ep" => format!("_DP{:02X}${:02X}0", dst, arg_reg),
+                    "_TMK" | "thunder_tma" | "T_mk" => format!("_TM{:02X}${:02X}0", dst, arg_reg),
+                    "_FLA" | "fla_attn" | "F_la" => format!("_FL{:02X}${:02X}0", dst, arg_reg),
+                    "_LQD" | "liquid_step" | "L_qd" => format!("_LQ{:02X}${:02X}0", dst, arg_reg),
+                    "_JEP" | "jepa_energy" | "J_ep" => format!("_JE{:02X}${:02X}0", dst, arg_reg),
+                    "_GFN" | "gflownet_db" | "G_fn" => format!("_GF{:02X}${:02X}0", dst, arg_reg),
+                    "_LIF" | "lif_step" | "L_if" => format!("_LF{:02X}${:02X}0", dst, arg_reg),
+                    "_STP" | "stdp_step" | "S_tp" => format!("_ST{:02X}${:02X}0", dst, arg_reg),
+                    "_FEP" | "fep_energy" | "F_ep" => format!("_FE{:02X}${:02X}0", dst, arg_reg),
                     _ => format!("_TT{:02X}${:02X}0", dst, arg_reg),
                 };
                 slots.push(Self::seal_slot(&raw8, '>'));

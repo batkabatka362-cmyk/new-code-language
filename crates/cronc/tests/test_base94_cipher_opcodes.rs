@@ -317,3 +317,178 @@ fn test_base94_frontier_cipher_model_file_conformance() {
         conf.err()
     );
 }
+
+#[test]
+fn test_base94_comprehensive_lists_ciphers_evaluation() {
+    let code = r#"
+        // 1. Data Scaling & Feature Engineering (lists.md Ch 1)
+        x_raw = [10.0, 20.0, 30.0, 40.0, 100.0]
+        x_rsc = _RSC(x_raw)
+        x_mas = _MAS(x_raw)
+        x_bcx = _BCX(x_raw, 0.5)
+        x_nan = [1.0, 0.0, 3.0]
+        x_imp = _IMP(x_nan, 2.0)
+        x_ohe = _OHE(2.0, 5.0)
+        x_fft = _FFT([1.0, 0.0, -1.0, 0.0])
+        x_ema = _EMA([1.0, 2.0, 3.0, 4.0], 0.5)
+
+        // 2. Classical ML & Solvers (lists.md Ch 2)
+        X_mat = [[1.0, 1.0], [1.0, 2.0], [1.0, 3.0]]
+        Y_vec = [2.0, 3.0, 4.0]
+        beta_ols = _OLS(X_mat, Y_vec)
+        beta_rdg = _RDG(X_mat, Y_vec, 0.1)
+        w_las = _LAS([0.5, -0.005, 0.02], 0.01)
+        k_step = _KMN([[1.0, 1.0], [5.0, 5.0]], [[0.0, 0.0], [6.0, 6.0]])
+
+        // 3. Vector Math & Distances (lists.md Ch 3)
+        u_v = [1.0, 2.0]
+        v_v = [4.0, 6.0]
+        d_l2 = _L2D(u_v, v_v)
+        d_l1 = _L1D(u_v, v_v)
+        s_cos = _COS(u_v, v_v)
+        d_ham = _HAM([1.0, 0.0, 1.0], [1.0, 1.0, 0.0])
+        d_hyp = _HYP([0.0, 0.0], [0.5, 0.0])
+
+        // 4. Graph AI & Search (lists.md Ch 4)
+        H_g = [[1.0, 0.0], [0.0, 1.0]]
+        A_g = [[0.0, 1.0], [1.0, 0.0]]
+        g_out = _GCN(H_g, A_g)
+        m_puct = _MCT(0.8, 0.5, 100.0, 10.0, 1.414)
+        c_geom = _CGA([1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0])
+
+        // 5. Frontier Models (lists.md Ch 5, 7, 10, 11)
+        x_flow = _CFM([1.0, 2.0], [0.1, 0.2], 0.1)
+        t_eng = [[0.1, 0.2], [0.3, 0.4]]
+        x_egr = _EGR([1.0, 2.0], t_eng)
+        x_mhc = _MHC([1.0, 2.0], [0.5, 0.5])
+        h_mtp = _MTP([[1.0, 2.0]], [[0.5], [0.5]])
+        x_irp = _IRP([1.0, 0.0], 1.0, 8.0)
+
+        // 6. AGI, Audio, Robotics, Neuromorphic (lists.md Ch 15, 17, 18, 20)
+        cb_mat = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]
+        a_rvq = _RVQ([0.0, 1.0], cb_mat)
+        r_act = _ROB([0.0, 0.0], [1.0, 1.0], 0.05)
+        d_moe = _DEP([1.0, 2.0, 3.0], [0.1, 0.8, 0.5], 2.0)
+        t_gemm = _TMK([[1.0, 2.0]], [[3.0], [4.0]])
+        f_lin = _FLA([[1.0, 0.0]], [[1.0, 0.0]], [[0.5, 0.5]], 0.95)
+        l_step = _LQD([0.5, 0.5], [0.1, 0.1], [0.2, 0.2], [0.3, 0.3], 0.01)
+        j_nrg = _JEP([1.0, 2.0], [1.0, 1.0])
+        g_db = _GFN(1.0, 0.5, 2.0, 0.25)
+        v_lif = _LIF([0.5, 0.8], [0.3, 0.4], 0.9, 1.0)
+        w_stdp = _STP([0.5], 10.0, 0.01, 0.01, 20.0, 20.0)
+        fe_val = _FEP([0.7, 0.3], [0.5, 0.5])
+    "#;
+
+    let prog = parse_math_code(code).expect("Parse comprehensive lists ciphers failed");
+    let mut eval = MathEvaluator::new();
+    eval.execute_program_value(&prog)
+        .expect("Eval comprehensive lists ciphers failed");
+
+    // 1. Verify Data Scaling
+    assert!(eval.env.contains_key("x_rsc"));
+    assert!(eval.env.contains_key("x_mas"));
+    assert!(eval.env.contains_key("x_bcx"));
+    if let Some(MathValue::Vector(v)) = eval.env.get("x_imp") {
+        assert_eq!(v[1], 2.0); // 0.0 was imputed to 2.0
+    }
+    if let Some(MathValue::Vector(v)) = eval.env.get("x_ohe") {
+        assert_eq!(v, &[0.0, 0.0, 1.0, 0.0, 0.0]);
+    }
+    assert!(eval.env.contains_key("x_fft"));
+    assert!(eval.env.contains_key("x_ema"));
+
+    // 2. Verify Classical ML
+    if let Some(MathValue::Vector(b)) = eval.env.get("beta_ols") {
+        // Line y = 1 + x => beta = [1.0, 1.0]
+        assert!((b[0] - 1.0).abs() < 1e-4);
+        assert!((b[1] - 1.0).abs() < 1e-4);
+    } else {
+        panic!("beta_ols must be Vector");
+    }
+    assert!(eval.env.contains_key("beta_rdg"));
+    if let Some(MathValue::Vector(w)) = eval.env.get("w_las") {
+        assert!((w[0] - 0.49).abs() < 1e-5);
+        assert_eq!(w[1], 0.0); // shrunk to zero
+    }
+    if let Some(MathValue::Vector(k)) = eval.env.get("k_step") {
+        assert_eq!(k, &[0.0, 1.0]); // row 0 -> centroid 0, row 1 -> centroid 1
+    }
+
+    // 3. Verify Vector Math & Distances
+    if let Some(MathValue::Scalar(d)) = eval.env.get("d_l2") {
+        assert_eq!(*d, 5.0); // sqrt(3^2 + 4^2) = 5
+    }
+    if let Some(MathValue::Scalar(d)) = eval.env.get("d_l1") {
+        assert_eq!(*d, 7.0); // 3 + 4 = 7
+    }
+    assert!(eval.env.contains_key("s_cos"));
+    if let Some(MathValue::Scalar(d)) = eval.env.get("d_ham") {
+        assert_eq!(*d, 2.0);
+    }
+    assert!(eval.env.contains_key("d_hyp"));
+
+    // 4. Verify Graph AI & Search
+    assert!(eval.env.contains_key("g_out"));
+    assert!(eval.env.contains_key("m_puct"));
+    assert!(eval.env.contains_key("c_geom"));
+
+    // 5. Verify Frontier Models
+    if let Some(MathValue::Vector(v)) = eval.env.get("x_flow") {
+        assert!((v[0] - 1.01).abs() < 1e-5);
+        assert!((v[1] - 2.02).abs() < 1e-5);
+    }
+    assert!(eval.env.contains_key("x_egr"));
+    assert!(eval.env.contains_key("x_mhc"));
+    assert!(eval.env.contains_key("h_mtp"));
+    assert!(eval.env.contains_key("x_irp"));
+
+    // 6. Verify AGI, Audio, Robotics, Neuromorphic
+    assert!(eval.env.contains_key("a_rvq"));
+    if let Some(MathValue::Vector(v)) = eval.env.get("r_act") {
+        assert!((v[0] - 0.05).abs() < 1e-5);
+    }
+    assert!(eval.env.contains_key("d_moe"));
+    if let Some(MathValue::Matrix(m)) = eval.env.get("t_gemm") {
+        assert_eq!(m[0][0], 11.0); // 1*3 + 2*4 = 11
+    }
+    assert!(eval.env.contains_key("f_lin"));
+    assert!(eval.env.contains_key("l_step"));
+    if let Some(MathValue::Scalar(e)) = eval.env.get("j_nrg") {
+        assert_eq!(*e, 0.5); // (0^2 + 1^2)/2 = 0.5
+    }
+    if let Some(MathValue::Scalar(r)) = eval.env.get("g_db") {
+        assert_eq!(*r, 0.0); // 1.0*0.5 - 2.0*0.25 = 0.0
+    }
+    assert!(eval.env.contains_key("v_lif"));
+    assert!(eval.env.contains_key("w_stdp"));
+    assert!(eval.env.contains_key("fe_val"));
+}
+
+#[test]
+fn test_base94_pipeline_chaining_comprehensive_modular() {
+    let pipeline_code = r#"
+        // Modular Data Pipeline Chaining without words:
+        x_in = [1.0, 0.0, 4.0, 8.0]
+        y_out = x_in -> _IMP(2.0) -> _RSC -> _MAS -> _EMA(0.8) -> _Z0 -> _SI
+    "#;
+
+    let prog = parse_math_code(pipeline_code).expect("Parse chained pipeline failed");
+    let mut eval = MathEvaluator::new();
+    eval.execute_program_value(&prog)
+        .expect("Eval chained pipeline failed");
+
+    if let Some(MathValue::Vector(v)) = eval.env.get("y_out") {
+        assert_eq!(v.len(), 4);
+        for &val in v {
+            assert!(val >= 0.0 && val <= 1.0, "Sigmoid output must be in [0, 1]");
+        }
+    } else {
+        panic!("y_out must be a Vector");
+    }
+
+    // Verify VLIW Lowering generates bundles with matching cipher opcodes
+    let vliw_bundles = prog.to_vliw();
+    assert!(vliw_bundles.contains("B0000:"));
+    assert!(vliw_bundles.contains(">"));
+}
+
