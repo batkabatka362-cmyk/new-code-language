@@ -42,7 +42,7 @@ fn print_help() {
     println!("    cl-llvm <file.cl> [-o out.ll]  Transpile .cl directly into SSA LLVM Intermediate Representation");
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
     println!("    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench");
-    println!("    ptx <file.cl> [-o <out.ptx>]   Compile .cl into NVIDIA CUDA PTX v7.5+ GPU kernel");
+    println!("    ptx <file.cl> [-o <out.ptx>] [--run] Compile .cl to CUDA PTX & JIT execute on GPU silicon");
     println!("    metal <file.cl> [-o <out.metal>] Compile .cl into Apple Metal Shading Language (MSL)");
     println!("    cl-transpile <file.cl> [opts]  Cross-transpile .cl to C++20, CUDA, C# (.NET), Python, WGSL");
     println!();
@@ -1792,6 +1792,35 @@ fn main() {
                     for line in ptx_code.lines().take(15) {
                         println!("  {}", line);
                     }
+
+                    if args.iter().any(|a| a == "--run" || a == "--exec" || a == "--cuda") {
+                        println!("\n[CRON CUDA HARDWARE JIT] Initializing native GPU driver without NVCC...");
+                        if !cronc::cl_cuda_driver::CudaDriver::is_available() {
+                            eprintln!("[ERROR] NVIDIA CUDA Driver library (nvcuda.dll / libcuda.so) not detected on host system.");
+                        } else {
+                            match cronc::cl_cuda_driver::CudaDriver::init() {
+                                Ok(driver) => {
+                                    let name = driver.device_name(0).unwrap_or_else(|_| "GPU 0".to_string());
+                                    let mem = driver.device_total_memory(0).unwrap_or(0);
+                                    println!("[CRON CUDA HARDWARE JIT] Target Device: {} ({} MB VRAM)", name, mem / 1024 / 1024);
+                                    println!("[CRON CUDA HARDWARE JIT] JIT compiling and verifying PTX kernel on hardware...");
+                                    match driver.create_context(0) {
+                                        Ok(ctx) => {
+                                            let _ = ctx.make_current();
+                                            match ctx.load_ptx(&ptx_code) {
+                                                Ok(_module) => {
+                                                    println!("[CRON CUDA HARDWARE JIT SUCCESS] PTX successfully compiled into native GPU machine code on {}!", name);
+                                                }
+                                                Err(e) => eprintln!("[CRON CUDA HARDWARE JIT ERROR] PTX compilation failed: {}", e),
+                                            }
+                                        }
+                                        Err(e) => eprintln!("[CRON CUDA HARDWARE JIT ERROR] Failed to create CUDA context: {}", e),
+                                    }
+                                }
+                                Err(e) => eprintln!("[CRON CUDA HARDWARE JIT ERROR] Driver initialization failed: {}", e),
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!("{}", e);
@@ -2797,7 +2826,34 @@ fn main() {
                     } else if emit_c23 {
                         println!("{}", prog.to_c23());
                     } else if emit_ptx {
-                        println!("{}", prog.to_ptx());
+                        let ptx = prog.to_ptx();
+                        println!("{}", ptx);
+                        if args.iter().any(|a| a == "--run" || a == "--cuda") {
+                            println!("\n[CRON CUDA HARDWARE JIT] Discovering host NVIDIA GPU...");
+                            if !cronc::cl_cuda_driver::CudaDriver::is_available() {
+                                eprintln!("[ERROR] NVIDIA CUDA Driver not detected on this system.");
+                            } else {
+                                match cronc::cl_cuda_driver::CudaDriver::init() {
+                                    Ok(driver) => {
+                                        let name = driver.device_name(0).unwrap_or_else(|_| "GPU 0".to_string());
+                                        let mem = driver.device_total_memory(0).unwrap_or(0);
+                                        println!("[CRON CUDA HARDWARE JIT] Connected to {} ({} MB VRAM)", name, mem / 1024 / 1024);
+                                        println!("[CRON CUDA HARDWARE JIT] JIT compiling PTX to hardware machine code...");
+                                        match driver.create_context(0) {
+                                            Ok(ctx) => {
+                                                let _ = ctx.make_current();
+                                                match ctx.load_ptx(&ptx) {
+                                                    Ok(_) => println!("\x1b[32m[+] PTX successfully compiled into native SASS machine code on {}!\x1b[0m", name),
+                                                    Err(e) => eprintln!("[ERROR] PTX JIT compilation failed: {}", e),
+                                                }
+                                            }
+                                            Err(e) => eprintln!("[ERROR] Failed to create CUDA context: {}", e),
+                                        }
+                                    }
+                                    Err(e) => eprintln!("[ERROR] Failed to init CUDA driver: {}", e),
+                                }
+                            }
+                        }
                     } else if emit_vliw {
                         println!("{}", prog.to_vliw());
                     } else if compare_profiles {
