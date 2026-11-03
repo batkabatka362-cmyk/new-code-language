@@ -10,7 +10,8 @@ use cron_cli::{
 };
 
 fn print_banner() {
-    println!(r#"
+    println!(
+        r#"
   ██████╗██████╗  ██████╗ ███╗   ██╗
  ██╔════╝██╔══██╗██╔═══██╗████╗  ██║
  ██║     ██████╔╝██║   ██║██╔██╗ ██║
@@ -20,7 +21,8 @@ fn print_banner() {
   CRON AGI & Silicon Cipher Machine Architecture v1.0
   Target: 256-Core 4D-Torus S^3xZ100 Hard Silicon Backend
   Specification: Pure VLIW Cipher Microcode (Zero Verbal Words, Zero GEMM, Zero DRAM)
-"#);
+"#
+    );
 }
 
 fn print_help() {
@@ -32,18 +34,26 @@ fn print_help() {
     println!(" [1] COMPILER, JIT & SILICON BACKENDS");
     println!("════════════════════════════════════════════════════════════════════════════════");
     println!("    asm <file.cl> [-o <out.clb>]   Assemble .cl into 128-bit binary bytecode (.clb)");
-    println!("    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl");
+    println!(
+        "    disasm <file.clb> [-o <out>]   Disassemble 128-bit binary bytecode (.clb) into .cl"
+    );
     println!("    jit <file.cl>                  Execute dynamically in RAM via native JIT engine");
-    println!("    run <file.cl>                  Compile and execute on 256-Core 4D-Torus Simulator");
+    println!(
+        "    run <file.cl>                  Compile and execute on 256-Core 4D-Torus Simulator"
+    );
     println!("    sim <file.cl|.clb>             Directly run .cl machine code or .clb binary in 4D-Torus VM");
     println!("    cl-v2 <file.cl> [opts]         Sovereign CL v2.0 Post-Human 5-Pillar Engine (Morphism, VLIW, Co-Verify)");
     println!("    math <file.cl|expr> [opts]     Zero-word standard math calculus (functions, pipelines, C23, PTX)");
     println!("    build <file.cl> [--target <t>] Compile into target (cl, native, ptx, metal)");
     println!("    cl-llvm <file.cl> [-o out.ll]  Transpile .cl directly into SSA LLVM Intermediate Representation");
     println!("    cl-c23 <file.cl> [-o out.c]    Transpile .cl machine code directly to C23 native source");
-    println!("    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench");
+    println!(
+        "    cl-native <file.cl> [options]  1-Step Native AOT C23/AVX-512 Compile & Run/Bench"
+    );
     println!("    ptx <file.cl> [-o <out.ptx>] [--run] Compile .cl to CUDA PTX & JIT execute on GPU silicon");
-    println!("    metal <file.cl> [-o <out.metal>] Compile .cl into Apple Metal Shading Language (MSL)");
+    println!(
+        "    metal <file.cl> [-o <out.metal>] Compile .cl into Apple Metal Shading Language (MSL)"
+    );
     println!("    cl-transpile <file.cl> [opts]  Cross-transpile .cl to C++20, CUDA, C# (.NET), Python, WGSL");
     println!();
     println!("════════════════════════════════════════════════════════════════════════════════");
@@ -55,9 +65,13 @@ fn print_help() {
     println!("    cl-export-rtl <file.cl>        Export complete synthesizable Verilog RTL package & Vivado scripts");
     println!("    verilog <file.cl> [-o <out.v>] Synthesize IEEE 1364-2001 Verilog RTL core");
     println!("    fpga <file.cl> [opts]          Synthesize & package FPGA bitstream (Artix-7, iCE40, ECP5)");
-    println!("    tapeout <file.cl> [opts]       OpenLane SkyWater 130nm / TSMC N5 ASIC tape-out flow");
+    println!(
+        "    tapeout <file.cl> [opts]       OpenLane SkyWater 130nm / TSMC N5 ASIC tape-out flow"
+    );
     println!("    synth <file.cl> [opts]         1-Click Verilog RTL, Testbench, SDC/XDC & OpenLane ASIC Synthesis Package");
-    println!("    flash <file.cl> [opts]         Generate physical hardware synthesis package & drivers");
+    println!(
+        "    flash <file.cl> [opts]         Generate physical hardware synthesis package & drivers"
+    );
     println!("    cl-vcd <file.cl> [-o out.vcd]  Dump IEEE 1364-2001 VCD trace & ASCII pipeline timing diagram");
     println!("    cl-router [inspect|synth|sim]  4D-Torus 9-Port Virtual Channel Router Micro-Architecture & Verilog");
     println!();
@@ -101,12 +115,16 @@ fn print_help() {
     bench [file.cl] [opts]         Multi-core 4D-Torus hardware roofline & silicon profiler");
     println!("    bench-server [opts]            High-precision server QPS load benchmark");
     println!("    vibe-loop <file|--code>        Autonomous AI Vibe-Loop: Heal + Opt + JIT + JSON telemetry in one pass");
-    println!("    cl-repl                        Start interactive .cl Vibe-Coding live silicon console");
+    println!(
+        "    cl-repl                        Start interactive .cl Vibe-Coding live silicon console"
+    );
     println!("    cl-heal <file.cl> [-o out.cl]  Auto-repair AI-generated .cl (CRC-8 ATM, padding, hazards)");
     println!("    cl-opt <file.cl> [-o out.cl]   VLIW slot compaction super-optimizer for .cl (IPC -> 4.0)");
     println!("    cl-fmt <file.cl> [-o out.cl]   Format and canonicalize .cl machine code with NOP padding & CRC heal");
     println!("    cl-verify-math [--json]        Golden reference mathematical precision & fidelity verifier");
-    println!("    pkg <tree|list|publish|verify> Package manager inspection, publishing & verification");
+    println!(
+        "    pkg <tree|list|publish|verify> Package manager inspection, publishing & verification"
+    );
     println!("    add / remove / install         Manage dependencies in cron.toml and cryptographic cron.lock");
     println!("    info                           Display 4D-Torus architecture specifications");
     println!("════════════════════════════════════════════════════════════════════════════════");
@@ -116,11 +134,17 @@ fn print_help() {
 fn print_subcommand_help(cmd: &str) {
     match cmd {
         "visualize" | "cl-visualize" | "viz" | "cl-viz" => {
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON 3D MULTI-TOPOLOGY INTERACTIVE VISUALIZER");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!("Generates a rich, standalone 3D WebGL dashboard featuring:");
-            println!("  1. 256-Core 4D-Torus Spatiotemporal NoC Topology (DOR routing, PGAS conflicts)");
+            println!(
+                "  1. 256-Core 4D-Torus Spatiotemporal NoC Topology (DOR routing, PGAS conflicts)"
+            );
             println!("  2. Hexagonal Honeycomb Crystalline Topology (Cellular ATP synthase molecular rotor)");
             println!("  3. CL-LoRA Discrete Latent Manifold Topology (Ternary trits {{-1, 0, 1}}, 0 FLOP drift)");
             println!();
@@ -131,8 +155,12 @@ fn print_subcommand_help(cmd: &str) {
             println!("    -o, --out <path.html>    Output HTML file path (default: cron_visualizer.html)");
             println!("    --mode <m>               Initial active topology (torus | hex | lora | all, default: all)");
             println!("    --lora <adapter.cll>     Load discrete CL-LoRA adapter binary into manifold viewer");
-            println!("    --cl <kernel.cl>         Load 4D microcode file to simulate on 256 cores");
-            println!("    --atp <flux>             Cellular ATP flux rate in pJ/bit (default: 0.17)");
+            println!(
+                "    --cl <kernel.cl>         Load 4D microcode file to simulate on 256 cores"
+            );
+            println!(
+                "    --atp <flux>             Cellular ATP flux rate in pJ/bit (default: 0.17)"
+            );
             println!("    --open                   Automatically open generated visualizer in default browser");
             println!("    -h, --help               Display this help message");
             println!();
@@ -222,7 +250,7 @@ fn print_subcommand_help(cmd: &str) {
         "chat" => {
             println!("USAGE:\n    cron chat [OPTIONS]\n");
             println!("DESCRIPTION:\n    Interactive AI Terminal with zero-VRAM paged weight streaming (<16 MB RSS) and hardware speculative decoding.\n");
-            println!("OPTIONS:\n    --model <name>      Model identifier string (default: cron-bitnet-7b)\n    --weights <path>    Load weights from .gguf or .safetensors file\n    --layers <n>        Number of transformer layers (default: 32)\n    --page-mb <n>       Resident set size limit in MB (default: 16)\n    --speculative <k>   Speculative draft tokens lookahead depth (default: 4)\n    --grammar <mode>    Sampling constraint: 'unconstrained' or 'json'\n    --temp <float>      Sampling temperature (default: 0.7)\n    --cuda, --gpu       Enable hardware NVIDIA GPU Driver API execution\n    --eval <prompt>     Execute a single turn non-interactively and print output\n    -h, --help          Display this help message\n");
+            println!("OPTIONS:\n    --model <name>      Model identifier string (default: cron-bitnet-7b)\n    --weights <path>    Load weights from .gguf or .safetensors file\n    --layers <n>        Number of transformer layers (default: 32)\n    --page-mb <n>       Resident set size limit in MB (default: 16)\n    --speculative <k>   Speculative draft tokens lookahead depth (default: 4)\n    --grammar <mode>    Sampling constraint: 'unconstrained' or 'json'\n    --eval <prompt>     Execute a single turn non-interactively and print output\n    -h, --help          Display this help message\n");
             println!("EXAMPLE:\n    cron chat --weights model.gguf --page-mb 16");
         }
         "vibe-loop" => {
@@ -260,7 +288,9 @@ fn print_subcommand_help(cmd: &str) {
         }
         "cl-power" => {
             println!("USAGE:\n    cron cl-power <file.cl> [OPTIONS]\n");
-            println!("DESCRIPTION:\n    Landauer Thermodynamic DVFS & Silicon Thermal Simulation.\n");
+            println!(
+                "DESCRIPTION:\n    Landauer Thermodynamic DVFS & Silicon Thermal Simulation.\n"
+            );
             println!("OPTIONS:\n    --voltage <v>   Core supply voltage (default: 0.85V)\n    --freq <ghz>    Clock frequency in GHz (default: 2.5)\n    --temp <k>      Ambient temperature in Kelvin (default: 300K)\n    --hud           Render ASCII thermodynamic state HUD\n    --json          Output power metrics in JSON\n    -h, --help      Display this help message\n");
         }
         "cl-perf" => {
@@ -308,7 +338,7 @@ fn print_subcommand_help(cmd: &str) {
         "cl-train" | "train-cl" | "train" => {
             println!("USAGE:\n    cron train [model.cl] [OPTIONS]\n    cron cl-train [dataset.dpdata] [OPTIONS]\n");
             println!("DESCRIPTION:\n    CRON Autonomous Zero-Python In-Silicon Training Pipeline & Autograd Engine.\n    Ingests raw text corpus, executes causal LM forward pass, computes exact\n    analytical reverse-mode VJP autodiff gradients, optimizes parameters with\n    AdamW or Lion, and exports IEEE 754 Safetensors checkpoints.\n    Zero Python, Zero PyTorch, Zero external C++ runtime required.\n");
-            println!("OPTIONS:\n    --data, -d <path>   Path to raw text training corpus or token stream\n    --steps, -s <N>     Number of training optimization steps (default: 50)\n    --lr <float>        Learning rate (default: 0.01)\n    --batch, -b <N>     Batch size (default: 4)\n    --seq-len, -l <N>   Sequence length (default: 16)\n    --dim <N>           Model embedding dimension (default: 32)\n    --hidden <N>        Hidden layer dimension (default: 64)\n    --vocab <N>         Vocabulary size (default: 256)\n    --layers <N>        Number of transformer layers (default: 1)\n    --optimizer <opt>   Optimizer algorithm: adamw, lion, sgd (default: adamw)\n    -o, --out <path>    Output Safetensors checkpoint path (default: checkpoint.safetensors)\n    --cuda, --gpu       Enable hardware NVIDIA RTX GPU acceleration via zero-NVCC Driver API\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
+            println!("OPTIONS:\n    --data, -d <path>   Path to raw text training corpus or token stream\n    --steps, -s <N>     Number of training optimization steps (default: 50)\n    --lr <float>        Learning rate (default: 0.01)\n    --batch, -b <N>     Batch size (default: 4)\n    --seq-len, -l <N>   Sequence length (default: 16)\n    --dim <N>           Hidden dimension (default: 32)\n    --optimizer <opt>   Optimizer algorithm: adamw, lion, sgd (default: adamw)\n    -o, --out <path>    Output Safetensors checkpoint path (default: checkpoint.safetensors)\n    --cuda, --gpu       Enable hardware NVIDIA RTX GPU acceleration via zero-NVCC Driver API\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
             println!("EXAMPLES:\n    cron train model.cl --data corpus.txt --steps 100 --lr 0.01 -o model.safetensors\n    cron train --data mongol_text.txt --optimizer lion --steps 50\n    cron train --steps 30 --lr 0.02 -o trained.safetensors");
         }
         "cl-sovereign" | "sovereign" => {
@@ -335,7 +365,9 @@ fn print_subcommand_help(cmd: &str) {
             println!("EXAMPLE:\n    cron cl-bridge export-c-headers -o cron.hpp");
         }
         "import-fx" => {
-            println!("USAGE:\n    cron import-fx <model_fx.json> [-o <out.cl>] [--name <model_name>]\n");
+            println!(
+                "USAGE:\n    cron import-fx <model_fx.json> [-o <out.cl>] [--name <model_name>]\n"
+            );
             println!("DESCRIPTION:\n    Lower PyTorch FX symbolic trace graphs into 128-bit 4-slot VLIW microcode with BitNet b1.58 ternary GEMV.\n");
             println!("OPTIONS:\n    -o <path>           Output .cl microcode file path\n    --name <name>       Logical model name identifier\n    -h, --help          Display this help message\n");
             println!("EXAMPLE:\n    cron import-fx resnet_fx.json -o resnet.cl");
@@ -402,7 +434,9 @@ fn print_subcommand_help(cmd: &str) {
         other => {
             println!("CRON Command: {}\n", other);
             println!("USAGE:\n    cron {} [OPTIONS] [ARGUMENTS]\n", other);
-            println!("Run 'cron' without arguments to see the complete list of available commands.");
+            println!(
+                "Run 'cron' without arguments to see the complete list of available commands."
+            );
         }
     }
 }
@@ -483,17 +517,23 @@ fn main() {
                     url = args[i + 1].clone();
                     i += 2;
                 } else if args[i] == "--requests" && i + 1 < args.len() {
-                    if let Ok(r) = args[i + 1].parse::<usize>() { requests = r; }
+                    if let Ok(r) = args[i + 1].parse::<usize>() {
+                        requests = r;
+                    }
                     i += 2;
                 } else if args[i] == "--concurrency" && i + 1 < args.len() {
-                    if let Ok(c) = args[i + 1].parse::<usize>() { concurrency = c; }
+                    if let Ok(c) = args[i + 1].parse::<usize>() {
+                        concurrency = c;
+                    }
                     i += 2;
                 } else {
                     i += 1;
                 }
             }
 
-            if let Err(e) = cron_cli::bench_server::run_server_benchmark(&url, requests, concurrency) {
+            if let Err(e) =
+                cron_cli::bench_server::run_server_benchmark(&url, requests, concurrency)
+            {
                 eprintln!("[CRON BENCH ERROR] {}", e);
                 std::process::exit(1);
             }
@@ -558,7 +598,11 @@ fn main() {
                             let md = doc.to_markdown();
                             let out_file = format!("{}/{}.md", out_dir, mod_name);
                             let _ = fs::write(&out_file, md);
-                            println!("  [ ✓ GENERATED] {:<30} -> {}", format!("{}.cr", mod_name), out_file);
+                            println!(
+                                "  [ ✓ GENERATED] {:<30} -> {}",
+                                format!("{}.cr", mod_name),
+                                out_file
+                            );
                             total_generated += 1;
                         }
                     }
@@ -566,7 +610,10 @@ fn main() {
             }
 
             println!("============================================================");
-            println!("  SUMMARY: {} Module Documentation Files Generated", total_generated);
+            println!(
+                "  SUMMARY: {} Module Documentation Files Generated",
+                total_generated
+            );
             println!("  STATUS: Documentation Suite is Complete & Verified");
         }
         "stream-infer" => {
@@ -579,16 +626,22 @@ fn main() {
             let mut i = 2;
             while i < args.len() {
                 if args[i] == "--layers" && i + 1 < args.len() {
-                    if let Ok(l) = args[i + 1].parse::<usize>() { num_layers = l; }
+                    if let Ok(l) = args[i + 1].parse::<usize>() {
+                        num_layers = l;
+                    }
                     i += 2;
                 } else if args[i] == "--page-mb" && i + 1 < args.len() {
-                    if let Ok(p) = args[i + 1].parse::<usize>() { page_size_mb = p; }
+                    if let Ok(p) = args[i + 1].parse::<usize>() {
+                        page_size_mb = p;
+                    }
                     i += 2;
                 } else if args[i] == "--grammar" && i + 1 < args.len() {
                     grammar_mode = args[i + 1].clone();
                     i += 2;
                 } else if args[i] == "--speculative" && i + 1 < args.len() {
-                    if let Ok(k) = args[i + 1].parse::<usize>() { k_speculative = k; }
+                    if let Ok(k) = args[i + 1].parse::<usize>() {
+                        k_speculative = k;
+                    }
                     i += 2;
                 } else if args[i] == "--weights" && i + 1 < args.len() {
                     weights_path = Some(args[i + 1].clone());
@@ -598,29 +651,59 @@ fn main() {
                 }
             }
 
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON HARD BACKEND: ZERO-VRAM PAGED STREAMING INFERENCE");
             if let Some(ref wp) = weights_path {
                 println!(" Model Weights File:     {}", wp);
             } else {
-                println!(" Total Layers:           {} Layers (Simulated 7.5B Model)", num_layers);
+                println!(
+                    " Total Layers:           {} Layers (Simulated 7.5B Model)",
+                    num_layers
+                );
             }
-            println!(" Max Active Page Buffer: {} MB SRAM/RAM Limit", page_size_mb);
+            println!(
+                " Max Active Page Buffer: {} MB SRAM/RAM Limit",
+                page_size_mb
+            );
             println!(" Grammar Constraint:     {}", grammar_mode);
-            println!(" Speculative Lookahead:  K = {} Draft Tokens", k_speculative);
-            println!("================================================================================");
+            println!(
+                " Speculative Lookahead:  K = {} Draft Tokens",
+                k_speculative
+            );
+            println!(
+                "================================================================================"
+            );
 
             let layer_bytes = 2 * 1024 * 1024;
             let page_bytes = page_size_mb * 1024 * 1024;
             let streamer = if let Some(ref w_path) = weights_path {
                 let path = std::path::Path::new(w_path);
-                let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                let ext = path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
                 if ext == "gguf" {
-                    cron_rt::PagedWeightStreamer::from_gguf_file(path, page_bytes)
-                        .unwrap_or_else(|_| cron_rt::PagedWeightStreamer::new_synthetic(num_layers, layer_bytes, page_bytes))
+                    cron_rt::PagedWeightStreamer::from_gguf_file(path, page_bytes).unwrap_or_else(
+                        |_| {
+                            cron_rt::PagedWeightStreamer::new_synthetic(
+                                num_layers,
+                                layer_bytes,
+                                page_bytes,
+                            )
+                        },
+                    )
                 } else {
                     cron_rt::PagedWeightStreamer::from_safetensors_file(path, page_bytes)
-                        .unwrap_or_else(|_| cron_rt::PagedWeightStreamer::new_synthetic(num_layers, layer_bytes, page_bytes))
+                        .unwrap_or_else(|_| {
+                            cron_rt::PagedWeightStreamer::new_synthetic(
+                                num_layers,
+                                layer_bytes,
+                                page_bytes,
+                            )
+                        })
                 }
             } else {
                 cron_rt::PagedWeightStreamer::new_synthetic(num_layers, layer_bytes, page_bytes)
@@ -636,7 +719,8 @@ fn main() {
             let elapsed = start.elapsed();
 
             // Hardware-Level Speculative Decoding Execution
-            let mut spec_engine = cronc::speculative_decoding::SpeculativeEngine::new(k_speculative);
+            let mut spec_engine =
+                cronc::speculative_decoding::SpeculativeEngine::new(k_speculative);
             let prompt = vec![1, 1504, 306];
             let _ = spec_engine.run_speculative_decoding(&prompt, 16, |ctx, drafts| {
                 // Algorithmic target verification: check draft consistency against target transition
@@ -646,32 +730,70 @@ fn main() {
                     .enumerate()
                     .map(|(i, &d)| {
                         let expected = ((last as u64 * 31 + (i + 1) as u64) % 32000) as u32;
-                        if d == expected { d } else { expected }
+                        if d == expected {
+                            d
+                        } else {
+                            expected
+                        }
                     })
                     .collect()
             });
 
             // Constrained JSON Sampler Demonstration
             let mut sampler = cronc::constrained_sampler::ConstrainedSampler::new(
-                cronc::constrained_sampler::GrammarMode::StrictJson
+                cronc::constrained_sampler::GrammarMode::StrictJson,
             );
-            let sample_json = "{\"model\": \"cron-bitnet-7b\", \"active_ram_mb\": 4, \"status\": \"verified\"}";
+            let sample_json =
+                "{\"model\": \"cron-bitnet-7b\", \"active_ram_mb\": 4, \"status\": \"verified\"}";
             for ch in sample_json.chars() {
                 let _ = sampler.consume_char(ch);
             }
 
             println!();
-            println!("+------------------------------------------------------------------------------+");
-            println!("|                 ZERO-VRAM PAGED STREAMING EXECUTION REPORT                   |");
-            println!("+------------------------------------------------------------------------------+");
-            println!("| Total Model Parameters:  7.544 Billion (Simulated)                           |");
-            println!("| Active Resident Set:     {:<51} |", format!("{} MB (Strictly Bounded)", page_size_mb));
-            println!("| Stream Throughput:       {:<51} |", format!("{:.2} GB/s", (actual_layers * layer_bytes) as f64 / (elapsed.as_secs_f64().max(1e-6) * 1e9)));
-            println!("| Speculative Speedup:     {:<51} |", format!("{:.2}x Bandwidth Amplification", spec_engine.telemetry.effective_speedup));
-            println!("| DRAM Bandwidth Saved:    {:<51} |", format!("{:.1}% (Reduced Thermal/Power)", spec_engine.telemetry.bandwidth_savings_pct));
+            println!(
+                "+------------------------------------------------------------------------------+"
+            );
+            println!(
+                "|                 ZERO-VRAM PAGED STREAMING EXECUTION REPORT                   |"
+            );
+            println!(
+                "+------------------------------------------------------------------------------+"
+            );
+            println!(
+                "| Total Model Parameters:  7.544 Billion (Simulated)                           |"
+            );
+            println!(
+                "| Active Resident Set:     {:<51} |",
+                format!("{} MB (Strictly Bounded)", page_size_mb)
+            );
+            println!(
+                "| Stream Throughput:       {:<51} |",
+                format!(
+                    "{:.2} GB/s",
+                    (actual_layers * layer_bytes) as f64 / (elapsed.as_secs_f64().max(1e-6) * 1e9)
+                )
+            );
+            println!(
+                "| Speculative Speedup:     {:<51} |",
+                format!(
+                    "{:.2}x Bandwidth Amplification",
+                    spec_engine.telemetry.effective_speedup
+                )
+            );
+            println!(
+                "| DRAM Bandwidth Saved:    {:<51} |",
+                format!(
+                    "{:.1}% (Reduced Thermal/Power)",
+                    spec_engine.telemetry.bandwidth_savings_pct
+                )
+            );
             println!("| Constrained Output:      {:<51} |", sampler.emitted_text);
-            println!("| Syntax Validity:         100.0% PROVABLY VALID JSON                          |");
-            println!("+------------------------------------------------------------------------------+");
+            println!(
+                "| Syntax Validity:         100.0% PROVABLY VALID JSON                          |"
+            );
+            println!(
+                "+------------------------------------------------------------------------------+"
+            );
             println!("  STATUS: ZERO-VRAM STREAMING & CONSTRAINED DECODING SUCCESSFUL");
             println!();
         }
@@ -685,13 +807,19 @@ fn main() {
                     config.model_name = args[i + 1].clone();
                     i += 2;
                 } else if args[i] == "--layers" && i + 1 < args.len() {
-                    if let Ok(l) = args[i + 1].parse::<usize>() { config.num_layers = l; }
+                    if let Ok(l) = args[i + 1].parse::<usize>() {
+                        config.num_layers = l;
+                    }
                     i += 2;
                 } else if args[i] == "--page-mb" && i + 1 < args.len() {
-                    if let Ok(p) = args[i + 1].parse::<usize>() { config.page_size_mb = p; }
+                    if let Ok(p) = args[i + 1].parse::<usize>() {
+                        config.page_size_mb = p;
+                    }
                     i += 2;
                 } else if args[i] == "--speculative" && i + 1 < args.len() {
-                    if let Ok(k) = args[i + 1].parse::<usize>() { config.k_speculative = k; }
+                    if let Ok(k) = args[i + 1].parse::<usize>() {
+                        config.k_speculative = k;
+                    }
                     i += 2;
                 } else if args[i] == "--grammar" && i + 1 < args.len() {
                     config.grammar_mode = args[i + 1].clone();
@@ -700,19 +828,33 @@ fn main() {
                     config.weights_path = Some(args[i + 1].clone());
                     i += 2;
                 } else if (args[i] == "--max-tokens" || args[i] == "-n") && i + 1 < args.len() {
-                    if let Ok(m) = args[i + 1].parse::<usize>() { config.max_tokens_per_turn = m; }
+                    if let Ok(m) = args[i + 1].parse::<usize>() {
+                        config.max_tokens_per_turn = m;
+                    }
                     i += 2;
-                } else if (args[i] == "--eval" || args[i] == "--prompt" || args[i] == "-p") && i + 1 < args.len() {
+                } else if (args[i] == "--eval" || args[i] == "--prompt" || args[i] == "-p")
+                    && i + 1 < args.len()
+                {
                     eval_prompt = Some(args[i + 1].clone());
                     i += 2;
-                } else if (args[i] == "--temp" || args[i] == "--temperature") && i + 1 < args.len() {
-                    if let Ok(t) = args[i + 1].parse::<f32>() { config.temperature = t; }
+                } else if (args[i] == "--temp" || args[i] == "--temperature") && i + 1 < args.len()
+                {
+                    if let Ok(t) = args[i + 1].parse::<f32>() {
+                        config.temperature = t;
+                    }
                     i += 2;
                 } else if args[i] == "--mode" && i + 1 < args.len() {
                     match args[i + 1].to_lowercase().as_str() {
-                        "float" | "fp32" | "simd" => config.precision_mode = cronc::cl_infer::ComputePrecisionMode::FloatSimd,
-                        "ternary" | "bitnet" => config.precision_mode = cronc::cl_infer::ComputePrecisionMode::TernaryZeroFlop,
-                        "hybrid" | "mixed" => config.precision_mode = cronc::cl_infer::ComputePrecisionMode::Hybrid,
+                        "float" | "fp32" | "simd" => {
+                            config.precision_mode = cronc::cl_infer::ComputePrecisionMode::FloatSimd
+                        }
+                        "ternary" | "bitnet" => {
+                            config.precision_mode =
+                                cronc::cl_infer::ComputePrecisionMode::TernaryZeroFlop
+                        }
+                        "hybrid" | "mixed" => {
+                            config.precision_mode = cronc::cl_infer::ComputePrecisionMode::Hybrid
+                        }
                         _ => {}
                     }
                     i += 2;
@@ -720,7 +862,9 @@ fn main() {
                     config.use_mla = true;
                     i += 1;
                 } else if args[i] == "--latent-dim" && i + 1 < args.len() {
-                    if let Ok(d) = args[i + 1].parse::<usize>() { config.kv_latent_dim = d; }
+                    if let Ok(d) = args[i + 1].parse::<usize>() {
+                        config.kv_latent_dim = d;
+                    }
                     i += 2;
                 } else if args[i] == "--ssm" || args[i] == "--mamba" {
                     config.use_ssm = true;
@@ -729,10 +873,14 @@ fn main() {
                     config.use_moe = true;
                     i += 1;
                 } else if args[i] == "--experts" && i + 1 < args.len() {
-                    if let Ok(e) = args[i + 1].parse::<usize>() { config.num_experts = e; }
+                    if let Ok(e) = args[i + 1].parse::<usize>() {
+                        config.num_experts = e;
+                    }
                     i += 2;
                 } else if args[i] == "--active-experts" && i + 1 < args.len() {
-                    if let Ok(a) = args[i + 1].parse::<usize>() { config.num_active_experts = a; }
+                    if let Ok(a) = args[i + 1].parse::<usize>() {
+                        config.num_active_experts = a;
+                    }
                     i += 2;
                 } else if args[i] == "--reasoning" || args[i] == "--think" {
                     config.reasoning_mode = true;
@@ -774,10 +922,16 @@ fn main() {
         }
         "multimodal" => {
             use std::io::Write;
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON MULTI-MODAL SILICON STREAMING ENGINE (4D-Torus Sensory NoC)");
-            println!(" Target: 256-Core Neuromorphic Photonic Silicon (Retina + Cochlea + Thalamus)");
-            println!("================================================================================");
+            println!(
+                " Target: 256-Core Neuromorphic Photonic Silicon (Retina + Cochlea + Thalamus)"
+            );
+            println!(
+                "================================================================================"
+            );
 
             let mut mode = "all";
             let mut image_path: Option<String> = None;
@@ -794,48 +948,105 @@ fn main() {
             let mut i = 2;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--vision" => { mode = "vision"; i += 1; }
-                    "--audio" => { mode = "audio"; i += 1; }
-                    "--image" if i + 1 < args.len() => { image_path = Some(args[i + 1].clone()); i += 2; }
-                    "--audio-file" | "--wav" if i + 1 < args.len() => { audio_path = Some(args[i + 1].clone()); i += 2; }
-                    "--pattern" if i + 1 < args.len() => { pattern_type = args[i + 1].clone(); i += 2; }
-                    "--prompt" if i + 1 < args.len() => { prompt_text = Some(args[i + 1].clone()); i += 2; }
-                    "--tokens" if i + 1 < args.len() => { max_tokens = args[i + 1].parse().unwrap_or(32); i += 2; }
-                    "--live" => { live_stream = true; i += 1; }
-                    "--fps" if i + 1 < args.len() => { fps = args[i + 1].parse().unwrap_or(30); i += 2; }
-                    "--frames" if i + 1 < args.len() => { live_frames = args[i + 1].parse().unwrap_or(10); i += 2; }
-                    "--thalamus" => { show_thalamus = true; i += 1; }
-                    "--json" => { emit_json = true; i += 1; }
+                    "--vision" => {
+                        mode = "vision";
+                        i += 1;
+                    }
+                    "--audio" => {
+                        mode = "audio";
+                        i += 1;
+                    }
+                    "--image" if i + 1 < args.len() => {
+                        image_path = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--audio-file" | "--wav" if i + 1 < args.len() => {
+                        audio_path = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--pattern" if i + 1 < args.len() => {
+                        pattern_type = args[i + 1].clone();
+                        i += 2;
+                    }
+                    "--prompt" if i + 1 < args.len() => {
+                        prompt_text = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--tokens" if i + 1 < args.len() => {
+                        max_tokens = args[i + 1].parse().unwrap_or(32);
+                        i += 2;
+                    }
+                    "--live" => {
+                        live_stream = true;
+                        i += 1;
+                    }
+                    "--fps" if i + 1 < args.len() => {
+                        fps = args[i + 1].parse().unwrap_or(30);
+                        i += 2;
+                    }
+                    "--frames" if i + 1 < args.len() => {
+                        live_frames = args[i + 1].parse().unwrap_or(10);
+                        i += 2;
+                    }
+                    "--thalamus" => {
+                        show_thalamus = true;
+                        i += 1;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
                     other if !other.starts_with("--") && i >= 3 && prompt_text.is_none() => {
                         prompt_text = Some(other.to_string());
                         i += 1;
                     }
-                    _ => { i += 1; }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
             // 1. Process or Synthesize Visual Retinal Stream
             let (img_w, img_h, rgb_data) = if let Some(ref path) = image_path {
                 match fs::read(path) {
-                    Ok(bytes) => match cronc::cl_multimodal::MultiModalFusion::parse_ppm_or_bmp(&bytes) {
-                        Ok((w, h, rgb)) => {
-                            if !emit_json { println!("  [Input] Loaded image file '{}': {}x{} RGB", path, w, h); }
-                            (w, h, rgb)
+                    Ok(bytes) => {
+                        match cronc::cl_multimodal::MultiModalFusion::parse_ppm_or_bmp(&bytes) {
+                            Ok((w, h, rgb)) => {
+                                if !emit_json {
+                                    println!(
+                                        "  [Input] Loaded image file '{}': {}x{} RGB",
+                                        path, w, h
+                                    );
+                                }
+                                (w, h, rgb)
+                            }
+                            Err(e) => {
+                                eprintln!("[WARN] Failed to parse image '{}': {}. Using synthetic pattern.", path, e);
+                                let rgb = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_test_pattern(&pattern_type, 224, 224);
+                                (224, 224, rgb)
+                            }
                         }
-                        Err(e) => {
-                            eprintln!("[WARN] Failed to parse image '{}': {}. Using synthetic pattern.", path, e);
-                            let rgb = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_test_pattern(&pattern_type, 224, 224);
-                            (224, 224, rgb)
-                        }
-                    },
+                    }
                     Err(e) => {
-                        eprintln!("[WARN] Failed to read image '{}': {}. Using synthetic pattern.", path, e);
-                        let rgb = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_test_pattern(&pattern_type, 224, 224);
+                        eprintln!(
+                            "[WARN] Failed to read image '{}': {}. Using synthetic pattern.",
+                            path, e
+                        );
+                        let rgb =
+                            cronc::cl_multimodal::MultiModalFusion::generate_synthetic_test_pattern(
+                                &pattern_type,
+                                224,
+                                224,
+                            );
                         (224, 224, rgb)
                     }
                 }
             } else {
-                let rgb = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_test_pattern(&pattern_type, 224, 224);
+                let rgb = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_test_pattern(
+                    &pattern_type,
+                    224,
+                    224,
+                );
                 (224, 224, rgb)
             };
 
@@ -847,31 +1058,49 @@ fn main() {
                 embed_dim: 64,
                 is_ternary: true,
             };
-            let patches = cronc::cl_multimodal::VisionPatchProcessor::extract_patches(&rgb_data, &vis_cfg);
-            let vision_projected = cronc::cl_multimodal::VisionPatchProcessor::project_patches(&patches, &vis_cfg);
+            let patches =
+                cronc::cl_multimodal::VisionPatchProcessor::extract_patches(&rgb_data, &vis_cfg);
+            let vision_projected =
+                cronc::cl_multimodal::VisionPatchProcessor::project_patches(&patches, &vis_cfg);
 
             // 2. Process or Synthesize Audio Cochlear Stream
             let (sample_rate, pcm_samples) = if let Some(ref path) = audio_path {
                 match fs::read(path) {
-                    Ok(bytes) => match cronc::cl_multimodal::MultiModalFusion::parse_wav(&bytes) {
-                        Ok((sr, samples)) => {
-                            if !emit_json { println!("  [Input] Loaded WAV audio '{}': {} samples @ {} Hz", path, samples.len(), sr); }
-                            (sr, samples)
+                    Ok(bytes) => {
+                        match cronc::cl_multimodal::MultiModalFusion::parse_wav(&bytes) {
+                            Ok((sr, samples)) => {
+                                if !emit_json {
+                                    println!(
+                                        "  [Input] Loaded WAV audio '{}': {} samples @ {} Hz",
+                                        path,
+                                        samples.len(),
+                                        sr
+                                    );
+                                }
+                                (sr, samples)
+                            }
+                            Err(e) => {
+                                eprintln!("[WARN] Failed to parse WAV '{}': {}. Using synthetic audio tone.", path, e);
+                                let pcm = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_audio(440.0, 1.0, 16000);
+                                (16000, pcm)
+                            }
                         }
-                        Err(e) => {
-                            eprintln!("[WARN] Failed to parse WAV '{}': {}. Using synthetic audio tone.", path, e);
-                            let pcm = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_audio(440.0, 1.0, 16000);
-                            (16000, pcm)
-                        }
-                    },
+                    }
                     Err(e) => {
-                        eprintln!("[WARN] Failed to read audio '{}': {}. Using synthetic audio tone.", path, e);
-                        let pcm = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_audio(440.0, 1.0, 16000);
+                        eprintln!(
+                            "[WARN] Failed to read audio '{}': {}. Using synthetic audio tone.",
+                            path, e
+                        );
+                        let pcm = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_audio(
+                            440.0, 1.0, 16000,
+                        );
                         (16000, pcm)
                     }
                 }
             } else {
-                let pcm = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_audio(440.0, 1.0, 16000);
+                let pcm = cronc::cl_multimodal::MultiModalFusion::generate_synthetic_audio(
+                    440.0, 1.0, 16000,
+                );
                 (16000, pcm)
             };
 
@@ -882,23 +1111,34 @@ fn main() {
                 mel_bands: 80,
                 embed_dim: 64,
             };
-            let mel = cronc::cl_multimodal::AudioSpectrogramProcessor::compute_mel_spectrogram(&pcm_samples, &aud_cfg);
-            let audio_projected = cronc::cl_multimodal::AudioSpectrogramProcessor::project_audio_frames(&mel, 64);
+            let mel = cronc::cl_multimodal::AudioSpectrogramProcessor::compute_mel_spectrogram(
+                &pcm_samples,
+                &aud_cfg,
+            );
+            let audio_projected =
+                cronc::cl_multimodal::AudioSpectrogramProcessor::project_audio_frames(&mel, 64);
 
             // 3. Thalamic Sensory Transduction & Spiking
             let hub = cronc::ThalamicSensoryHub::default();
-            let grayscale: Vec<f32> = rgb_data.chunks_exact(3).map(|c| (0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32) / 255.0).collect();
+            let grayscale: Vec<f32> = rgb_data
+                .chunks_exact(3)
+                .map(|c| (0.299 * c[0] as f32 + 0.587 * c[1] as f32 + 0.114 * c[2] as f32) / 255.0)
+                .collect();
             let vision_frame = hub.retinal.transduce_patch(&grayscale, img_w, img_h);
             let audio_frame = hub.cochlea.transduce_audio(&pcm_samples);
             let total_spikes = vision_frame.total_spikes + audio_frame.total_spikes;
-            let s3_phase_angle_rad = audio_frame.spectral_or_spatial_energy.atan2(vision_frame.spectral_or_spatial_energy.max(1e-6));
+            let s3_phase_angle_rad = audio_frame
+                .spectral_or_spatial_energy
+                .atan2(vision_frame.spectral_or_spatial_energy.max(1e-6));
 
             if !emit_json {
                 if mode == "all" || mode == "vision" {
                     println!("\n✓ Vision Front-End:      {}x{} RGB -> {} Patches (16x16x3) -> Projected to 64-dim BitNet", img_w, img_h, patches.len());
                     println!("  Patches Extracted:     {} patches", patches.len());
                     println!("  Total Vision Tokens:   {} tokens", vision_projected.len());
-                    let ascii_img = cronc::cl_multimodal::MultiModalFusion::render_ascii_image(&rgb_data, img_w, img_h, 48, 12);
+                    let ascii_img = cronc::cl_multimodal::MultiModalFusion::render_ascii_image(
+                        &rgb_data, img_w, img_h, 48, 12,
+                    );
                     print!("{}", ascii_img);
                 }
 
@@ -906,16 +1146,39 @@ fn main() {
                     println!("\n✓ Audio Front-End:       {} Hz PCM -> STFT (512 FFT, 160 Hop) -> 80 Mel Filterbanks", sample_rate);
                     println!("  Spectrogram Frames:    {} temporal frames", mel.len());
                     println!("  Total Audio Tokens:    {} tokens", audio_projected.len());
-                    let ascii_spec = cronc::cl_multimodal::MultiModalFusion::render_ascii_spectrogram(&mel, 48);
+                    let ascii_spec =
+                        cronc::cl_multimodal::MultiModalFusion::render_ascii_spectrogram(&mel, 48);
                     print!("{}", ascii_spec);
                 }
 
                 if show_thalamus || mode == "all" {
                     println!("\n┌─── Thalamocortical Multimodal Spiking Hub ──────────────────┐");
-                    println!("│ Retinal Action Potentials: {:>6} spikes (Base-94: \"{}\")", vision_frame.total_spikes, vision_frame.token_string.chars().take(20).collect::<String>());
-                    println!("│ Cochlear Action Potentials:{:>6} spikes (Base-94: \"{}\")", audio_frame.total_spikes, audio_frame.token_string.chars().take(20).collect::<String>());
-                    println!("│ Combined Action Potentials:{:>6} total spikes across Layer IV", total_spikes);
-                    println!("│ S^3 Hypersphere Rotor Phase: {:>6.4} rad (Cross-Modal Geodesic)", s3_phase_angle_rad);
+                    println!(
+                        "│ Retinal Action Potentials: {:>6} spikes (Base-94: \"{}\")",
+                        vision_frame.total_spikes,
+                        vision_frame
+                            .token_string
+                            .chars()
+                            .take(20)
+                            .collect::<String>()
+                    );
+                    println!(
+                        "│ Cochlear Action Potentials:{:>6} spikes (Base-94: \"{}\")",
+                        audio_frame.total_spikes,
+                        audio_frame
+                            .token_string
+                            .chars()
+                            .take(20)
+                            .collect::<String>()
+                    );
+                    println!(
+                        "│ Combined Action Potentials:{:>6} total spikes across Layer IV",
+                        total_spikes
+                    );
+                    println!(
+                        "│ S^3 Hypersphere Rotor Phase: {:>6.4} rad (Cross-Modal Geodesic)",
+                        s3_phase_angle_rad
+                    );
                     println!("│ Landauer Thermal Dissipation: 0.17 pJ / sensory token");
                     println!("└─────────────────────────────────────────────────────────────┘");
                 }
@@ -937,11 +1200,14 @@ fn main() {
                     let w_hop = (f * 11) % 4;
                     let active_packets = patches.len() + mel.len().min(16);
                     let elapsed_us = frame_start.elapsed().as_micros().max(42);
-                    let throughput_gbps = (active_packets as f64 * 32.0 * 8.0) / (elapsed_us as f64 * 1000.0);
+                    let throughput_gbps =
+                        (active_packets as f64 * 32.0 * 8.0) / (elapsed_us as f64 * 1000.0);
                     println!("  [Frame #{:03}] Latency: {:>4} µs | Target Torus: ({},{},{},{}) | Packets: {:>3} | NoC: {:>5.2} GB/s | Status: 0% Drop [LOCKED]",
                         f, elapsed_us, x_hop, y_hop, z_hop, w_hop, active_packets, throughput_gbps);
                     if elapsed_us < frame_budget_us as u128 {
-                        std::thread::sleep(std::time::Duration::from_micros((frame_budget_us as u128 - elapsed_us).min(10_000) as u64));
+                        std::thread::sleep(std::time::Duration::from_micros(
+                            (frame_budget_us as u128 - elapsed_us).min(10_000) as u64,
+                        ));
                     }
                 }
                 println!("  STATUS: LIVE SENSORY STREAM COMPLETED (Zero Frame Drops, Jitter < 0.05 ms)\n");
@@ -949,9 +1215,15 @@ fn main() {
 
             // 5. End-to-End Autoregressive Sensory VQA / Reasoning
             if let Some(ref prompt) = prompt_text {
-                println!("\n╭─────────────────── CRON Multi-Modal Sensory VQA Inference ──────────╮");
+                println!(
+                    "\n╭─────────────────── CRON Multi-Modal Sensory VQA Inference ──────────╮"
+                );
                 println!("  [Architecture] Multiplier-Free BitNet b1.58 + FlashAttention-3");
-                println!("  [Prefix Context] {} Vision Patches + {} Audio Frames Ingested", vision_projected.len().min(16), audio_projected.len().min(8));
+                println!(
+                    "  [Prefix Context] {} Vision Patches + {} Audio Frames Ingested",
+                    vision_projected.len().min(16),
+                    audio_projected.len().min(8)
+                );
                 print!("  [Sensory Prompt] \"{}\" ──► ", prompt.trim());
                 let _ = std::io::stdout().flush();
 
@@ -1007,7 +1279,9 @@ fn main() {
                     },
                 );
 
-                println!("\n╰────────────────────────────────────────────────────────────────────╯");
+                println!(
+                    "\n╰────────────────────────────────────────────────────────────────────╯"
+                );
                 println!("  [Telemetry] Prompt Tokens: {} | Generated: {} | TTFT: {:.2} µs | Throughput: {:.1} tok/s | Energy: {:.2} pJ/tok",
                     res.telemetry.prompt_tokens, res.telemetry.generated_tokens, res.telemetry.time_to_first_token_us, res.telemetry.tokens_per_second, res.telemetry.energy_per_token_pj);
             }
@@ -1065,7 +1339,9 @@ fn main() {
             if is_cluster {
                 println!("================================================================================");
                 println!(" CRON 4,096-CORE MULTI-CHIP AUTONOMOUS SWARM CLUSTER RUNTIME");
-                println!(" Topology: 16 Chips x 256 Cores (4x4 Board Grid x 4x4x4x4 Torus NoC, 6D-DOR)");
+                println!(
+                    " Topology: 16 Chips x 256 Cores (4x4 Board Grid x 4x4x4x4 Torus NoC, 6D-DOR)"
+                );
                 println!(" Interconnect: 3.2 Tbps/socket DWDM Optical Waveguide Mesh (51.2 Tbps Total BW)");
                 println!(" Task: {}", task);
                 println!("================================================================================");
@@ -1077,18 +1353,43 @@ fn main() {
                     println!("{{");
                     println!("  \"task\": \"{}\",", report.task);
                     println!("  \"consensus_achieved\": {},", report.consensus_achieved);
-                    println!("  \"consensus_score\": {:.4},", report.telemetry.consensus_score);
+                    println!(
+                        "  \"consensus_score\": {:.4},",
+                        report.telemetry.consensus_score
+                    );
                     println!("  \"total_chips\": {},", report.telemetry.total_chips);
                     println!("  \"total_cores\": {},", report.telemetry.total_cores);
                     println!("  \"active_cores\": {},", report.telemetry.active_cores);
-                    println!("  \"packets_routed\": {},", report.telemetry.total_packets_routed);
-                    println!("  \"inter_chip_packets\": {},", report.telemetry.inter_chip_packets);
-                    println!("  \"intra_chip_packets\": {},", report.telemetry.intra_chip_packets);
+                    println!(
+                        "  \"packets_routed\": {},",
+                        report.telemetry.total_packets_routed
+                    );
+                    println!(
+                        "  \"inter_chip_packets\": {},",
+                        report.telemetry.inter_chip_packets
+                    );
+                    println!(
+                        "  \"intra_chip_packets\": {},",
+                        report.telemetry.intra_chip_packets
+                    );
                     println!("  \"avg_hops\": {:.2},", report.telemetry.avg_hop_count);
                     println!("  \"max_hops\": {},", report.telemetry.max_hop_count);
-                    println!("  \"optical_bandwidth_tbps\": {:.2},", report.telemetry.aggregate_optical_bandwidth_tbps);
-                    println!("  \"latency_us\": {:.2},", report.telemetry.consensus_latency_us);
-                    println!("  \"status\": \"{}\"", if report.consensus_achieved { "global_quorum_reached" } else { "quorum_failed" });
+                    println!(
+                        "  \"optical_bandwidth_tbps\": {:.2},",
+                        report.telemetry.aggregate_optical_bandwidth_tbps
+                    );
+                    println!(
+                        "  \"latency_us\": {:.2},",
+                        report.telemetry.consensus_latency_us
+                    );
+                    println!(
+                        "  \"status\": \"{}\"",
+                        if report.consensus_achieved {
+                            "global_quorum_reached"
+                        } else {
+                            "quorum_failed"
+                        }
+                    );
                     println!("}}");
                 } else {
                     println!("{}", report.ascii_cluster_hud);
@@ -1097,17 +1398,58 @@ fn main() {
                     println!("+------------------------------------------------------------------------------+");
                     println!("| Cluster Fabric:     16 Physical Dies | 4,096 Distributed Cores               |");
                     println!("| Network Routing:    6D-DOR (Inter-Die Optical Ring + Intra-Die 4D-Torus)     |");
-                    println!("| Total Packets:      {:<56} |", report.telemetry.total_packets_routed);
-                    println!("| Inter-Chip Packets: {:<56} |", format!("{} pkts (DWDM optical channels)", report.telemetry.inter_chip_packets));
-                    println!("| Intra-Chip Packets: {:<56} |", format!("{} pkts (4D-Torus flits)", report.telemetry.intra_chip_packets));
-                    println!("| Average Hops:       {:<56} |", format!("{:.2} hops / packet (Max: {})", report.telemetry.avg_hop_count, report.telemetry.max_hop_count));
-                    println!("| Optical Bandwidth:  {:<56} |", format!("{:.2} Tbps sustained", report.telemetry.aggregate_optical_bandwidth_tbps));
-                    println!("| Consensus Score:    {:<56} |", format!("{:.2}% Agreement (16/16 Quorums Reached)", report.telemetry.consensus_score));
-                    println!("| Latency:            {:<56} |", format!("{:.2} µs (Tier-1 + Tier-2)", report.telemetry.consensus_latency_us));
+                    println!(
+                        "| Total Packets:      {:<56} |",
+                        report.telemetry.total_packets_routed
+                    );
+                    println!(
+                        "| Inter-Chip Packets: {:<56} |",
+                        format!(
+                            "{} pkts (DWDM optical channels)",
+                            report.telemetry.inter_chip_packets
+                        )
+                    );
+                    println!(
+                        "| Intra-Chip Packets: {:<56} |",
+                        format!(
+                            "{} pkts (4D-Torus flits)",
+                            report.telemetry.intra_chip_packets
+                        )
+                    );
+                    println!(
+                        "| Average Hops:       {:<56} |",
+                        format!(
+                            "{:.2} hops / packet (Max: {})",
+                            report.telemetry.avg_hop_count, report.telemetry.max_hop_count
+                        )
+                    );
+                    println!(
+                        "| Optical Bandwidth:  {:<56} |",
+                        format!(
+                            "{:.2} Tbps sustained",
+                            report.telemetry.aggregate_optical_bandwidth_tbps
+                        )
+                    );
+                    println!(
+                        "| Consensus Score:    {:<56} |",
+                        format!(
+                            "{:.2}% Agreement (16/16 Quorums Reached)",
+                            report.telemetry.consensus_score
+                        )
+                    );
+                    println!(
+                        "| Latency:            {:<56} |",
+                        format!(
+                            "{:.2} µs (Tier-1 + Tier-2)",
+                            report.telemetry.consensus_latency_us
+                        )
+                    );
                     println!("+------------------------------------------------------------------------------+");
                     println!();
                     println!("  Resolution: {}", report.resolution);
-                    println!("  STATUS: 4,096-CORE HIERARCHICAL CLUSTER CONSENSUS VERIFIED (SSS+ TIER)");
+                    println!(
+                        "  STATUS: 4,096-CORE HIERARCHICAL CLUSTER CONSENSUS VERIFIED (SSS+ TIER)"
+                    );
                     println!();
                 }
             } else {
@@ -1124,12 +1466,28 @@ fn main() {
                     println!("{{");
                     println!("  \"task\": \"{}\",", report.task);
                     println!("  \"consensus_achieved\": {},", report.consensus_achieved);
-                    println!("  \"consensus_score\": {:.4},", report.telemetry.consensus_score);
-                    println!("  \"packets_routed\": {},", report.telemetry.total_packets_routed);
+                    println!(
+                        "  \"consensus_score\": {:.4},",
+                        report.telemetry.consensus_score
+                    );
+                    println!(
+                        "  \"packets_routed\": {},",
+                        report.telemetry.total_packets_routed
+                    );
                     println!("  \"avg_hops\": {:.2},", report.telemetry.avg_hop_count);
                     println!("  \"max_hops\": {},", report.telemetry.max_hop_count);
-                    println!("  \"latency_us\": {:.2},", report.telemetry.consensus_latency_us);
-                    println!("  \"status\": \"{}\"", if report.consensus_achieved { "quorum_reached" } else { "quorum_failed" });
+                    println!(
+                        "  \"latency_us\": {:.2},",
+                        report.telemetry.consensus_latency_us
+                    );
+                    println!(
+                        "  \"status\": \"{}\"",
+                        if report.consensus_achieved {
+                            "quorum_reached"
+                        } else {
+                            "quorum_failed"
+                        }
+                    );
                     println!("}}");
                 } else {
                     println!("{}", report.ascii_mesh_hud);
@@ -1138,16 +1496,41 @@ fn main() {
                     println!("+------------------------------------------------------------------------------+");
                     println!("| Active Cores:       256 Cores (4x4x4x4 Torus NoC)                            |");
                     println!("| Dimension Routing:  DOR X -> Y -> Z -> W (Deadlock-Free, Max {} Hops)        |", report.telemetry.max_hop_count);
-                    println!("| Total Packets:      {:<56} |", report.telemetry.total_packets_routed);
-                    println!("| Average Hops:       {:<56} |", format!("{:.2} hops / packet", report.telemetry.avg_hop_count));
-                    println!("| Consensus Score:    {:<56} |", format!("{:.2}% Agreement ({})", report.telemetry.consensus_score, if report.consensus_achieved { "Quorum Achieved" } else { "Below Quorum" }));
-                    println!("| Latency:            {:<56} |", format!("{:.2} µs", report.telemetry.consensus_latency_us));
+                    println!(
+                        "| Total Packets:      {:<56} |",
+                        report.telemetry.total_packets_routed
+                    );
+                    println!(
+                        "| Average Hops:       {:<56} |",
+                        format!("{:.2} hops / packet", report.telemetry.avg_hop_count)
+                    );
+                    println!(
+                        "| Consensus Score:    {:<56} |",
+                        format!(
+                            "{:.2}% Agreement ({})",
+                            report.telemetry.consensus_score,
+                            if report.consensus_achieved {
+                                "Quorum Achieved"
+                            } else {
+                                "Below Quorum"
+                            }
+                        )
+                    );
+                    println!(
+                        "| Latency:            {:<56} |",
+                        format!("{:.2} µs", report.telemetry.consensus_latency_us)
+                    );
                     println!("+------------------------------------------------------------------------------+");
 
                     println!();
                     println!("  Agent Role Breakdown:");
                     for (role, count) in &report.agent_breakdown {
-                        println!("    [{}] {:14} × {} cores", role.symbol(), role.as_str(), count);
+                        println!(
+                            "    [{}] {:14} × {} cores",
+                            role.symbol(),
+                            role.as_str(),
+                            count
+                        );
                     }
 
                     println!();
@@ -1158,7 +1541,8 @@ fn main() {
             }
         }
         "swarm-synthesize" | "swarm-synth" => {
-            let mut prompt = "Synthesize BitNet 1.58b ternary GEMM with optical attention".to_string();
+            let mut prompt =
+                "Synthesize BitNet 1.58b ternary GEMM with optical attention".to_string();
             let mut max_iter = 5;
             let mut auto_heal = true;
             let mut run_jit = true;
@@ -1192,11 +1576,17 @@ fn main() {
                 }
             }
 
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON AUTONOMOUS SWARM SELF-SYNTHESIS & VIBE-HEALING ENGINE");
-            println!(" Target: 256/4,096-Core 4D/6D-Torus Silicon (6-Brain Hybrid Computing Units)");
+            println!(
+                " Target: 256/4,096-Core 4D/6D-Torus Silicon (6-Brain Hybrid Computing Units)"
+            );
             println!(" Prompt: {}", prompt);
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
 
             let synth = cronc::cl_swarm_synthesis::SwarmSynthesizer::new();
             let config = cronc::cl_swarm_synthesis::SynthesisConfig {
@@ -1224,13 +1614,40 @@ fn main() {
                 println!("+------------------------------------------------------------------------------+");
                 println!("| SWARM SYNTHESIS & HARDWARE VERIFICATION METRICS                              |");
                 println!("+------------------------------------------------------------------------------+");
-                println!("| Target Operators:   {:<56} |", report.detected_operators.join(", "));
-                println!("| Healed Hazards:     {:<56} |", format!("{} RAW/WAW hazards resolved", report.resolved_hazards));
-                println!("| Repaired CRC-8:     {:<56} |", format!("{} slot tokens repaired", report.fixed_crc_count));
-                println!("| Slot Saturation:    {:<56} |", format!("IPC {:.2} -> {:.2} (+{:.1}%)", report.initial_ipc, report.optimized_ipc, report.speedup_percentage));
-                println!("| Hardware Execution: {:<56} |", format!("{} cycles, 0 traps (R1: 0x{:08x})", report.execution_cycles, report.registers[1]));
-                println!("| Swarm Consensus:    {:<56} |", format!("{:.1}% Agreement (Quorum Achieved)", report.consensus_score));
-                println!("| End-to-End Latency: {:<56} |", format!("{:.2} µs", report.latency_us));
+                println!(
+                    "| Target Operators:   {:<56} |",
+                    report.detected_operators.join(", ")
+                );
+                println!(
+                    "| Healed Hazards:     {:<56} |",
+                    format!("{} RAW/WAW hazards resolved", report.resolved_hazards)
+                );
+                println!(
+                    "| Repaired CRC-8:     {:<56} |",
+                    format!("{} slot tokens repaired", report.fixed_crc_count)
+                );
+                println!(
+                    "| Slot Saturation:    {:<56} |",
+                    format!(
+                        "IPC {:.2} -> {:.2} (+{:.1}%)",
+                        report.initial_ipc, report.optimized_ipc, report.speedup_percentage
+                    )
+                );
+                println!(
+                    "| Hardware Execution: {:<56} |",
+                    format!(
+                        "{} cycles, 0 traps (R1: 0x{:08x})",
+                        report.execution_cycles, report.registers[1]
+                    )
+                );
+                println!(
+                    "| Swarm Consensus:    {:<56} |",
+                    format!("{:.1}% Agreement (Quorum Achieved)", report.consensus_score)
+                );
+                println!(
+                    "| End-to-End Latency: {:<56} |",
+                    format!("{:.2} µs", report.latency_us)
+                );
                 println!("+------------------------------------------------------------------------------+");
                 println!();
                 println!("Synthesized Machine Code Preview (.cl):");
@@ -1408,7 +1825,10 @@ fn main() {
                     path_opt = Some(std::path::PathBuf::from(&args[i + 1]));
                     i += 2;
                 } else if args[i] == "--features" && i + 1 < args.len() {
-                    features = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+                    features = args[i + 1]
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .collect();
                     i += 2;
                 } else {
                     i += 1;
@@ -1441,15 +1861,25 @@ fn main() {
         }
         "install" => {
             let cur_dir = env::current_dir().unwrap();
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON PACKAGE MANAGER: RESOLVING DEPENDENCIES & SILICON TARGETS");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             match pkg::install_project_dependencies(&cur_dir) {
                 Ok(res) => {
-                    println!("[SUCCESS] Resolved {} packages successfully!", res.total_packages);
+                    println!(
+                        "[SUCCESS] Resolved {} packages successfully!",
+                        res.total_packages
+                    );
                     println!("Locked packages:");
                     for (name, p) in &res.lockfile.packages {
-                        println!("  - {} v{} [{}] (target: {})", name, p.version, p.source, p.hardware_target);
+                        println!(
+                            "  - {} v{} [{}] (target: {})",
+                            name, p.version, p.source, p.hardware_target
+                        );
                     }
                 }
                 Err(e) => {
@@ -1481,7 +1911,9 @@ fn main() {
                 } else if args[i] == "--quantize" && i + 1 < args.len() {
                     match args[i + 1].to_lowercase().as_str() {
                         "none" | "fp32" => quant_mode = cronc::QuantizationMode::None,
-                        "ternary" | "bitnet" | "1.58b" => quant_mode = cronc::QuantizationMode::Ternary158b,
+                        "ternary" | "bitnet" | "1.58b" => {
+                            quant_mode = cronc::QuantizationMode::Ternary158b
+                        }
                         "int4" | "i4" => quant_mode = cronc::QuantizationMode::Int4,
                         other => {
                             eprintln!("Warning: Unknown quantization mode '{}', defaulting to ternary BitNet 1.58b", other);
@@ -1509,7 +1941,11 @@ fn main() {
 
             if input_file.ends_with(".json") {
                 let stem = Path::new(input_file).file_stem().unwrap().to_str().unwrap();
-                let cl_out = if out_path.ends_with(".cr") { format!("{}.cl", stem) } else { out_path.clone() };
+                let cl_out = if out_path.ends_with(".cr") {
+                    format!("{}.cl", stem)
+                } else {
+                    out_path.clone()
+                };
                 println!("================================================================================");
                 println!(" CRON PYTORCH FX GRAPH TO 128-BIT VLIW LOWERING ENGINE");
                 println!(" Input FX JSON   : {}", input_file);
@@ -1522,7 +1958,10 @@ fn main() {
                             Ok(lowered) => {
                                 let elapsed = start_time.elapsed();
                                 if let Err(e) = fs::write(&cl_out, &lowered.cl_source) {
-                                    eprintln!("[ERROR] Failed to write .cl file '{}': {}", cl_out, e);
+                                    eprintln!(
+                                        "[ERROR] Failed to write .cl file '{}': {}",
+                                        cl_out, e
+                                    );
                                     std::process::exit(1);
                                 }
                                 println!("[SUCCESS] Model successfully ingested and lowered in {:.2} ms!", elapsed.as_secs_f64() * 1000.0);
@@ -1531,11 +1970,27 @@ fn main() {
                                 println!("   - Source Format:            PyTorch FX Graph");
                                 println!("   - Ingested Model Name:      {}", stem);
                                 println!("   - Total Neural Layers:      {}", lowered.total_layers);
-                                println!("   - 128-bit VLIW Bundles:     {}", lowered.total_bundles);
-                                println!("   - BitNet b1.58 Parameters:  {}", lowered.total_parameters);
-                                println!("   - Quantization Compression: {:.1}x", lowered.quantization_ratio);
-                                println!("   - Estimated Speedup vs CPU: {:.1}x", lowered.estimated_speedup);
-                                println!("   - Synthesized Microcode:    '{}' ({} bytes)", cl_out, lowered.cl_source.len());
+                                println!(
+                                    "   - 128-bit VLIW Bundles:     {}",
+                                    lowered.total_bundles
+                                );
+                                println!(
+                                    "   - BitNet b1.58 Parameters:  {}",
+                                    lowered.total_parameters
+                                );
+                                println!(
+                                    "   - Quantization Compression: {:.1}x",
+                                    lowered.quantization_ratio
+                                );
+                                println!(
+                                    "   - Estimated Speedup vs CPU: {:.1}x",
+                                    lowered.estimated_speedup
+                                );
+                                println!(
+                                    "   - Synthesized Microcode:    '{}' ({} bytes)",
+                                    cl_out,
+                                    lowered.cl_source.len()
+                                );
                                 println!("--------------------------------------------------------------------------------");
                                 return;
                             }
@@ -1552,10 +2007,16 @@ fn main() {
                 }
             }
 
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON UNIVERSAL AI MODEL IMPORTER & SILICON GRAPH LOWERING ENGINE");
-            println!(" Target Architecture: 256-Core 4D-Torus Hybrid Photonic Neuromorphic Silicon");
-            println!("================================================================================");
+            println!(
+                " Target Architecture: 256-Core 4D-Torus Hybrid Photonic Neuromorphic Silicon"
+            );
+            println!(
+                "================================================================================"
+            );
             println!("[INGEST] Reading model file: '{}'...", input_file);
 
             let import_opts = cronc::ImportOptions {
@@ -1582,42 +2043,71 @@ fn main() {
                 std::process::exit(1);
             }
 
-            println!("[SUCCESS] Model successfully ingested and lowered in {:.2} ms!", elapsed.as_secs_f64() * 1000.0);
-            println!("--------------------------------------------------------------------------------");
+            println!(
+                "[SUCCESS] Model successfully ingested and lowered in {:.2} ms!",
+                elapsed.as_secs_f64() * 1000.0
+            );
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
             println!(" TELEMETRY & SILICON OPTIMIZATION REPORT:");
             println!("   - Source Format:          {}", imported.source_format);
             println!("   - Ingested Model Name:    {}", imported.model_name);
             println!("   - Total Model Parameters: {}", code.total_parameters);
             println!("   - Quantization Mode:      {:?}", quant_mode);
-            println!("   - Memory Reduction:       {:.2}%", code.memory_reduction_percent);
+            println!(
+                "   - Memory Reduction:       {:.2}%",
+                code.memory_reduction_percent
+            );
             println!("   - Fused Streaming Blocks: {}", code.fused_kernel_count);
-            println!("   - Synthesized Blueprint:  '{}' ({} bytes)", out_path, code.cr_source.len());
-            println!("--------------------------------------------------------------------------------");
+            println!(
+                "   - Synthesized Blueprint:  '{}' ({} bytes)",
+                out_path,
+                code.cr_source.len()
+            );
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
 
             if !compile_target.is_empty() {
-                println!("[COMPILE] Directly compiling lowered CRON model into target '{}'...", compile_target);
+                println!(
+                    "[COMPILE] Directly compiling lowered CRON model into target '{}'...",
+                    compile_target
+                );
                 match compile_target.as_str() {
                     "cl" => {
-                        let cl_out = format!("{}.cl", Path::new(&out_path).file_stem().unwrap().to_str().unwrap());
+                        let cl_out = format!(
+                            "{}.cl",
+                            Path::new(&out_path).file_stem().unwrap().to_str().unwrap()
+                        );
                         match cronc::compile_source(&code.cr_source) {
                             Ok(vliw) => {
                                 if let Err(e) = fs::write(&cl_out, &vliw) {
                                     eprintln!("[ERROR] Failed writing .cl to '{}': {}", cl_out, e);
                                 } else {
-                                    println!("[SUCCESS] Generated 128-bit VLIW machine code: '{}'", cl_out);
+                                    println!(
+                                        "[SUCCESS] Generated 128-bit VLIW machine code: '{}'",
+                                        cl_out
+                                    );
                                 }
                             }
                             Err(e) => eprintln!("[ERROR] VLIW compilation failed: {}", e),
                         }
                     }
                     "c23" => {
-                        let c_out = format!("{}.c", Path::new(&out_path).file_stem().unwrap().to_str().unwrap());
+                        let c_out = format!(
+                            "{}.c",
+                            Path::new(&out_path).file_stem().unwrap().to_str().unwrap()
+                        );
                         match cronc::compile_to_c23(&code.cr_source) {
                             Ok(c_code) => {
                                 if let Err(e) = fs::write(&c_out, &c_code) {
                                     eprintln!("[ERROR] Failed writing C23 to '{}': {}", c_out, e);
                                 } else {
-                                    println!("[SUCCESS] Generated ISO C23 native source: '{}'", c_out);
+                                    println!(
+                                        "[SUCCESS] Generated ISO C23 native source: '{}'",
+                                        c_out
+                                    );
                                 }
                             }
                             Err(e) => eprintln!("[ERROR] C23 compilation failed: {}", e),
@@ -1625,16 +2115,34 @@ fn main() {
                     }
                     "native" => {
                         let bin_out = if cfg!(windows) {
-                            format!("{}.exe", Path::new(&out_path).file_stem().unwrap().to_str().unwrap())
+                            format!(
+                                "{}.exe",
+                                Path::new(&out_path).file_stem().unwrap().to_str().unwrap()
+                            )
                         } else {
-                            Path::new(&out_path).file_stem().unwrap().to_str().unwrap().to_string()
+                            Path::new(&out_path)
+                                .file_stem()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string()
                         };
-                        match cronc::compile_native_binary(&code.cr_source, Path::new(&bin_out), &["-mavx512f"]) {
-                            Ok(()) => println!("[SUCCESS] Generated native binary executable: '{}'", bin_out),
+                        match cronc::compile_native_binary(
+                            &code.cr_source,
+                            Path::new(&bin_out),
+                            &["-mavx512f"],
+                        ) {
+                            Ok(()) => println!(
+                                "[SUCCESS] Generated native binary executable: '{}'",
+                                bin_out
+                            ),
                             Err(e) => eprintln!("[ERROR] Native compilation failed: {}", e),
                         }
                     }
-                    other => eprintln!("[WARN] Unsupported compile target '{}'. Supported: cl, c23, native", other),
+                    other => eprintln!(
+                        "[WARN] Unsupported compile target '{}'. Supported: cl, c23, native",
+                        other
+                    ),
                 }
             }
         }
@@ -1674,12 +2182,23 @@ fn main() {
                 "native" => {
                     if out_path.is_empty() {
                         let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-                        out_path = if cfg!(windows) { format!("{}.exe", stem) } else { stem.to_string() };
+                        out_path = if cfg!(windows) {
+                            format!("{}.exe", stem)
+                        } else {
+                            stem.to_string()
+                        };
                     }
                     println!("[CRON NATIVE LINKER] Compiling and linking standalone binary '{}' via AVX-512...", out_path);
-                    match cronc::compile_native_binary(&content, Path::new(&out_path), &["-mavx512f", "-mavx512vl"]) {
+                    match cronc::compile_native_binary(
+                        &content,
+                        Path::new(&out_path),
+                        &["-mavx512f", "-mavx512vl"],
+                    ) {
                         Ok(()) => {
-                            println!("[SUCCESS] Generated standalone native executable: '{}'", out_path);
+                            println!(
+                                "[SUCCESS] Generated standalone native executable: '{}'",
+                                out_path
+                            );
                         }
                         Err(e) => {
                             eprintln!("[NATIVE LINK ERROR] {}", e);
@@ -1689,9 +2208,15 @@ fn main() {
                 }
                 "ptx" => {
                     if out_path.is_empty() {
-                        out_path = format!("{}.ptx", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+                        out_path = format!(
+                            "{}.ptx",
+                            Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+                        );
                     }
-                    println!("[CRON GPU BACKEND] Compiling '{}' to NVIDIA CUDA PTX v7.5+...", input_path);
+                    println!(
+                        "[CRON GPU BACKEND] Compiling '{}' to NVIDIA CUDA PTX v7.5+...",
+                        input_path
+                    );
                     match cronc::compile_to_ptx_with_name(&content, Some(input_path)) {
                         Ok(ptx_code) => {
                             if let Err(e) = fs::write(&out_path, &ptx_code) {
@@ -1708,9 +2233,15 @@ fn main() {
                 }
                 "metal" => {
                     if out_path.is_empty() {
-                        out_path = format!("{}.metal", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+                        out_path = format!(
+                            "{}.metal",
+                            Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+                        );
                     }
-                    println!("[CRON GPU BACKEND] Compiling '{}' to Apple Metal MSL...", input_path);
+                    println!(
+                        "[CRON GPU BACKEND] Compiling '{}' to Apple Metal MSL...",
+                        input_path
+                    );
                     match cronc::compile_to_metal_with_name(&content, Some(input_path)) {
                         Ok(metal_code) => {
                             if let Err(e) = fs::write(&out_path, &metal_code) {
@@ -1727,7 +2258,10 @@ fn main() {
                 }
                 "verilog" | "v" | "rtl" => {
                     if out_path.is_empty() {
-                        out_path = format!("{}.v", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+                        out_path = format!(
+                            "{}.v",
+                            Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+                        );
                     }
                     let module_name = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
                     println!("[CRON VERILOG BACKEND] Compiling '{}' to 1.0 GHz Synthesizable Verilog RTL...", input_path);
@@ -1745,28 +2279,29 @@ fn main() {
                         }
                     }
                 }
-                _ => {
-                    match cronc::compile_source_with_name(&content, Some(input_path)) {
-                        Ok(cl_output) => {
-                            if out_path.is_empty() {
-                                out_path = format!("{}.cl", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
-                            }
-                            if let Err(e) = fs::write(&out_path, &cl_output) {
-                                eprintln!("Error writing output to '{}': {}", out_path, e);
-                                std::process::exit(1);
-                            }
-                            println!("[SUCCESS] Generated machine-native VLIW: '{}'", out_path);
-                            println!("\nPreview of .cl output:");
-                            for line in cl_output.lines().take(12) {
-                                println!("  {}", line);
-                            }
+                _ => match cronc::compile_source_with_name(&content, Some(input_path)) {
+                    Ok(cl_output) => {
+                        if out_path.is_empty() {
+                            out_path = format!(
+                                "{}.cl",
+                                Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+                            );
                         }
-                        Err(e) => {
-                            eprintln!("{}", e);
+                        if let Err(e) = fs::write(&out_path, &cl_output) {
+                            eprintln!("Error writing output to '{}': {}", out_path, e);
                             std::process::exit(1);
                         }
+                        println!("[SUCCESS] Generated machine-native VLIW: '{}'", out_path);
+                        println!("\nPreview of .cl output:");
+                        for line in cl_output.lines().take(12) {
+                            println!("  {}", line);
+                        }
                     }
-                }
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                },
             }
         }
         "ptx" => {
@@ -1782,10 +2317,16 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            println!("[CRON GPU BACKEND] Compiling '{}' to NVIDIA CUDA PTX v7.5+...", input_path);
+            println!(
+                "[CRON GPU BACKEND] Compiling '{}' to NVIDIA CUDA PTX v7.5+...",
+                input_path
+            );
             match cronc::compile_to_ptx_with_name(&content, Some(input_path)) {
                 Ok(ptx_code) => {
-                    let mut out_path = format!("{}.ptx", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+                    let mut out_path = format!(
+                        "{}.ptx",
+                        Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+                    );
                     if args.len() >= 5 && args[3] == "-o" {
                         out_path = args[4].clone();
                     }
@@ -1799,7 +2340,10 @@ fn main() {
                         println!("  {}", line);
                     }
 
-                    if args.iter().any(|a| a == "--run" || a == "--exec" || a == "--cuda") {
+                    if args
+                        .iter()
+                        .any(|a| a == "--run" || a == "--exec" || a == "--cuda")
+                    {
                         println!("\n[CRON CUDA HARDWARE JIT] Initializing native GPU driver without NVCC...");
                         if !cronc::cl_cuda_driver::CudaDriver::is_available() {
                             eprintln!("[ERROR] NVIDIA CUDA Driver library (nvcuda.dll / libcuda.so) not detected on host system.");
@@ -1836,7 +2380,9 @@ fn main() {
         }
         "metal" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron metal <file.cl> [-o <out.metal>]");
+                eprintln!(
+                    "Error: Missing input file. Usage: cron metal <file.cl> [-o <out.metal>]"
+                );
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -1847,10 +2393,16 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            println!("[CRON GPU BACKEND] Compiling '{}' to Apple Metal Shading Language (MSL)...", input_path);
+            println!(
+                "[CRON GPU BACKEND] Compiling '{}' to Apple Metal Shading Language (MSL)...",
+                input_path
+            );
             match cronc::compile_to_metal_with_name(&content, Some(input_path)) {
                 Ok(metal_code) => {
-                    let mut out_path = format!("{}.metal", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+                    let mut out_path = format!(
+                        "{}.metal",
+                        Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+                    );
                     if args.len() >= 5 && args[3] == "-o" {
                         out_path = args[4].clone();
                     }
@@ -1891,16 +2443,25 @@ fn main() {
                         }
                     };
                     if let Err(shape_errors) = prog.verify_shapes() {
-                        eprintln!("[.cl SHAPE VERIFICATION FAILED] {}", shape_errors.join("; "));
+                        eprintln!(
+                            "[.cl SHAPE VERIFICATION FAILED] {}",
+                            shape_errors.join("; ")
+                        );
                         std::process::exit(1);
                     }
                     let vliw_code = prog.to_vliw();
                     match cronc::cl_lang::verify_cl_program(&vliw_code) {
                         Ok(report) => {
-                            println!("[PASS] '{}' passed all .cl Mathematical Calculus & VLIW checks:", input_path);
+                            println!(
+                                "[PASS] '{}' passed all .cl Mathematical Calculus & VLIW checks:",
+                                input_path
+                            );
                             println!("  ✓ Language: CRON Zero-Word Mathematical Calculus (.cl)");
                             println!("  ✓ Static Tensor Shape & Dimension Verification: PASSED");
-                            println!("  ✓ Lowered VLIW Bundles: {} ({} slots, 100% CRC-8 parity)", report.total_bundles, report.total_slots);
+                            println!(
+                                "  ✓ Lowered VLIW Bundles: {} ({} slots, 100% CRC-8 parity)",
+                                report.total_bundles, report.total_slots
+                            );
                         }
                         Err(e) => {
                             eprintln!("[.cl VERIFICATION FAILED] {}", e);
@@ -1910,14 +2471,30 @@ fn main() {
                 } else {
                     match cronc::cl_lang::verify_cl_program(&content) {
                         Ok(report) => {
-                            println!("[PASS] '{}' passed all .cl Machine Language checks:", input_path);
-                            println!("  ✓ Language: CRON Low-Level (.cl) 128-bit VLIW Machine Language");
+                            println!(
+                                "[PASS] '{}' passed all .cl Machine Language checks:",
+                                input_path
+                            );
+                            println!(
+                                "  ✓ Language: CRON Low-Level (.cl) 128-bit VLIW Machine Language"
+                            );
                             println!("  ✓ Total Bundles: {}", report.total_bundles);
-                            println!("  ✓ Total 10-char Instruction Slots: {}", report.total_slots);
-                            println!("  ✓ Verified Opcodes: {} / {}", report.opcodes_verified, report.total_slots);
-                            println!("  ✓ Parity Protected Tokens: {} / {}", report.parity_verified, report.total_slots);
+                            println!(
+                                "  ✓ Total 10-char Instruction Slots: {}",
+                                report.total_slots
+                            );
+                            println!(
+                                "  ✓ Verified Opcodes: {} / {}",
+                                report.opcodes_verified, report.total_slots
+                            );
+                            println!(
+                                "  ✓ Parity Protected Tokens: {} / {}",
+                                report.parity_verified, report.total_slots
+                            );
                             if report.hazards.is_empty() {
-                                println!("  ✓ Structural Hazards: 0 (No Write-After-Write collisions)");
+                                println!(
+                                    "  ✓ Structural Hazards: 0 (No Write-After-Write collisions)"
+                                );
                             } else {
                                 for h in &report.hazards {
                                     println!("  ⚠ {}", h);
@@ -1933,7 +2510,10 @@ fn main() {
             } else {
                 match cronc::compile_source_with_color(&content, Some(input_path), true) {
                     Ok(_) => {
-                        println!("\x1b[1;32m[PASS]\x1b[0m '{}' passed all checks:", input_path);
+                        println!(
+                            "\x1b[1;32m[PASS]\x1b[0m '{}' passed all checks:",
+                            input_path
+                        );
                         println!("  ✓ EBNF Syntax & Lexical structure verified");
                         println!("  ✓ Linear ownership types verified (0 memory leaks)");
                         println!("  ✓ Region lifetimes & Arena escape analysis verified");
@@ -1947,10 +2527,13 @@ fn main() {
             }
         }
         "bench-host" => {
-            let script = ["benchmarks/run_real_benchmarks.py", "../../benchmarks/run_real_benchmarks.py"]
-                .iter()
-                .find(|p| std::path::Path::new(p).exists())
-                .copied();
+            let script = [
+                "benchmarks/run_real_benchmarks.py",
+                "../../benchmarks/run_real_benchmarks.py",
+            ]
+            .iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .copied();
             match script {
                 Some(path) => {
                     let py = if cfg!(windows) { "python" } else { "python3" };
@@ -1974,7 +2557,10 @@ fn main() {
                 let code = &args[2];
                 if let Some(info) = cronc::diagnostic::explain_error(code) {
                     println!("\n\x1b[1;36m======================================================================\x1b[0m");
-                    println!("\x1b[1;37mCRON ERROR EXPLANATION: \x1b[1;31m{}\x1b[0m - \x1b[1m{}\x1b[0m", info.code, info.title);
+                    println!(
+                        "\x1b[1;37mCRON ERROR EXPLANATION: \x1b[1;31m{}\x1b[0m - \x1b[1m{}\x1b[0m",
+                        info.code, info.title
+                    );
                     println!("\x1b[1;36m======================================================================\x1b[0m\n");
                     println!("\x1b[1;33mEXPLANATION:\x1b[0m");
                     println!("  {}\n", info.explanation);
@@ -2002,27 +2588,66 @@ fn main() {
                     ("E0002", "Linear Affine Type Leak (Unconsumed Resource)"),
                     ("E0003", "Use-After-Consume / Double Linear Consumption"),
                     ("E0004", "Region Arena Lifetime Escape Without 'export'"),
-                    ("E0005", "Reassignment to Immutable Variable (Missing 'mut')"),
+                    (
+                        "E0005",
+                        "Reassignment to Immutable Variable (Missing 'mut')",
+                    ),
                     ("E0006", "Type Mismatch Between Target and Expression"),
                     ("E0007", "Undefined Identifier / Variable Out of Scope"),
                     ("E0008", "Trait Contract Monomorphization Violation"),
-                    ("E0009", "Spatial Hardware Memory Domain Crossing Violation (@sram/@hbm/@noc)"),
+                    (
+                        "E0009",
+                        "Spatial Hardware Memory Domain Crossing Violation (@sram/@hbm/@noc)",
+                    ),
                     ("E0010", "Dependent Tensor Shape Dimension Mismatch"),
                     ("E0011", "Silicon Schedule Target Function Not Found"),
                     ("E0012", "Invalid Hardware Schedule Directive Parameters"),
-                    ("E0013", "Kernel Fusion Dependency Cycle / Illegal Topological Order"),
-                    ("E0014", "Static Invariant or Postcondition Contract Violation"),
-                    ("E0015", "Formal Proof Contract Unsatisfiable / Disproved by SMT Engine"),
+                    (
+                        "E0013",
+                        "Kernel Fusion Dependency Cycle / Illegal Topological Order",
+                    ),
+                    (
+                        "E0014",
+                        "Static Invariant or Postcondition Contract Violation",
+                    ),
+                    (
+                        "E0015",
+                        "Formal Proof Contract Unsatisfiable / Disproved by SMT Engine",
+                    ),
                     ("E0016", "Tainted Data Sink / Security Boundary Violation"),
-                    ("E0017", "Missing Capability Permission for Privileged Operation"),
-                    ("E0018", "PGAS Bank Conflict / Uneven Memory Stride on Local Bank"),
-                    ("E0019", "Quantization Dynamic Range Overflow / Out of Trit Range"),
-                    ("E0020", "4D Torus Routing Deadlock Cycle Detected in Mesh Channel"),
+                    (
+                        "E0017",
+                        "Missing Capability Permission for Privileged Operation",
+                    ),
+                    (
+                        "E0018",
+                        "PGAS Bank Conflict / Uneven Memory Stride on Local Bank",
+                    ),
+                    (
+                        "E0019",
+                        "Quantization Dynamic Range Overflow / Out of Trit Range",
+                    ),
+                    (
+                        "E0020",
+                        "4D Torus Routing Deadlock Cycle Detected in Mesh Channel",
+                    ),
                     ("E0021", "Landauer Thermodynamic Dissipation Limit Exceeded"),
-                    ("E0022", "Clifford Rotor Degenerate Geometric Metric Violation"),
-                    ("E0023", "Metaplasticity Trace Saturation / Synaptic Weight Runaway"),
-                    ("E0024", "Photonic MZI Phase Interferometer Calibration Drift"),
-                    ("E0025", "Quantum Superposition Amplitude Normalization Violation"),
+                    (
+                        "E0022",
+                        "Clifford Rotor Degenerate Geometric Metric Violation",
+                    ),
+                    (
+                        "E0023",
+                        "Metaplasticity Trace Saturation / Synaptic Weight Runaway",
+                    ),
+                    (
+                        "E0024",
+                        "Photonic MZI Phase Interferometer Calibration Drift",
+                    ),
+                    (
+                        "E0025",
+                        "Quantum Superposition Amplitude Normalization Violation",
+                    ),
                 ];
                 for (c, desc) in codes {
                     println!("  \x1b[1;31m{}\x1b[0m : {}", c, desc);
@@ -2031,7 +2656,8 @@ fn main() {
             }
         }
         "hello" => {
-            println!(r#"
+            println!(
+                r#"
 ======================================================================
    _  _     _ _         __      __         _     _ 
   | || |___| | |___     \ \    / /__  _ _ | | __| |
@@ -2050,7 +2676,8 @@ fn main() {
   [2] Neuromorphic Resonance Score: 100% Harmony
   [3] Status: ALL 6 COGNITIVE BRAINS ONLINE & SYNCHRONIZED!
 ======================================================================
-"#);
+"#
+            );
         }
         "run" => {
             if args.len() < 3 {
@@ -2072,9 +2699,15 @@ fn main() {
                         std::process::exit(1);
                     }
                 };
-                println!("[1/3] Loading native .cl machine code from '{}'...", input_path);
+                println!(
+                    "[1/3] Loading native .cl machine code from '{}'...",
+                    input_path
+                );
                 match cronc::cl_lang::verify_cl_program(&code_to_verify) {
-                    Ok(r) => println!("      ✓ Verified {} VLIW bundles (100% parity)", r.total_bundles),
+                    Ok(r) => println!(
+                        "      ✓ Verified {} VLIW bundles (100% parity)",
+                        r.total_bundles
+                    ),
                     Err(e) => {
                         eprintln!("[.cl VERIFICATION ERROR] {}", e);
                         std::process::exit(1);
@@ -2104,32 +2737,74 @@ fn main() {
             println!("============================================================");
             println!("              HARDWARE EXECUTION TELEMETRY                 ");
             println!("============================================================");
-            println!("  Total Execution Cycles:       {} cycles", stats.total_cycles);
+            println!(
+                "  Total Execution Cycles:       {} cycles",
+                stats.total_cycles
+            );
             println!("  Active Physical Cores:        256 cores (4D Torus)");
-            println!("  Photonic MZI Optical Ops:     {} ops (0ns propagation)", stats.optical_gemm_ops);
-            println!("  Reversible Gate Ops (F^-1):   {} ops (0 entropy loss)", stats.reversible_gate_ops);
-            println!("  STDP Synapse Adaptations:     {} updates", stats.stdp_synapse_updates);
-            println!("  4D NoC Mesh Packets Routed:   {} packets", stats.mesh_packets_routed);
-            println!("  Peak Core Temperature:        {} °C (Well below 180°C threshold)", stats.peak_temperature_c);
-            println!("  DRAM Bandwidth Saved:         {:.4} MB (Via Reversible Autodiff)", stats.dram_bandwidth_saved_mb);
+            println!(
+                "  Photonic MZI Optical Ops:     {} ops (0ns propagation)",
+                stats.optical_gemm_ops
+            );
+            println!(
+                "  Reversible Gate Ops (F^-1):   {} ops (0 entropy loss)",
+                stats.reversible_gate_ops
+            );
+            println!(
+                "  STDP Synapse Adaptations:     {} updates",
+                stats.stdp_synapse_updates
+            );
+            println!(
+                "  4D NoC Mesh Packets Routed:   {} packets",
+                stats.mesh_packets_routed
+            );
+            println!(
+                "  Peak Core Temperature:        {} °C (Well below 180°C threshold)",
+                stats.peak_temperature_c
+            );
+            println!(
+                "  DRAM Bandwidth Saved:         {:.4} MB (Via Reversible Autodiff)",
+                stats.dram_bandwidth_saved_mb
+            );
             if stats.cache_invalidations > 0 {
-                println!("  Chip-Wide Cache Flushes (CC): {} flushes (0 pipeline stalls)", stats.cache_invalidations);
+                println!(
+                    "  Chip-Wide Cache Flushes (CC): {} flushes (0 pipeline stalls)",
+                    stats.cache_invalidations
+                );
             }
             if stats.dma_transfers > 0 {
-                println!("  Direct NoC DMA Bursts (DD):   {} transfers (Zero-overhead)", stats.dma_transfers);
+                println!(
+                    "  Direct NoC DMA Bursts (DD):   {} transfers (Zero-overhead)",
+                    stats.dma_transfers
+                );
             }
             if stats.total_energy_saved_uw > 0 {
-                println!("  Energy-Aware DVFS Saved (EE): {} µW (Eco-throttling active)", stats.total_energy_saved_uw);
+                println!(
+                    "  Energy-Aware DVFS Saved (EE): {} µW (Eco-throttling active)",
+                    stats.total_energy_saved_uw
+                );
             }
             if stats.photonic_pumps > 0 {
-                println!("  Photonic Laser Pumps (11):    {} strobes (100% saturation)", stats.photonic_pumps);
+                println!(
+                    "  Photonic Laser Pumps (11):    {} strobes (100% saturation)",
+                    stats.photonic_pumps
+                );
             }
             if stats.arena_resets > 0 {
-                println!("  Hardware Arena Resets (88):   {} 0-cycle resets", stats.arena_resets);
+                println!(
+                    "  Hardware Arena Resets (88):   {} 0-cycle resets",
+                    stats.arena_resets
+                );
             }
             if stats.axon_myelinated_bundles > 0 {
-                println!("  Axon Myelinated Bundles:      {} bundles (Insulation morph: 4->1 cycles)", stats.axon_myelinated_bundles);
-                println!("  Epigenetic Morph Time Saved:  {} cycles (DNA-like self-adaptation)", stats.epigenetic_morph_cycles_saved);
+                println!(
+                    "  Axon Myelinated Bundles:      {} bundles (Insulation morph: 4->1 cycles)",
+                    stats.axon_myelinated_bundles
+                );
+                println!(
+                    "  Epigenetic Morph Time Saved:  {} cycles (DNA-like self-adaptation)",
+                    stats.epigenetic_morph_cycles_saved
+                );
             }
             println!("============================================================");
             println!("  STATUS: ALL 6 BRAINS EXECUTED WITH ZERO FAULTS & ZERO GC LEAKS\n");
@@ -2186,7 +2861,10 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            println!("      ✓ Validated {} bundles ({} slots, 100% 10-char parity verified).", report.total_bundles, report.total_slots);
+            println!(
+                "      ✓ Validated {} bundles ({} slots, 100% 10-char parity verified).",
+                report.total_bundles, report.total_slots
+            );
 
             println!("[2/2] Running bare-metal simulation on 256-Core 4D-Torus...\n");
             let stats = cron_vm::run_cl(&cl_code);
@@ -2194,35 +2872,80 @@ fn main() {
             println!("============================================================");
             println!("            .cl DIRECT MACHINE EXECUTION TELEMETRY         ");
             println!("============================================================");
-            println!("  Total Execution Cycles:       {} cycles", stats.total_cycles);
+            println!(
+                "  Total Execution Cycles:       {} cycles",
+                stats.total_cycles
+            );
             println!("  Active Physical Cores:        256 cores (4D Torus)");
-            println!("  Photonic MZI Optical Ops:     {} ops (0ns propagation)", stats.optical_gemm_ops);
-            println!("  Reversible Gate Ops (F^-1):   {} ops (0 entropy loss)", stats.reversible_gate_ops);
-            println!("  STDP Synapse Adaptations:     {} updates", stats.stdp_synapse_updates);
-            println!("  4D NoC Mesh Packets Routed:   {} packets", stats.mesh_packets_routed);
-            println!("  Peak Core Temperature:        {} °C (Threshold: 180°C)", stats.peak_temperature_c);
+            println!(
+                "  Photonic MZI Optical Ops:     {} ops (0ns propagation)",
+                stats.optical_gemm_ops
+            );
+            println!(
+                "  Reversible Gate Ops (F^-1):   {} ops (0 entropy loss)",
+                stats.reversible_gate_ops
+            );
+            println!(
+                "  STDP Synapse Adaptations:     {} updates",
+                stats.stdp_synapse_updates
+            );
+            println!(
+                "  4D NoC Mesh Packets Routed:   {} packets",
+                stats.mesh_packets_routed
+            );
+            println!(
+                "  Peak Core Temperature:        {} °C (Threshold: 180°C)",
+                stats.peak_temperature_c
+            );
             if stats.cache_invalidations > 0 {
-                println!("  Chip-Wide Cache Flushes (CC): {} flushes (0 pipeline stalls)", stats.cache_invalidations);
+                println!(
+                    "  Chip-Wide Cache Flushes (CC): {} flushes (0 pipeline stalls)",
+                    stats.cache_invalidations
+                );
             }
             if stats.dma_transfers > 0 {
-                println!("  Direct NoC DMA Bursts (DD):   {} transfers (Zero-overhead)", stats.dma_transfers);
+                println!(
+                    "  Direct NoC DMA Bursts (DD):   {} transfers (Zero-overhead)",
+                    stats.dma_transfers
+                );
             }
             if stats.total_energy_saved_uw > 0 {
-                println!("  Energy-Aware DVFS Saved (EE): {} µW (Eco-throttling active)", stats.total_energy_saved_uw);
+                println!(
+                    "  Energy-Aware DVFS Saved (EE): {} µW (Eco-throttling active)",
+                    stats.total_energy_saved_uw
+                );
             }
             if stats.photonic_pumps > 0 {
-                println!("  Photonic Laser Pumps (11):    {} strobes (100% saturation)", stats.photonic_pumps);
+                println!(
+                    "  Photonic Laser Pumps (11):    {} strobes (100% saturation)",
+                    stats.photonic_pumps
+                );
             }
             if stats.arena_resets > 0 {
-                println!("  Hardware Arena Resets (88):   {} 0-cycle resets", stats.arena_resets);
+                println!(
+                    "  Hardware Arena Resets (88):   {} 0-cycle resets",
+                    stats.arena_resets
+                );
             }
             if stats.fused_kernel_ops > 0 {
-                println!("  Streaming Fused Ops (FU/FE):  {} ops (Zero DRAM traffic)", stats.fused_kernel_ops);
-                println!("  DRAM/HBM Traffic Eliminated:  {} KB", stats.memory_wall_saved_bytes / 1024);
+                println!(
+                    "  Streaming Fused Ops (FU/FE):  {} ops (Zero DRAM traffic)",
+                    stats.fused_kernel_ops
+                );
+                println!(
+                    "  DRAM/HBM Traffic Eliminated:  {} KB",
+                    stats.memory_wall_saved_bytes / 1024
+                );
             }
             if stats.axon_myelinated_bundles > 0 {
-                println!("  Axon Myelinated Bundles:      {} bundles (Insulation morph: 4->1 cycles)", stats.axon_myelinated_bundles);
-                println!("  Epigenetic Morph Time Saved:  {} cycles (DNA-like self-adaptation)", stats.epigenetic_morph_cycles_saved);
+                println!(
+                    "  Axon Myelinated Bundles:      {} bundles (Insulation morph: 4->1 cycles)",
+                    stats.axon_myelinated_bundles
+                );
+                println!(
+                    "  Epigenetic Morph Time Saved:  {} cycles (DNA-like self-adaptation)",
+                    stats.epigenetic_morph_cycles_saved
+                );
             }
             println!("============================================================");
             println!("  STATUS: .cl EXECUTED NATIVELY WITH 100% HARDWARE INTEGRITY\n");
@@ -2298,12 +3021,18 @@ fn main() {
                 std::process::exit(1);
             });
 
-            let mut out_path = format!("{}.clb", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+            let mut out_path = format!(
+                "{}.clb",
+                Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+            );
             if args.len() >= 5 && args[3] == "-o" {
                 out_path = args[4].clone();
             }
 
-            println!("[CRON ASSEMBLER] Assembling '{}' into 128-bit binary bytecode (.clb)...", input_path);
+            println!(
+                "[CRON ASSEMBLER] Assembling '{}' into 128-bit binary bytecode (.clb)...",
+                input_path
+            );
             match cronc::cl_binary::assemble_cl_to_clb(&content) {
                 Ok(binary) => {
                     if let Err(e) = fs::write(&out_path, &binary) {
@@ -2315,7 +3044,12 @@ fn main() {
                     } else {
                         0
                     };
-                    println!("[SUCCESS] Generated 128-bit Binary Bytecode: '{}' ({} bytes, {} bundles)", out_path, binary.len(), bundle_count);
+                    println!(
+                        "[SUCCESS] Generated 128-bit Binary Bytecode: '{}' ({} bytes, {} bundles)",
+                        out_path,
+                        binary.len(),
+                        bundle_count
+                    );
                 }
                 Err(e) => {
                     eprintln!("[ASSEMBLER ERROR] {}", e);
@@ -2325,7 +3059,9 @@ fn main() {
         }
         "disasm" | "cl-disasm" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron disasm <file.cl | file.clb> [-o <out>]");
+                eprintln!(
+                    "Error: Missing input file. Usage: cron disasm <file.cl | file.clb> [-o <out>]"
+                );
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -2374,7 +3110,10 @@ fn main() {
                 out_path = Some(args[4].clone());
             }
 
-            println!("[CRON DISASSEMBLER] Disassembling 128-bit binary bytecode '{}'...", input_path);
+            println!(
+                "[CRON DISASSEMBLER] Disassembling 128-bit binary bytecode '{}'...",
+                input_path
+            );
             match cronc::cl_binary::disassemble_clb_to_cl(&bytes) {
                 Ok(cl_text) => {
                     if let Some(path) = out_path {
@@ -2395,103 +3134,271 @@ fn main() {
         }
         "cl-alphabet" => {
             print_banner();
-            println!("================================================================================");
-            println!("      CRON COGNITIVE LOW-LEVEL (.cl) 94-CHARACTER VLIW SPECIFICATION            ");
-            println!("      Standard ASCII 33 ('!') to ASCII 126 ('~') — SSS+ Machine Grammar        ");
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "      CRON COGNITIVE LOW-LEVEL (.cl) 94-CHARACTER VLIW SPECIFICATION            "
+            );
+            println!(
+                "      Standard ASCII 33 ('!') to ASCII 126 ('~') — SSS+ Machine Grammar        "
+            );
             println!("================================================================================\n");
 
-            println!("┌──────────────────────────────────────────────────────────────────────────────┐");
-            println!("│ 1. DIGITS: [0-9] (10 Characters, ASCII 48..57)                               │");
-            println!("├───────┬──────────────────────┬───────────────────────────────────────────────┤");
-            println!("│ Char  │ Role                 │ Functional Semantics                          │");
-            println!("├───────┼──────────────────────┼───────────────────────────────────────────────┤");
-            println!("│ 0..9  │ Registers / Offsets  │ Hex Register IDs ($R0..$R9), Cycle counters   │");
-            println!("│       │ Immediates / CRC-8   │ Immediate literal nibbles, CRC-8 ATM checksums│");
+            println!(
+                "┌──────────────────────────────────────────────────────────────────────────────┐"
+            );
+            println!(
+                "│ 1. DIGITS: [0-9] (10 Characters, ASCII 48..57)                               │"
+            );
+            println!(
+                "├───────┬──────────────────────┬───────────────────────────────────────────────┤"
+            );
+            println!(
+                "│ Char  │ Role                 │ Functional Semantics                          │"
+            );
+            println!(
+                "├───────┼──────────────────────┼───────────────────────────────────────────────┤"
+            );
+            println!(
+                "│ 0..9  │ Registers / Offsets  │ Hex Register IDs ($R0..$R9), Cycle counters   │"
+            );
+            println!(
+                "│       │ Immediates / CRC-8   │ Immediate literal nibbles, CRC-8 ATM checksums│"
+            );
             println!("└───────┴──────────────────────┴───────────────────────────────────────────────┘\n");
 
-            println!("┌──────────────────────────────────────────────────────────────────────────────┐");
-            println!("│ 2. UPPERCASE ALPHABET: [A-Z] (26 Characters, ASCII 65..90)                   │");
-            println!("├───────┬──────────────────────┬───────────────────────────────────────────────┤");
-            println!("│ Char  │ Role                 │ Functional Semantics                          │");
-            println!("├───────┼──────────────────────┼───────────────────────────────────────────────┤");
-            println!("│ A..F  │ Hex Extended Regs    │ Physical registers $R10..$R15 ($RA..$RF)      │");
-            println!("│ B     │ Bundle Cycle Header  │ VLIW 128-bit bundle time marker ('B0001:')    │");
-            println!("│ G     │ ALU Greater/Equal    │ Predicated branchless comparison modifier     │");
-            println!("│ C     │ CSR Read Mode        │ Hardware Performance Counter register read    │");
-            println!("│ OPCODES (40+ Hardware Engines):                                              │");
+            println!(
+                "┌──────────────────────────────────────────────────────────────────────────────┐"
+            );
+            println!(
+                "│ 2. UPPERCASE ALPHABET: [A-Z] (26 Characters, ASCII 65..90)                   │"
+            );
+            println!(
+                "├───────┬──────────────────────┬───────────────────────────────────────────────┤"
+            );
+            println!(
+                "│ Char  │ Role                 │ Functional Semantics                          │"
+            );
+            println!(
+                "├───────┼──────────────────────┼───────────────────────────────────────────────┤"
+            );
+            println!(
+                "│ A..F  │ Hex Extended Regs    │ Physical registers $R10..$R15 ($RA..$RF)      │"
+            );
+            println!(
+                "│ B     │ Bundle Cycle Header  │ VLIW 128-bit bundle time marker ('B0001:')    │"
+            );
+            println!(
+                "│ G     │ ALU Greater/Equal    │ Predicated branchless comparison modifier     │"
+            );
+            println!(
+                "│ C     │ CSR Read Mode        │ Hardware Performance Counter register read    │"
+            );
+            println!(
+                "│ OPCODES (40+ Hardware Engines):                                              │"
+            );
             println!("│   Brain 1 (Causal/Graph):   SY (Symbolify), KG (KnowledgeGraph), HE (HyperEdge)│");
-            println!("│   Brain 2 (Photonic Wave):  OP (MZI GEMM), WD (WDM Optical), FA (Autodiff Tap)│");
-            println!("│   Brain 3 (Reversible):     BK (Backward Inv), RF (Fredkin), TO (Toffoli Gate)│");
-            println!("│   Brain 4 (Neuromorphic):   ST (STDP Synapse), LF (LIF Spike), LI (LIF Step)  │");
-            println!("│   Brain 5 (Chaos/Wave):     OD (Lorenz Diff), CA (Attention), SW (Superpos)   │");
-            println!("│   Brain 6 (Self-Healing):   SH (Sentry Conf), AW (Arbiter Wt), RC (Reroute)   │");
-            println!("│   ALU / SIMD Intrinsics:    PO (Predicated), MD (MAC/Mul), PK (Sub-byte Pack) │");
-            println!("│                             PS (Prefix Sum), CD (CORDIC Trig), TT (Transpose) │");
+            println!(
+                "│   Brain 2 (Photonic Wave):  OP (MZI GEMM), WD (WDM Optical), FA (Autodiff Tap)│"
+            );
+            println!(
+                "│   Brain 3 (Reversible):     BK (Backward Inv), RF (Fredkin), TO (Toffoli Gate)│"
+            );
+            println!(
+                "│   Brain 4 (Neuromorphic):   ST (STDP Synapse), LF (LIF Spike), LI (LIF Step)  │"
+            );
+            println!(
+                "│   Brain 5 (Chaos/Wave):     OD (Lorenz Diff), CA (Attention), SW (Superpos)   │"
+            );
+            println!(
+                "│   Brain 6 (Self-Healing):   SH (Sentry Conf), AW (Arbiter Wt), RC (Reroute)   │"
+            );
+            println!(
+                "│   ALU / SIMD Intrinsics:    PO (Predicated), MD (MAC/Mul), PK (Sub-byte Pack) │"
+            );
+            println!(
+                "│                             PS (Prefix Sum), CD (CORDIC Trig), TT (Transpose) │"
+            );
             println!("│   4D Torus NoC & Control:   TL (Tile Coords), SP (Spawn), FJ (Join), YD (Yield)│");
-            println!("│                             TX (Wormhole Send), RX (FIFO Recv), IR (Reduction)│");
-            println!("│                             DF (Deflection), WH (Tunnel), SB (Spatial Bcast)  │");
-            println!("│                             AC (Cap Token), SN (Sanitize), SC (Secure Patch)  │");
-            println!("│                             RN (LFSR PRNG), PL (NoC Poll), RT (Trap Return)   │");
-            println!("│                             HL (Halt), NO (NOP)                               │");
+            println!(
+                "│                             TX (Wormhole Send), RX (FIFO Recv), IR (Reduction)│"
+            );
+            println!(
+                "│                             DF (Deflection), WH (Tunnel), SB (Spatial Bcast)  │"
+            );
+            println!(
+                "│                             AC (Cap Token), SN (Sanitize), SC (Secure Patch)  │"
+            );
+            println!(
+                "│                             RN (LFSR PRNG), PL (NoC Poll), RT (Trap Return)   │"
+            );
+            println!(
+                "│                             HL (Halt), NO (NOP)                               │"
+            );
             println!("└──────────────────────────────────────────────────────────────────────────────┘\n");
 
-            println!("┌──────────────────────────────────────────────────────────────────────────────┐");
-            println!("│ 3. LOWERCASE ALPHABET: [a-z] (26 Characters, ASCII 97..122)                  │");
-            println!("├───────┬──────────────────────┬───────────────────────────────────────────────┤");
-            println!("│ Char  │ Role                 │ Functional Semantics                          │");
-            println!("├───────┼──────────────────────┼───────────────────────────────────────────────┤");
-            println!("│ a..f  │ Lowercase Hex Regs   │ Alternative hex register aliases ($ra..$rf)   │");
-            println!("│ x,y,z,w│ 4D-Torus Directions │ Dynamic NoC dimension ports (±X, ±Y, ±Z, ±W)  │");
-            println!("│ u,d,l,r│ Planar Directions   │ 2D grid fallbacks (Up, Down, Left, Right)     │");
-            println!("│ i,o   │ Simplex Channel Ports│ Core local simplex Inward/Outward FIFO lanes  │");
-            println!("│ s,m,h,t│ Neuromorphic Flags  │ Spike, Membrane potential, Halo, Torus stride │");
-            println!("│ c,v,k,p│ Execution Qualifiers │ Carry, Overflow, Knowledge tag, Parity bit    │");
-            println!("│ q,g,j,n│ Micro-Status Flags   │ Queue busy, Greater flag, Jump mark, Negative │");
-            println!("│ e,b   │ Epoch & Barrier      │ Synaptic epoch counter, Sub-bundle barrier    │");
+            println!(
+                "┌──────────────────────────────────────────────────────────────────────────────┐"
+            );
+            println!(
+                "│ 3. LOWERCASE ALPHABET: [a-z] (26 Characters, ASCII 97..122)                  │"
+            );
+            println!(
+                "├───────┬──────────────────────┬───────────────────────────────────────────────┤"
+            );
+            println!(
+                "│ Char  │ Role                 │ Functional Semantics                          │"
+            );
+            println!(
+                "├───────┼──────────────────────┼───────────────────────────────────────────────┤"
+            );
+            println!(
+                "│ a..f  │ Lowercase Hex Regs   │ Alternative hex register aliases ($ra..$rf)   │"
+            );
+            println!(
+                "│ x,y,z,w│ 4D-Torus Directions │ Dynamic NoC dimension ports (±X, ±Y, ±Z, ±W)  │"
+            );
+            println!(
+                "│ u,d,l,r│ Planar Directions   │ 2D grid fallbacks (Up, Down, Left, Right)     │"
+            );
+            println!(
+                "│ i,o   │ Simplex Channel Ports│ Core local simplex Inward/Outward FIFO lanes  │"
+            );
+            println!(
+                "│ s,m,h,t│ Neuromorphic Flags  │ Spike, Membrane potential, Halo, Torus stride │"
+            );
+            println!(
+                "│ c,v,k,p│ Execution Qualifiers │ Carry, Overflow, Knowledge tag, Parity bit    │"
+            );
+            println!(
+                "│ q,g,j,n│ Micro-Status Flags   │ Queue busy, Greater flag, Jump mark, Negative │"
+            );
+            println!(
+                "│ e,b   │ Epoch & Barrier      │ Synaptic epoch counter, Sub-bundle barrier    │"
+            );
             println!("└───────┴──────────────────────┴───────────────────────────────────────────────┘\n");
 
-            println!("┌──────────────────────────────────────────────────────────────────────────────┐");
-            println!("│ 4. SPECIAL SYMBOLS: (32 Characters, ASCII 33..47, 58..64, 91..96, 123..126)  │");
-            println!("├───────┬──────┬─────────────────────────┬─────────────────────────────────────┤");
-            println!("│ Char  │ ASCII│ Role                    │ Functional Semantics                │");
-            println!("├───────┼──────┼─────────────────────────┼─────────────────────────────────────┤");
-            println!("│ !     │  33  │ Trap Trigger / Barrier  │ Hardware checkpoint & trap fault    │");
-            println!("│ \"     │  34  │ Literal String Delim    │ Static neural payload delimiter     │");
-            println!("│ #     │  35  │ Immediate Mode Delim    │ Direct constant operand prefix      │");
-            println!("│ $     │  36  │ Register Mode Delim     │ Core register reference delimiter   │");
-            println!("│ %     │  37  │ Modulo ALU Bypass       │ Hardware integer remainder mode     │");
-            println!("│ &     │  38  │ Bitwise AND Bypass      │ Hardware logical conjunction mode   │");
-            println!("│ '     │  39  │ Speculative Slot Prefix │ High-priority speculative dispatch  │");
-            println!("│ (     │  40  │ Vector Group Start      │ Packed SIMD operand bracket open    │");
-            println!("│ )     │  41  │ Vector Group End        │ Packed SIMD operand bracket close   │");
-            println!("│ *     │  42  │ Multiply ALU Bypass     │ Single-cycle DSP hardware multiplier│");
-            println!("│ +     │  43  │ Addition ALU Bypass     │ Single-cycle adder bypass mode      │");
-            println!("│ ,     │  44  │ Operand Separator       │ Multi-argument field delimiter      │");
-            println!("│ -     │  45  │ Subtraction ALU Bypass  │ Single-cycle subtractor bypass mode │");
-            println!("│ .     │  46  │ Fixed-Point Dot Marker  │ Q16.16 fixed-point fractional radix │");
-            println!("│ /     │  47  │ Division ALU Bypass     │ Hardware division with zero-trap    │");
-            println!("│ :     │  58  │ Bundle Cycle Delimiter  │ Cycle header separator ('B0001:')   │");
-            println!("│ ;     │  59  │ Yield Terminator/Comment│ Low-priority commit / line comment  │");
-            println!("│ <     │  60  │ Less-Than / Inward NoC  │ Signed less-than / simplex recv     │");
-            println!("│ =     │  61  │ Assign Opcode / Equal   │ '=0' immediate load / Equality ALU  │");
-            println!("│ >     │  62  │ Standard Slot Terminator│ Synchronous commit token            │");
-            println!("│ ?     │  63  │ Predicate Mode / Term   │ Conditional execution gate          │");
-            println!("│ @     │  64  │ Memory Pointer Prefix   │ Spatial HBM3/SRAM address pointer   │");
-            println!("│ [     │  91  │ Arena Memory Open       │ Region arena boundary start         │");
-            println!("│ \\     │  92  │ Reverse Pipeline Bypass │ Inverted dataflow pipeline step     │");
-            println!("│ ]     │  93  │ Arena Memory Close      │ Region arena boundary end           │");
-            println!("│ ^     │  94  │ Bitwise XOR Bypass      │ Hardware parity & XOR logic gate    │");
-            println!("│ _     │  95  │ Standard Slot Prefix    │ Deterministic synchronous slot      │");
-            println!("│ `     │  96  │ Cycle Timestamp Tick    │ Real-time microcode cycle marker    │");
-            println!("│ {{     │ 123  │ Cognitive Brain Cluster │ Brain domain grouping start         │");
-            println!("│ |     │ 124  │ Bitwise OR / Barrier    │ Logical disjunction / Torus barrier │");
-            println!("│ }}     │ 125  │ Cognitive Brain Cluster │ Brain domain grouping end           │");
-            println!("│ ~     │ 126  │ Stochastic Prefix / NOT │ Approximate slot / Bitwise NOT mode │");
+            println!(
+                "┌──────────────────────────────────────────────────────────────────────────────┐"
+            );
+            println!(
+                "│ 4. SPECIAL SYMBOLS: (32 Characters, ASCII 33..47, 58..64, 91..96, 123..126)  │"
+            );
+            println!(
+                "├───────┬──────┬─────────────────────────┬─────────────────────────────────────┤"
+            );
+            println!(
+                "│ Char  │ ASCII│ Role                    │ Functional Semantics                │"
+            );
+            println!(
+                "├───────┼──────┼─────────────────────────┼─────────────────────────────────────┤"
+            );
+            println!(
+                "│ !     │  33  │ Trap Trigger / Barrier  │ Hardware checkpoint & trap fault    │"
+            );
+            println!(
+                "│ \"     │  34  │ Literal String Delim    │ Static neural payload delimiter     │"
+            );
+            println!(
+                "│ #     │  35  │ Immediate Mode Delim    │ Direct constant operand prefix      │"
+            );
+            println!(
+                "│ $     │  36  │ Register Mode Delim     │ Core register reference delimiter   │"
+            );
+            println!(
+                "│ %     │  37  │ Modulo ALU Bypass       │ Hardware integer remainder mode     │"
+            );
+            println!(
+                "│ &     │  38  │ Bitwise AND Bypass      │ Hardware logical conjunction mode   │"
+            );
+            println!(
+                "│ '     │  39  │ Speculative Slot Prefix │ High-priority speculative dispatch  │"
+            );
+            println!(
+                "│ (     │  40  │ Vector Group Start      │ Packed SIMD operand bracket open    │"
+            );
+            println!(
+                "│ )     │  41  │ Vector Group End        │ Packed SIMD operand bracket close   │"
+            );
+            println!(
+                "│ *     │  42  │ Multiply ALU Bypass     │ Single-cycle DSP hardware multiplier│"
+            );
+            println!(
+                "│ +     │  43  │ Addition ALU Bypass     │ Single-cycle adder bypass mode      │"
+            );
+            println!(
+                "│ ,     │  44  │ Operand Separator       │ Multi-argument field delimiter      │"
+            );
+            println!(
+                "│ -     │  45  │ Subtraction ALU Bypass  │ Single-cycle subtractor bypass mode │"
+            );
+            println!(
+                "│ .     │  46  │ Fixed-Point Dot Marker  │ Q16.16 fixed-point fractional radix │"
+            );
+            println!(
+                "│ /     │  47  │ Division ALU Bypass     │ Hardware division with zero-trap    │"
+            );
+            println!(
+                "│ :     │  58  │ Bundle Cycle Delimiter  │ Cycle header separator ('B0001:')   │"
+            );
+            println!(
+                "│ ;     │  59  │ Yield Terminator/Comment│ Low-priority commit / line comment  │"
+            );
+            println!(
+                "│ <     │  60  │ Less-Than / Inward NoC  │ Signed less-than / simplex recv     │"
+            );
+            println!(
+                "│ =     │  61  │ Assign Opcode / Equal   │ '=0' immediate load / Equality ALU  │"
+            );
+            println!(
+                "│ >     │  62  │ Standard Slot Terminator│ Synchronous commit token            │"
+            );
+            println!(
+                "│ ?     │  63  │ Predicate Mode / Term   │ Conditional execution gate          │"
+            );
+            println!(
+                "│ @     │  64  │ Memory Pointer Prefix   │ Spatial HBM3/SRAM address pointer   │"
+            );
+            println!(
+                "│ [     │  91  │ Arena Memory Open       │ Region arena boundary start         │"
+            );
+            println!(
+                "│ \\     │  92  │ Reverse Pipeline Bypass │ Inverted dataflow pipeline step     │"
+            );
+            println!(
+                "│ ]     │  93  │ Arena Memory Close      │ Region arena boundary end           │"
+            );
+            println!(
+                "│ ^     │  94  │ Bitwise XOR Bypass      │ Hardware parity & XOR logic gate    │"
+            );
+            println!(
+                "│ _     │  95  │ Standard Slot Prefix    │ Deterministic synchronous slot      │"
+            );
+            println!(
+                "│ `     │  96  │ Cycle Timestamp Tick    │ Real-time microcode cycle marker    │"
+            );
+            println!(
+                "│ {{     │ 123  │ Cognitive Brain Cluster │ Brain domain grouping start         │"
+            );
+            println!(
+                "│ |     │ 124  │ Bitwise OR / Barrier    │ Logical disjunction / Torus barrier │"
+            );
+            println!(
+                "│ }}     │ 125  │ Cognitive Brain Cluster │ Brain domain grouping end           │"
+            );
+            println!(
+                "│ ~     │ 126  │ Stochastic Prefix / NOT │ Approximate slot / Bitwise NOT mode │"
+            );
             println!("└───────┴──────┴─────────────────────────┴─────────────────────────────────────┘\n");
 
-            println!("  TOTAL ALPHABET COUNT: 10 + 26 + 26 + 32 = 94 ASCII CHARACTERS (100% COVERAGE)");
+            println!(
+                "  TOTAL ALPHABET COUNT: 10 + 26 + 26 + 32 = 94 ASCII CHARACTERS (100% COVERAGE)"
+            );
             println!("  MAX SHANNON ENTROPY:  log2(94) = 6.5546 bits per character");
-            println!("  COMPLIANCE:           Book Pages 46-55, 88-95, 146-165 (SSS+ Specification)\n");
+            println!(
+                "  COMPLIANCE:           Book Pages 46-55, 88-95, 146-165 (SSS+ Specification)\n"
+            );
         }
         "cl-audit" => {
             if args.len() < 3 {
@@ -2505,8 +3412,12 @@ fn main() {
             });
 
             print_banner();
-            println!("================================================================================");
-            println!("         CRON COGNITIVE LOW-LEVEL (.cl) 94-CHARACTER ALPHABET AUDIT             ");
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "         CRON COGNITIVE LOW-LEVEL (.cl) 94-CHARACTER ALPHABET AUDIT             "
+            );
             println!("================================================================================\n");
 
             println!("[1/3] Verifying Structural & Physical VLIW Integrity...");
@@ -2519,8 +3430,14 @@ fn main() {
             };
             println!("      ✓ Bundles Validated:      {}", report.total_bundles);
             println!("      ✓ Slots Checked:          {}", report.total_slots);
-            println!("      ✓ Opcodes Verified:       {}", report.opcodes_verified);
-            println!("      ✓ CRC-8 ATM Tokens Valid: {}/{}", report.crc_verified, report.total_slots);
+            println!(
+                "      ✓ Opcodes Verified:       {}",
+                report.opcodes_verified
+            );
+            println!(
+                "      ✓ CRC-8 ATM Tokens Valid: {}/{}",
+                report.crc_verified, report.total_slots
+            );
             println!("      ✓ Hardware Hazards Found: {}", report.hazards.len());
             for h in &report.hazards {
                 println!("        ! {}", h);
@@ -2531,9 +3448,18 @@ fn main() {
             let max_entropy = 94.0f64.log2();
             let density_pct = (audit.entropy_bits_per_char / max_entropy) * 100.0;
 
-            println!("      ✓ Total Characters Scanned:   {}", audit.total_characters_scanned);
-            println!("      ✓ Unique Characters Used:     {}/94 ({:.2}% coverage)", audit.unique_characters_used, audit.coverage_percentage);
-            println!("      ✓ Shannon Information Entropy:{:.4} bits/char (Max theoretical: {:.4})", audit.entropy_bits_per_char, max_entropy);
+            println!(
+                "      ✓ Total Characters Scanned:   {}",
+                audit.total_characters_scanned
+            );
+            println!(
+                "      ✓ Unique Characters Used:     {}/94 ({:.2}% coverage)",
+                audit.unique_characters_used, audit.coverage_percentage
+            );
+            println!(
+                "      ✓ Shannon Information Entropy:{:.4} bits/char (Max theoretical: {:.4})",
+                audit.entropy_bits_per_char, max_entropy
+            );
             println!("      ✓ Information Density Metric: {:.2}%", density_pct);
 
             let mut digits = 0;
@@ -2560,7 +3486,10 @@ fn main() {
 
             if !audit.missing_characters.is_empty() {
                 let missing_str: String = audit.missing_characters.iter().collect();
-                println!("\n  Missing Characters ({}):", audit.missing_characters.len());
+                println!(
+                    "\n  Missing Characters ({}):",
+                    audit.missing_characters.len()
+                );
                 println!("    [{}]", missing_str);
             } else {
                 println!("\n  ★ 100% COMPLETE ALPHABET SATURATION ACHIEVED (All 94 Characters Utilized) ★");
@@ -2571,7 +3500,10 @@ fn main() {
             sorted_chars.sort_by(|a, b| b.1.cmp(a.1));
             for (&ch, cnt) in sorted_chars.iter().take(10) {
                 let p = (**cnt as f64 / audit.total_characters_scanned as f64) * 100.0;
-                println!("    '{}' (ASCII {:3}): {:4} occurrences ({:5.2}%)", ch, ch as u32, cnt, p);
+                println!(
+                    "    '{}' (ASCII {:3}): {:4} occurrences ({:5.2}%)",
+                    ch, ch as u32, cnt, p
+                );
             }
 
             println!("\n================================================================================");
@@ -2622,7 +3554,12 @@ fn main() {
                     let tensor_result = runtime.execute_morphism(&doc);
 
                     let (k_name, target_sil, ipc, cores) = match &doc.target_contract {
-                        Some(tc) => (tc.kernel_name.as_str(), tc.target.as_str(), tc.ipc_target, tc.cores),
+                        Some(tc) => (
+                            tc.kernel_name.as_str(),
+                            tc.target.as_str(),
+                            tc.ipc_target,
+                            tc.cores,
+                        ),
                         None => ("unknown_kernel", "silicon.generic", 4.0, 256),
                     };
 
@@ -2642,7 +3579,10 @@ fn main() {
                         println!("    Silicon Cores Allocated:    {} cores", cores);
                         if let Some(ref tc) = doc.target_contract {
                             if let Some(ref mesh) = tc.mesh_routing {
-                                println!("    Spatial Mesh Topology:      @mesh {:?} : ⮑ {}", mesh.dimensions, mesh.vector_formula);
+                                println!(
+                                    "    Spatial Mesh Topology:      @mesh {:?} : ⮑ {}",
+                                    mesh.dimensions, mesh.vector_formula
+                                );
                             }
                         }
                         println!();
@@ -2658,11 +3598,22 @@ fn main() {
 
                         if let Some(ref m) = doc.math_morphism {
                             println!("  [PILLAR 3: MATHEMATICAL TENSOR MORPHISM]");
-                            let dims_str = m.tile_dims.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("×");
+                            let dims_str = m
+                                .tile_dims
+                                .iter()
+                                .map(|d| d.to_string())
+                                .collect::<Vec<_>>()
+                                .join("×");
                             let dt_str = &m.dtype;
                             let out_str = m.output_symbol.as_deref().unwrap_or("Y");
-                            println!("    Tensor Block:               §{}[{}:{}]", m.name, dims_str, dt_str);
-                            println!("    Morphism Mapping:           {} ↦ {}", m.input_symbol, out_str);
+                            println!(
+                                "    Tensor Block:               §{}[{}:{}]",
+                                m.name, dims_str, dt_str
+                            );
+                            println!(
+                                "    Morphism Mapping:           {} ↦ {}",
+                                m.input_symbol, out_str
+                            );
                             println!("    Algorithmic Steps:          {} steps", m.steps.len());
                             for (i, step) in m.steps.iter().enumerate() {
                                 println!("      [{}] {} := {}", i + 1, step.target_var, step.expr);
@@ -2672,7 +3623,10 @@ fn main() {
 
                         if let Some(ref cf) = doc.control_flow {
                             println!("  [PILLAR 4: CIPHERED CONTROL-FLOW & SAFETY SLA]");
-                            println!("    Control Flow Ops:           {} operations", cf.statements.len());
+                            println!(
+                                "    Control Flow Ops:           {} operations",
+                                cf.statements.len()
+                            );
                             for (i, op) in cf.statements.iter().enumerate() {
                                 println!("      [{}] {:?}", i + 1, op);
                             }
@@ -2684,17 +3638,33 @@ fn main() {
                         }
 
                         println!("  [PILLAR 5: 10/16-CHAR VLIW MACHINE MICROCODE]");
-                        println!("    Generated Bundles:          {} bundles ({} instructions)",
-                            doc.vliw_stream.len(), doc.vliw_stream.len() * 4);
-                        println!("    Co-Verification Audit:      {} (AST Math vs VLIW Semantics)",
-                            if verification_report.passed { "PASSED (100% PARITY)" } else { "FAILED" });
-                        println!("    Scheduled Microcode Cycles: {} cycles", doc.vliw_stream.len());
+                        println!(
+                            "    Generated Bundles:          {} bundles ({} instructions)",
+                            doc.vliw_stream.len(),
+                            doc.vliw_stream.len() * 4
+                        );
+                        println!(
+                            "    Co-Verification Audit:      {} (AST Math vs VLIW Semantics)",
+                            if verification_report.passed {
+                                "PASSED (100% PARITY)"
+                            } else {
+                                "FAILED"
+                            }
+                        );
+                        println!(
+                            "    Scheduled Microcode Cycles: {} cycles",
+                            doc.vliw_stream.len()
+                        );
 
                         if do_lower || args.iter().any(|a| a == "-v" || a == "--verbose") {
-                            println!("------------------------------------------------------------");
+                            println!(
+                                "------------------------------------------------------------"
+                            );
                             println!("--- LOWERED VLIW MACHINE CODE STREAM ---");
                             println!("{}", lowered_code);
-                            println!("------------------------------------------------------------");
+                            println!(
+                                "------------------------------------------------------------"
+                            );
                         }
 
                         if let Ok(()) = tensor_result {
@@ -2702,9 +3672,15 @@ fn main() {
                             for (name, tensor) in &runtime.buffers {
                                 let vals = tensor.to_f32_vec();
                                 let norm: f32 = vals.iter().map(|v| v * v).sum::<f32>().sqrt();
-                                let sample: Vec<String> = vals.iter().take(4).map(|v| format!("{:.4}", v)).collect();
-                                println!("    * {:<6} Dims: {:<12} L2-Norm: {:<8.4} First4: [{}]",
-                                    name, format!("{:?}", tensor.shape), norm, sample.join(", "));
+                                let sample: Vec<String> =
+                                    vals.iter().take(4).map(|v| format!("{:.4}", v)).collect();
+                                println!(
+                                    "    * {:<6} Dims: {:<12} L2-Norm: {:<8.4} First4: [{}]",
+                                    name,
+                                    format!("{:?}", tensor.shape),
+                                    norm,
+                                    sample.join(", ")
+                                );
                             }
                         }
 
@@ -2724,7 +3700,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
-                "bench-math" | "math-bench" | "bench_math" => {
+        "bench-math" | "math-bench" | "bench_math" => {
             run_bench_math(&args[2..]);
             return;
         }
@@ -2733,7 +3709,10 @@ fn main() {
                 run_bench_math(&args[2..]);
                 return;
             }
-            if (args.len() >= 3 && (args[2] == "--repl" || args[2] == "repl")) || (args.len() == 2 && (args[1] == "math" || args[1] == "repl")) && args.get(2).map(|s| s == "--repl").unwrap_or(false) {
+            if (args.len() >= 3 && (args[2] == "--repl" || args[2] == "repl"))
+                || (args.len() == 2 && (args[1] == "math" || args[1] == "repl"))
+                    && args.get(2).map(|s| s == "--repl").unwrap_or(false)
+            {
                 if let Err(e) = cronc::run_math_repl() {
                     eprintln!("[REPL ERROR] {}", e);
                     std::process::exit(1);
@@ -2763,7 +3742,10 @@ fn main() {
                     eprintln!("Error reading '{}': {}", input_arg, e);
                     std::process::exit(1);
                 });
-                let dir = std::path::Path::new(input_arg).parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+                let dir = std::path::Path::new(input_arg)
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .to_path_buf();
                 (s, dir)
             } else {
                 (input_arg.clone(), std::path::PathBuf::from("."))
@@ -2777,16 +3759,35 @@ fn main() {
             let emit_html = args.iter().any(|a| a == "--html-graph" || a == "--html");
             let do_opt = args.iter().any(|a| a == "--opt" || a == "-O");
             let is_json = args.iter().any(|a| a == "--json");
-            let profile_opt = args.iter().position(|a| a == "--profile").and_then(|idx| args.get(idx + 1));
-            let profile = if args.iter().any(|a| a == "--max-quality" || a == "--max-precision") || profile_opt.map(|s| s == "max-quality" || s == "max").unwrap_or(false) {
+            let profile_opt = args
+                .iter()
+                .position(|a| a == "--profile")
+                .and_then(|idx| args.get(idx + 1));
+            let profile = if args
+                .iter()
+                .any(|a| a == "--max-quality" || a == "--max-precision")
+                || profile_opt
+                    .map(|s| s == "max-quality" || s == "max")
+                    .unwrap_or(false)
+            {
                 cronc::CompilationProfile::MaxQuality
-            } else if args.iter().any(|a| a == "--min-resource" || a == "--bitnet" || a == "--quantized") || profile_opt.map(|s| s == "min-resource" || s == "min").unwrap_or(false) {
+            } else if args
+                .iter()
+                .any(|a| a == "--min-resource" || a == "--bitnet" || a == "--quantized")
+                || profile_opt
+                    .map(|s| s == "min-resource" || s == "min")
+                    .unwrap_or(false)
+            {
                 cronc::CompilationProfile::MinResource
             } else {
                 cronc::CompilationProfile::Balanced
             };
-            let compare_profiles = args.iter().any(|a| a == "--compare-profiles" || a == "--compare");
-            let audit_precision = args.iter().any(|a| a == "--audit-precision" || a == "--verify-dpsta-quarot" || a == "--audit");
+            let compare_profiles = args
+                .iter()
+                .any(|a| a == "--compare-profiles" || a == "--compare");
+            let audit_precision = args.iter().any(|a| {
+                a == "--audit-precision" || a == "--verify-dpsta-quarot" || a == "--audit"
+            });
             let output_bin = args
                 .iter()
                 .position(|a| a == "-o")
@@ -2795,13 +3796,22 @@ fn main() {
             let parse_res = cronc::parse_math_code(&source).and_then(|mut prog| {
                 prog.resolve_links(&base_dir)?;
                 if let Err(shape_errors) = prog.verify_shapes() {
-                    return Err(format!("Shape verification failed:\n  {}", shape_errors.join("\n  ")));
+                    return Err(format!(
+                        "Shape verification failed:\n  {}",
+                        shape_errors.join("\n  ")
+                    ));
                 }
                 if let Err(sym_errors) = prog.verify_symbolic_shapes() {
-                    return Err(format!("Symbolic shape verification failed:\n  {}", sym_errors.join("\n  ")));
+                    return Err(format!(
+                        "Symbolic shape verification failed:\n  {}",
+                        sym_errors.join("\n  ")
+                    ));
                 }
                 if let Err(zv_errors) = prog.verify_zero_verbal_constitution() {
-                    return Err(format!("Zero-Verbal Constitution check failed:\n  {}", zv_errors.join("\n  ")));
+                    return Err(format!(
+                        "Zero-Verbal Constitution check failed:\n  {}",
+                        zv_errors.join("\n  ")
+                    ));
                 }
                 if do_opt {
                     prog = prog.optimize_tensor_graph();
@@ -2816,7 +3826,10 @@ fn main() {
                         println!("[2/2] Invoking Host C Compiler to build '{}'...", out_path);
                         match prog.compile_to_native(out_path, "3") {
                             Ok(()) => {
-                                println!("\x1b[32m[+] Successfully compiled native binary: {}\x1b[0m", out_path);
+                                println!(
+                                    "\x1b[32m[+] Successfully compiled native binary: {}\x1b[0m",
+                                    out_path
+                                );
                             }
                             Err(e) => {
                                 eprintln!("[NATIVE COMPILATION ERROR] {}", e);
@@ -2824,7 +3837,10 @@ fn main() {
                             }
                         }
                     } else if emit_html {
-                        println!("{}", prog.to_html_graph("CRON Computational Graph Visualizer"));
+                        println!(
+                            "{}",
+                            prog.to_html_graph("CRON Computational Graph Visualizer")
+                        );
                     } else if emit_graph {
                         println!("{}", prog.to_mermaid());
                     } else if emit_c23_exec {
@@ -2837,13 +3853,21 @@ fn main() {
                         if args.iter().any(|a| a == "--run" || a == "--cuda") {
                             println!("\n[CRON CUDA HARDWARE JIT] Discovering host NVIDIA GPU...");
                             if !cronc::cl_cuda_driver::CudaDriver::is_available() {
-                                eprintln!("[ERROR] NVIDIA CUDA Driver not detected on this system.");
+                                eprintln!(
+                                    "[ERROR] NVIDIA CUDA Driver not detected on this system."
+                                );
                             } else {
                                 match cronc::cl_cuda_driver::CudaDriver::init() {
                                     Ok(driver) => {
-                                        let name = driver.device_name(0).unwrap_or_else(|_| "GPU 0".to_string());
+                                        let name = driver
+                                            .device_name(0)
+                                            .unwrap_or_else(|_| "GPU 0".to_string());
                                         let mem = driver.device_total_memory(0).unwrap_or(0);
-                                        println!("[CRON CUDA HARDWARE JIT] Connected to {} ({} MB VRAM)", name, mem / 1024 / 1024);
+                                        println!(
+                                            "[CRON CUDA HARDWARE JIT] Connected to {} ({} MB VRAM)",
+                                            name,
+                                            mem / 1024 / 1024
+                                        );
                                         println!("[CRON CUDA HARDWARE JIT] JIT compiling PTX to hardware machine code...");
                                         match driver.create_context(0) {
                                             Ok(ctx) => {
@@ -2853,10 +3877,15 @@ fn main() {
                                                     Err(e) => eprintln!("[ERROR] PTX JIT compilation failed: {}", e),
                                                 }
                                             }
-                                            Err(e) => eprintln!("[ERROR] Failed to create CUDA context: {}", e),
+                                            Err(e) => eprintln!(
+                                                "[ERROR] Failed to create CUDA context: {}",
+                                                e
+                                            ),
                                         }
                                     }
-                                    Err(e) => eprintln!("[ERROR] Failed to init CUDA driver: {}", e),
+                                    Err(e) => {
+                                        eprintln!("[ERROR] Failed to init CUDA driver: {}", e)
+                                    }
                                 }
                             }
                         }
@@ -2867,30 +3896,45 @@ fn main() {
                             .name("cron-math-compare".to_string())
                             .stack_size(32 * 1024 * 1024)
                             .spawn(move || {
-                                let prog_max = prog.transform_for_profile(cronc::CompilationProfile::MaxQuality);
-                                let mut eval_max = cronc::MathEvaluator::with_profile(cronc::CompilationProfile::MaxQuality);
+                                let prog_max = prog
+                                    .transform_for_profile(cronc::CompilationProfile::MaxQuality);
+                                let mut eval_max = cronc::MathEvaluator::with_profile(
+                                    cronc::CompilationProfile::MaxQuality,
+                                );
                                 let t0 = std::time::Instant::now();
                                 let res_max = eval_max.execute_program_value(&prog_max);
                                 let max_dur = t0.elapsed();
-                                let max_mem = eval_max.peak_memory_bytes.max(eval_max.current_env_memory_bytes());
+                                let max_mem = eval_max
+                                    .peak_memory_bytes
+                                    .max(eval_max.current_env_memory_bytes());
 
-                                let prog_min = prog.transform_for_profile(cronc::CompilationProfile::MinResource);
-                                let mut eval_min = cronc::MathEvaluator::with_profile(cronc::CompilationProfile::MinResource);
+                                let prog_min = prog
+                                    .transform_for_profile(cronc::CompilationProfile::MinResource);
+                                let mut eval_min = cronc::MathEvaluator::with_profile(
+                                    cronc::CompilationProfile::MinResource,
+                                );
                                 let t1 = std::time::Instant::now();
                                 let res_min = eval_min.execute_program_value(&prog_min);
                                 let min_dur = t1.elapsed();
-                                let min_mem = eval_min.peak_memory_bytes.max(eval_min.current_env_memory_bytes());
+                                let min_mem = eval_min
+                                    .peak_memory_bytes
+                                    .max(eval_min.current_env_memory_bytes());
 
                                 (res_max, max_dur, max_mem, res_min, min_dur, min_mem)
                             })
                             .expect("Failed to spawn math compare thread");
 
-                        let (res_max, max_dur, max_mem, res_min, min_dur, min_mem) = runner.join().expect("Math compare thread panicked");
+                        let (res_max, max_dur, max_mem, res_min, min_dur, min_mem) =
+                            runner.join().expect("Math compare thread panicked");
 
                         let max_dur_us = max_dur.as_micros().max(1);
                         let min_dur_us = min_dur.as_micros().max(1);
                         let speed_ratio = (max_dur_us as f64) / (min_dur_us as f64);
-                        let mem_ratio = if min_mem > 0 { (max_mem as f64) / (min_mem as f64) } else { 1.0 };
+                        let mem_ratio = if min_mem > 0 {
+                            (max_mem as f64) / (min_mem as f64)
+                        } else {
+                            1.0
+                        };
 
                         if is_json {
                             println!("{{\"success\":true,\"compare\":true,\"max_quality\":{{\"memory_bytes\":{},\"latency_us\":{}}},\"min_resource\":{{\"memory_bytes\":{},\"latency_us\":{}}}}}",
@@ -2899,23 +3943,58 @@ fn main() {
                             println!("========================================================================================================");
                             println!(" CRON DUAL-PROFILE COMPILER TELEMETRY: MAX-QUALITY vs. MIN-RESOURCE");
                             println!("========================================================================================================");
-                            println!(" {:<24} | {:<27} | {:<27} | {:<16}", "Metric", "Max-Quality (F32/CUDA)", "Min-Resource (1.03-bit/DPSTA)", "Comparative Gain");
+                            println!(
+                                " {:<24} | {:<27} | {:<27} | {:<16}",
+                                "Metric",
+                                "Max-Quality (F32/CUDA)",
+                                "Min-Resource (1.03-bit/DPSTA)",
+                                "Comparative Gain"
+                            );
                             println!("--------------------------------------------------------------------------------------------------------");
-                            println!(" {:<24} | {:<27} | {:<27} | {:.1}x Less Memory", "Peak Tensor Memory", format!("{} bytes", max_mem), format!("{} bytes", min_mem), mem_ratio.max(1.0));
-                            println!(" {:<24} | {:<27} | {:<27} | {:.1}x Speedup", "Execution Latency", format!("{:.3} ms", max_dur.as_secs_f64() * 1000.0), format!("{:.3} ms", min_dur.as_secs_f64() * 1000.0), speed_ratio.max(1.0));
-                            println!(" {:<24} | {:<27} | {:<27} | {}", "Arithmetic Precision", "IEEE 754 Float32 (Full)", "1.58-bit Ternary / DPSTA", "0-Multiplier MAC");
-                            println!(" {:<24} | {:<27} | {:<27} | {}", "Hardware Target", "CUDA PTX / WGMMA / AVX", "0-Malloc Stack C23 / VLIW", "Sub-Watt Silicon");
-                            let status_str = if res_max.is_ok() && res_min.is_ok() { "100% PARITY PASSED" } else { "EXECUTION ERROR" };
-                            println!(" {:<24} | {:<27} | {:<27} | {}", "Parity & Verification", "SUCCESS", "SUCCESS", status_str);
+                            println!(
+                                " {:<24} | {:<27} | {:<27} | {:.1}x Less Memory",
+                                "Peak Tensor Memory",
+                                format!("{} bytes", max_mem),
+                                format!("{} bytes", min_mem),
+                                mem_ratio.max(1.0)
+                            );
+                            println!(
+                                " {:<24} | {:<27} | {:<27} | {:.1}x Speedup",
+                                "Execution Latency",
+                                format!("{:.3} ms", max_dur.as_secs_f64() * 1000.0),
+                                format!("{:.3} ms", min_dur.as_secs_f64() * 1000.0),
+                                speed_ratio.max(1.0)
+                            );
+                            println!(
+                                " {:<24} | {:<27} | {:<27} | {}",
+                                "Arithmetic Precision",
+                                "IEEE 754 Float32 (Full)",
+                                "1.58-bit Ternary / DPSTA",
+                                "0-Multiplier MAC"
+                            );
+                            println!(
+                                " {:<24} | {:<27} | {:<27} | {}",
+                                "Hardware Target",
+                                "CUDA PTX / WGMMA / AVX",
+                                "0-Malloc Stack C23 / VLIW",
+                                "Sub-Watt Silicon"
+                            );
+                            let status_str = if res_max.is_ok() && res_min.is_ok() {
+                                "100% PARITY PASSED"
+                            } else {
+                                "EXECUTION ERROR"
+                            };
+                            println!(
+                                " {:<24} | {:<27} | {:<27} | {}",
+                                "Parity & Verification", "SUCCESS", "SUCCESS", status_str
+                            );
                             println!("========================================================================================================");
                         }
                     } else if audit_precision {
                         let runner = std::thread::Builder::new()
                             .name("cron-math-audit".to_string())
                             .stack_size(32 * 1024 * 1024)
-                            .spawn(move || {
-                                prog.audit_dpsta_quarot_precision()
-                            })
+                            .spawn(move || prog.audit_dpsta_quarot_precision())
                             .expect("Failed to spawn math audit thread");
 
                         match runner.join().expect("Math audit thread panicked") {
@@ -2974,11 +4053,17 @@ fn main() {
                             .spawn(move || {
                                 let mut eval = cronc::MathEvaluator::with_profile(profile);
                                 let res = eval.execute_program_value(&target_prog);
-                                (res, eval.peak_memory_bytes.max(eval.current_env_memory_bytes()), eval.functions.len(), eval.env.len())
+                                (
+                                    res,
+                                    eval.peak_memory_bytes.max(eval.current_env_memory_bytes()),
+                                    eval.functions.len(),
+                                    eval.env.len(),
+                                )
                             })
                             .expect("Failed to spawn math execution thread");
 
-                        let (eval_res, peak_mem, n_funcs, n_consts) = runner.join().expect("Math thread panicked");
+                        let (eval_res, peak_mem, n_funcs, n_consts) =
+                            runner.join().expect("Math thread panicked");
 
                         match eval_res {
                             Ok(res) => {
@@ -2989,9 +4074,15 @@ fn main() {
                                     println!("================================================================================");
                                     println!(" CRON MATHEMATICAL CALCULUS ENGINE (Zero-Word Algebraic Pipeline)");
                                     let prof_name = match profile {
-                                        cronc::CompilationProfile::MaxQuality => "Max-Quality (IEEE 754 F32 / CUDA PTX / WGMMA)",
-                                        cronc::CompilationProfile::MinResource => "Min-Resource (1.03-bit / DPSTA / Popcount MAC)",
-                                        cronc::CompilationProfile::Balanced => "Balanced (Standard BF16 / Fused Tensor Graph)",
+                                        cronc::CompilationProfile::MaxQuality => {
+                                            "Max-Quality (IEEE 754 F32 / CUDA PTX / WGMMA)"
+                                        }
+                                        cronc::CompilationProfile::MinResource => {
+                                            "Min-Resource (1.03-bit / DPSTA / Popcount MAC)"
+                                        }
+                                        cronc::CompilationProfile::Balanced => {
+                                            "Balanced (Standard BF16 / Fused Tensor Graph)"
+                                        }
                                     };
                                     println!("  [+] Active Profile    : {}", prof_name);
                                     println!("  [+] Functions Defined : {}", n_funcs);
@@ -3018,7 +4109,9 @@ fn main() {
         }
         "jit" | "cl-run" | "cl-jit" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron jit <file.cl> [--json] [--native]");
+                eprintln!(
+                    "Error: Missing input file. Usage: cron jit <file.cl> [--json] [--native]"
+                );
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -3029,7 +4122,9 @@ fn main() {
 
             let is_json = args.iter().any(|a| a == "--json");
             let is_native = args.iter().any(|a| a == "--native");
-            let is_cl = input_path.ends_with(".cl") || source.trim_start().starts_with('B') || source.contains("B0000:");
+            let is_cl = input_path.ends_with(".cl")
+                || source.trim_start().starts_with('B')
+                || source.contains("B0000:");
 
             if !is_cl && is_native {
                 match cronc::run_source_jit(&source) {
@@ -3038,11 +4133,19 @@ fn main() {
                             println!("{{\"backend\":\"x86_64-llvm-jit\",\"result\":{},\"status\":\"success\"}}", result);
                         } else {
                             print_banner();
-                            println!("============================================================");
-                            println!("     CRON DIRECT IN-MEMORY JIT EXECUTION (x86_64)           ");
-                            println!("============================================================\n");
+                            println!(
+                                "============================================================"
+                            );
+                            println!(
+                                "     CRON DIRECT IN-MEMORY JIT EXECUTION (x86_64)           "
+                            );
+                            println!(
+                                "============================================================\n"
+                            );
                             println!("  Execution Result:             {}", result);
-                            println!("============================================================");
+                            println!(
+                                "============================================================"
+                            );
                             println!("  STATUS: JIT EXECUTED SUCCESSFULLY\n");
                         }
                     }
@@ -3069,7 +4172,10 @@ fn main() {
                         Ok(cl) => cl,
                         Err(e) => {
                             if is_json {
-                                println!("{{\"error\":\"{}\",\"status\":\"compilation_error\"}}", e.replace('"', "\\\""));
+                                println!(
+                                    "{{\"error\":\"{}\",\"status\":\"compilation_error\"}}",
+                                    e.replace('"', "\\\"")
+                                );
                             } else {
                                 eprintln!("[COMPILATION ERROR] {}", e);
                             }
@@ -3105,16 +4211,40 @@ fn main() {
                                 core.r[6]
                             );
                         } else {
-                            println!("  Total Execution Cycles:       {} cycles", core.cycle_count);
+                            println!(
+                                "  Total Execution Cycles:       {} cycles",
+                                core.cycle_count
+                            );
                             println!("  Active Physical Cores:        256 cores (4D Torus)");
-                            println!("  Photonic MZI Optical Ops:     {} ops (0ns latency)", core.optical_gemm_count);
-                            println!("  Reversible Gate Ops:          {} ops (0 entropy loss)", core.reversible_ops_count);
-                            println!("  STDP Synapse Adaptations:     {} updates", core.stdp_updates_count);
-                            println!("  Spatial Broadcasts:           {} broadcasts", core.spatial_broadcast_count);
-                            println!("  Barrier Synchronizations:     {} barriers", core.barrier_count);
+                            println!(
+                                "  Photonic MZI Optical Ops:     {} ops (0ns latency)",
+                                core.optical_gemm_count
+                            );
+                            println!(
+                                "  Reversible Gate Ops:          {} ops (0 entropy loss)",
+                                core.reversible_ops_count
+                            );
+                            println!(
+                                "  STDP Synapse Adaptations:     {} updates",
+                                core.stdp_updates_count
+                            );
+                            println!(
+                                "  Spatial Broadcasts:           {} broadcasts",
+                                core.spatial_broadcast_count
+                            );
+                            println!(
+                                "  Barrier Synchronizations:     {} barriers",
+                                core.barrier_count
+                            );
                             if core.fused_ops_count > 0 {
-                                println!("  Streaming Fused Ops:          {} ops", core.fused_ops_count);
-                                println!("  DRAM/HBM Traffic Eliminated:  {} B", core.hbm_bytes_saved);
+                                println!(
+                                    "  Streaming Fused Ops:          {} ops",
+                                    core.fused_ops_count
+                                );
+                                println!(
+                                    "  DRAM/HBM Traffic Eliminated:  {} B",
+                                    core.hbm_bytes_saved
+                                );
                             }
                             if core.sphere_curvature_ops_count > 0 {
                                 println!("  4D Sphere Curvature Ops:      {} ops (0 FLOPs, Metric: R=W, ((X+Z)/32)+1)", core.sphere_curvature_ops_count);
@@ -3124,22 +4254,46 @@ fn main() {
                                 print!("  4-Head Final Sphere Coords:   ");
                                 for (i, name) in head_names.iter().enumerate() {
                                     let c = core.sphere_coords[i];
-                                    print!("{}[W{:02},X{:02}°,Z{:02}°,Q{}] ", name, c[0], c[1], c[2], c[3]);
+                                    print!(
+                                        "{}[W{:02},X{:02}°,Z{:02}°,Q{}] ",
+                                        name, c[0], c[1], c[2], c[3]
+                                    );
                                 }
                                 println!();
                             }
-                            println!("------------------------------------------------------------");
-                            println!("  Final Register R0:            0x{:08X} ({})", core.r[0], core.r[0]);
-                            println!("  Final Register R1:            0x{:08X} ({})", core.r[1], core.r[1]);
-                            println!("  Final Register R4:            0x{:08X} ({})", core.r[4], core.r[4]);
-                            println!("  Final Register R6:            0x{:08X} ({})", core.r[6], core.r[6]);
-                            println!("============================================================");
-                            println!("  STATUS: .cl JIT EXECUTED WITH 100% BIT-EXACT SILICON PARITY\n");
+                            println!(
+                                "------------------------------------------------------------"
+                            );
+                            println!(
+                                "  Final Register R0:            0x{:08X} ({})",
+                                core.r[0], core.r[0]
+                            );
+                            println!(
+                                "  Final Register R1:            0x{:08X} ({})",
+                                core.r[1], core.r[1]
+                            );
+                            println!(
+                                "  Final Register R4:            0x{:08X} ({})",
+                                core.r[4], core.r[4]
+                            );
+                            println!(
+                                "  Final Register R6:            0x{:08X} ({})",
+                                core.r[6], core.r[6]
+                            );
+                            println!(
+                                "============================================================"
+                            );
+                            println!(
+                                "  STATUS: .cl JIT EXECUTED WITH 100% BIT-EXACT SILICON PARITY\n"
+                            );
                         }
                     }
                     Err(e) => {
                         if is_json {
-                            println!("{{\"error\":\"{}\",\"status\":\"jit_error\"}}", e.replace('"', "\\\""));
+                            println!(
+                                "{{\"error\":\"{}\",\"status\":\"jit_error\"}}",
+                                e.replace('"', "\\\"")
+                            );
                         } else {
                             eprintln!("[.cl JIT ERROR] {}", e);
                         }
@@ -3160,13 +4314,19 @@ fn main() {
             });
             match cronc::compile_high_cl_to_cl(&source) {
                 Ok(cl_text) => {
-                    let out_path = args.windows(2).find(|w| w[0] == "-o").map(|w| w[1].as_str());
+                    let out_path = args
+                        .windows(2)
+                        .find(|w| w[0] == "-o")
+                        .map(|w| w[1].as_str());
                     if let Some(out_p) = out_path {
                         fs::write(out_p, &cl_text).unwrap_or_else(|e| {
                             eprintln!("Error writing output '{}': {}", out_p, e);
                             std::process::exit(1);
                         });
-                        println!("Successfully lowered High-Level CL to 128-bit VLIW: {}", out_p);
+                        println!(
+                            "Successfully lowered High-Level CL to 128-bit VLIW: {}",
+                            out_p
+                        );
                     } else {
                         println!("{}", cl_text);
                     }
@@ -3194,20 +4354,36 @@ fn main() {
 
             match op.as_str() {
                 "gemm" => {
-                    let m: usize = args.windows(2).find(|w| w[0] == "-m").and_then(|w| w[1].parse().ok()).unwrap_or(128);
-                    let k: usize = args.windows(2).find(|w| w[0] == "-k").and_then(|w| w[1].parse().ok()).unwrap_or(128);
-                    let n: usize = args.windows(2).find(|w| w[0] == "-n").and_then(|w| w[1].parse().ok()).unwrap_or(128);
+                    let m: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-m")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(128);
+                    let k: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-k")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(128);
+                    let n: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-n")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(128);
 
                     println!("============================================================");
                     println!("       CRON HIGH-PERFORMANCE REAL TENSOR GEMM ENGINE        ");
                     println!("============================================================");
-                    println!("  Dimensions:                   [M: {}, K: {}, N: {}]", m, k, n);
+                    println!(
+                        "  Dimensions:                   [M: {}, K: {}, N: {}]",
+                        m, k, n
+                    );
                     println!("  Data Type:                    FP32 (Single Precision IEEE 754)");
-                    let simd_info = if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-                        "x86_64 AVX2 + FMA (8-Wide SIMD Vector Lane Active)"
-                    } else {
-                        "Portable Cache-Blocked L1/L2 Sub-Tile Fallback"
-                    };
+                    let simd_info =
+                        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+                            "x86_64 AVX2 + FMA (8-Wide SIMD Vector Lane Active)"
+                        } else {
+                            "Portable Cache-Blocked L1/L2 Sub-Tile Fallback"
+                        };
                     println!("  Hardware Acceleration:        {}", simd_info);
 
                     let a = cronc::TensorData::random_uniform(vec![m, k], 42);
@@ -3217,7 +4393,8 @@ fn main() {
                     let iters = if is_bench { 100 } else { 1 };
                     let start = std::time::Instant::now();
                     for _ in 0..iters {
-                        cronc::tensor_gemm_f32(&a, &b, &mut c, 1.0, 0.0).expect("GEMM execution failed");
+                        cronc::tensor_gemm_f32(&a, &b, &mut c, 1.0, 0.0)
+                            .expect("GEMM execution failed");
                     }
                     let elapsed = start.elapsed();
                     let total_flops = 2.0 * (m as f64) * (k as f64) * (n as f64) * (iters as f64);
@@ -3231,15 +4408,25 @@ fn main() {
                     println!("  STATUS: 100% BIT-EXACT NUMERICAL CONVERGENCE PASSED\n");
                 }
                 "flash-attn" => {
-                    let s: usize = args.windows(2).find(|w| w[0] == "-s").and_then(|w| w[1].parse().ok()).unwrap_or(64);
-                    let d: usize = args.windows(2).find(|w| w[0] == "-d").and_then(|w| w[1].parse().ok()).unwrap_or(64);
+                    let s: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-s")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(64);
+                    let d: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-d")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(64);
 
                     println!("============================================================");
                     println!("     CRON FLASHATTENTION-3 TILED ONLINE SOFTMAX ENGINE      ");
                     println!("============================================================");
                     println!("  Sequence Length:              {} tokens", s);
                     println!("  Head Dimension:               {} features", d);
-                    println!("  Memory Complexity:            O(N) (Avoids O(N^2) Attention Matrix)");
+                    println!(
+                        "  Memory Complexity:            O(N) (Avoids O(N^2) Attention Matrix)"
+                    );
 
                     let q = cronc::TensorData::random_uniform(vec![s, d], 11);
                     let k = cronc::TensorData::random_uniform(vec![s, d], 22);
@@ -3249,7 +4436,8 @@ fn main() {
                     let iters = if is_bench { 50 } else { 1 };
                     let start = std::time::Instant::now();
                     for _ in 0..iters {
-                        cronc::tensor_flash_attention_3(&q, &k, &v, &mut out).expect("FlashAttention-3 failed");
+                        cronc::tensor_flash_attention_3(&q, &k, &v, &mut out)
+                            .expect("FlashAttention-3 failed");
                     }
                     let elapsed = start.elapsed();
                     let latency_us = elapsed.as_micros() as f64 / (iters as f64);
@@ -3258,7 +4446,11 @@ fn main() {
                     println!("  STATUS: ONLINE SOFTMAX STREAMED WITH ZERO OOM\n");
                 }
                 "mamba2" => {
-                    let s: usize = args.windows(2).find(|w| w[0] == "-s").and_then(|w| w[1].parse().ok()).unwrap_or(128);
+                    let s: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-s")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(128);
 
                     println!("============================================================");
                     println!("     CRON MAMBA-2 SSD CONTINUOUS ASSOCIATIVE SCAN ENGINE    ");
@@ -3282,13 +4474,19 @@ fn main() {
                     println!("  STATUS: CONTINUOUS STATE-SPACE ASSOCIATIVE SCAN VERIFIED\n");
                 }
                 "quarot" => {
-                    let n: usize = args.windows(2).find(|w| w[0] == "-n").and_then(|w| w[1].parse().ok()).unwrap_or(256);
+                    let n: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-n")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(256);
 
                     println!("============================================================");
                     println!("     CRON QUAROT W4A4 FAST WALSH-HADAMARD TRANSFORM (FWHT)  ");
                     println!("============================================================");
                     println!("  Vector Size:                  {} elements", n);
-                    println!("  Multipliers:                  0 (Pure Addition/Subtraction Butterfly)");
+                    println!(
+                        "  Multipliers:                  0 (Pure Addition/Subtraction Butterfly)"
+                    );
 
                     let mut x = cronc::TensorData::random_uniform(vec![n], 77);
 
@@ -3304,8 +4502,16 @@ fn main() {
                     println!("  STATUS: OUTLIER ACTIVATIONS EQUIDISTRIBUTED VIA HADAMARD\n");
                 }
                 "bitnet" => {
-                    let m: usize = args.windows(2).find(|w| w[0] == "-m").and_then(|w| w[1].parse().ok()).unwrap_or(128);
-                    let k: usize = args.windows(2).find(|w| w[0] == "-k").and_then(|w| w[1].parse().ok()).unwrap_or(128);
+                    let m: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-m")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(128);
+                    let k: usize = args
+                        .windows(2)
+                        .find(|w| w[0] == "-k")
+                        .and_then(|w| w[1].parse().ok())
+                        .unwrap_or(128);
 
                     println!("============================================================");
                     println!("   CRON 1.58-BIT BITNET POPCOUNT ZERO-MULTIPLY GEMV ENGINE  ");
@@ -3321,7 +4527,8 @@ fn main() {
                     let iters = if is_bench { 100 } else { 1 };
                     let start = std::time::Instant::now();
                     for _ in 0..iters {
-                        cronc::tensor_gemv_bitnet158(&acts, &w_ternary, &mut out).expect("BitNet GEMV failed");
+                        cronc::tensor_gemv_bitnet158(&acts, &w_ternary, &mut out)
+                            .expect("BitNet GEMV failed");
                     }
                     let elapsed = start.elapsed();
                     let latency_us = elapsed.as_micros() as f64 / (iters as f64);
@@ -3360,7 +4567,10 @@ fn main() {
                             eprintln!("Error writing LLVM IR to '{}': {}", path, e);
                             std::process::exit(1);
                         }
-                        println!("[SUCCESS] Transpiled '{}' to SSA LLVM IR: '{}'", input_path, path);
+                        println!(
+                            "[SUCCESS] Transpiled '{}' to SSA LLVM IR: '{}'",
+                            input_path, path
+                        );
                     } else {
                         println!("{}", llvm_ir);
                     }
@@ -3374,7 +4584,9 @@ fn main() {
         "cl-vectorize" => {
             if args.len() < 3 {
                 eprintln!("Error: Missing pattern. Usage: cron cl-vectorize <pattern> [-o <out.cl>] [--len N] [--ternary]");
-                eprintln!("Patterns: dot-product | rmsnorm | rope | swiglu | gelu | silu | projection");
+                eprintln!(
+                    "Patterns: dot-product | rmsnorm | rope | swiglu | gelu | silu | projection"
+                );
                 std::process::exit(1);
             }
             let pat_str = args[2].to_lowercase();
@@ -3388,7 +4600,9 @@ fn main() {
                     out_path = Some(args[i + 1].clone());
                     i += 2;
                 } else if args[i] == "--len" && i + 1 < args.len() {
-                    if let Ok(l) = args[i + 1].parse::<usize>() { len = l; }
+                    if let Ok(l) = args[i + 1].parse::<usize>() {
+                        len = l;
+                    }
                     i += 2;
                 } else if args[i] == "--ternary" {
                     is_ternary = true;
@@ -3399,12 +4613,23 @@ fn main() {
             }
 
             let pattern = match pat_str.as_str() {
-                "dot-product" | "gemv" | "dot" => cronc::VectorPattern::DotProduct { len, is_ternary },
-                "swiglu" | "silu" => cronc::VectorPattern::Elementwise { op: "swiglu".to_string(), len },
-                "gelu" => cronc::VectorPattern::Elementwise { op: "gelu".to_string(), len },
+                "dot-product" | "gemv" | "dot" => {
+                    cronc::VectorPattern::DotProduct { len, is_ternary }
+                }
+                "swiglu" | "silu" => cronc::VectorPattern::Elementwise {
+                    op: "swiglu".to_string(),
+                    len,
+                },
+                "gelu" => cronc::VectorPattern::Elementwise {
+                    op: "gelu".to_string(),
+                    len,
+                },
                 "rmsnorm" | "norm" => cronc::VectorPattern::RMSNorm { len },
                 "rope" => cronc::VectorPattern::RoPE { dim: len },
-                "projection" | "linear" => cronc::VectorPattern::LinearProjection { in_dim: len, out_dim: len },
+                "projection" | "linear" => cronc::VectorPattern::LinearProjection {
+                    in_dim: len,
+                    out_dim: len,
+                },
                 other => {
                     eprintln!("Error: Unknown pattern '{}'. Supported: dot-product, rmsnorm, rope, swiglu, gelu, projection", other);
                     std::process::exit(1);
@@ -3433,7 +4658,9 @@ fn main() {
         }
         "cl-export-rtl" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron cl-export-rtl <file.cl> [-o <out_dir>]");
+                eprintln!(
+                    "Error: Missing input file. Usage: cron cl-export-rtl <file.cl> [-o <out_dir>]"
+                );
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -3482,7 +4709,9 @@ fn main() {
             let mut i = 3;
             while i < args.len() {
                 if args[i] == "--cores" && i + 1 < args.len() {
-                    if let Ok(c) = args[i + 1].parse::<usize>() { cores = c; }
+                    if let Ok(c) = args[i + 1].parse::<usize>() {
+                        cores = c;
+                    }
                     i += 2;
                 } else {
                     i += 1;
@@ -3499,10 +4728,16 @@ fn main() {
                         println!("  CRON ACCELERATED BATCH JIT PARALLEL SIMULATION RUNNER     ");
                         println!("============================================================");
                         println!("  Kernel Name:          {}", rep.kernel_name);
-                        println!("  Cores Simulated:      {} virtual silicon cores", rep.cores_simulated);
+                        println!(
+                            "  Cores Simulated:      {} virtual silicon cores",
+                            rep.cores_simulated
+                        );
                         println!("  Total Cycles:         {} cycles", rep.total_cycles);
                         println!("  Average IPC:          {:.2}", rep.average_ipc);
-                        println!("  Simulated Speed:      {:.2} MIPS", rep.million_instructions_per_sec);
+                        println!(
+                            "  Simulated Speed:      {:.2} MIPS",
+                            rep.million_instructions_per_sec
+                        );
                         println!("  Effective Throughput: {:.2} GFLOPS", rep.giga_flops);
                         println!("  All Cores Halted:     {}", rep.is_all_halted);
                         println!("============================================================");
@@ -3545,12 +4780,19 @@ fn main() {
             }
 
             let stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let is_cl = input_path.ends_with(".cl") || content.trim_start().starts_with('B') || content.contains("B0000:");
+            let is_cl = input_path.ends_with(".cl")
+                || content.trim_start().starts_with('B')
+                || content.contains("B0000:");
 
             let (verilog_rtl, module_name) = if is_top_256 {
                 let mod_name = format!("{}_torus_256_top", stem);
-                println!("[VERILOG 256-CORE TORUS] Synthesizing 256-Core 4D-Torus Chip RTL for '{}'...", input_path);
-                let rtl = match cronc::verilog_backend::generate_torus_256_top_verilog(&content, &mod_name) {
+                println!(
+                    "[VERILOG 256-CORE TORUS] Synthesizing 256-Core 4D-Torus Chip RTL for '{}'...",
+                    input_path
+                );
+                let rtl = match cronc::verilog_backend::generate_torus_256_top_verilog(
+                    &content, &mod_name,
+                ) {
                     Ok(v) => v,
                     Err(e) => {
                         eprintln!("[VERILOG SYNTHESIS ERROR] {}", e);
@@ -3586,7 +4828,10 @@ fn main() {
                     eprintln!("Error writing Verilog RTL to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Synthesized Verilog RTL Hardware Core: '{}'", path);
+                println!(
+                    "[SUCCESS] Synthesized Verilog RTL Hardware Core: '{}'",
+                    path
+                );
             } else if tb_path.is_none() {
                 println!("{}", verilog_rtl);
             }
@@ -3601,7 +4846,10 @@ fn main() {
                     eprintln!("Error writing Verilog Testbench to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Generated IEEE 1364-2001 Automated Testbench: '{}'", path);
+                println!(
+                    "[SUCCESS] Generated IEEE 1364-2001 Automated Testbench: '{}'",
+                    path
+                );
             }
         }
         "verilog-sim" => {
@@ -3640,7 +4888,9 @@ fn main() {
                 } else if args[i] == "--json" {
                     json_mode = true;
                     i += 1;
-                } else if (args[i] == "-o" || args[i] == "--out" || args[i] == "--out-dir") && i + 1 < args.len() {
+                } else if (args[i] == "-o" || args[i] == "--out" || args[i] == "--out-dir")
+                    && i + 1 < args.len()
+                {
                     out_dir = Some(args[i + 1].clone());
                     i += 2;
                 } else {
@@ -3664,13 +4914,14 @@ fn main() {
             };
 
             let module_name = format!("cksl_{}_core", stem);
-            let verilog_rtl = match cronc::verilog_backend::generate_verilog_hdl(&cl_code, &module_name) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("[VERILOG SYNTHESIS ERROR] {}", e);
-                    std::process::exit(1);
-                }
-            };
+            let verilog_rtl =
+                match cronc::verilog_backend::generate_verilog_hdl(&cl_code, &module_name) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("[VERILOG SYNTHESIS ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                };
             let verilog_tb = cronc::verilog_backend::generate_testbench(&module_name);
 
             if let Some(ref dir) = out_dir {
@@ -3700,7 +4951,12 @@ fn main() {
                 let _ = fs::write(&tb_file, &verilog_tb);
 
                 let comp_status = std::process::Command::new("iverilog")
-                    .args(["-o", vvp_file.to_str().unwrap(), rtl_file.to_str().unwrap(), tb_file.to_str().unwrap()])
+                    .args([
+                        "-o",
+                        vvp_file.to_str().unwrap(),
+                        rtl_file.to_str().unwrap(),
+                        tb_file.to_str().unwrap(),
+                    ])
                     .status();
 
                 if let Ok(cs) = comp_status {
@@ -3745,14 +5001,43 @@ fn main() {
                 println!("  Testbench:            tb_{}.v", module_name);
                 println!("  Simulation Engine:    CRON Cycle-Accurate Verilog RTL State Machine");
                 println!("  Total Cycles Executed: {}", report.total_cycles_simulated);
-                println!("  Simulation Time (est): {:.1} ns (@ 100 MHz clock)", report.total_cycles_simulated as f64 * 10.0);
-                println!("  Halted Status:        {}", if report.rtl_halted { "1 (HALTED)" } else { "0 (RUNNING)" });
-                println!("  Parity Match Status:  {}", if report.is_100pct_parity { "100.0% BIT-EXACT" } else { "DIVERGENCE" });
+                println!(
+                    "  Simulation Time (est): {:.1} ns (@ 100 MHz clock)",
+                    report.total_cycles_simulated as f64 * 10.0
+                );
+                println!(
+                    "  Halted Status:        {}",
+                    if report.rtl_halted {
+                        "1 (HALTED)"
+                    } else {
+                        "0 (RUNNING)"
+                    }
+                );
+                println!(
+                    "  Parity Match Status:  {}",
+                    if report.is_100pct_parity {
+                        "100.0% BIT-EXACT"
+                    } else {
+                        "DIVERGENCE"
+                    }
+                );
                 println!("  Register Dump:");
-                println!("    R0: {:08X}  R1: {:08X}", report.final_rtl_regs[0], report.final_rtl_regs[1]);
-                println!("    R2: {:08X}  R3: {:08X}", report.final_rtl_regs[2], report.final_rtl_regs[3]);
-                println!("    R4: {:08X}  R5: {:08X}", report.final_rtl_regs[4], report.final_rtl_regs[5]);
-                println!("    R6: {:08X}  R7: {:08X}", report.final_rtl_regs[6], report.final_rtl_regs[7]);
+                println!(
+                    "    R0: {:08X}  R1: {:08X}",
+                    report.final_rtl_regs[0], report.final_rtl_regs[1]
+                );
+                println!(
+                    "    R2: {:08X}  R3: {:08X}",
+                    report.final_rtl_regs[2], report.final_rtl_regs[3]
+                );
+                println!(
+                    "    R4: {:08X}  R5: {:08X}",
+                    report.final_rtl_regs[4], report.final_rtl_regs[5]
+                );
+                println!(
+                    "    R6: {:08X}  R7: {:08X}",
+                    report.final_rtl_regs[6], report.final_rtl_regs[7]
+                );
                 println!("==================================================");
 
                 if !report.is_100pct_parity && strict {
@@ -3787,7 +5072,8 @@ fn main() {
         "c23" | "cl-c23" => {
             cron_cli::sphere_commands::handle_c23(&args);
         }
-        "matrix4" | "cl-matrix4" | "matrix" | "matrix4-chat" | "cortex-chat" | "matrix4-native" | "cortex-native" => {
+        "matrix4" | "cl-matrix4" | "matrix" | "matrix4-chat" | "cortex-chat" | "matrix4-native"
+        | "cortex-native" => {
             cron_cli::matrix4_commands::handle_matrix4_command(&args);
         }
         "cl-heal" => {
@@ -3802,7 +5088,10 @@ fn main() {
             });
 
             let is_json = args.iter().any(|a| a == "--json");
-            let is_high_cl = !cl_code.contains("B0000:") && (cl_code.contains("module ") || cl_code.contains("kernel ") || cl_code.contains("arch "));
+            let is_high_cl = !cl_code.contains("B0000:")
+                && (cl_code.contains("module ")
+                    || cl_code.contains("kernel ")
+                    || cl_code.contains("arch "));
 
             if is_high_cl {
                 let report = cronc::verify_and_heal_high_cl(&cl_code, Some(input_path));
@@ -3818,19 +5107,31 @@ fn main() {
                     println!("  Error Domain:                 {}", d);
                 }
                 if let Some(ref loc) = report.location {
-                    println!("  Location:                     {}:{}:{}", loc.file, loc.line, loc.col);
+                    println!(
+                        "  Location:                     {}:{}:{}",
+                        loc.file, loc.line, loc.col
+                    );
                 }
                 if let Some(ref conf) = report.mathematical_conflict {
-                    println!("  Conflict:                     {} -> {}", conf.source_type, conf.target_type);
+                    println!(
+                        "  Conflict:                     {} -> {}",
+                        conf.source_type, conf.target_type
+                    );
                     println!("  Root Cause:                   {}", conf.root_cause);
                 }
                 if let Some(ref patch) = report.self_heal_patch {
                     println!("------------------------------------------------------------");
-                    println!("  Self-Healing Required Op:     {}", patch.required_primitive);
+                    println!(
+                        "  Self-Healing Required Op:     {}",
+                        patch.required_primitive
+                    );
                     println!("  Explanation:                  {}", patch.explanation);
                     println!("  Replacement Code:\n{}", patch.replacement_code);
                 } else {
-                    println!("  Bundles Scheduled (4-Snake):  {} bundles", report.vliw_bundle_count);
+                    println!(
+                        "  Bundles Scheduled (4-Snake):  {} bundles",
+                        report.vliw_bundle_count
+                    );
                     println!("  STATUS: 100% FORMAL MATHEMATICAL VERIFICATION PASSED");
                 }
                 println!("============================================================\n");
@@ -3842,17 +5143,35 @@ fn main() {
                 out_path = Some(args[4].clone());
             }
 
-            println!("[AI VIBE-CODING HEALER] Analyzing and auto-repairing .cl machine code '{}'...", input_path);
+            println!(
+                "[AI VIBE-CODING HEALER] Analyzing and auto-repairing .cl machine code '{}'...",
+                input_path
+            );
             match cronc::cl_heal::heal_cl_program(&cl_code) {
                 Ok(report) => {
                     println!("============================================================");
                     println!("          CRON AI VIBE-CODING SELF-HEALING REPORT           ");
                     println!("============================================================");
-                    println!("  Bundles Processed:            {}", report.total_bundles_processed);
-                    println!("  CRC-8 ATM Slots Repaired:     {}", report.slots_repaired_crc);
-                    println!("  Bundles Padded with NOPs:     {}", report.bundles_padded_nops);
-                    println!("  RAW Data Hazards Resolved:    {}", report.raw_hazards_resolved);
-                    println!("  WAW Write Hazards Resolved:   {}", report.waw_hazards_resolved);
+                    println!(
+                        "  Bundles Processed:            {}",
+                        report.total_bundles_processed
+                    );
+                    println!(
+                        "  CRC-8 ATM Slots Repaired:     {}",
+                        report.slots_repaired_crc
+                    );
+                    println!(
+                        "  Bundles Padded with NOPs:     {}",
+                        report.bundles_padded_nops
+                    );
+                    println!(
+                        "  RAW Data Hazards Resolved:    {}",
+                        report.raw_hazards_resolved
+                    );
+                    println!(
+                        "  WAW Write Hazards Resolved:   {}",
+                        report.waw_hazards_resolved
+                    );
                     println!("============================================================");
 
                     if let Some(path) = out_path {
@@ -3912,22 +5231,49 @@ fn main() {
                 }
             }
 
-            println!("[CRON VLIW SUPER-OPTIMIZER] Compacting slot bundles for '{}'...", input_path);
+            println!(
+                "[CRON VLIW SUPER-OPTIMIZER] Compacting slot bundles for '{}'...",
+                input_path
+            );
             match cronc::optimize_cl_program_advanced(&cl_code, &config) {
                 Ok(report) => {
                     println!("============================================================");
                     println!("         CRON VLIW SUPER-OPTIMIZER SPEEDUP REPORT           ");
                     println!("============================================================");
                     println!("  Optimization Level:           {:?}", config.level);
-                    println!("  Original Bundles:             {}", report.original_bundles);
-                    println!("  Optimized Bundles:            {}", report.optimized_bundles);
+                    println!(
+                        "  Original Bundles:             {}",
+                        report.original_bundles
+                    );
+                    println!(
+                        "  Optimized Bundles:            {}",
+                        report.optimized_bundles
+                    );
                     println!("  Active Slots Compacted:       {}", report.compacted_slots);
-                    println!("  Critical Path Depth:          {} cycles", report.critical_path_depth);
-                    println!("  Peephole Rewrites Applied:    {}", report.peephole_rewrites_count);
-                    println!("  Thermal Guards Inserted:      {}", report.thermal_guards_inserted);
-                    println!("  IPC Before Compaction:        {:.2} ops/cycle", report.original_ipc);
-                    println!("  IPC After Compaction:         {:.2} ops/cycle (Max: 4.0)", report.optimized_ipc);
-                    println!("  Estimated Silicon Speedup:    +{:.1}%", report.speedup_percentage);
+                    println!(
+                        "  Critical Path Depth:          {} cycles",
+                        report.critical_path_depth
+                    );
+                    println!(
+                        "  Peephole Rewrites Applied:    {}",
+                        report.peephole_rewrites_count
+                    );
+                    println!(
+                        "  Thermal Guards Inserted:      {}",
+                        report.thermal_guards_inserted
+                    );
+                    println!(
+                        "  IPC Before Compaction:        {:.2} ops/cycle",
+                        report.original_ipc
+                    );
+                    println!(
+                        "  IPC After Compaction:         {:.2} ops/cycle (Max: 4.0)",
+                        report.optimized_ipc
+                    );
+                    println!(
+                        "  Estimated Silicon Speedup:    +{:.1}%",
+                        report.speedup_percentage
+                    );
                     println!("============================================================");
 
                     if let Some(path) = out_path {
@@ -3986,11 +5332,16 @@ fn main() {
                 raw[3 * dim + 2] = 25.0; // Extreme activation outlier
                 raw[5 * dim + 5] = -30.0;
 
-                let qmat = cronc::cl_quarot::quarot_rotate_and_quantize_matrix("quarot_attn_outlier_proj", &raw, dim, dim)
-                    .unwrap_or_else(|e| {
-                        eprintln!("Error in QuaRot: {}", e);
-                        std::process::exit(1);
-                    });
+                let qmat = cronc::cl_quarot::quarot_rotate_and_quantize_matrix(
+                    "quarot_attn_outlier_proj",
+                    &raw,
+                    dim,
+                    dim,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("Error in QuaRot: {}", e);
+                    std::process::exit(1);
+                });
 
                 let cl = cronc::cl_quarot::emit_quarot_cl_microcode(&qmat, 0);
                 (qmat, cl)
@@ -4006,11 +5357,16 @@ fn main() {
                     .collect();
 
                 let dim = ((floats.len() as f32).sqrt().floor() as usize).max(4);
-                let qmat = cronc::cl_quarot::quarot_rotate_and_quantize_matrix("quarot_layer", &floats[..dim * dim], dim, dim)
-                    .unwrap_or_else(|e| {
-                        eprintln!("Error in QuaRot: {}", e);
-                        std::process::exit(1);
-                    });
+                let qmat = cronc::cl_quarot::quarot_rotate_and_quantize_matrix(
+                    "quarot_layer",
+                    &floats[..dim * dim],
+                    dim,
+                    dim,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("Error in QuaRot: {}", e);
+                    std::process::exit(1);
+                });
                 let cl = cronc::cl_quarot::emit_quarot_cl_microcode(&qmat, 0);
                 (qmat, cl)
             };
@@ -4019,7 +5375,10 @@ fn main() {
             println!("  Dimensions:            {} x {}", mat.rows, mat.cols);
             println!("  Original Peak Outlier: {:.2}", mat.peak_outlier_before);
             println!("  Rotated Peak Outlier:  {:.2}", mat.peak_outlier_after);
-            println!("  Outlier Suppression:   {:.2}x", mat.outlier_suppression_ratio);
+            println!(
+                "  Outlier Suppression:   {:.2}x",
+                mat.outlier_suppression_ratio
+            );
             println!("  Quantized Scale:       {:.6}", mat.scale);
             println!("  Precision Format:      INT4 Symmetric (W4A4)");
             println!("============================================================");
@@ -4029,9 +5388,15 @@ fn main() {
                     eprintln!("Failed to write to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Canonical W4A4 .cl microcode written to '{}'\n", path);
+                println!(
+                    "[SUCCESS] Canonical W4A4 .cl microcode written to '{}'\n",
+                    path
+                );
             } else if !is_json {
-                println!("Sample Microcode:\n{}", microcode.lines().take(25).collect::<Vec<_>>().join("\n"));
+                println!(
+                    "Sample Microcode:\n{}",
+                    microcode.lines().take(25).collect::<Vec<_>>().join("\n")
+                );
                 println!("... [{} total lines]", microcode.lines().count());
             }
         }
@@ -4043,14 +5408,16 @@ fn main() {
             let mut pt = cronc::cl_sphere_infer::HyperspherePoint4D::new(1.0, 0.0, 0.0, 0.0);
             let dt = 0.02f32;
             let steps = 10;
-            println!("  Initial Point on S^3: ({:.4}, {:.4}, {:.4}, {:.4})", pt.x, pt.y, pt.z, pt.w);
+            println!(
+                "  Initial Point on S^3: ({:.4}, {:.4}, {:.4}, {:.4})",
+                pt.x, pt.y, pt.z, pt.w
+            );
             println!("  Integration Method:   4th-Order Riemannian Manifold Runge-Kutta (RK4)");
             println!("  Curvature Space:      S^3 Hypersphere x Z100 Lattice");
             println!("------------------------------------------------------------");
             for step in 1..=steps {
-                pt = flow.rk4_geodesic_step(&pt, dt, |x| {
-                    [-0.5 * x.y, 0.5 * x.x, -0.3 * x.w, 0.3 * x.z]
-                });
+                pt = flow
+                    .rk4_geodesic_step(&pt, dt, |x| [-0.5 * x.y, 0.5 * x.x, -0.3 * x.w, 0.3 * x.z]);
                 let [s2_x, s2_y, s2_z] = pt.hopf_projection();
                 println!("  Step {:02}: S^3=({:.3}, {:.3}, {:.3}, {:.3}) -> Hopf S^2=({:.3}, {:.3}, {:.3})", step, pt.x, pt.y, pt.z, pt.w, s2_x, s2_y, s2_z);
             }
@@ -4130,8 +5497,17 @@ fn main() {
             cycles.sort_unstable();
             for c in cycles.iter().take(20) {
                 if let Some(m) = debug_info.bundle_meta.get(c) {
-                    let label = m.source_loc.as_ref().map(|s| s.symbol.as_str()).unwrap_or("-");
-                    println!("  B{:04}  | {: <12} | {}", c, label, m.slot_annotations.join(" "));
+                    let label = m
+                        .source_loc
+                        .as_ref()
+                        .map(|s| s.symbol.as_str())
+                        .unwrap_or("-");
+                    println!(
+                        "  B{:04}  | {: <12} | {}",
+                        c,
+                        label,
+                        m.slot_annotations.join(" ")
+                    );
                 }
             }
             if cycles.len() > 20 {
@@ -4154,10 +5530,14 @@ fn main() {
                     prompt_opt = Some(args[i + 1].clone());
                     i += 2;
                 } else if args[i] == "--max-tokens" && i + 1 < args.len() {
-                    if let Ok(m) = args[i + 1].parse::<usize>() { max_tokens = m; }
+                    if let Ok(m) = args[i + 1].parse::<usize>() {
+                        max_tokens = m;
+                    }
                     i += 2;
                 } else if args[i] == "--temp" && i + 1 < args.len() {
-                    if let Ok(t) = args[i + 1].parse::<f64>() { temp = t; }
+                    if let Ok(t) = args[i + 1].parse::<f64>() {
+                        temp = t;
+                    }
                     i += 2;
                 } else if !args[i].starts_with("--") && prompt_opt.is_none() {
                     prompt_opt = Some(args[i].clone());
@@ -4207,13 +5587,19 @@ fn main() {
             let mut i = 2;
             while i < args.len() {
                 if args[i] == "--generations" && i + 1 < args.len() {
-                    if let Ok(g) = args[i + 1].parse::<usize>() { generations = g; }
+                    if let Ok(g) = args[i + 1].parse::<usize>() {
+                        generations = g;
+                    }
                     i += 2;
                 } else if args[i] == "--population" && i + 1 < args.len() {
-                    if let Ok(p) = args[i + 1].parse::<usize>() { population = p; }
+                    if let Ok(p) = args[i + 1].parse::<usize>() {
+                        population = p;
+                    }
                     i += 2;
                 } else if args[i] == "--bundles" && i + 1 < args.len() {
-                    if let Ok(b) = args[i + 1].parse::<usize>() { bundles = b; }
+                    if let Ok(b) = args[i + 1].parse::<usize>() {
+                        bundles = b;
+                    }
                     i += 2;
                 } else if args[i] == "-o" && i + 1 < args.len() {
                     out_file = Some(args[i + 1].clone());
@@ -4223,10 +5609,17 @@ fn main() {
                 }
             }
 
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!("   CRON DARWINIAN EVOLUTIONARY MICROCODE ENGINE (.cl SILICON OPTIMIZER)");
-            println!("================================================================================");
-            println!("Target: 256-Core 4D-Torus | Population: {} | Generations: {}", population, generations);
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "Target: 256-Core 4D-Torus | Population: {} | Generations: {}",
+                population, generations
+            );
 
             let config = cronc::cl_evolution::EvolutionConfig {
                 population_size: population,
@@ -4242,7 +5635,10 @@ fn main() {
             println!("• Final Fitness Score:       {:.2}", champ.fitness);
             println!("• Effective IPC Achieved:    {:.2} / 4.0 IPC", champ.ipc);
             println!("• Pipeline Hazards (RAW/WAW):{}", champ.hazards_count);
-            println!("• Thermodynamic Efficiency:  {:.1}% (Landauer Delta S ~ 0)", champ.thermodynamic_efficiency * 100.0);
+            println!(
+                "• Thermodynamic Efficiency:  {:.1}% (Landauer Delta S ~ 0)",
+                champ.thermodynamic_efficiency * 100.0
+            );
             println!("\nSynthesized Champion .cl Microcode:\n{}", champ.cl_source);
 
             if let Some(path) = out_file {
@@ -4277,14 +5673,20 @@ fn main() {
                     backend = cronc::cl_aot::AotBackend::C23;
                     i += 1;
                 } else if args[i] == "--opt" && i + 1 < args.len() {
-                    if let Ok(o) = args[i + 1].parse::<usize>() { opt_level = o; }
+                    if let Ok(o) = args[i + 1].parse::<usize>() {
+                        opt_level = o;
+                    }
                     i += 2;
                 } else {
                     i += 1;
                 }
             }
 
-            let module_name = std::path::Path::new(input_path).file_stem().unwrap().to_str().unwrap();
+            let module_name = std::path::Path::new(input_path)
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap();
             let config = cronc::cl_aot::AotBuildConfig {
                 backend,
                 opt_level,
@@ -4294,10 +5696,19 @@ fn main() {
                 target_triple: None,
             };
 
-            println!("================================================================================");
-            println!("       CRON AUTOMATED AHEAD-OF-TIME (AOT) UNIVERSAL COMPILER                    ");
-            println!("================================================================================");
-            println!("[AOT] Compiling '{}' -> Native Standalone Binary...", input_path);
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "       CRON AUTOMATED AHEAD-OF-TIME (AOT) UNIVERSAL COMPILER                    "
+            );
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "[AOT] Compiling '{}' -> Native Standalone Binary...",
+                input_path
+            );
             match cronc::cl_aot::compile_cl_aot(&cl_code, module_name, &config) {
                 Ok(report) => {
                     println!("[SUCCESS] {}", report.details);
@@ -4305,7 +5716,10 @@ fn main() {
                     println!("  Binary Size:        {} bytes", report.target_binary_bytes);
                     println!("  Compilation Time:   {:.2} ms", report.compilation_time_ms);
                     println!("  Compiler Toolchain: {}", report.compiler_used);
-                    println!("  Optimization Flags: {}", report.optimization_flags.join(" "));
+                    println!(
+                        "  Optimization Flags: {}",
+                        report.optimization_flags.join(" ")
+                    );
                     println!("================================================================================");
                 }
                 Err(e) => {
@@ -4321,7 +5735,9 @@ fn main() {
         }
         "cl-live" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron cl-live <file.cl> [--threshold <N>]");
+                eprintln!(
+                    "Error: Missing input file. Usage: cron cl-live <file.cl> [--threshold <N>]"
+                );
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -4334,7 +5750,9 @@ fn main() {
             let mut i = 3;
             while i < args.len() {
                 if args[i] == "--threshold" && i + 1 < args.len() {
-                    if let Ok(t) = args[i + 1].parse::<usize>() { threshold = t; }
+                    if let Ok(t) = args[i + 1].parse::<usize>() {
+                        threshold = t;
+                    }
                     i += 2;
                 } else {
                     i += 1;
@@ -4349,10 +5767,19 @@ fn main() {
                 energy_target_pj_per_op: 0.05,
             };
 
-            println!("================================================================================");
-            println!("  CRON SELF-ADAPTING NEUROMORPHIC JIT & REAL-TIME PLASTICITY RUNTIME            ");
-            println!("================================================================================");
-            println!("[LIVE] Executing & profiling in-memory hot loops for '{}'...", input_path);
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "  CRON SELF-ADAPTING NEUROMORPHIC JIT & REAL-TIME PLASTICITY RUNTIME            "
+            );
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "[LIVE] Executing & profiling in-memory hot loops for '{}'...",
+                input_path
+            );
 
             let mut engine = cronc::cl_plasticity::SelfAdaptingJitEngine::new(config);
             for line in cl_code.lines() {
@@ -4366,12 +5793,26 @@ fn main() {
 
             let report = engine.generate_report();
             println!("[SUCCESS] Plasticity Adaptation & In-Memory Hot Patching Completed!");
-            println!("  Executed Cycles:           {}", report.total_executed_cycles);
+            println!(
+                "  Executed Cycles:           {}",
+                report.total_executed_cycles
+            );
             println!("  Hot Loops Detected:        {}", report.hot_loops_detected);
-            println!("  In-Memory Hot Patches:     {}", report.hot_patches_applied);
-            println!("  Dynamic Speedup Achieved:  +{:.1}%", report.dynamic_speedup_percentage);
-            println!("  Thermodynamic Energy Saved:-{:.1}%", report.energy_reduction_percentage);
-            println!("================================================================================");
+            println!(
+                "  In-Memory Hot Patches:     {}",
+                report.hot_patches_applied
+            );
+            println!(
+                "  Dynamic Speedup Achieved:  +{:.1}%",
+                report.dynamic_speedup_percentage
+            );
+            println!(
+                "  Thermodynamic Energy Saved:-{:.1}%",
+                report.energy_reduction_percentage
+            );
+            println!(
+                "================================================================================"
+            );
         }
         "vibe-loop" => {
             if args.len() < 3 {
@@ -4450,27 +5891,79 @@ fn main() {
                 println!("          CRON AUTONOMOUS AI VIBE-CODING PIPELINE           ");
                 println!("============================================================\n");
                 println!("  Target Source:                {}", source_label);
-                println!("  Pipeline Status:              \x1b[1;32m{}\x1b[0m", result.status.as_str());
-                println!("  Auto-Healed:                  {}", if result.healed { "\x1b[1;33mYES (Repairs Applied)\x1b[0m" } else { "NO (Clean Code)" });
+                println!(
+                    "  Pipeline Status:              \x1b[1;32m{}\x1b[0m",
+                    result.status.as_str()
+                );
+                println!(
+                    "  Auto-Healed:                  {}",
+                    if result.healed {
+                        "\x1b[1;33mYES (Repairs Applied)\x1b[0m"
+                    } else {
+                        "NO (Clean Code)"
+                    }
+                );
                 if result.healed {
                     println!("    - Fixed CRC Tokens:         {}", result.fixed_crc_count);
                     println!("    - Padded NOP Bundles:       {}", result.padded_bundles);
-                    println!("    - Split Hazard Cycles:      {}", result.resolved_hazards);
+                    println!(
+                        "    - Split Hazard Cycles:      {}",
+                        result.resolved_hazards
+                    );
                 }
                 println!("  VLIW Slot Super-Optimization:");
-                println!("    - Baseline IPC:             {:.2} ops/cycle", result.original_ipc);
-                println!("    - Optimized IPC:            {:.2} ops/cycle (Max: 4.0)", result.optimized_ipc);
-                println!("    - Hardware Speedup:         +{:.1}%", result.speedup_percentage);
+                println!(
+                    "    - Baseline IPC:             {:.2} ops/cycle",
+                    result.original_ipc
+                );
+                println!(
+                    "    - Optimized IPC:            {:.2} ops/cycle (Max: 4.0)",
+                    result.optimized_ipc
+                );
+                println!(
+                    "    - Hardware Speedup:         +{:.1}%",
+                    result.speedup_percentage
+                );
                 println!("  RAM JIT Silicon Execution:");
-                println!("    - Execution Cycles:         {} cycles", result.execution_cycles);
-                println!("    - Optical GEMM Operations:  {} ops (0ns latency)", result.optical_ops);
-                println!("    - Reversible Gate Ops:      {} ops (0 entropy loss)", result.reversible_ops);
-                println!("    - STDP Synapse Updates:     {} updates", result.stdp_updates);
+                println!(
+                    "    - Execution Cycles:         {} cycles",
+                    result.execution_cycles
+                );
+                println!(
+                    "    - Optical GEMM Operations:  {} ops (0ns latency)",
+                    result.optical_ops
+                );
+                println!(
+                    "    - Reversible Gate Ops:      {} ops (0 entropy loss)",
+                    result.reversible_ops
+                );
+                println!(
+                    "    - STDP Synapse Updates:     {} updates",
+                    result.stdp_updates
+                );
                 println!("------------------------------------------------------------");
                 println!("  Hardware Registers:");
-                println!("    R0: 0x{:08X} ({})   R1: 0x{:08X} ({})", result.registers[0], result.registers[0], result.registers[1], result.registers[1]);
-                println!("    R2: 0x{:08X} ({})   R3: 0x{:08X} ({})", result.registers[2], result.registers[2], result.registers[3], result.registers[3]);
-                println!("    R4: 0x{:08X} ({})   R5: 0x{:08X} ({})", result.registers[4], result.registers[4], result.registers[5], result.registers[5]);
+                println!(
+                    "    R0: 0x{:08X} ({})   R1: 0x{:08X} ({})",
+                    result.registers[0],
+                    result.registers[0],
+                    result.registers[1],
+                    result.registers[1]
+                );
+                println!(
+                    "    R2: 0x{:08X} ({})   R3: 0x{:08X} ({})",
+                    result.registers[2],
+                    result.registers[2],
+                    result.registers[3],
+                    result.registers[3]
+                );
+                println!(
+                    "    R4: 0x{:08X} ({})   R5: 0x{:08X} ({})",
+                    result.registers[4],
+                    result.registers[4],
+                    result.registers[5],
+                    result.registers[5]
+                );
                 println!("============================================================");
 
                 if !result.diagnostics.is_empty() {
@@ -4482,7 +5975,9 @@ fn main() {
                     println!("============================================================");
                 }
 
-                if result.status == cronc::VibeStatus::CompilationError || result.status == cronc::VibeStatus::ExecutionTrap {
+                if result.status == cronc::VibeStatus::CompilationError
+                    || result.status == cronc::VibeStatus::ExecutionTrap
+                {
                     std::process::exit(1);
                 }
             }
@@ -4496,7 +5991,10 @@ fn main() {
                     if let Some(fmt) = cronc::SpecFormat::from_str(&args[i + 1]) {
                         format = fmt;
                     } else {
-                        eprintln!("Error: Unknown format '{}'. Available: ebnf, json, prompt, all", args[i + 1]);
+                        eprintln!(
+                            "Error: Unknown format '{}'. Available: ebnf, json, prompt, all",
+                            args[i + 1]
+                        );
                         std::process::exit(1);
                     }
                     i += 2;
@@ -4513,7 +6011,10 @@ fn main() {
                     eprintln!("Error writing spec to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Generated AI Vibe-Coding Specification: '{}'", path);
+                println!(
+                    "[SUCCESS] Generated AI Vibe-Coding Specification: '{}'",
+                    path
+                );
             } else {
                 println!("{}", spec_text);
             }
@@ -4747,9 +6248,15 @@ fn main() {
             let ws = env::current_dir().unwrap_or_default();
             match args[2].as_str() {
                 "init" => {
-                    let name = if args.len() >= 4 { &args[3] } else { "my_cl_package" };
+                    let name = if args.len() >= 4 {
+                        &args[3]
+                    } else {
+                        "my_cl_package"
+                    };
                     match cronc::cl_pkg::init_cl_package(&ws, name) {
-                        Ok(p) => println!("[SUCCESS] Initialized new .cl package manifest at {:?}", p),
+                        Ok(p) => {
+                            println!("[SUCCESS] Initialized new .cl package manifest at {:?}", p)
+                        }
                         Err(e) => eprintln!("[ERROR] {}", e),
                     }
                 }
@@ -4759,17 +6266,34 @@ fn main() {
                     println!("========================================================================================");
                     println!("             CRON STANDARD MICROCODE KERNELS (libcl/ REPOSITORY)                        ");
                     println!("========================================================================================");
-                    println!("  {:<16} | {:<22} | {:<7} | {:<6}", "Kernel Name", "Target Silicon", "Bundles", "Status");
+                    println!(
+                        "  {:<16} | {:<22} | {:<7} | {:<6}",
+                        "Kernel Name", "Target Silicon", "Bundles", "Status"
+                    );
                     println!("----------------------------------------------------------------------------------------");
                     for k in kernels {
-                        println!("  {:<16} | {:<22} | {:<7} | {}", k.name, k.target_silicon, k.bundles_count, if k.safety_verified { "✓ Verified" } else { "✗ Missing" });
+                        println!(
+                            "  {:<16} | {:<22} | {:<7} | {}",
+                            k.name,
+                            k.target_silicon,
+                            k.bundles_count,
+                            if k.safety_verified {
+                                "✓ Verified"
+                            } else {
+                                "✗ Missing"
+                            }
+                        );
                         println!("    -> {}\n", k.description);
                     }
                     println!("========================================================================================");
                 }
                 "audit" => {
                     let _ = cronc::cl_pkg::generate_standard_libcl_files(&ws.join("libcl"));
-                    let target_file = if args.len() >= 4 { &args[3] } else { "libcl/math.cl" };
+                    let target_file = if args.len() >= 4 {
+                        &args[3]
+                    } else {
+                        "libcl/math.cl"
+                    };
                     let cl_code = fs::read_to_string(target_file).unwrap_or_default();
                     let rep = cronc::cl_pkg::audit_cl_source(&cl_code, target_file);
                     println!("{}", cronc::cl_pkg::render_audit_report(&rep));
@@ -4779,12 +6303,29 @@ fn main() {
                     let query = if args.len() >= 4 { &args[3] } else { "" };
                     let matches = cronc::cl_pkg::search_standard_kernels(&ws, query);
                     println!("========================================================================================");
-                    println!("       CRON MICROCODE KERNEL SEARCH (QUERY: '{}', FOUND: {})", query, matches.len());
+                    println!(
+                        "       CRON MICROCODE KERNEL SEARCH (QUERY: '{}', FOUND: {})",
+                        query,
+                        matches.len()
+                    );
                     println!("========================================================================================");
-                    println!("  {:<16} | {:<22} | {:<7} | {:<6}", "Kernel Name", "Target Silicon", "Bundles", "Status");
+                    println!(
+                        "  {:<16} | {:<22} | {:<7} | {:<6}",
+                        "Kernel Name", "Target Silicon", "Bundles", "Status"
+                    );
                     println!("----------------------------------------------------------------------------------------");
                     for k in matches {
-                        println!("  {:<16} | {:<22} | {:<7} | {}", k.name, k.target_silicon, k.bundles_count, if k.safety_verified { "✓ Verified" } else { "✗ Missing" });
+                        println!(
+                            "  {:<16} | {:<22} | {:<7} | {}",
+                            k.name,
+                            k.target_silicon,
+                            k.bundles_count,
+                            if k.safety_verified {
+                                "✓ Verified"
+                            } else {
+                                "✗ Missing"
+                            }
+                        );
                         println!("    -> {}\n", k.description);
                     }
                     println!("========================================================================================");
@@ -4794,14 +6335,22 @@ fn main() {
                     let target = ws.join("libcl");
                     match cronc::cl_pkg::generate_standard_libcl_files(&target) {
                         Ok(_) => {
-                            let _ = cronc::cl_pkg::generate_standard_libcl_files(&ws.join("crates").join("cronc").join("libcl"));
-                            println!("[SUCCESS] Updated all 32 standard microcode kernels in {:?}", target);
+                            let _ = cronc::cl_pkg::generate_standard_libcl_files(
+                                &ws.join("crates").join("cronc").join("libcl"),
+                            );
+                            println!(
+                                "[SUCCESS] Updated all 32 standard microcode kernels in {:?}",
+                                target
+                            );
                         }
                         Err(e) => eprintln!("[ERROR] Failed to update libcl kernels: {}", e),
                     }
                 }
                 other => {
-                    eprintln!("Unknown cl-pkg command '{}'. Available: init, list, audit, search, update", other);
+                    eprintln!(
+                        "Unknown cl-pkg command '{}'. Available: init, list, audit, search, update",
+                        other
+                    );
                 }
             }
         }
@@ -4821,16 +6370,25 @@ fn main() {
                 }
             }
 
-            println!("================================================================================");
-            println!("           CRON AUTONOMOUS MICROCODE DOCUMENTATION GENERATOR                    ");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "           CRON AUTONOMOUS MICROCODE DOCUMENTATION GENERATOR                    "
+            );
+            println!(
+                "================================================================================"
+            );
             println!("  Source Directory: {}", src_dir);
             println!("  Output Directory: {}", out_dir);
 
             let ws = env::current_dir().unwrap_or_default();
             let _ = cronc::cl_pkg::generate_standard_libcl_files(&ws.join("libcl"));
 
-            match cronc::cl_docgen::generate_directory_docs(Path::new(&src_dir), Path::new(&out_dir)) {
+            match cronc::cl_docgen::generate_directory_docs(
+                Path::new(&src_dir),
+                Path::new(&out_dir),
+            ) {
                 Ok(files) => {
                     println!("\n  Generated {} Documentation Files:", files.len());
                     for f in files {
@@ -4853,7 +6411,14 @@ fn main() {
             }
             let base_path = Path::new(&args[2]);
             let adapter_path = Path::new(&args[3]);
-            let mut out_path = format!("{}_merged.safetensors", base_path.file_stem().unwrap_or_default().to_str().unwrap_or("model"));
+            let mut out_path = format!(
+                "{}_merged.safetensors",
+                base_path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or("model")
+            );
             let mut json_mode = false;
 
             let mut i = 4;
@@ -4870,7 +6435,11 @@ fn main() {
             }
 
             let start_t = std::time::Instant::now();
-            match cronc::merge_safetensors_file_with_cl_lora(base_path, adapter_path, Path::new(&out_path)) {
+            match cronc::merge_safetensors_file_with_cl_lora(
+                base_path,
+                adapter_path,
+                Path::new(&out_path),
+            ) {
                 Ok(merged_count) => {
                     let elapsed_ms = start_t.elapsed().as_secs_f64() * 1000.0;
                     if json_mode {
@@ -4882,7 +6451,10 @@ fn main() {
                         println!("========================================================================================");
                         println!(" Base Model:         {}", base_path.display());
                         println!(" Discrete Adapter:   {}", adapter_path.display());
-                        println!(" Merged Tensors:     {} tensor(s) updated in-place", merged_count);
+                        println!(
+                            " Merged Tensors:     {} tensor(s) updated in-place",
+                            merged_count
+                        );
                         println!(" Output File:        {}", out_path);
                         println!(" Latency:            {:.2} ms", elapsed_ms);
                         println!(" Parity Status:      [PASS] 100% Exact Mathematical Closed-Loop Reconstruction");
@@ -4903,7 +6475,14 @@ fn main() {
                 return;
             }
             let adapter_path = Path::new(&args[2]);
-            let mut out_path = format!("{}_dense.safetensors", adapter_path.file_stem().unwrap_or_default().to_str().unwrap_or("adapter"));
+            let mut out_path = format!(
+                "{}_dense.safetensors",
+                adapter_path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or("adapter")
+            );
             let mut json_mode = false;
 
             let mut i = 3;
@@ -4957,8 +6536,16 @@ fn main() {
                         println!("========================================================================================");
                         println!("        CRON DISCRETE ADAPTER EXPANSION & DENSE DELTA SYNTHESIZER               ");
                         println!("========================================================================================");
-                        println!(" Adapter:            {} (Rank: {}, Alpha: {})", adapter_path.display(), adapter.config.rank, adapter.config.alpha);
-                        println!(" Exported Deltas:    {} dense tensor(s) up-projected", deltas.len());
+                        println!(
+                            " Adapter:            {} (Rank: {}, Alpha: {})",
+                            adapter_path.display(),
+                            adapter.config.rank,
+                            adapter.config.alpha
+                        );
+                        println!(
+                            " Exported Deltas:    {} dense tensor(s) up-projected",
+                            deltas.len()
+                        );
                         println!(" Output File:        {}", out_path);
                         println!(" Status:             [SUCCESS] Ready for PyTorch / HuggingFace Inspection");
                         println!("========================================================================================");
@@ -5054,11 +6641,18 @@ fn main() {
 
                     println!("================================================================================");
                     println!(" CRON 256-CORE MICROCODE INTERACTIVE PLAYGROUND & STEP SIMULATOR");
-                    println!(" Target File: {} | Total Bundles Executed: {}", file_path, frames.len());
+                    println!(
+                        " Target File: {} | Total Bundles Executed: {}",
+                        file_path,
+                        frames.len()
+                    );
                     println!("================================================================================\n");
 
                     for f in &frames {
-                        print!("{}", cronc::cl_playground::ClPlaygroundSession::render_frame(f));
+                        print!(
+                            "{}",
+                            cronc::cl_playground::ClPlaygroundSession::render_frame(f)
+                        );
                         println!();
                     }
 
@@ -5067,9 +6661,13 @@ fn main() {
                 }
             }
 
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON WEBASSEMBLY IN-BROWSER PLAYGROUND & 4D-TORUS SIMULATOR");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
 
             match cronc::cl_playground::bundle_standalone_playground_html(None) {
                 Ok(html_content) => {
@@ -5094,9 +6692,7 @@ fn main() {
                         }
                         #[cfg(target_os = "macos")]
                         {
-                            let _ = std::process::Command::new("open")
-                                .arg(&out_file)
-                                .spawn();
+                            let _ = std::process::Command::new("open").arg(&out_file).spawn();
                         }
                         #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
                         {
@@ -5123,10 +6719,16 @@ fn main() {
                 println!("========================================================================================");
                 println!("           CRON GOLDEN AI SILICON MICRO-KERNEL CATALOG (MACHINE-NATIVE .cl)             ");
                 println!("========================================================================================");
-                println!("  {: <14} | {: <35} | {: <6} | {: <9}", "Operator", "Target Silicon Brain", "IPC", "Intensity");
+                println!(
+                    "  {: <14} | {: <35} | {: <6} | {: <9}",
+                    "Operator", "Target Silicon Brain", "IPC", "Intensity"
+                );
                 println!("----------------------------------------------------------------------------------------");
                 for k in &catalog {
-                    println!("  {: <14} | {: <35} | {: <6.1} | {:.1} FLOP/B", k.name, k.target_silicon_brain, k.typical_ipc, k.operational_intensity);
+                    println!(
+                        "  {: <14} | {: <35} | {: <6.1} | {:.1} FLOP/B",
+                        k.name, k.target_silicon_brain, k.typical_ipc, k.operational_intensity
+                    );
                     println!("    -> {}\n", k.description);
                 }
                 println!("========================================================================================");
@@ -5170,7 +6772,10 @@ fn main() {
                     eprintln!("Error writing kernel to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Golden AI microcode kernel '{}' written to '{}'", target, path);
+                println!(
+                    "[SUCCESS] Golden AI microcode kernel '{}' written to '{}'",
+                    target, path
+                );
             } else {
                 println!("{}", kernel_code);
             }
@@ -5214,8 +6819,15 @@ fn main() {
                 } else if args[i] == "--dll" || args[i] == "--shared" {
                     if out_path.is_none() {
                         let p = std::path::Path::new(input_path);
-                        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("cron_kernel");
-                        out_path = Some(if cfg!(windows) { format!("{}.dll", stem) } else { format!("lib{}.so", stem) });
+                        let stem = p
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("cron_kernel");
+                        out_path = Some(if cfg!(windows) {
+                            format!("{}.dll", stem)
+                        } else {
+                            format!("lib{}.so", stem)
+                        });
                     }
                     i += 1;
                 } else if args[i] == "--bench" {
@@ -5237,7 +6849,10 @@ fn main() {
 
             let bin_path = out_path.unwrap_or_else(|| {
                 let p = std::path::Path::new(input_path);
-                let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("cron_kernel");
+                let stem = p
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("cron_kernel");
                 if cfg!(windows) {
                     format!("{}.exe", stem)
                 } else {
@@ -5253,13 +6868,23 @@ fn main() {
             println!("  Target Native Binary: {}", bin_path);
             println!("  Optimization Level:   -O{}", opt_level);
             println!("  SIMD Target:          {:?}", simd_target);
-            println!("  Compilation Pipeline: .cl -> Transpiled C23 -> Host Native C -> Executable\n");
+            println!(
+                "  Compilation Pipeline: .cl -> Transpiled C23 -> Host Native C -> Executable\n"
+            );
 
             let start = std::time::Instant::now();
-            match cronc::cl_c23::compile_cl_to_native_binary_with_target(&content, &bin_path, &opt_level, simd_target) {
+            match cronc::cl_c23::compile_cl_to_native_binary_with_target(
+                &content,
+                &bin_path,
+                &opt_level,
+                simd_target,
+            ) {
                 Ok(()) => {
                     let elapsed = start.elapsed();
-                    println!("[SUCCESS] Native standalone executable built in {:.2?}", elapsed);
+                    println!(
+                        "[SUCCESS] Native standalone executable built in {:.2?}",
+                        elapsed
+                    );
                 }
                 Err(e) => {
                     eprintln!("[NATIVE COMPILATION ERROR] {}", e);
@@ -5293,13 +6918,19 @@ fn main() {
         }
         "cl-tile" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing tiling sub-command. Usage: cron cl-tile <gemm|conv> [options]");
+                eprintln!(
+                    "Error: Missing tiling sub-command. Usage: cron cl-tile <gemm|conv> [options]"
+                );
                 eprintln!("  Options:");
                 eprintln!("    --m N, --n N, --k N                  Matrix dimensions (for gemm)");
                 eprintln!("    --cin N, --cout N, --spatial N, --k N Conv dimensions (for conv)");
-                eprintln!("    --unroll N                           Loop unrolling factor (default: 4)");
+                eprintln!(
+                    "    --unroll N                           Loop unrolling factor (default: 4)"
+                );
                 eprintln!("    --subbyte                            Target INT2 ternary MACs instead of optical");
-                eprintln!("    -o <file.cl>                         Write synthesized microcode to file");
+                eprintln!(
+                    "    -o <file.cl>                         Write synthesized microcode to file"
+                );
                 eprintln!("    --json                               Output JSON telemetry");
                 std::process::exit(1);
             }
@@ -5320,22 +6951,54 @@ fn main() {
             let mut i = 3;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--m" if i + 1 < args.len() => { m = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--n" if i + 1 < args.len() => { n = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--k" if i + 1 < args.len() => { 
-                        k = args[i + 1].parse().unwrap_or(64); 
-                        k_size = k;
-                        i += 2; 
+                    "--m" if i + 1 < args.len() => {
+                        m = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
                     }
-                    "--cin" if i + 1 < args.len() => { cin = args[i + 1].parse().unwrap_or(32); i += 2; }
-                    "--cout" if i + 1 < args.len() => { cout = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--spatial" if i + 1 < args.len() => { spatial = args[i + 1].parse().unwrap_or(16); i += 2; }
-                    "--unroll" if i + 1 < args.len() => { unroll = args[i + 1].parse().unwrap_or(4); i += 2; }
-                    "--subbyte" => { subbyte = true; i += 1; }
-                    "--systolic" | "--wavefront" => { systolic = true; i += 1; }
-                    "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
-                    "--json" => { emit_json = true; i += 1; }
-                    _ => { i += 1; }
+                    "--n" if i + 1 < args.len() => {
+                        n = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--k" if i + 1 < args.len() => {
+                        k = args[i + 1].parse().unwrap_or(64);
+                        k_size = k;
+                        i += 2;
+                    }
+                    "--cin" if i + 1 < args.len() => {
+                        cin = args[i + 1].parse().unwrap_or(32);
+                        i += 2;
+                    }
+                    "--cout" if i + 1 < args.len() => {
+                        cout = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--spatial" if i + 1 < args.len() => {
+                        spatial = args[i + 1].parse().unwrap_or(16);
+                        i += 2;
+                    }
+                    "--unroll" if i + 1 < args.len() => {
+                        unroll = args[i + 1].parse().unwrap_or(4);
+                        i += 2;
+                    }
+                    "--subbyte" => {
+                        subbyte = true;
+                        i += 1;
+                    }
+                    "--systolic" | "--wavefront" => {
+                        systolic = true;
+                        i += 1;
+                    }
+                    "-o" if i + 1 < args.len() => {
+                        out_file = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
@@ -5351,7 +7014,10 @@ fn main() {
                 "conv" | "conv2d" => cronc::tile_conv2d(cin, cout, spatial, k_size, &tile_opts),
                 "wgmma" | "tile16" => cronc::cl_tile::tile_16x16_wgmma(subbyte),
                 other => {
-                    eprintln!("Unknown cl-tile operation '{}'. Available: gemm, conv, wgmma", other);
+                    eprintln!(
+                        "Unknown cl-tile operation '{}'. Available: gemm, conv, wgmma",
+                        other
+                    );
                     std::process::exit(1);
                 }
             };
@@ -5375,7 +7041,10 @@ fn main() {
                     eprintln!("Failed to write output to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Synthesized polyhedral tiled .cl machine code written to '{}'", path);
+                println!(
+                    "[SUCCESS] Synthesized polyhedral tiled .cl machine code written to '{}'",
+                    path
+                );
             }
         }
         "cl-cluster" | "cl-distributed" | "distributed" => {
@@ -5401,12 +7070,29 @@ fn main() {
             let mut i = 3;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--m" if i + 1 < args.len() => { m = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--n" if i + 1 < args.len() => { n = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--k" if i + 1 < args.len() => { k = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
-                    "--json" => { emit_json = true; i += 1; }
-                    _ => { i += 1; }
+                    "--m" if i + 1 < args.len() => {
+                        m = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--n" if i + 1 < args.len() => {
+                        n = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--k" if i + 1 < args.len() => {
+                        k = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "-o" if i + 1 < args.len() => {
+                        out_file = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
@@ -5424,7 +7110,10 @@ fn main() {
                             eprintln!("Error writing sparse microcode to '{}': {}", path, e);
                             std::process::exit(1);
                         }
-                        println!("[SUCCESS] Synthesized 2:4 sparse GEMM microcode written to '{}'", path);
+                        println!(
+                            "[SUCCESS] Synthesized 2:4 sparse GEMM microcode written to '{}'",
+                            path
+                        );
                     } else {
                         println!("{}", code);
                     }
@@ -5439,7 +7128,10 @@ fn main() {
                     }
                 }
                 other => {
-                    eprintln!("Unknown cl-sparse command '{}'. Available: kernel, analyze", other);
+                    eprintln!(
+                        "Unknown cl-sparse command '{}'. Available: kernel, analyze",
+                        other
+                    );
                     std::process::exit(1);
                 }
             }
@@ -5468,13 +7160,33 @@ fn main() {
             let mut i = 3;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--temp" if i + 1 < args.len() => { temp_k = args[i + 1].parse().unwrap_or(300.0); i += 2; }
-                    "--freq" if i + 1 < args.len() => { freq_ghz = args[i + 1].parse().unwrap_or(2.0); i += 2; }
-                    "--voltage" if i + 1 < args.len() => { voltage_v = args[i + 1].parse().unwrap_or(0.85); i += 2; }
-                    "--ambient" if i + 1 < args.len() => { ambient_c = args[i + 1].parse().unwrap_or(25.0); i += 2; }
-                    "--cores" if i + 1 < args.len() => { cores = args[i + 1].parse().unwrap_or(256); i += 2; }
-                    "--json" => { emit_json = true; i += 1; }
-                    _ => { i += 1; }
+                    "--temp" if i + 1 < args.len() => {
+                        temp_k = args[i + 1].parse().unwrap_or(300.0);
+                        i += 2;
+                    }
+                    "--freq" if i + 1 < args.len() => {
+                        freq_ghz = args[i + 1].parse().unwrap_or(2.0);
+                        i += 2;
+                    }
+                    "--voltage" if i + 1 < args.len() => {
+                        voltage_v = args[i + 1].parse().unwrap_or(0.85);
+                        i += 2;
+                    }
+                    "--ambient" if i + 1 < args.len() => {
+                        ambient_c = args[i + 1].parse().unwrap_or(25.0);
+                        i += 2;
+                    }
+                    "--cores" if i + 1 < args.len() => {
+                        cores = args[i + 1].parse().unwrap_or(256);
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
@@ -5514,16 +7226,45 @@ fn main() {
             let mut i = 2;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--m" if i + 1 < args.len() => { m = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--n" if i + 1 < args.len() => { n = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--k" if i + 1 < args.len() => { k = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--metric" if i + 1 < args.len() => { metric = args[i + 1].clone(); i += 2; }
-                    "--max" if i + 1 < args.len() => { max_candidates = args[i + 1].parse().unwrap_or(32); i += 2; }
-                    "--ambient" if i + 1 < args.len() => { ambient_temp_c = args[i + 1].parse().unwrap_or(25.0); i += 2; }
-                    "--no-sparse" => { enable_sparsity = false; i += 1; }
-                    "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
-                    "--json" => { emit_json = true; i += 1; }
-                    _ => { i += 1; }
+                    "--m" if i + 1 < args.len() => {
+                        m = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--n" if i + 1 < args.len() => {
+                        n = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--k" if i + 1 < args.len() => {
+                        k = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--metric" if i + 1 < args.len() => {
+                        metric = args[i + 1].clone();
+                        i += 2;
+                    }
+                    "--max" if i + 1 < args.len() => {
+                        max_candidates = args[i + 1].parse().unwrap_or(32);
+                        i += 2;
+                    }
+                    "--ambient" if i + 1 < args.len() => {
+                        ambient_temp_c = args[i + 1].parse().unwrap_or(25.0);
+                        i += 2;
+                    }
+                    "--no-sparse" => {
+                        enable_sparsity = false;
+                        i += 1;
+                    }
+                    "-o" if i + 1 < args.len() => {
+                        out_file = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
@@ -5550,7 +7291,10 @@ fn main() {
                     eprintln!("Error writing auto-tuned kernel to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Synthesized auto-tuned .cl kernel written to '{}'", path);
+                println!(
+                    "[SUCCESS] Synthesized auto-tuned .cl kernel written to '{}'",
+                    path
+                );
             }
         }
         "cl-stream" => {
@@ -5572,15 +7316,41 @@ fn main() {
             let mut i = 2;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--bands" if i + 1 < args.len() => { mel_bands = args[i + 1].parse().unwrap_or(80); i += 2; }
-                    "--quant" if i + 1 < args.len() => { quant_bits = args[i + 1].parse().unwrap_or(4); i += 2; }
-                    "--dim" if i + 1 < args.len() => { frame_dim = args[i + 1].parse().unwrap_or(224); i += 2; }
-                    "--patch" if i + 1 < args.len() => { patch_size = args[i + 1].parse().unwrap_or(16); i += 2; }
-                    "--clock" if i + 1 < args.len() => { clock_ghz = args[i + 1].parse().unwrap_or(1.6); i += 2; }
-                    "--depth" if i + 1 < args.len() => { buffer_depth = args[i + 1].parse().unwrap_or(4); i += 2; }
-                    "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
-                    "--json" => { emit_json = true; i += 1; }
-                    _ => { i += 1; }
+                    "--bands" if i + 1 < args.len() => {
+                        mel_bands = args[i + 1].parse().unwrap_or(80);
+                        i += 2;
+                    }
+                    "--quant" if i + 1 < args.len() => {
+                        quant_bits = args[i + 1].parse().unwrap_or(4);
+                        i += 2;
+                    }
+                    "--dim" if i + 1 < args.len() => {
+                        frame_dim = args[i + 1].parse().unwrap_or(224);
+                        i += 2;
+                    }
+                    "--patch" if i + 1 < args.len() => {
+                        patch_size = args[i + 1].parse().unwrap_or(16);
+                        i += 2;
+                    }
+                    "--clock" if i + 1 < args.len() => {
+                        clock_ghz = args[i + 1].parse().unwrap_or(1.6);
+                        i += 2;
+                    }
+                    "--depth" if i + 1 < args.len() => {
+                        buffer_depth = args[i + 1].parse().unwrap_or(4);
+                        i += 2;
+                    }
+                    "-o" if i + 1 < args.len() => {
+                        out_file = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
@@ -5624,7 +7394,10 @@ fn main() {
                     eprintln!("Error writing streaming pipeline to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Synthesized streaming pipeline .cl written to '{}'", path);
+                println!(
+                    "[SUCCESS] Synthesized streaming pipeline .cl written to '{}'",
+                    path
+                );
             }
         }
         "cl-snn" => {
@@ -5644,13 +7417,33 @@ fn main() {
             let mut i = 2;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--neurons" if i + 1 < args.len() => { neurons = args[i + 1].parse().unwrap_or(8); i += 2; }
-                    "--cycles" if i + 1 < args.len() => { cycles = args[i + 1].parse().unwrap_or(20); i += 2; }
-                    "--beta" if i + 1 < args.len() => { beta = args[i + 1].parse().unwrap_or(0.85); i += 2; }
-                    "--threshold" if i + 1 < args.len() => { threshold = args[i + 1].parse().unwrap_or(1.0); i += 2; }
-                    "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
-                    "--json" => { emit_json = true; i += 1; }
-                    _ => { i += 1; }
+                    "--neurons" if i + 1 < args.len() => {
+                        neurons = args[i + 1].parse().unwrap_or(8);
+                        i += 2;
+                    }
+                    "--cycles" if i + 1 < args.len() => {
+                        cycles = args[i + 1].parse().unwrap_or(20);
+                        i += 2;
+                    }
+                    "--beta" if i + 1 < args.len() => {
+                        beta = args[i + 1].parse().unwrap_or(0.85);
+                        i += 2;
+                    }
+                    "--threshold" if i + 1 < args.len() => {
+                        threshold = args[i + 1].parse().unwrap_or(1.0);
+                        i += 2;
+                    }
+                    "-o" if i + 1 < args.len() => {
+                        out_file = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
@@ -5670,7 +7463,10 @@ fn main() {
                             eprintln!("Error writing SNN kernel to '{}': {}", path, e);
                             std::process::exit(1);
                         }
-                        println!("[SUCCESS] Synthesized Brain 4 SNN microcode written to '{}'", path);
+                        println!(
+                            "[SUCCESS] Synthesized Brain 4 SNN microcode written to '{}'",
+                            path
+                        );
                     } else {
                         println!("{}", code);
                     }
@@ -5680,14 +7476,21 @@ fn main() {
                     let mut input_events = Vec::new();
                     for t in 0..cycles {
                         if t % 4 == 0 {
-                            input_events.push(cronc::SpikeEvent { time_cycle: t, neuron_id: 0 });
+                            input_events.push(cronc::SpikeEvent {
+                                time_cycle: t,
+                                neuron_id: 0,
+                            });
                         }
                         if t % 6 == 0 && neurons > 1 {
-                            input_events.push(cronc::SpikeEvent { time_cycle: t, neuron_id: 1 });
+                            input_events.push(cronc::SpikeEvent {
+                                time_cycle: t,
+                                neuron_id: 1,
+                            });
                         }
                     }
 
-                    let res = cronc::simulate_snn(neurons, cycles, &lif_cfg, &stdp_cfg, &input_events);
+                    let res =
+                        cronc::simulate_snn(neurons, cycles, &lif_cfg, &stdp_cfg, &input_events);
 
                     if emit_json {
                         println!("{}", res.to_json());
@@ -5700,11 +7503,17 @@ fn main() {
                             eprintln!("Error writing SNN kernel to '{}': {}", path, e);
                             std::process::exit(1);
                         }
-                        println!("[SUCCESS] Synthesized Brain 4 SNN microcode written to '{}'", path);
+                        println!(
+                            "[SUCCESS] Synthesized Brain 4 SNN microcode written to '{}'",
+                            path
+                        );
                     }
                 }
                 other => {
-                    eprintln!("Unknown cl-snn action '{}'. Available: sim, synth, raster", other);
+                    eprintln!(
+                        "Unknown cl-snn action '{}'. Available: sim, synth, raster",
+                        other
+                    );
                     std::process::exit(1);
                 }
             }
@@ -5751,14 +7560,38 @@ fn main() {
             let mut i = 2;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--dim" if i + 1 < args.len() => { hidden_dim = args[i + 1].parse().unwrap_or(64); i += 2; }
-                    "--layers" if i + 1 < args.len() => { num_layers = args[i + 1].parse().unwrap_or(2); i += 2; }
-                    "--heads" if i + 1 < args.len() => { num_heads = args[i + 1].parse().unwrap_or(4); i += 2; }
-                    "--tokens" if i + 1 < args.len() => { max_tokens = args[i + 1].parse().unwrap_or(16); i += 2; }
-                    "--temp" if i + 1 < args.len() => { temperature = args[i + 1].parse().unwrap_or(0.7); i += 2; }
-                    "--top-p" if i + 1 < args.len() => { top_p = args[i + 1].parse().unwrap_or(0.95); i += 2; }
-                    "--top-k" if i + 1 < args.len() => { top_k = args[i + 1].parse().unwrap_or(40); i += 2; }
-                    "--repeat-penalty" if i + 1 < args.len() => { repetition_penalty = args[i + 1].parse().unwrap_or(1.15); i += 2; }
+                    "--dim" if i + 1 < args.len() => {
+                        hidden_dim = args[i + 1].parse().unwrap_or(64);
+                        i += 2;
+                    }
+                    "--layers" if i + 1 < args.len() => {
+                        num_layers = args[i + 1].parse().unwrap_or(2);
+                        i += 2;
+                    }
+                    "--heads" if i + 1 < args.len() => {
+                        num_heads = args[i + 1].parse().unwrap_or(4);
+                        i += 2;
+                    }
+                    "--tokens" if i + 1 < args.len() => {
+                        max_tokens = args[i + 1].parse().unwrap_or(16);
+                        i += 2;
+                    }
+                    "--temp" if i + 1 < args.len() => {
+                        temperature = args[i + 1].parse().unwrap_or(0.7);
+                        i += 2;
+                    }
+                    "--top-p" if i + 1 < args.len() => {
+                        top_p = args[i + 1].parse().unwrap_or(0.95);
+                        i += 2;
+                    }
+                    "--top-k" if i + 1 < args.len() => {
+                        top_k = args[i + 1].parse().unwrap_or(40);
+                        i += 2;
+                    }
+                    "--repeat-penalty" if i + 1 < args.len() => {
+                        repetition_penalty = args[i + 1].parse().unwrap_or(1.15);
+                        i += 2;
+                    }
                     "--model" | "-m" if i + 1 < args.len() => {
                         let m_raw = args[i + 1].clone();
                         let p = std::path::Path::new(&m_raw);
@@ -5766,9 +7599,14 @@ fn main() {
                             model_path = Some(m_raw);
                         } else if cronc::resolve_model(&m_raw).is_some() {
                             match cronc::ensure_model_available(&m_raw, None, true) {
-                                Ok((_, local_p)) => model_path = Some(local_p.to_str().unwrap().to_string()),
+                                Ok((_, local_p)) => {
+                                    model_path = Some(local_p.to_str().unwrap().to_string())
+                                }
                                 Err(e) => {
-                                    eprintln!("[WARN] Auto-resolve model failed: {}. Using raw path.", e);
+                                    eprintln!(
+                                        "[WARN] Auto-resolve model failed: {}. Using raw path.",
+                                        e
+                                    );
                                     model_path = Some(m_raw);
                                 }
                             }
@@ -5779,37 +7617,103 @@ fn main() {
                     }
                     "--mode" if i + 1 < args.len() => {
                         match args[i + 1].to_lowercase().as_str() {
-                            "float" | "fp32" | "simd" => compute_mode = cronc::ComputePrecisionMode::FloatSimd,
-                            "hybrid" | "mixed" => compute_mode = cronc::ComputePrecisionMode::Hybrid,
+                            "float" | "fp32" | "simd" => {
+                                compute_mode = cronc::ComputePrecisionMode::FloatSimd
+                            }
+                            "hybrid" | "mixed" => {
+                                compute_mode = cronc::ComputePrecisionMode::Hybrid
+                            }
                             _ => compute_mode = cronc::ComputePrecisionMode::TernaryZeroFlop,
                         }
                         i += 2;
                     }
-                    "--mla" => { use_mla = true; i += 1; }
-                    "--latent-dim" if i + 1 < args.len() => { kv_latent_dim = args[i + 1].parse().unwrap_or(16); i += 2; }
-                    "--reasoning" | "--think" => { reasoning_mode = true; i += 1; }
-                    "--ssm" | "--mamba" => { use_ssm = true; i += 1; }
-                    "--moe" => { use_moe = true; i += 1; }
-                    "--experts" if i + 1 < args.len() => { num_experts = args[i + 1].parse().unwrap_or(8); i += 2; }
-                    "--active-experts" if i + 1 < args.len() => { num_active_experts = args[i + 1].parse().unwrap_or(2); i += 2; }
-                    "--clifford" => { use_clifford = true; i += 1; }
-                    "--reversible" => { use_reversible = true; i += 1; }
-                    "--snn" => { use_snn = true; i += 1; }
-                    "--speculative" => { use_speculative = true; i += 1; }
-                    "--draft" if i + 1 < args.len() => { draft_path = Some(args[i + 1].clone()); i += 2; }
-                    "--target" if i + 1 < args.len() => { target_path = Some(args[i + 1].clone()); i += 2; }
-                    "-k" | "--lookahead" if i + 1 < args.len() => { spec_k = args[i + 1].parse().unwrap_or(4); i += 2; }
-                    "--cot" | "--refine" => { cot_mode = true; i += 1; }
-                    "--no-sparse" => { enable_sparsity = false; i += 1; }
-                    "--no-stream" => { stream_tokens = false; i += 1; }
-                    "--cuda" | "--gpu" => { use_cuda = true; i += 1; }
-                    "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
-                    "--json" => { emit_json = true; i += 1; }
+                    "--mla" => {
+                        use_mla = true;
+                        i += 1;
+                    }
+                    "--latent-dim" if i + 1 < args.len() => {
+                        kv_latent_dim = args[i + 1].parse().unwrap_or(16);
+                        i += 2;
+                    }
+                    "--reasoning" | "--think" => {
+                        reasoning_mode = true;
+                        i += 1;
+                    }
+                    "--ssm" | "--mamba" => {
+                        use_ssm = true;
+                        i += 1;
+                    }
+                    "--moe" => {
+                        use_moe = true;
+                        i += 1;
+                    }
+                    "--experts" if i + 1 < args.len() => {
+                        num_experts = args[i + 1].parse().unwrap_or(8);
+                        i += 2;
+                    }
+                    "--active-experts" if i + 1 < args.len() => {
+                        num_active_experts = args[i + 1].parse().unwrap_or(2);
+                        i += 2;
+                    }
+                    "--clifford" => {
+                        use_clifford = true;
+                        i += 1;
+                    }
+                    "--reversible" => {
+                        use_reversible = true;
+                        i += 1;
+                    }
+                    "--snn" => {
+                        use_snn = true;
+                        i += 1;
+                    }
+                    "--speculative" => {
+                        use_speculative = true;
+                        i += 1;
+                    }
+                    "--draft" if i + 1 < args.len() => {
+                        draft_path = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--target" if i + 1 < args.len() => {
+                        target_path = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "-k" | "--lookahead" if i + 1 < args.len() => {
+                        spec_k = args[i + 1].parse().unwrap_or(4);
+                        i += 2;
+                    }
+                    "--cot" | "--refine" => {
+                        cot_mode = true;
+                        i += 1;
+                    }
+                    "--no-sparse" => {
+                        enable_sparsity = false;
+                        i += 1;
+                    }
+                    "--no-stream" => {
+                        stream_tokens = false;
+                        i += 1;
+                    }
+                    "--cuda" | "--gpu" => {
+                        use_cuda = true;
+                        i += 1;
+                    }
+                    "-o" if i + 1 < args.len() => {
+                        out_file = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--json" => {
+                        emit_json = true;
+                        i += 1;
+                    }
                     other if !other.starts_with("--") && i >= 3 => {
                         prompt_text = other.to_string();
                         i += 1;
                     }
-                    _ => { i += 1; }
+                    _ => {
+                        i += 1;
+                    }
                 }
             }
 
@@ -5847,7 +7751,10 @@ fn main() {
                             eprintln!("Error writing transformer microcode to '{}': {}", path, e);
                             std::process::exit(1);
                         }
-                        println!("[SUCCESS] Synthesized LLM Transformer microcode written to '{}'", path);
+                        println!(
+                            "[SUCCESS] Synthesized LLM Transformer microcode written to '{}'",
+                            path
+                        );
                     } else {
                         println!("{}", code);
                     }
@@ -5866,7 +7773,9 @@ fn main() {
                 }
                 "chat" => {
                     let chat_config = cron_cli::chat::ChatConfig {
-                        model_name: model_path.clone().unwrap_or_else(|| "cron-bitnet-b1.58".to_string()),
+                        model_name: model_path
+                            .clone()
+                            .unwrap_or_else(|| "cron-bitnet-b1.58".to_string()),
                         num_layers,
                         page_size_mb: 16,
                         k_speculative: 4,
@@ -5895,22 +7804,36 @@ fn main() {
                     }
                 }
                 _ if use_speculative || sub_cmd == "speculative" => {
-                    let draft_file = draft_path.unwrap_or_else(|| "models/sovereign_1b/main.cl".to_string());
-                    let target_file = target_path.unwrap_or_else(|| "models/sovereign_3b/main.cl".to_string());
+                    let draft_file =
+                        draft_path.unwrap_or_else(|| "models/sovereign_1b/main.cl".to_string());
+                    let target_file =
+                        target_path.unwrap_or_else(|| "models/sovereign_3b/main.cl".to_string());
                     let draft_cl = fs::read_to_string(&draft_file).unwrap_or_else(|_| "; Fallback draft\n.module sovereign_1b\nB0000: '==01#0001> _NO00#000> _NO00#000> _NO00#000>\n!HL00#000(\n".to_string());
                     let target_cl = fs::read_to_string(&target_file).unwrap_or_else(|_| "; Fallback target\n.module sovereign_3b\nB0000: '==01#0001> _NO00#000> _NO00#000> _NO00#000>\n!HL00#000(\n".to_string());
-                    let session = cronc::speculative_decoding::SpatialSiliconSpeculativeSession::new(spec_k, &draft_cl, &target_cl);
+                    let session =
+                        cronc::speculative_decoding::SpatialSiliconSpeculativeSession::new(
+                            spec_k, &draft_cl, &target_cl,
+                        );
                     let prompt_tokens = tokenizer.encode(&prompt_text);
-                    let report = session.generate(&prompt_tokens, max_tokens).unwrap_or_else(|e| {
-                        eprintln!("[ERROR] Speculative decoding failed: {}", e);
-                        std::process::exit(1);
-                    });
+                    let report = session
+                        .generate(&prompt_tokens, max_tokens)
+                        .unwrap_or_else(|e| {
+                            eprintln!("[ERROR] Speculative decoding failed: {}", e);
+                            std::process::exit(1);
+                        });
                     let generated_str = tokenizer.decode(&report.generated_tokens);
                     if emit_json {
-                        println!(r#"{{"prompt":"{}","generated":"{}","drafted":{},"accepted":{},"rejected":{},"acceptance_rate":{:.2},"speedup":{:.2},"bandwidth_saved":{:.2}}}"#,
-                            prompt_text.replace('\"', "\\\""), generated_str.replace('\"', "\\\""),
-                            report.total_drafted, report.total_accepted, report.total_rejected,
-                            report.acceptance_rate_pct, report.effective_speedup, report.bandwidth_savings_pct);
+                        println!(
+                            r#"{{"prompt":"{}","generated":"{}","drafted":{},"accepted":{},"rejected":{},"acceptance_rate":{:.2},"speedup":{:.2},"bandwidth_saved":{:.2}}}"#,
+                            prompt_text.replace('\"', "\\\""),
+                            generated_str.replace('\"', "\\\""),
+                            report.total_drafted,
+                            report.total_accepted,
+                            report.total_rejected,
+                            report.acceptance_rate_pct,
+                            report.effective_speedup,
+                            report.bandwidth_savings_pct
+                        );
                     } else {
                         println!("\n╭──────────────── CRON Spatial Silicon Speculative Engine ──────────────╮");
                         println!("  [Architecture] Draft: Sovereign-1B (Core [0,0,0,0]) | Target: Sovereign-3B (Core [3,3,3,3])");
@@ -5919,42 +7842,76 @@ fn main() {
                         println!("  [Output]       \"{}\"", generated_str);
                         println!("├────────────────────────── Telemetry HUD ─────────────────────────────┤");
                         println!("  Drafted Tokens:         {}", report.total_drafted);
-                        println!("  Accepted Tokens:        {} ({:.1}% Acceptance Rate)", report.total_accepted, report.acceptance_rate_pct);
+                        println!(
+                            "  Accepted Tokens:        {} ({:.1}% Acceptance Rate)",
+                            report.total_accepted, report.acceptance_rate_pct
+                        );
                         println!("  Rejected/Corrected:     {}", report.total_rejected);
                         println!("  Verification Passes:    {}", report.verification_passes);
-                        println!("  Effective Acceleration: {:.2}x Speedup (Zero DRAM Roundtrips)", report.effective_speedup);
-                        println!("  HBM/DRAM Traffic Saved: {:.1}% Bandwidth Amplification", report.bandwidth_savings_pct);
+                        println!(
+                            "  Effective Acceleration: {:.2}x Speedup (Zero DRAM Roundtrips)",
+                            report.effective_speedup
+                        );
+                        println!(
+                            "  HBM/DRAM Traffic Saved: {:.1}% Bandwidth Amplification",
+                            report.bandwidth_savings_pct
+                        );
                         println!("  Silicon Co-Sim Status:  100% BIT-EXACT HARDWARE PARITY (0.00% Divergence)");
                         println!("╰──────────────────────────────────────────────────────────────────────╯\n");
                     }
                 }
                 _ if cot_mode || sub_cmd == "cot" => {
-                    let cot_file = model_path.unwrap_or_else(|| "models/sovereign_3b/cot_refine.cl".to_string());
+                    let cot_file = model_path
+                        .unwrap_or_else(|| "models/sovereign_3b/cot_refine.cl".to_string());
                     let cot_cl = fs::read_to_string(&cot_file).unwrap_or_else(|_| {
                         eprintln!("[ERROR] CoT kernel file not found: {}", cot_file);
                         std::process::exit(1);
                     });
-                    let lowered = cronc::cl_lang::lower_cl_with_kernels(&cot_cl).unwrap_or_else(|e| {
-                        eprintln!("[ERROR] Kernel lowering failed: {}", e);
-                        std::process::exit(1);
-                    });
+                    let lowered =
+                        cronc::cl_lang::lower_cl_with_kernels(&cot_cl).unwrap_or_else(|e| {
+                            eprintln!("[ERROR] Kernel lowering failed: {}", e);
+                            std::process::exit(1);
+                        });
                     let mut core = cronc::ClJitCore::new();
-                    let premise_hash = prompt_text.as_bytes().iter().fold(0x42u32, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u32));
+                    let premise_hash = prompt_text.as_bytes().iter().fold(0x42u32, |acc, &b| {
+                        acc.wrapping_mul(31).wrapping_add(b as u32)
+                    });
                     core.r[1] = premise_hash;
                     let _ = cronc::execute_cl_on_core(&lowered, &mut core);
 
                     if emit_json {
-                        println!(r#"{{"prompt":"{}","premise":{},"verified_thought":{},"cycles":{},"status":"100% BIT-EXACT PARITY"}}"#,
-                            prompt_text.replace('\"', "\\\""), premise_hash, core.r[4], core.cycle_count);
+                        println!(
+                            r#"{{"prompt":"{}","premise":{},"verified_thought":{},"cycles":{},"status":"100% BIT-EXACT PARITY"}}"#,
+                            prompt_text.replace('\"', "\\\""),
+                            premise_hash,
+                            core.r[4],
+                            core.cycle_count
+                        );
                     } else {
                         println!("\n╭──────────────── CRON Autonomous CoT Self-Refinement ───────────────╮");
-                        println!("  [Kernel]       Sovereign-3B Autonomous Reasoning (cot_refine.cl)");
-                        println!("  [Premise]      \"{}\" (Hash: 0x{:08X})", prompt_text.trim(), premise_hash);
+                        println!(
+                            "  [Kernel]       Sovereign-3B Autonomous Reasoning (cot_refine.cl)"
+                        );
+                        println!(
+                            "  [Premise]      \"{}\" (Hash: 0x{:08X})",
+                            prompt_text.trim(),
+                            premise_hash
+                        );
                         println!("  [Reasoning]    4-Cycle Iterative SwiGLU Hypothesis Generation");
-                        println!("  [Gating]       Dynamic Verification: Self-Correcting Geodesic Rotor");
-                        println!("  [Verified]     Thought Vector Reg[4] = 0x{:08X}", core.r[4]);
-                        println!("  [Silicon Core] Executed in {} Cycles on 256-Core 4D-Torus", core.cycle_count);
-                        println!("  [RTL Status]   100% BIT-EXACT VERILOG RTL CO-SIMULATION PARITY");
+                        println!(
+                            "  [Gating]       Dynamic Verification: Self-Correcting Geodesic Rotor"
+                        );
+                        println!(
+                            "  [Verified]     Thought Vector Reg[4] = 0x{:08X}",
+                            core.r[4]
+                        );
+                        println!(
+                            "  [Silicon Core] Executed in {} Cycles on 256-Core 4D-Torus",
+                            core.cycle_count
+                        );
+                        println!(
+                            "  [RTL Status]   100% BIT-EXACT VERILOG RTL CO-SIMULATION PARITY"
+                        );
                         println!("╰──────────────────────────────────────────────────────────────────────╯\n");
                     }
                 }
@@ -5966,9 +7923,15 @@ fn main() {
                     let safetensors_prov;
                     let golden_prov;
 
-                    let provider_ref: &dyn cronc::LayerWeightProvider = if let Some(ref mpath) = model_path {
+                    let provider_ref: &dyn cronc::LayerWeightProvider = if let Some(ref mpath) =
+                        model_path
+                    {
                         let path_obj = std::path::Path::new(mpath);
-                        let ext = path_obj.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                        let ext = path_obj
+                            .extension()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_lowercase();
                         if ext == "gguf" {
                             match cronc::GgufWeightProvider::from_file(path_obj) {
                                 Ok(p) => {
@@ -5977,7 +7940,12 @@ fn main() {
                                 }
                                 Err(e) => {
                                     eprintln!("[WARN] Failed to load GGUF '{}': {}. Falling back to GoldenBitNetWeightProvider.", mpath, e);
-                                    golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                                    golden_prov = cronc::GoldenBitNetWeightProvider::new(
+                                        num_layers,
+                                        hidden_dim,
+                                        config.intermediate_dim,
+                                        vocab_size,
+                                    );
                                     &golden_prov
                                 }
                             }
@@ -5989,33 +7957,59 @@ fn main() {
                                 }
                                 Err(e) => {
                                     eprintln!("[WARN] Failed to load SafeTensors '{}': {}. Falling back to GoldenBitNetWeightProvider.", mpath, e);
-                                    golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                                    golden_prov = cronc::GoldenBitNetWeightProvider::new(
+                                        num_layers,
+                                        hidden_dim,
+                                        config.intermediate_dim,
+                                        vocab_size,
+                                    );
                                     &golden_prov
                                 }
                             }
                         } else {
-                            golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                            golden_prov = cronc::GoldenBitNetWeightProvider::new(
+                                num_layers,
+                                hidden_dim,
+                                config.intermediate_dim,
+                                vocab_size,
+                            );
                             &golden_prov
                         }
                     } else {
-                        golden_prov = cronc::GoldenBitNetWeightProvider::new(num_layers, hidden_dim, config.intermediate_dim, vocab_size);
+                        golden_prov = cronc::GoldenBitNetWeightProvider::new(
+                            num_layers,
+                            hidden_dim,
+                            config.intermediate_dim,
+                            vocab_size,
+                        );
                         &golden_prov
                     };
 
                     if stream_tokens && !emit_json {
                         let mode_desc = match config.compute_mode {
-                            cronc::ComputePrecisionMode::TernaryZeroFlop => "Multiplier-Free BitNet b1.58 (0 FLOPs, 1.7 pJ/tok)",
-                            cronc::ComputePrecisionMode::FloatSimd => "Precision Float SIMD (Hardware Multipliers Active)",
-                            cronc::ComputePrecisionMode::Hybrid => "Hybrid (Float Multipliers Attention + Ternary Zero-FLOP FFN)",
+                            cronc::ComputePrecisionMode::TernaryZeroFlop => {
+                                "Multiplier-Free BitNet b1.58 (0 FLOPs, 1.7 pJ/tok)"
+                            }
+                            cronc::ComputePrecisionMode::FloatSimd => {
+                                "Precision Float SIMD (Hardware Multipliers Active)"
+                            }
+                            cronc::ComputePrecisionMode::Hybrid => {
+                                "Hybrid (Float Multipliers Attention + Ternary Zero-FLOP FFN)"
+                            }
                         };
                         println!("\n╭─────────────────── CRON AI Silicon Inference Engine ───────────────╮");
                         println!("  [Compute Mode] {}", mode_desc);
                         if config.use_mla {
-                            println!("  [Attention]    MLA (Compressed Latent KV-Cache, latent_dim={})", config.kv_latent_dim);
+                            println!(
+                                "  [Attention]    MLA (Compressed Latent KV-Cache, latent_dim={})",
+                                config.kv_latent_dim
+                            );
                         } else if config.use_ssm {
                             println!("  [Architecture] Mamba-3 Selective State-Space Model (O(1) Recurrence)");
                         } else {
-                            println!("  [Attention]    FlashAttention-3 Online Tiled Multi-Head Softmax");
+                            println!(
+                                "  [Attention]    FlashAttention-3 Online Tiled Multi-Head Softmax"
+                            );
                         }
                         if config.use_moe {
                             println!("  [Architecture] Fine-Grained Sparse MoE (Total: {}, Active Top-{}: {})", config.num_experts, config.num_active_experts, config.num_active_experts);
@@ -6073,7 +8067,10 @@ fn main() {
                             eprintln!("Error writing transformer microcode to '{}': {}", path, e);
                             std::process::exit(1);
                         }
-                        println!("[SUCCESS] Synthesized LLM Transformer microcode written to '{}'", path);
+                        println!(
+                            "[SUCCESS] Synthesized LLM Transformer microcode written to '{}'",
+                            path
+                        );
                     }
                 }
                 "bench" | "benchmark" => {
@@ -6112,25 +8109,30 @@ fn main() {
                     let prompt = "Cron silicon neuromorphic intelligence:".to_string();
 
                     if enable_accel {
-                        let mut pipeline = cronc::ModelAccelerationPipeline::new(spec_k, 16, 2, hidden_dim, 2048);
+                        let mut pipeline =
+                            cronc::ModelAccelerationPipeline::new(spec_k, 16, 2, hidden_dim, 2048);
                         let prompt_toks = tokenizer.encode(&prompt);
-                        let _seq = pipeline.run_accelerated_generation(&prompt_toks, num_tokens, |_ctx, drafts| {
-                            // Realistic ground-truth target verifier: ~70% empirical acceptance with branch corrections
-                            let mut verified = Vec::with_capacity(drafts.len() + 1);
-                            for (idx, &d) in drafts.iter().enumerate() {
-                                if (idx + 1) % 4 != 0 {
-                                    verified.push(d);
-                                } else {
-                                    // Realistic mismatch: triggers correction and branch truncation
-                                    verified.push((d.wrapping_add(13)) % 32000);
-                                    break;
+                        let _seq = pipeline.run_accelerated_generation(
+                            &prompt_toks,
+                            num_tokens,
+                            |_ctx, drafts| {
+                                // Realistic ground-truth target verifier: ~70% empirical acceptance with branch corrections
+                                let mut verified = Vec::with_capacity(drafts.len() + 1);
+                                for (idx, &d) in drafts.iter().enumerate() {
+                                    if (idx + 1) % 4 != 0 {
+                                        verified.push(d);
+                                    } else {
+                                        // Realistic mismatch: triggers correction and branch truncation
+                                        verified.push((d.wrapping_add(13)) % 32000);
+                                        break;
+                                    }
                                 }
-                            }
-                            if verified.is_empty() {
-                                verified.push(42);
-                            }
-                            verified
-                        });
+                                if verified.is_empty() {
+                                    verified.push(42);
+                                }
+                                verified
+                            },
+                        );
 
                         if emit_json {
                             println!(
@@ -6189,20 +8191,55 @@ fn main() {
                     if emit_json {
                         println!(
                             r#"{{"status":"ok","tokens_generated":{},"total_time_ms":{:.3},"tokens_per_sec":{:.2},"ttft_ms":{:.3},"mem_mb":{:.2},"paged_cache_hit_rate":1.0,"mode":"{:?}","zero_backprop":true,"zero_flops":true}}"#,
-                            gen_tokens, total_elapsed * 1000.0, tok_per_sec, ttft_ms, mem_footprint_mb, compute_mode
+                            gen_tokens,
+                            total_elapsed * 1000.0,
+                            tok_per_sec,
+                            ttft_ms,
+                            mem_footprint_mb,
+                            compute_mode
                         );
                     } else {
                         println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
                         println!("║             CRON LLM INFERENCE HIGH-PERFORMANCE ROOFLINE BENCHMARK                    ║");
                         println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
-                        println!("║ Tokens Generated : {:<66} ║", format!("{} Tokens (Context Window: {} Tokens)", gen_tokens, context_len));
-                        println!("║ Generation Speed : {:<66} ║", format!("{:.2} Tokens / Second (Zero-VRAM Native)", tok_per_sec));
-                        println!("║ Time-To-1st-Token: {:<66} ║", format!("{:.3} ms (Instantaneous Attention Prefill)", ttft_ms));
-                        println!("║ Total Latency    : {:<66} ║", format!("{:.3} ms", total_elapsed * 1000.0));
-                        println!("║ Physical RAM     : {:<66} ║", format!("{:.2} MB (< 12 MB Hard Bounded Ceiling)", mem_footprint_mb));
-                        println!("║ Paged Cache Hit  : {:<66} ║", "100.0% (Zero Fragmented Virtual Memory)");
-                        println!("║ Compute Topology : {:<66} ║", format!("BitNet b1.58 Ternary Zero-FLOP ({:?})", compute_mode));
-                        println!("║ Multi-Head Arch  : {:<66} ║", format!("Layers: {} | Heads: {} | Hidden: {}", num_layers, num_heads, hidden_dim));
+                        println!(
+                            "║ Tokens Generated : {:<66} ║",
+                            format!(
+                                "{} Tokens (Context Window: {} Tokens)",
+                                gen_tokens, context_len
+                            )
+                        );
+                        println!(
+                            "║ Generation Speed : {:<66} ║",
+                            format!("{:.2} Tokens / Second (Zero-VRAM Native)", tok_per_sec)
+                        );
+                        println!(
+                            "║ Time-To-1st-Token: {:<66} ║",
+                            format!("{:.3} ms (Instantaneous Attention Prefill)", ttft_ms)
+                        );
+                        println!(
+                            "║ Total Latency    : {:<66} ║",
+                            format!("{:.3} ms", total_elapsed * 1000.0)
+                        );
+                        println!(
+                            "║ Physical RAM     : {:<66} ║",
+                            format!("{:.2} MB (< 12 MB Hard Bounded Ceiling)", mem_footprint_mb)
+                        );
+                        println!(
+                            "║ Paged Cache Hit  : {:<66} ║",
+                            "100.0% (Zero Fragmented Virtual Memory)"
+                        );
+                        println!(
+                            "║ Compute Topology : {:<66} ║",
+                            format!("BitNet b1.58 Ternary Zero-FLOP ({:?})", compute_mode)
+                        );
+                        println!(
+                            "║ Multi-Head Arch  : {:<66} ║",
+                            format!(
+                                "Layers: {} | Heads: {} | Hidden: {}",
+                                num_layers, num_heads, hidden_dim
+                            )
+                        );
                         println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
                     }
                 }
@@ -6260,17 +8297,44 @@ fn main() {
                     "libcron_native.so".to_string()
                 }
             });
-            println!("[BUILDING CRON NATIVE SHARED ACCELERATOR] Target: {}", target_dll);
+            println!(
+                "[BUILDING CRON NATIVE SHARED ACCELERATOR] Target: {}",
+                target_dll
+            );
             let c_source = "src_native/cron_native.c";
             let mut cmd = std::process::Command::new("gcc");
-            cmd.args(["-std=c2x", "-shared", "-O3", "-mavx2", "-mfma", "-fopenmp", "-static-libgcc", c_source, "-o", &target_dll]);
+            cmd.args([
+                "-std=c2x",
+                "-shared",
+                "-O3",
+                "-mavx2",
+                "-mfma",
+                "-fopenmp",
+                "-static-libgcc",
+                c_source,
+                "-o",
+                &target_dll,
+            ]);
             match cmd.status() {
                 Ok(s) if s.success() => {
-                    println!("[SUCCESS] Native shared library compiled successfully: {}", target_dll);
+                    println!(
+                        "[SUCCESS] Native shared library compiled successfully: {}",
+                        target_dll
+                    );
                 }
                 _ => {
                     let mut cmd2 = std::process::Command::new("gcc");
-                    cmd2.args(["-std=c2x", "-shared", "-O3", "-mavx2", "-mfma", "-static-libgcc", c_source, "-o", &target_dll]);
+                    cmd2.args([
+                        "-std=c2x",
+                        "-shared",
+                        "-O3",
+                        "-mavx2",
+                        "-mfma",
+                        "-static-libgcc",
+                        c_source,
+                        "-o",
+                        &target_dll,
+                    ]);
                     if let Ok(s2) = cmd2.status() {
                         if s2.success() {
                             println!("[SUCCESS] Native shared library compiled (single-threaded fallback): {}", target_dll);
@@ -6339,27 +8403,63 @@ fn main() {
             println!("              4D-TORUS SPATIAL LINKING REPORT               ");
             println!("============================================================");
             println!("  Input Source:                 {}", input_path);
-            println!("  Active Cores Linked:          {} Cores (4D Torus Sub-Mesh)", report.total_cores);
-            println!("  Total Bundles Emitted:        {} Bundles (128-bit VLIW)", report.total_bundles);
-            println!("  Inter-Core Channels:          {} NoC Communication Channels", report.inter_core_channels.len());
-            println!("  Max Torus Hop Distance:       {} Hops (Toroidal Wrap)", report.max_hop_distance);
+            println!(
+                "  Active Cores Linked:          {} Cores (4D Torus Sub-Mesh)",
+                report.total_cores
+            );
+            println!(
+                "  Total Bundles Emitted:        {} Bundles (128-bit VLIW)",
+                report.total_bundles
+            );
+            println!(
+                "  Inter-Core Channels:          {} NoC Communication Channels",
+                report.inter_core_channels.len()
+            );
+            println!(
+                "  Max Torus Hop Distance:       {} Hops (Toroidal Wrap)",
+                report.max_hop_distance
+            );
             println!("  DOR Deadlock-Freedom Proof:   PROVEN ACYCLIC (Dally-Seitz Theorem)");
-            println!("  PGAS Partitioned Memory:      {} KB (64 KB/Core SRAM Banks)", report.pgas_bytes_allocated / 1024);
+            println!(
+                "  PGAS Partitioned Memory:      {} KB (64 KB/Core SRAM Banks)",
+                report.pgas_bytes_allocated / 1024
+            );
             println!("------------------------------------------------------------");
             println!("  Active 4D Torus Core Coordinates:");
             for coord in &report.active_core_coords {
                 let cid = coord.to_core_id();
-                let b_count = linker.cores.get(coord).map(|c| c.bundles.len()).unwrap_or(0);
-                println!("    - Core [{},{},{},{}] (ID {:>3}): {:>4} bundles, SRAM offset: 0x{:06X}",
-                    coord.x, coord.y, coord.z, coord.w, cid, b_count, cid * 65536);
+                let b_count = linker
+                    .cores
+                    .get(coord)
+                    .map(|c| c.bundles.len())
+                    .unwrap_or(0);
+                println!(
+                    "    - Core [{},{},{},{}] (ID {:>3}): {:>4} bundles, SRAM offset: 0x{:06X}",
+                    coord.x,
+                    coord.y,
+                    coord.z,
+                    coord.w,
+                    cid,
+                    b_count,
+                    cid * 65536
+                );
             }
             if !report.inter_core_channels.is_empty() {
                 println!("  Inter-Core Wormhole Channels:");
                 for ch in &report.inter_core_channels {
-                    println!("    * [{},{},{},{}] -> [{},{},{},{}] (Distance: {} hops, Route: {})",
-                        ch.src_coord.x, ch.src_coord.y, ch.src_coord.z, ch.src_coord.w,
-                        ch.dst_coord.x, ch.dst_coord.y, ch.dst_coord.z, ch.dst_coord.w,
-                        ch.hop_distance, ch.routing_path);
+                    println!(
+                        "    * [{},{},{},{}] -> [{},{},{},{}] (Distance: {} hops, Route: {})",
+                        ch.src_coord.x,
+                        ch.src_coord.y,
+                        ch.src_coord.z,
+                        ch.src_coord.w,
+                        ch.dst_coord.x,
+                        ch.dst_coord.y,
+                        ch.dst_coord.z,
+                        ch.dst_coord.w,
+                        ch.hop_distance,
+                        ch.routing_path
+                    );
                 }
             }
             println!("============================================================");
@@ -6370,7 +8470,11 @@ fn main() {
                     eprintln!("Error writing binary pack to '{}': {}", out_p, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Linked binary package emitted: '{}' ({} bytes)", out_p, bin.len());
+                println!(
+                    "[SUCCESS] Linked binary package emitted: '{}' ({} bytes)",
+                    out_p,
+                    bin.len()
+                );
             }
 
             if let Some(c_p) = emit_c_path {
@@ -6438,15 +8542,30 @@ fn main() {
                     let line_count = decompiled.lines().count();
                     println!(
                         "[SUCCESS] Decompiled machine-native VLIW to {}: '{}' ({} lines)",
-                        if is_v2 { "Sovereign CL v2.0" } else { "CRON Blueprint" },
+                        if is_v2 {
+                            "Sovereign CL v2.0"
+                        } else {
+                            "CRON Blueprint"
+                        },
                         out_path,
                         line_count
                     );
                     println!("============================================================");
                     println!("      REVERSE SEMANTIC DECOMPILATION SUMMARY                ");
                     println!("============================================================");
-                    println!("  Source Input:         {} (128-bit VLIW Machine Language)", input_path);
-                    println!("  Target Output:        {} ({})", out_path, if is_v2 { "Sovereign CL v2.0" } else { "Human Cognitive Projection" });
+                    println!(
+                        "  Source Input:         {} (128-bit VLIW Machine Language)",
+                        input_path
+                    );
+                    println!(
+                        "  Target Output:        {} ({})",
+                        out_path,
+                        if is_v2 {
+                            "Sovereign CL v2.0"
+                        } else {
+                            "Human Cognitive Projection"
+                        }
+                    );
                     println!("  Linear Types:         100% Affine Soundness Verified");
                     println!("  Silicon Brains Mapped:Photonic, Reversible, STDP, 4D Torus NoC");
                     println!("============================================================\n");
@@ -6476,15 +8595,25 @@ fn main() {
             let mut found_modules: Vec<(String, usize, bool)> = Vec::new();
 
             if libcl_dir.is_dir() {
-                fn collect_cl_files(dir: &Path, base: &Path, list: &mut Vec<(String, usize, bool)>) {
+                fn collect_cl_files(
+                    dir: &Path,
+                    base: &Path,
+                    list: &mut Vec<(String, usize, bool)>,
+                ) {
                     if let Ok(entries) = fs::read_dir(dir) {
                         for entry in entries.flatten() {
                             let p = entry.path();
                             if p.is_dir() {
                                 collect_cl_files(&p, base, list);
                             } else if p.extension().map(|e| e == "cl").unwrap_or(false) {
-                                let rel = p.strip_prefix(base).unwrap_or(&p).to_string_lossy().replace('\\', "/");
-                                let line_count = fs::read_to_string(&p).map(|s| s.lines().count()).unwrap_or(0);
+                                let rel = p
+                                    .strip_prefix(base)
+                                    .unwrap_or(&p)
+                                    .to_string_lossy()
+                                    .replace('\\', "/");
+                                let line_count = fs::read_to_string(&p)
+                                    .map(|s| s.lines().count())
+                                    .unwrap_or(0);
                                 list.push((rel, line_count, true));
                             }
                         }
@@ -6502,7 +8631,13 @@ fn main() {
                 println!("  \"modules\": [");
                 for (i, (rel, lines, ok)) in found_modules.iter().enumerate() {
                     let comma = if i + 1 < found_modules.len() { "," } else { "" };
-                    println!("    {{\"path\": \"{}\", \"lines\": {}, \"status\": \"{}\"}}{}", rel, lines, if *ok { "ready" } else { "missing" }, comma);
+                    println!(
+                        "    {{\"path\": \"{}\", \"lines\": {}, \"status\": \"{}\"}}{}",
+                        rel,
+                        lines,
+                        if *ok { "ready" } else { "missing" },
+                        comma
+                    );
                 }
                 println!("  ]");
                 println!("}}");
@@ -6522,7 +8657,12 @@ fn main() {
             }
 
             println!("============================================================");
-            println!("  SUMMARY: {} / {} Modules Verified ({} Total Lines of Pure CRON)", verified_count, found_modules.len(), total_lines);
+            println!(
+                "  SUMMARY: {} / {} Modules Verified ({} Total Lines of Pure CRON)",
+                verified_count,
+                found_modules.len(),
+                total_lines
+            );
             println!("  STATUS: Standard Library is Complete, Operational, and Pure\n");
         }
         "info" => {
@@ -6539,7 +8679,11 @@ fn main() {
             println!();
         }
         "test" => {
-            let default_dir = if Path::new("libcl").exists() { "libcl".to_string() } else { "examples".to_string() };
+            let default_dir = if Path::new("libcl").exists() {
+                "libcl".to_string()
+            } else {
+                "examples".to_string()
+            };
             let mut target_path = default_dir;
             let mut verilog_mode = false;
             let mut fuzz_mode = false;
@@ -6559,10 +8703,15 @@ fn main() {
                     fuzz_mode = true;
                     i += 1;
                 } else if (args[i] == "--iterations" || args[i] == "-n") && i + 1 < args.len() {
-                    if let Ok(it) = args[i + 1].parse::<usize>() { fuzz_iterations = it; }
+                    if let Ok(it) = args[i + 1].parse::<usize>() {
+                        fuzz_iterations = it;
+                    }
                     i += 2;
-                } else if (args[i] == "--cycles" || args[i] == "--max-cycles") && i + 1 < args.len() {
-                    if let Ok(c) = args[i + 1].parse::<usize>() { max_cycles = c; }
+                } else if (args[i] == "--cycles" || args[i] == "--max-cycles") && i + 1 < args.len()
+                {
+                    if let Ok(c) = args[i + 1].parse::<usize>() {
+                        max_cycles = c;
+                    }
                     i += 2;
                 } else if args[i] == "--strict" {
                     strict = true;
@@ -6573,7 +8722,9 @@ fn main() {
                 } else if args[i] == "--eda" {
                     eda_mode = true;
                     i += 1;
-                } else if (args[i] == "-o" || args[i] == "--out" || args[i] == "--out-dir") && i + 1 < args.len() {
+                } else if (args[i] == "-o" || args[i] == "--out" || args[i] == "--out-dir")
+                    && i + 1 < args.len()
+                {
                     out_dir = Some(args[i + 1].clone());
                     i += 2;
                 } else if !args[i].starts_with('-') {
@@ -6638,9 +8789,18 @@ fn main() {
                 println!("║         CRON PHYSICAL VERILOG RTL TESTBENCH & CO-SIMULATION SUITE                     ║");
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Target Scope:        {:<65} ║", target_path);
-                println!("║ Test Suites:         {:<65} ║", format!("{} test suites (.cl)", test_files.len()));
-                println!("║ Hardware Target:     {:<65} ║", "256-Core 4D-Torus S^3xZ100 Silicon (IEEE 1364-2001)");
-                println!("║ Parity Standard:     {:<65} ║", "Cycle-Accurate Lockstep Parity (0 Divergence, 0 DSPs)");
+                println!(
+                    "║ Test Suites:         {:<65} ║",
+                    format!("{} test suites (.cl)", test_files.len())
+                );
+                println!(
+                    "║ Hardware Target:     {:<65} ║",
+                    "256-Core 4D-Torus S^3xZ100 Silicon (IEEE 1364-2001)"
+                );
+                println!(
+                    "║ Parity Standard:     {:<65} ║",
+                    "Cycle-Accurate Lockstep Parity (0 Divergence, 0 DSPs)"
+                );
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝\n");
 
                 let mut passed = 0;
@@ -6649,11 +8809,12 @@ fn main() {
                 let mut reports_json = Vec::new();
                 let t_start = std::time::Instant::now();
 
-                let has_iverilog = eda_mode && std::process::Command::new("iverilog")
-                    .arg("-V")
-                    .output()
-                    .map(|o| o.status.success())
-                    .unwrap_or(false);
+                let has_iverilog = eda_mode
+                    && std::process::Command::new("iverilog")
+                        .arg("-V")
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false);
 
                 for file in &test_files {
                     let rel = file.to_string_lossy();
@@ -6667,17 +8828,21 @@ fn main() {
                     };
 
                     let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("test");
-                    let module_name = format!("cksl_{}_core", stem.replace(|c: char| !c.is_alphanumeric(), "_"));
+                    let module_name = format!(
+                        "cksl_{}_core",
+                        stem.replace(|c: char| !c.is_alphanumeric(), "_")
+                    );
 
                     // 1. Synthesize Verilog HDL RTL Core & Testbench
-                    let verilog_rtl = match cronc::verilog_backend::generate_verilog_hdl(&src, &module_name) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            println!("  [FAIL] {} — RTL synthesis error: {}", rel, e);
-                            failed += 1;
-                            continue;
-                        }
-                    };
+                    let verilog_rtl =
+                        match cronc::verilog_backend::generate_verilog_hdl(&src, &module_name) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                println!("  [FAIL] {} — RTL synthesis error: {}", rel, e);
+                                failed += 1;
+                                continue;
+                            }
+                        };
                     let verilog_tb = cronc::verilog_backend::generate_testbench(&module_name);
 
                     // Optional write out to disk
@@ -6718,7 +8883,12 @@ fn main() {
                         let _ = fs::write(&tmp_tb, &verilog_tb);
 
                         let comp_res = std::process::Command::new("iverilog")
-                            .args(["-o", tmp_vvp.to_str().unwrap(), tmp_rtl.to_str().unwrap(), tmp_tb.to_str().unwrap()])
+                            .args([
+                                "-o",
+                                tmp_vvp.to_str().unwrap(),
+                                tmp_rtl.to_str().unwrap(),
+                                tmp_tb.to_str().unwrap(),
+                            ])
                             .status();
 
                         if let Ok(cs) = comp_res {
@@ -6785,11 +8955,33 @@ fn main() {
                     println!("\n╔═══════════════════════════════════════════════════════════════════════════════════════╗");
                     println!("║             CRON PHYSICAL VERILOG TESTBENCH & CO-SIMULATION SUMMARY                   ║");
                     println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
-                    println!("║ Total Suites Verified:       {:<65} ║", format!("{} / {}", passed, test_files.len()));
-                    println!("║ Total Clock Cycles:          {:<65} ║", format!("{} cycles ({:.2} ns @ 1 GHz)", total_cycles, total_cycles as f64));
-                    println!("║ Hardware DSP Multipliers:    {:<65} ║", "0 DSPs (100% Multiplier-Free Silicon Architecture)");
-                    println!("║ Lockstep State Parity:       {:<65} ║", if failed == 0 { "100.000% Bit-Exact (0 Divergence)" } else { "Divergence Detected" });
-                    println!("║ Execution Wall Time:         {:<65} ║", format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0));
+                    println!(
+                        "║ Total Suites Verified:       {:<65} ║",
+                        format!("{} / {}", passed, test_files.len())
+                    );
+                    println!(
+                        "║ Total Clock Cycles:          {:<65} ║",
+                        format!(
+                            "{} cycles ({:.2} ns @ 1 GHz)",
+                            total_cycles, total_cycles as f64
+                        )
+                    );
+                    println!(
+                        "║ Hardware DSP Multipliers:    {:<65} ║",
+                        "0 DSPs (100% Multiplier-Free Silicon Architecture)"
+                    );
+                    println!(
+                        "║ Lockstep State Parity:       {:<65} ║",
+                        if failed == 0 {
+                            "100.000% Bit-Exact (0 Divergence)"
+                        } else {
+                            "Divergence Detected"
+                        }
+                    );
+                    println!(
+                        "║ Execution Wall Time:         {:<65} ║",
+                        format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0)
+                    );
                     println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                     if failed == 0 {
                         println!("║ STATUS: [SUCCESS] ALL VERILOG TESTBENCHES CERTIFIED FOR AMD VIVADO & ASIC TAPEOUT   ║");
@@ -6804,7 +8996,10 @@ fn main() {
                 }
             } else {
                 // Existing fast VM test runner
-                println!("[CRON TEST RUNNER] Scanning directory '{}' for .cl test suites...\n", target_path);
+                println!(
+                    "[CRON TEST RUNNER] Scanning directory '{}' for .cl test suites...\n",
+                    target_path
+                );
 
                 let mut passed = 0;
                 let mut failed = 0;
@@ -6832,7 +9027,10 @@ fn main() {
                         let telemetry = cron_vm::run_cl(&src);
                         println!(
                             "  [PASS] {:<45} ({} cycles, {} GEMM, {} rev) [.CL SILICON]",
-                            rel, telemetry.total_cycles, telemetry.optical_gemm_ops, telemetry.reversible_gate_ops
+                            rel,
+                            telemetry.total_cycles,
+                            telemetry.optical_gemm_ops,
+                            telemetry.reversible_gate_ops
                         );
                         passed += 1;
                     } else {
@@ -6841,7 +9039,10 @@ fn main() {
                                 let telemetry = cron_vm::run_cl(&cl_code);
                                 println!(
                                     "  [PASS] {:<45} ({} cycles, {} GEMM, {} rev)",
-                                    rel, telemetry.total_cycles, telemetry.optical_gemm_ops, telemetry.reversible_gate_ops
+                                    rel,
+                                    telemetry.total_cycles,
+                                    telemetry.optical_gemm_ops,
+                                    telemetry.reversible_gate_ops
                                 );
                                 passed += 1;
                             }
@@ -6854,7 +9055,12 @@ fn main() {
                 }
 
                 println!("\n============================================================");
-                println!("  TEST RESULTS: {} passed, {} failed, {} total", passed, failed, test_files.len());
+                println!(
+                    "  TEST RESULTS: {} passed, {} failed, {} total",
+                    passed,
+                    failed,
+                    test_files.len()
+                );
                 println!("============================================================\n");
                 if failed > 0 {
                     std::process::exit(1);
@@ -6947,15 +9153,33 @@ fn main() {
                 std::process::exit(1);
             });
 
-            println!("[FDO PROFILER] Execution profile written to '{}'", prof_path);
+            println!(
+                "[FDO PROFILER] Execution profile written to '{}'",
+                prof_path
+            );
             println!();
             println!("  Profile Summary:");
-            println!("    Total Bundles:          {}", sim.profile.bundle_profiles.len());
+            println!(
+                "    Total Bundles:          {}",
+                sim.profile.bundle_profiles.len()
+            );
             println!("    Total NOPs:             {}", sim.profile.total_nops);
-            println!("    Avg Slot Utilization:   {:.2}%", sim.profile.avg_slot_utilization * 100.0);
-            println!("    Hottest Bundle:         B{:04}", sim.profile.hottest_bundle_cycle);
-            println!("    Underutilized Bundles:  {}", sim.profile.underutilized_bundles);
-            println!("    Unique Opcodes:         {}", sim.profile.opcode_frequency.len());
+            println!(
+                "    Avg Slot Utilization:   {:.2}%",
+                sim.profile.avg_slot_utilization * 100.0
+            );
+            println!(
+                "    Hottest Bundle:         B{:04}",
+                sim.profile.hottest_bundle_cycle
+            );
+            println!(
+                "    Underutilized Bundles:  {}",
+                sim.profile.underutilized_bundles
+            );
+            println!(
+                "    Unique Opcodes:         {}",
+                sim.profile.opcode_frequency.len()
+            );
             println!();
             println!("  Top 5 Opcodes:");
             let mut sorted_ops: Vec<_> = sim.profile.opcode_frequency.iter().collect();
@@ -6964,7 +9188,10 @@ fn main() {
                 println!("    {} = {} invocations", op, count);
             }
             println!();
-            println!("[SUCCESS] Profile ready. Run 'cron fdo-profile {}' to re-optimize.", input_path);
+            println!(
+                "[SUCCESS] Profile ready. Run 'cron fdo-profile {}' to re-optimize.",
+                input_path
+            );
         }
         "fdo-profile" => {
             // Full FDO Pipeline: Profile -> Analyze -> Re-schedule -> Emit optimized .cl
@@ -6984,7 +9211,10 @@ fn main() {
             println!("============================================================\n");
 
             // Phase 1: Initial Compilation
-            println!("[FDO 1/4] Compiling '{}' to baseline VLIW bundles...", input_path);
+            println!(
+                "[FDO 1/4] Compiling '{}' to baseline VLIW bundles...",
+                input_path
+            );
             let cl_code = match cronc::compile_source_with_name(&content, Some(input_path)) {
                 Ok(code) => code,
                 Err(e) => {
@@ -6992,8 +9222,14 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let baseline_bundle_count = cl_code.lines().filter(|l| l.trim().starts_with('B')).count();
-            println!("          ✓ Baseline: {} VLIW bundles generated", baseline_bundle_count);
+            let baseline_bundle_count = cl_code
+                .lines()
+                .filter(|l| l.trim().starts_with('B'))
+                .count();
+            println!(
+                "          ✓ Baseline: {} VLIW bundles generated",
+                baseline_bundle_count
+            );
 
             // Phase 2: Profiled Execution
             println!("[FDO 2/4] Executing with hardware profiling on 256-Core Simulator...");
@@ -7001,7 +9237,10 @@ fn main() {
             sim.enable_profiling();
             sim.load_machine_code(&cl_code);
             sim.run();
-            println!("          ✓ Profiled {} cycles across 256 cores", sim.stats.total_cycles);
+            println!(
+                "          ✓ Profiled {} cycles across 256 cores",
+                sim.stats.total_cycles
+            );
 
             // Phase 3: Profile Analysis & Bundle Compaction
             println!("[FDO 3/4] Analyzing profile for bundle compaction opportunities...");
@@ -7016,9 +9255,18 @@ fn main() {
             } else {
                 0
             };
-            println!("          ✓ Found {} underutilized bundles ({} NOP slots)", underutilized, total_nops);
-            println!("          ✓ Baseline slot utilization: {:.1}%", utilization * 100.0);
-            println!("          ✓ Potential compaction: {} bundles can be eliminated", potential_savings);
+            println!(
+                "          ✓ Found {} underutilized bundles ({} NOP slots)",
+                underutilized, total_nops
+            );
+            println!(
+                "          ✓ Baseline slot utilization: {:.1}%",
+                utilization * 100.0
+            );
+            println!(
+                "          ✓ Potential compaction: {} bundles can be eliminated",
+                potential_savings
+            );
 
             // Phase 4: Re-schedule and emit optimized bundles
             println!("[FDO 4/4] Re-scheduling with profile-guided bundle compaction...");
@@ -7060,10 +9308,17 @@ fn main() {
             println!("  Optimized Bundles:         {}", optimized_count);
             println!("  Bundles Eliminated:        {}", potential_savings);
             println!("  Baseline Utilization:      {:.1}%", utilization * 100.0);
-            println!("  Optimized Utilization:     {:.1}%", new_utilization.min(1.0) * 100.0);
+            println!(
+                "  Optimized Utilization:     {:.1}%",
+                new_utilization.min(1.0) * 100.0
+            );
             println!("  Profile Output:            {}", prof_path);
             println!("  Optimized Output:          {}", opt_path);
-            println!("  Fibers Spawned/Joined:     {} / {}", sim.fiber_queue.len(), sim.fibers_completed);
+            println!(
+                "  Fibers Spawned/Joined:     {} / {}",
+                sim.fiber_queue.len(),
+                sim.fibers_completed
+            );
             println!("============================================================");
             println!("  STATUS: FDO PIPELINE COMPLETE — BUNDLES RE-OPTIMIZED\n");
         }
@@ -7152,36 +9407,101 @@ fn main() {
             let stall_rate = (1.0 - profile.avg_slot_utilization) * 100.0;
             println!("  \x1b[1mCYCLES:\x1b[0m {:04} / {:04}  |  \x1b[1mSTALL RATE:\x1b[0m {:.1}%  |  \x1b[1mACTIVE FIBERS:\x1b[0m {}  |  \x1b[1mCOMPLETED:\x1b[0m {}",
                 executed, total_bundles, stall_rate, sim.active_fiber_count(), sim.fibers_completed);
-            println!("--------------------------------------------------------------------------------");
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
             println!("  \x1b[1;33mCOGNITIVE ENGINE ACTIVITY METERS:\x1b[0m");
 
             let render_meter = |name: &str, level: usize, max: usize, extra: &str| {
-                let ratio = if max > 0 { (level as f64 / max as f64).min(1.0) } else { 0.0 };
+                let ratio = if max > 0 {
+                    (level as f64 / max as f64).min(1.0)
+                } else {
+                    0.0
+                };
                 let bars = (ratio * 16.0) as usize;
                 let bar_str: String = (0..16).map(|i| if i < bars { '#' } else { ' ' }).collect();
-                println!("    {:<24} [{}] {:>3}% {}", name, bar_str, (ratio * 100.0) as usize, extra);
+                println!(
+                    "    {:<24} [{}] {:>3}% {}",
+                    name,
+                    bar_str,
+                    (ratio * 100.0) as usize,
+                    extra
+                );
             };
 
-            render_meter("Brain 1 (Symbolic Graph)", core0.registers[1] as usize, 100, "(Unifications: 8)");
-            render_meter("Brain 2 (Photonic GEMM)", core0.optical_gemm_count, core0.optical_gemm_count.max(1), &format!("(GEMM Count: {})", core0.optical_gemm_count));
-            render_meter("Brain 3 (Quantum Phase)", core0.reversible_ops_count, core0.reversible_ops_count.max(1), &format!("(Reversible: {})", core0.reversible_ops_count));
-            render_meter("Brain 4 (Neuromorphic)", core0.stdp_updates_count, core0.stdp_updates_count.max(1), &format!("(STDP Updates: {})", core0.stdp_updates_count));
-            render_meter("Brain 5 (Chaos Attractor)", core0.registers[10] as usize, 100, "(Lorenz Step: Active)");
-            render_meter("Brain 6 (Arbiter Sentry)", core0.thermal_threshold as usize, 180, &format!("(Threshold: {}°C)", core0.thermal_threshold));
+            render_meter(
+                "Brain 1 (Symbolic Graph)",
+                core0.registers[1] as usize,
+                100,
+                "(Unifications: 8)",
+            );
+            render_meter(
+                "Brain 2 (Photonic GEMM)",
+                core0.optical_gemm_count,
+                core0.optical_gemm_count.max(1),
+                &format!("(GEMM Count: {})", core0.optical_gemm_count),
+            );
+            render_meter(
+                "Brain 3 (Quantum Phase)",
+                core0.reversible_ops_count,
+                core0.reversible_ops_count.max(1),
+                &format!("(Reversible: {})", core0.reversible_ops_count),
+            );
+            render_meter(
+                "Brain 4 (Neuromorphic)",
+                core0.stdp_updates_count,
+                core0.stdp_updates_count.max(1),
+                &format!("(STDP Updates: {})", core0.stdp_updates_count),
+            );
+            render_meter(
+                "Brain 5 (Chaos Attractor)",
+                core0.registers[10] as usize,
+                100,
+                "(Lorenz Step: Active)",
+            );
+            render_meter(
+                "Brain 6 (Arbiter Sentry)",
+                core0.thermal_threshold as usize,
+                180,
+                &format!("(Threshold: {}°C)", core0.thermal_threshold),
+            );
 
-            println!("--------------------------------------------------------------------------------");
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
             println!("  \x1b[1;32m4D-TORUS NoC MESH COORDINATES (Core 0):\x1b[0m");
             println!("    Coords: [X:0, Y:0, Z:0, W:0] | Routed Packets: {} | Neighbors: 8 (±X, ±Y, ±Z, ±W)",
                 sim.stats.mesh_packets_routed);
-            println!("--------------------------------------------------------------------------------");
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
             println!("  \x1b[1;35mSTACKLESS REGISTER INSPECTOR (ABI Dedicated Roles):\x1b[0m");
-            println!("    $rv (R0):  0x{:08X}  |  $a0 (R1):  0x{:08X}  |  $a1 (R2):  0x{:08X}", regs[0], regs[1], regs[2]);
-            println!("    $a2 (R3):  0x{:08X}  |  $t0 (R4):  0x{:08X}  |  $t1 (R5):  0x{:08X}", regs[3], regs[4], regs[5]);
-            println!("    $t2 (R6):  0x{:08X}  |  $s0 (R7):  0x{:08X}  |  $s1 (R8):  0x{:08X}", regs[6], regs[7], regs[8]);
-            println!("    $s2 (R9):  0x{:08X}  |  $im0(R10): 0x{:08X}  |  $im1(R11): 0x{:08X}", regs[9], regs[10], regs[11]);
-            println!("    $im2(R12): 0x{:08X}  |  $ar0(R13): 0x{:08X}  |  $ar1(R14): 0x{:08X}", regs[12], regs[13], regs[14]);
-            println!("    $bp (R15): 0x{:08X}  |  Shadow Checkpoints: {}  |  Traps: {} (Normal)",
-                regs[15], core0.shadow_bank.len(), core0.trap_count);
+            println!(
+                "    $rv (R0):  0x{:08X}  |  $a0 (R1):  0x{:08X}  |  $a1 (R2):  0x{:08X}",
+                regs[0], regs[1], regs[2]
+            );
+            println!(
+                "    $a2 (R3):  0x{:08X}  |  $t0 (R4):  0x{:08X}  |  $t1 (R5):  0x{:08X}",
+                regs[3], regs[4], regs[5]
+            );
+            println!(
+                "    $t2 (R6):  0x{:08X}  |  $s0 (R7):  0x{:08X}  |  $s1 (R8):  0x{:08X}",
+                regs[6], regs[7], regs[8]
+            );
+            println!(
+                "    $s2 (R9):  0x{:08X}  |  $im0(R10): 0x{:08X}  |  $im1(R11): 0x{:08X}",
+                regs[9], regs[10], regs[11]
+            );
+            println!(
+                "    $im2(R12): 0x{:08X}  |  $ar0(R13): 0x{:08X}  |  $ar1(R14): 0x{:08X}",
+                regs[12], regs[13], regs[14]
+            );
+            println!(
+                "    $bp (R15): 0x{:08X}  |  Shadow Checkpoints: {}  |  Traps: {} (Normal)",
+                regs[15],
+                core0.shadow_bank.len(),
+                core0.trap_count
+            );
             println!("\x1b[1;36m================================================================================\x1b[0m");
             println!("  \x1b[1;32mSTATUS: COGNITIVE EXECUTION NOMINAL — ALL 6 BRAINS HARMONIZED ON 4D TORUS\x1b[0m\n");
         }
@@ -7218,7 +9538,10 @@ fn main() {
             let stdin = std::io::stdin();
             let stdout = std::io::stdout();
             if let Err(e) = cron_lsp::run_dap_server(stdin.lock(), stdout.lock()) {
-                eprintln!("[CRON-DAP ERROR] Debug adapter server exited with error: {}", e);
+                eprintln!(
+                    "[CRON-DAP ERROR] Debug adapter server exited with error: {}",
+                    e
+                );
                 std::process::exit(1);
             }
         }
@@ -7228,7 +9551,10 @@ fn main() {
             println!("[CRON PKG] Initializing CRON project '{}'...", name);
             match project::scaffold_project(&curr_dir, name) {
                 Ok(()) => {
-                    println!("[SUCCESS] Initialized CRON package '{}' in '{:?}'", name, curr_dir);
+                    println!(
+                        "[SUCCESS] Initialized CRON package '{}' in '{:?}'",
+                        name, curr_dir
+                    );
                     println!("  - cron.toml");
                     println!("  - src/main.cl");
                     println!("  - tests/test_sanity.cl");
@@ -7281,7 +9607,10 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            println!("[CRON AOT] Transpiling '{}' to native machine code via C23...", input_path);
+            println!(
+                "[CRON AOT] Transpiling '{}' to native machine code via C23...",
+                input_path
+            );
             let c_code = match cronc::compile_to_c23_with_name(&content, Some(input_path)) {
                 Ok(c) => c,
                 Err(e) => {
@@ -7291,7 +9620,11 @@ fn main() {
             };
 
             let file_stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let mut out_bin = if cfg!(windows) { format!("{}.exe", file_stem) } else { file_stem.to_string() };
+            let mut out_bin = if cfg!(windows) {
+                format!("{}.exe", file_stem)
+            } else {
+                file_stem.to_string()
+            };
             if args.len() >= 5 && args[3] == "-o" {
                 out_bin = args[4].clone();
             }
@@ -7311,7 +9644,10 @@ fn main() {
 
             match comp_res {
                 Ok(st) if st.success() => {
-                    println!("[SUCCESS] Successfully generated native machine binary: '{}'", out_bin);
+                    println!(
+                        "[SUCCESS] Successfully generated native machine binary: '{}'",
+                        out_bin
+                    );
                     println!("Run directly: ./{}", out_bin);
                 }
                 Ok(st) => {
@@ -7326,7 +9662,9 @@ fn main() {
         }
         "emit-llvm" => {
             if args.len() < 3 {
-                eprintln!("Error: Missing input file. Usage: cron emit-llvm <file.cl> [-o <out.ll>]");
+                eprintln!(
+                    "Error: Missing input file. Usage: cron emit-llvm <file.cl> [-o <out.ll>]"
+                );
                 std::process::exit(1);
             }
             let input_path = &args[2];
@@ -7337,10 +9675,16 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            println!("[CRON LLVM] Transpiling '{}' to LLVM IR (.ll)...", input_path);
+            println!(
+                "[CRON LLVM] Transpiling '{}' to LLVM IR (.ll)...",
+                input_path
+            );
             match cronc::compile_to_llvm_with_name(&content, Some(input_path)) {
                 Ok(llvm_ir) => {
-                    let mut out_path = format!("{}.ll", Path::new(input_path).file_stem().unwrap().to_str().unwrap());
+                    let mut out_path = format!(
+                        "{}.ll",
+                        Path::new(input_path).file_stem().unwrap().to_str().unwrap()
+                    );
                     if args.len() >= 5 && args[3] == "-o" {
                         out_path = args[4].clone();
                     }
@@ -7349,7 +9693,11 @@ fn main() {
                         std::process::exit(1);
                     }
                     println!("[SUCCESS] Generated LLVM IR: '{}'", out_path);
-                    println!("To compile manually with Clang: clang -O3 {} -o {}", out_path, out_path.trim_end_matches(".ll"));
+                    println!(
+                        "To compile manually with Clang: clang -O3 {} -o {}",
+                        out_path,
+                        out_path.trim_end_matches(".ll")
+                    );
                 }
                 Err(e) => {
                     eprintln!("{}", e);
@@ -7380,7 +9728,11 @@ fn main() {
             };
 
             let file_stem = Path::new(input_path).file_stem().unwrap().to_str().unwrap();
-            let mut out_bin = if cfg!(windows) { format!("{}.exe", file_stem) } else { file_stem.to_string() };
+            let mut out_bin = if cfg!(windows) {
+                format!("{}.exe", file_stem)
+            } else {
+                file_stem.to_string()
+            };
             if args.len() >= 5 && args[3] == "-o" {
                 out_bin = args[4].clone();
             }
@@ -7433,7 +9785,10 @@ fn main() {
                     let _ = fs::remove_file(&temp_c);
                     match gcc_res {
                         Ok(st) if st.success() => {
-                            println!("[SUCCESS] Generated native binary via C23 fallback: '{}'", out_bin);
+                            println!(
+                                "[SUCCESS] Generated native binary via C23 fallback: '{}'",
+                                out_bin
+                            );
                             println!("Run directly: ./{}", out_bin);
                         }
                         _ => {
@@ -7459,7 +9814,10 @@ fn main() {
             };
 
             let start = std::time::Instant::now();
-            println!("[CRON JIT] Compiling and executing '{}' in RAM...", input_path);
+            println!(
+                "[CRON JIT] Compiling and executing '{}' in RAM...",
+                input_path
+            );
             match cronc::execute_jit(&content) {
                 Ok(result) => {
                     let elapsed = start.elapsed();
@@ -7467,7 +9825,11 @@ fn main() {
                     println!("          NATIVE x86_64 JIT EXECUTION RESULT                ");
                     println!("============================================================");
                     println!("  Return Value:                 {}", result);
-                    println!("  Total JIT + Execution Time:   {:.3} ms ({:?})", elapsed.as_secs_f64() * 1000.0, elapsed);
+                    println!(
+                        "  Total JIT + Execution Time:   {:.3} ms ({:?})",
+                        elapsed.as_secs_f64() * 1000.0,
+                        elapsed
+                    );
                     println!("  Memory Footprint:             1 executable page (4 KB)");
                     println!("  STATUS:                       SUCCESS (0 external dependencies)\n");
                 }
@@ -7521,18 +9883,22 @@ fn main() {
                     config.board = Some(b);
                     i += 2;
                 } else if (args[i] == "--target" || args[i] == "--pdk") && i + 1 < args.len() {
-                    config.target = cronc::SiliconTarget::parse_target(&args[i + 1]).unwrap_or_else(|e| {
-                        eprintln!("Error: {}", e);
-                        std::process::exit(1);
-                    });
+                    config.target = cronc::SiliconTarget::parse_target(&args[i + 1])
+                        .unwrap_or_else(|e| {
+                            eprintln!("Error: {}", e);
+                            std::process::exit(1);
+                        });
                     i += 2;
                 } else if args[i] == "--interface" && i + 1 < args.len() {
-                    config.interface = cronc::HostInterface::parse_interface(&args[i + 1]).unwrap_or_else(|e| {
-                        eprintln!("Error: {}", e);
-                        std::process::exit(1);
-                    });
+                    config.interface = cronc::HostInterface::parse_interface(&args[i + 1])
+                        .unwrap_or_else(|e| {
+                            eprintln!("Error: {}", e);
+                            std::process::exit(1);
+                        });
                     i += 2;
-                } else if (args[i] == "--out-dir" || args[i] == "-o" || args[i] == "--out") && i + 1 < args.len() {
+                } else if (args[i] == "--out-dir" || args[i] == "-o" || args[i] == "--out")
+                    && i + 1 < args.len()
+                {
                     out_dir = std::path::PathBuf::from(&args[i + 1]);
                     i += 2;
                 } else if args[i] == "--dry-run" {
@@ -7589,15 +9955,27 @@ fn main() {
 
             let toolchain_desc = if let Some(b) = config.board {
                 match b {
-                    cronc::FpgaBoard::IceBreaker | cronc::FpgaBoard::GenericIce40 => "Open-Source Yosys + NextPNR-iCE40 Flow & PCF Constraints",
-                    cronc::FpgaBoard::ColorlightI5 | cronc::FpgaBoard::GenericEcp5 => "Open-Source Yosys + NextPNR-ECP5 Flow & LPF Constraints",
-                    cronc::FpgaBoard::DigilentArtyA7 => "AMD Vivado Physical Synthesis & XDC Pin Constraints",
+                    cronc::FpgaBoard::IceBreaker | cronc::FpgaBoard::GenericIce40 => {
+                        "Open-Source Yosys + NextPNR-iCE40 Flow & PCF Constraints"
+                    }
+                    cronc::FpgaBoard::ColorlightI5 | cronc::FpgaBoard::GenericEcp5 => {
+                        "Open-Source Yosys + NextPNR-ECP5 Flow & LPF Constraints"
+                    }
+                    cronc::FpgaBoard::DigilentArtyA7 => {
+                        "AMD Vivado Physical Synthesis & XDC Pin Constraints"
+                    }
                 }
             } else {
                 match config.target {
-                    cronc::SiliconTarget::OpenLaneSky130 => "OpenLane SkyWater 130nm ASIC Config & SDC Timing Constraints",
-                    cronc::SiliconTarget::YosysNextPnr => "Open-Source Yosys + NextPNR Synthesis & PnR Scripts",
-                    cronc::SiliconTarget::IntelStratix10 => "Intel Quartus Prime Pro Tcl & SDC Timing Constraints",
+                    cronc::SiliconTarget::OpenLaneSky130 => {
+                        "OpenLane SkyWater 130nm ASIC Config & SDC Timing Constraints"
+                    }
+                    cronc::SiliconTarget::YosysNextPnr => {
+                        "Open-Source Yosys + NextPNR Synthesis & PnR Scripts"
+                    }
+                    cronc::SiliconTarget::IntelStratix10 => {
+                        "Intel Quartus Prime Pro Tcl & SDC Timing Constraints"
+                    }
                     _ => "AMD Vivado Physical Synthesis Tcl & Timing Constraints",
                 }
             };
@@ -7607,7 +9985,9 @@ fn main() {
             let pkg = cronc::generate_hardware_package(&verilog_rtl, module_name, &config);
 
             if !emit_json {
-                println!("[3/4] Generating Zero-Copy PCIe Gen5 x16 AXI4 DMA & Hardware UART Drivers...");
+                println!(
+                    "[3/4] Generating Zero-Copy PCIe Gen5 x16 AXI4 DMA & Hardware UART Drivers..."
+                );
             }
             if let Err(e) = cronc::emit_hardware_package(&pkg, &out_dir) {
                 eprintln!("Error emitting package: {}", e);
@@ -7619,25 +9999,79 @@ fn main() {
                 return;
             }
 
-            println!("[4/4] Hardware Deployment Package Assembled in '{:?}':", out_dir);
-            println!("      ✓ Verilog RTL Core:       {}/cron_top.v", out_dir.display());
-            println!("      ✓ Hardware UART Bridge:   {}/cron_uart.v", out_dir.display());
+            println!(
+                "[4/4] Hardware Deployment Package Assembled in '{:?}':",
+                out_dir
+            );
+            println!(
+                "      ✓ Verilog RTL Core:       {}/cron_top.v",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Hardware UART Bridge:   {}/cron_uart.v",
+                out_dir.display()
+            );
             if !pkg.pin_constraints_name.is_empty() {
-                println!("      ✓ Pin Constraints:        {}/{}", out_dir.display(), pkg.pin_constraints_name);
+                println!(
+                    "      ✓ Pin Constraints:        {}/{}",
+                    out_dir.display(),
+                    pkg.pin_constraints_name
+                );
             }
-            println!("      ✓ Vivado Synthesis Tcl:   {}/synth.tcl", out_dir.display());
-            println!("      ✓ Quartus Synthesis Tcl:  {}/synth_quartus.tcl", out_dir.display());
-            println!("      ✓ OpenLane 130nm Config:  {}/config.json", out_dir.display());
-            println!("      ✓ OpenLane Tapeout Flow:  {}/run_openlane.sh", out_dir.display());
-            println!("      ✓ Yosys Synthesis Script: {}/synth_yosys.ys", out_dir.display());
-            println!("      ✓ NextPNR Place & Route:  {}/run_nextpnr.sh", out_dir.display());
-            println!("      ✓ Timing Constraints XDC: {}/timing.xdc", out_dir.display());
-            println!("      ✓ Timing Constraints SDC: {}/timing.sdc", out_dir.display());
-            println!("      ✓ Host PCIe DMA Header:   {}/cron_pcie_dma.h", out_dir.display());
-            println!("      ✓ Host PCIe DMA Driver:   {}/cron_pcie_dma.c", out_dir.display());
-            println!("      ✓ Deployment Manifest:    {}/flash_manifest.json", out_dir.display());
-            println!("      ✓ Bitstream Runner:       {}/build_bitstream.{}", out_dir.display(), if cfg!(windows) { "bat" } else { "sh" });
-            println!("      ✓ 1-Click Flash Script:   {}/flash_device.{}", out_dir.display(), if cfg!(windows) { "bat" } else { "sh" });
+            println!(
+                "      ✓ Vivado Synthesis Tcl:   {}/synth.tcl",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Quartus Synthesis Tcl:  {}/synth_quartus.tcl",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ OpenLane 130nm Config:  {}/config.json",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ OpenLane Tapeout Flow:  {}/run_openlane.sh",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Yosys Synthesis Script: {}/synth_yosys.ys",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ NextPNR Place & Route:  {}/run_nextpnr.sh",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Timing Constraints XDC: {}/timing.xdc",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Timing Constraints SDC: {}/timing.sdc",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Host PCIe DMA Header:   {}/cron_pcie_dma.h",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Host PCIe DMA Driver:   {}/cron_pcie_dma.c",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Deployment Manifest:    {}/flash_manifest.json",
+                out_dir.display()
+            );
+            println!(
+                "      ✓ Bitstream Runner:       {}/build_bitstream.{}",
+                out_dir.display(),
+                if cfg!(windows) { "bat" } else { "sh" }
+            );
+            println!(
+                "      ✓ 1-Click Flash Script:   {}/flash_device.{}",
+                out_dir.display(),
+                if cfg!(windows) { "bat" } else { "sh" }
+            );
             println!();
             println!("============================================================");
             println!("                 DEPLOYMENT SPECIFICATIONS                  ");
@@ -7646,18 +10080,48 @@ fn main() {
                 println!("  Target FPGA Board:            {}", b.display_name());
                 println!("  Target Silicon Chip:          {}", b.target_chip());
                 println!("  Board Oscillator Clock:       {} MHz", b.clock_mhz());
-                println!("  Physical Pin Constraints:     {}", b.constraint_filename());
+                println!(
+                    "  Physical Pin Constraints:     {}",
+                    b.constraint_filename()
+                );
                 println!("  1-Click Flash Command:        {}", b.programmer_command());
             } else {
-                println!("  Target Silicon:               {}", config.target.display_name());
-                println!("  Part Number:                  {}", config.target.part_number());
+                println!(
+                    "  Target Silicon:               {}",
+                    config.target.display_name()
+                );
+                println!(
+                    "  Part Number:                  {}",
+                    config.target.part_number()
+                );
             }
-            println!("  Host Interconnect:            {:?} ({:.2} GB/s BW)", config.interface, config.interface.bandwidth_gbps());
-            println!("  Core Clock Target:            {} MHz ({:.3} ns)", config.core_clock_mhz, 1000.0 / config.core_clock_mhz as f64);
-            println!("  4D-Torus NoC Clock:           {} MHz ({:.3} ns)", config.noc_clock_mhz, 1000.0 / config.noc_clock_mhz as f64);
-            println!("  Estimated FPGA LUTs:          {} LUTs", pkg.estimated_luts);
-            println!("  Estimated DSP Multipliers:    {} DSPs (100% Multiplier-Free)", pkg.estimated_dsp);
-            println!("  Estimated BRAM Blocks:        {} Blocks", pkg.estimated_bram);
+            println!(
+                "  Host Interconnect:            {:?} ({:.2} GB/s BW)",
+                config.interface,
+                config.interface.bandwidth_gbps()
+            );
+            println!(
+                "  Core Clock Target:            {} MHz ({:.3} ns)",
+                config.core_clock_mhz,
+                1000.0 / config.core_clock_mhz as f64
+            );
+            println!(
+                "  4D-Torus NoC Clock:           {} MHz ({:.3} ns)",
+                config.noc_clock_mhz,
+                1000.0 / config.noc_clock_mhz as f64
+            );
+            println!(
+                "  Estimated FPGA LUTs:          {} LUTs",
+                pkg.estimated_luts
+            );
+            println!(
+                "  Estimated DSP Multipliers:    {} DSPs (100% Multiplier-Free)",
+                pkg.estimated_dsp
+            );
+            println!(
+                "  Estimated BRAM Blocks:        {} Blocks",
+                pkg.estimated_bram
+            );
             println!("============================================================");
             let status_msg = if let Some(b) = config.board {
                 match b {
@@ -7667,9 +10131,15 @@ fn main() {
                 }
             } else {
                 match config.target {
-                    cronc::SiliconTarget::OpenLaneSky130 => "STATUS: HARDWARE PACKAGE READY FOR SKYWATER 130NM ASIC TAPEOUT",
-                    cronc::SiliconTarget::YosysNextPnr => "STATUS: HARDWARE PACKAGE READY FOR YOSYS / NEXTPNR FPGA SYNTHESIS",
-                    cronc::SiliconTarget::IntelStratix10 => "STATUS: HARDWARE PACKAGE READY FOR INTEL QUARTUS PRIME PRO",
+                    cronc::SiliconTarget::OpenLaneSky130 => {
+                        "STATUS: HARDWARE PACKAGE READY FOR SKYWATER 130NM ASIC TAPEOUT"
+                    }
+                    cronc::SiliconTarget::YosysNextPnr => {
+                        "STATUS: HARDWARE PACKAGE READY FOR YOSYS / NEXTPNR FPGA SYNTHESIS"
+                    }
+                    cronc::SiliconTarget::IntelStratix10 => {
+                        "STATUS: HARDWARE PACKAGE READY FOR INTEL QUARTUS PRIME PRO"
+                    }
                     _ => "STATUS: HARDWARE PACKAGE READY FOR AMD VIVADO / JTAG FLASH",
                 }
             };
@@ -7698,7 +10168,10 @@ fn main() {
                             println!("[SYNTHESIS] Runner exited with status: {}", status);
                         }
                         Err(e) => {
-                            println!("[SYNTHESIS NOTICE] Could not spawn bitstream runner directly: {}", e);
+                            println!(
+                                "[SYNTHESIS NOTICE] Could not spawn bitstream runner directly: {}",
+                                e
+                            );
                             println!("[SYNTHESIS NOTICE] You can invoke '{}' manually on the synthesis host.", script_path.display());
                         }
                     }
@@ -7728,7 +10201,10 @@ fn main() {
                             println!("[FLASH] Programmer script finished with status: {}", status);
                         }
                         Err(e) => {
-                            println!("[FLASH NOTICE] Could not spawn flash programmer directly: {}", e);
+                            println!(
+                                "[FLASH NOTICE] Could not spawn flash programmer directly: {}",
+                                e
+                            );
                             println!("[FLASH NOTICE] You can invoke '{}' manually once your board is plugged into USB.", script_path.display());
                         }
                     }
@@ -7747,7 +10223,9 @@ fn main() {
 
             let mut i = 2;
             while i < args.len() {
-                if (args[i] == "--watch" || args[i] == "-w" || args[i] == "--dir") && i + 1 < args.len() {
+                if (args[i] == "--watch" || args[i] == "-w" || args[i] == "--dir")
+                    && i + 1 < args.len()
+                {
                     watch_paths.push(std::path::PathBuf::from(&args[i + 1]));
                     i += 2;
                 } else if args[i] == "--cldb" && i + 1 < args.len() {
@@ -7798,11 +10276,37 @@ fn main() {
                 println!("╔══════════════════════════════════════════════════════════════════════════════╗");
                 println!("║   CRON AUTONOMOUS CONTINUOUS LEARNING & COGNITIVE DAEMON INITIALIZED         ║");
                 println!("╠══════════════════════════════════════════════════════════════════════════════╣");
-                println!("║ Crystalline Vault : {:<56} ║", daemon.config.cldb_path.display());
-                println!("║ Prior Memory State: {:<56} ║", if restored { "36,414B Prior Engram Vault Restored (Zero Amnesia)" } else { "Tabula Rasa (Fresh Substrate Initialized)" });
-                println!("║ Watch Directories : {:<56} ║", format!("{:?}", daemon.config.watch_paths));
-                println!("║ Sleep Idle Timeout: {:<56} ║", format!("{} seconds -> Hippocampal SWR (150-250Hz)", daemon.config.sleep_idle_secs));
-                println!("║ Mode              : {:<56} ║", if run_once { "Single-Cycle Step & Consolidate" } else { "Continuous Autonomous Background Daemon" });
+                println!(
+                    "║ Crystalline Vault : {:<56} ║",
+                    daemon.config.cldb_path.display()
+                );
+                println!(
+                    "║ Prior Memory State: {:<56} ║",
+                    if restored {
+                        "36,414B Prior Engram Vault Restored (Zero Amnesia)"
+                    } else {
+                        "Tabula Rasa (Fresh Substrate Initialized)"
+                    }
+                );
+                println!(
+                    "║ Watch Directories : {:<56} ║",
+                    format!("{:?}", daemon.config.watch_paths)
+                );
+                println!(
+                    "║ Sleep Idle Timeout: {:<56} ║",
+                    format!(
+                        "{} seconds -> Hippocampal SWR (150-250Hz)",
+                        daemon.config.sleep_idle_secs
+                    )
+                );
+                println!(
+                    "║ Mode              : {:<56} ║",
+                    if run_once {
+                        "Single-Cycle Step & Consolidate"
+                    } else {
+                        "Continuous Autonomous Background Daemon"
+                    }
+                );
                 println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
             }
 
@@ -7811,9 +10315,15 @@ fn main() {
                 if emit_json {
                     println!(
                         r#"{{"status":"ok","state":"{}","files_discovered":{},"files_ingested":{},"tokens":{},"swr_ripples":{},"synapses_pruned":{},"sparsity_pct":{:.2},"cldb_persisted":{},"time_ms":{:.2}}}"#,
-                        report.state.name(), report.files_discovered, report.files_ingested, report.tokens_processed,
-                        report.swr_ripples_executed, report.synapses_pruned, report.current_sparsity_pct,
-                        report.cldb_persisted, report.cycle_duration_ms
+                        report.state.name(),
+                        report.files_discovered,
+                        report.files_ingested,
+                        report.tokens_processed,
+                        report.swr_ripples_executed,
+                        report.synapses_pruned,
+                        report.current_sparsity_pct,
+                        report.cldb_persisted,
+                        report.cycle_duration_ms
                     );
                 } else {
                     println!("{}", daemon.render_ascii_brainwave_hud());
@@ -7829,10 +10339,21 @@ fn main() {
                 if emit_json {
                     println!(
                         r#"{{"cycle":{},"state":"{}","files_discovered":{},"files_ingested":{},"tokens":{},"swr_ripples":{},"synapses_pruned":{},"sparsity_pct":{:.2},"cldb_persisted":{}}}"#,
-                        cycle, report.state.name(), report.files_discovered, report.files_ingested, report.tokens_processed,
-                        report.swr_ripples_executed, report.synapses_pruned, report.current_sparsity_pct, report.cldb_persisted
+                        cycle,
+                        report.state.name(),
+                        report.files_discovered,
+                        report.files_ingested,
+                        report.tokens_processed,
+                        report.swr_ripples_executed,
+                        report.synapses_pruned,
+                        report.current_sparsity_pct,
+                        report.cldb_persisted
                     );
-                } else if report.files_ingested > 0 || report.swr_ripples_executed > 0 || report.cldb_persisted || cycle % 10 == 1 {
+                } else if report.files_ingested > 0
+                    || report.swr_ripples_executed > 0
+                    || report.cldb_persisted
+                    || cycle % 10 == 1
+                {
                     println!("{}", daemon.render_ascii_brainwave_hud());
                 }
 
@@ -7846,7 +10367,8 @@ fn main() {
             }
         }
         "agent" => {
-            let mut task = "Synthesize zero-hazard Clifford rotor microcode for associative memory".to_string();
+            let mut task = "Synthesize zero-hazard Clifford rotor microcode for associative memory"
+                .to_string();
             let mut caps_arg = "all".to_string();
             let mut sandbox_dir = std::path::PathBuf::from(".");
             let mut max_steps = 8usize;
@@ -7864,7 +10386,9 @@ fn main() {
                 } else if args[i] == "--sandbox" && i + 1 < args.len() {
                     sandbox_dir = std::path::PathBuf::from(&args[i + 1]);
                     i += 2;
-                } else if (args[i] == "--max-steps" || args[i] == "-n" || args[i] == "--steps") && i + 1 < args.len() {
+                } else if (args[i] == "--max-steps" || args[i] == "-n" || args[i] == "--steps")
+                    && i + 1 < args.len()
+                {
                     max_steps = args[i + 1].parse().unwrap_or(8);
                     i += 2;
                 } else if args[i] == "--taint" && i + 1 < args.len() {
@@ -7886,19 +10410,37 @@ fn main() {
             let all = caps_lower.contains("all");
 
             if all || caps_lower.contains("fs-read") || caps_lower.contains("read") {
-                ring.grant(cronc::CapabilityScope::FsRead { base_dir: sandbox_dir.clone() }, 32);
+                ring.grant(
+                    cronc::CapabilityScope::FsRead {
+                        base_dir: sandbox_dir.clone(),
+                    },
+                    32,
+                );
             }
             if all || caps_lower.contains("fs-write") || caps_lower.contains("write") {
-                ring.grant(cronc::CapabilityScope::FsWrite { base_dir: sandbox_dir.clone() }, 16);
+                ring.grant(
+                    cronc::CapabilityScope::FsWrite {
+                        base_dir: sandbox_dir.clone(),
+                    },
+                    16,
+                );
             }
             if all || caps_lower.contains("compute") || caps_lower.contains("vliw") {
-                ring.grant(cronc::CapabilityScope::ComputeSlot { max_cycles: 10_000 }, 64);
+                ring.grant(
+                    cronc::CapabilityScope::ComputeSlot { max_cycles: 10_000 },
+                    64,
+                );
             }
             if all || caps_lower.contains("torus") || caps_lower.contains("noc") {
                 ring.grant(cronc::CapabilityScope::TorusNoC { max_hops: 16 }, 32);
             }
             if all || caps_lower.contains("patch") || caps_lower.contains("memory") {
-                ring.grant(cronc::CapabilityScope::MemoryPatch { allowed_banks: 0xFFFF }, 16);
+                ring.grant(
+                    cronc::CapabilityScope::MemoryPatch {
+                        allowed_banks: 0xFFFF,
+                    },
+                    16,
+                );
             }
             if all || caps_lower.contains("io") || caps_lower.contains("hardware") {
                 ring.grant(cronc::CapabilityScope::HardwareIo, 16);
@@ -7926,20 +10468,56 @@ fn main() {
             if emit_json {
                 println!(
                     r#"{{"goal":"{}","steps":{},"solved":{},"conclusion":"{}","energy_pj":{:.2},"capabilities_invoked":{},"violations_blocked":{}}}"#,
-                    report.goal, report.total_steps, report.solved, report.final_conclusion,
-                    report.total_energy_pj, report.capabilities_invoked, report.security_violations_blocked
+                    report.goal,
+                    report.total_steps,
+                    report.solved,
+                    report.final_conclusion,
+                    report.total_energy_pj,
+                    report.capabilities_invoked,
+                    report.security_violations_blocked
                 );
             } else {
                 println!("{}", engine.render_ascii_agent_hud());
                 println!("╔══════════════════════════════════════════════════════════════════════════════╗");
                 println!("║                     AUTONOMOUS AGENT SESSION COMPLETE                        ║");
                 println!("╠══════════════════════════════════════════════════════════════════════════════╣");
-                println!("║ Goal Status        : {:<55} ║", if report.solved { "SOLVED (Verified Zero-Hazard VLIW)" } else { "PARTIAL / BUDGET LIMIT" });
-                println!("║ Execution Steps    : {:<55} ║", format!("{}/{}", report.total_steps, max_steps));
-                println!("║ Capabilities Used  : {:<55} ║", format!("{} privileged operations verified", report.capabilities_invoked));
-                println!("║ Taint Guard Blocks : {:<55} ║", format!("{} zero-trust violations neutralized", report.security_violations_blocked));
-                println!("║ Total Energy Cost  : {:<55} ║", format!("{:.2} pJ (Multiplier-Free BitNet b1.58)", report.total_energy_pj));
-                println!("║ Conclusion         : {:<55} ║", trunc(&report.final_conclusion, 55));
+                println!(
+                    "║ Goal Status        : {:<55} ║",
+                    if report.solved {
+                        "SOLVED (Verified Zero-Hazard VLIW)"
+                    } else {
+                        "PARTIAL / BUDGET LIMIT"
+                    }
+                );
+                println!(
+                    "║ Execution Steps    : {:<55} ║",
+                    format!("{}/{}", report.total_steps, max_steps)
+                );
+                println!(
+                    "║ Capabilities Used  : {:<55} ║",
+                    format!(
+                        "{} privileged operations verified",
+                        report.capabilities_invoked
+                    )
+                );
+                println!(
+                    "║ Taint Guard Blocks : {:<55} ║",
+                    format!(
+                        "{} zero-trust violations neutralized",
+                        report.security_violations_blocked
+                    )
+                );
+                println!(
+                    "║ Total Energy Cost  : {:<55} ║",
+                    format!(
+                        "{:.2} pJ (Multiplier-Free BitNet b1.58)",
+                        report.total_energy_pj
+                    )
+                );
+                println!(
+                    "║ Conclusion         : {:<55} ║",
+                    trunc(&report.final_conclusion, 55)
+                );
                 println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
             }
         }
@@ -7982,7 +10560,10 @@ fn main() {
             let report = if input_path.ends_with(".cl") {
                 println!("[1/3] Parsing & Auditing .cl Machine Bundles...");
                 println!("[2/3] Constructing 4D-Torus Channel Dependency Graph (CDG)...");
-                println!("[3/3] Performing Landauer Thermodynamic Bit-Erasure Audit at {:.1} K...", temp_k);
+                println!(
+                    "[3/3] Performing Landauer Thermodynamic Bit-Erasure Audit at {:.1} K...",
+                    temp_k
+                );
                 verifier.verify_cl(&content)
             } else {
                 println!("[1/3] Lexing and Parsing Cognitive Program AST...");
@@ -8004,7 +10585,10 @@ fn main() {
                 };
 
                 println!("[2/3] Constructing 4D-Torus Channel Dependency Graph (CDG)...");
-                println!("[3/3] Performing Landauer Thermodynamic Bit-Erasure Audit at {:.1} K...", temp_k);
+                println!(
+                    "[3/3] Performing Landauer Thermodynamic Bit-Erasure Audit at {:.1} K...",
+                    temp_k
+                );
                 verifier.verify_program(&program)
             };
 
@@ -8012,17 +10596,56 @@ fn main() {
             println!("             FORMAL SAFETY & PROOF REPORT                   ");
             println!("============================================================");
             println!("  Target Architecture:          256-Core 4D-Torus Silicon");
-            println!("  Operating Temperature:        {:.1} K ({:.1} °C)", temp_k, temp_k - 273.15);
+            println!(
+                "  Operating Temperature:        {:.1} K ({:.1} °C)",
+                temp_k,
+                temp_k - 273.15
+            );
             println!("  Core Clock Frequency:         {:.2} GHz", freq_ghz);
-            println!("  Operations Analyzed:          {} operations", report.total_operations_analyzed);
-            println!("  Reversible Zero-Entropy Ops:  {} ops (0 bits erased, ΔS = 0)", report.reversible_zero_entropy_ops);
-            println!("  Irreversible Logic Ops:       {} ops", report.irreversible_bit_erasing_ops);
-            println!("  Total Bits Erased:            {} bits", report.total_bits_erased);
-            println!("  Landauer Energy Dissipation:  {:.3e} Joules", report.landauer_energy_joules);
-            println!("  Landauer Power Dissipation:   {:.4} µW (Theoretical Floor)", report.landauer_power_microwatts);
-            println!("  Thermal TDP Headroom:         {:.2}% (TDP Budget: 350.0 W)", report.thermal_headroom_pct);
-            println!("  DOR Deadlock-Freedom Proof:   {}", if report.dor_deadlock_free { "PROVEN ACYCLIC (Dally-Seitz Theorem)" } else { "FAILED (Deadlock cycle detected)" });
-            println!("  PGAS Bank Conflict Safety:    {}", if report.pgas_bank_conflict_free { "VERIFIED (16-Bank Orthogonal)" } else { "FAILED (Bank conflict detected)" });
+            println!(
+                "  Operations Analyzed:          {} operations",
+                report.total_operations_analyzed
+            );
+            println!(
+                "  Reversible Zero-Entropy Ops:  {} ops (0 bits erased, ΔS = 0)",
+                report.reversible_zero_entropy_ops
+            );
+            println!(
+                "  Irreversible Logic Ops:       {} ops",
+                report.irreversible_bit_erasing_ops
+            );
+            println!(
+                "  Total Bits Erased:            {} bits",
+                report.total_bits_erased
+            );
+            println!(
+                "  Landauer Energy Dissipation:  {:.3e} Joules",
+                report.landauer_energy_joules
+            );
+            println!(
+                "  Landauer Power Dissipation:   {:.4} µW (Theoretical Floor)",
+                report.landauer_power_microwatts
+            );
+            println!(
+                "  Thermal TDP Headroom:         {:.2}% (TDP Budget: 350.0 W)",
+                report.thermal_headroom_pct
+            );
+            println!(
+                "  DOR Deadlock-Freedom Proof:   {}",
+                if report.dor_deadlock_free {
+                    "PROVEN ACYCLIC (Dally-Seitz Theorem)"
+                } else {
+                    "FAILED (Deadlock cycle detected)"
+                }
+            );
+            println!(
+                "  PGAS Bank Conflict Safety:    {}",
+                if report.pgas_bank_conflict_free {
+                    "VERIFIED (16-Bank Orthogonal)"
+                } else {
+                    "FAILED (Bank conflict detected)"
+                }
+            );
             println!("------------------------------------------------------------");
 
             if !report.violations.is_empty() {
@@ -8121,7 +10744,10 @@ fn handle_cluster_command(args: &[String]) {
             while i < args.len() {
                 match args[i].as_str() {
                     "--nodes" if i + 1 < args.len() => {
-                        nodes = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+                        nodes = args[i + 1]
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .collect();
                         i += 2;
                     }
                     _ => i += 1,
@@ -8164,7 +10790,12 @@ fn handle_cluster_command(args: &[String]) {
                 eprintln!("Failed to write cluster config to '{}': {}", out_file, e);
                 std::process::exit(1);
             }
-            println!("[SUCCESS] Generated CRON Cluster config '{}' for {} nodes ({} cores)", out_file, num_nodes, num_nodes * 256);
+            println!(
+                "[SUCCESS] Generated CRON Cluster config '{}' for {} nodes ({} cores)",
+                out_file,
+                num_nodes,
+                num_nodes * 256
+            );
         }
         "bench-net" | "net-bench" => {
             let mut nodes: Vec<String> = Vec::new();
@@ -8175,7 +10806,10 @@ fn handle_cluster_command(args: &[String]) {
             while i < args.len() {
                 match args[i].as_str() {
                     "--nodes" if i + 1 < args.len() => {
-                        nodes = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+                        nodes = args[i + 1]
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .collect();
                         i += 2;
                     }
                     "--size-kb" if i + 1 < args.len() => {
@@ -8219,33 +10853,67 @@ fn handle_cluster_command(args: &[String]) {
             println!("============================================================");
             println!("        CRON MULTI-CHIP CLUSTER ARCHITECTURE SPECIFICATION  ");
             println!("============================================================");
-            println!("  Total Cluster Sockets:        {} Chips (Distributed Node Fabric)", num_chips);
-            println!("  Total Distributed Cores:      {} Cores (256 Cores per Chip)", num_chips * 256);
-            println!("  Total VLIW Issue Lanes:       {} Lanes (4 Slots/Core)", num_chips * 256 * 4);
+            println!(
+                "  Total Cluster Sockets:        {} Chips (Distributed Node Fabric)",
+                num_chips
+            );
+            println!(
+                "  Total Distributed Cores:      {} Cores (256 Cores per Chip)",
+                num_chips * 256
+            );
+            println!(
+                "  Total VLIW Issue Lanes:       {} Lanes (4 Slots/Core)",
+                num_chips * 256 * 4
+            );
             println!("  Addressing Coordinate Space:  6D Hierarchical (chip_x, chip_y, core_x, core_y, core_z, core_w)");
             println!("  Inter-Chip Network Topology:  4x4 2D Interconnect Grid (Toroidal Wrap)");
             println!("  Inter-Chip Optical Protocol:  Dense WDM Waveguide (1310/1550nm Channels)");
             println!("  Per-Chip Optical Bandwidth:   3.20 Tbps (4x 800 Gbps Bi-directional Transceivers)");
-            println!("  Aggregate Bisection BW:       {:.2} Tbps (Non-blocking Crossbar)", (num_chips as f64) * 3.2);
+            println!(
+                "  Aggregate Bisection BW:       {:.2} Tbps (Non-blocking Crossbar)",
+                (num_chips as f64) * 3.2
+            );
             println!("  Cluster-Wide Synchronization: Hardware Barrier (bb), Cache Flush (CC), Zero-Copy DMA (DD)");
             println!("  Silicon Process Node:         TSMC N5 Ultra-Dense (FinFET + SiPh Hybrid)");
-            println!("  Aggregate Silicon Die Area:   {:.2} mm²", (num_chips as f64) * 86.26);
-            println!("  Nominal TDP Power Budget:     {:.1} W ({:.1} W per chip)", (num_chips as f64) * 72.9, 72.9);
-            println!("  Peak Cluster Compute Power:   {:.3} POps/s (Peta-Operations/sec)", (num_chips as f64) * 4.096);
+            println!(
+                "  Aggregate Silicon Die Area:   {:.2} mm²",
+                (num_chips as f64) * 86.26
+            );
+            println!(
+                "  Nominal TDP Power Budget:     {:.1} W ({:.1} W per chip)",
+                (num_chips as f64) * 72.9,
+                72.9
+            );
+            println!(
+                "  Peak Cluster Compute Power:   {:.3} POps/s (Peta-Operations/sec)",
+                (num_chips as f64) * 4.096
+            );
             println!("============================================================\n");
         }
         "run" => {
             if args.len() < 2 || args[1].starts_with("--") {
-                eprintln!("Error: Missing input file. Usage: cron cluster run <file> [--chips <N>]");
+                eprintln!(
+                    "Error: Missing input file. Usage: cron cluster run <file> [--chips <N>]"
+                );
                 std::process::exit(1);
             }
             let file_path = &args[1];
             print_banner();
-            println!("[1/3] Initializing {}-Chip Distributed Cluster ({} Cores)...", num_chips, num_chips * 256);
-            println!("      Interconnect: Optical Waveguide Mesh ({:.1} Tbps Aggregate Bandwidth)", (num_chips as f64) * 3.2);
+            println!(
+                "[1/3] Initializing {}-Chip Distributed Cluster ({} Cores)...",
+                num_chips,
+                num_chips * 256
+            );
+            println!(
+                "      Interconnect: Optical Waveguide Mesh ({:.1} Tbps Aggregate Bandwidth)",
+                (num_chips as f64) * 3.2
+            );
 
             let cl_code = if file_path.ends_with(".clb") {
-                println!("[2/3] Loading 128-bit Binary Bytecode (.clb) '{}'...", file_path);
+                println!(
+                    "[2/3] Loading 128-bit Binary Bytecode (.clb) '{}'...",
+                    file_path
+                );
                 let bin_data = fs::read(file_path).unwrap_or_else(|e| {
                     eprintln!("Error reading '{}': {}", file_path, e);
                     std::process::exit(1);
@@ -8275,7 +10943,10 @@ fn handle_cluster_command(args: &[String]) {
                 })
             };
 
-            println!("[3/3] Executing cycles concurrently across {} Cores...\n", num_chips * 256);
+            println!(
+                "[3/3] Executing cycles concurrently across {} Cores...\n",
+                num_chips * 256
+            );
             let mut cluster = cron_vm::ClusterSimulator::new(num_chips);
             cluster.load_machine_code(&cl_code);
             cluster.run(10_000);
@@ -8284,20 +10955,59 @@ fn handle_cluster_command(args: &[String]) {
             println!("============================================================");
             println!("          CLUSTER DISTRIBUTED HARDWARE TELEMETRY            ");
             println!("============================================================");
-            println!("  Total Execution Cycles:       {} cycles", stats.total_cycles);
-            println!("  Active Physical Chips:        {} chips (Distributed Fabric)", stats.num_chips);
-            println!("  Active Distributed Cores:     {} cores (6D Hierarchical Mesh)", stats.total_cores);
-            println!("  Cross-Chip Optical Packets:   {} packets (DWDM Waveguide)", stats.cross_chip_packets);
-            println!("  Direct NoC DMA Bursts (DD):   {} transfers (Zero-overhead)", stats.cross_chip_dma_bursts);
-            println!("  Cluster-Wide Barriers (bb):   {} syncs (Global lockstep)", stats.cluster_barrier_syncs);
-            println!("  Photonic MZI Optical Ops:     {} ops (0ns propagation)", stats.aggregate_gemm_ops);
-            println!("  Reversible Gate Ops (F^-1):   {} ops (0 entropy loss)", stats.aggregate_reversible_ops);
-            println!("  STDP Synapse Adaptations:     {} updates", stats.aggregate_stdp_updates);
-            println!("  Cluster Total Energy Saved:   {} µW (EE Dynamic DVFS)", stats.aggregate_energy_saved_uw);
-            println!("  Peak Cluster Temperature:     {} °C (Threshold: 180°C)", stats.peak_cluster_temperature_c);
-            println!("  Aggregate Interconnect BW:    {:.1} Tbps", stats.aggregate_bandwidth_tbps);
+            println!(
+                "  Total Execution Cycles:       {} cycles",
+                stats.total_cycles
+            );
+            println!(
+                "  Active Physical Chips:        {} chips (Distributed Fabric)",
+                stats.num_chips
+            );
+            println!(
+                "  Active Distributed Cores:     {} cores (6D Hierarchical Mesh)",
+                stats.total_cores
+            );
+            println!(
+                "  Cross-Chip Optical Packets:   {} packets (DWDM Waveguide)",
+                stats.cross_chip_packets
+            );
+            println!(
+                "  Direct NoC DMA Bursts (DD):   {} transfers (Zero-overhead)",
+                stats.cross_chip_dma_bursts
+            );
+            println!(
+                "  Cluster-Wide Barriers (bb):   {} syncs (Global lockstep)",
+                stats.cluster_barrier_syncs
+            );
+            println!(
+                "  Photonic MZI Optical Ops:     {} ops (0ns propagation)",
+                stats.aggregate_gemm_ops
+            );
+            println!(
+                "  Reversible Gate Ops (F^-1):   {} ops (0 entropy loss)",
+                stats.aggregate_reversible_ops
+            );
+            println!(
+                "  STDP Synapse Adaptations:     {} updates",
+                stats.aggregate_stdp_updates
+            );
+            println!(
+                "  Cluster Total Energy Saved:   {} µW (EE Dynamic DVFS)",
+                stats.aggregate_energy_saved_uw
+            );
+            println!(
+                "  Peak Cluster Temperature:     {} °C (Threshold: 180°C)",
+                stats.peak_cluster_temperature_c
+            );
+            println!(
+                "  Aggregate Interconnect BW:    {:.1} Tbps",
+                stats.aggregate_bandwidth_tbps
+            );
             println!("============================================================");
-            println!("  STATUS: {}-CORE DISTRIBUTED FABRIC EXECUTED 100% NATIVELY\n", stats.total_cores);
+            println!(
+                "  STATUS: {}-CORE DISTRIBUTED FABRIC EXECUTED 100% NATIVELY\n",
+                stats.total_cores
+            );
         }
         "bench" => {
             if args.iter().any(|a| a == "--net") {
@@ -8309,7 +11019,10 @@ fn handle_cluster_command(args: &[String]) {
                 while i < args.len() {
                     match args[i].as_str() {
                         "--nodes" if i + 1 < args.len() => {
-                            nodes = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+                            nodes = args[i + 1]
+                                .split(',')
+                                .map(|s| s.trim().to_string())
+                                .collect();
                             i += 2;
                         }
                         "--size-kb" if i + 1 < args.len() => {
@@ -8354,7 +11067,12 @@ fn handle_cluster_command(args: &[String]) {
             println!("============================================================");
             println!("      CRON 4,096-CORE DISTRIBUTED CLUSTER BENCHMARK         ");
             println!("============================================================");
-            println!("  Configuring {} Chips ({} Cores, {} VLIW Slots)...", num_chips, num_chips * 256, num_chips * 256 * 4);
+            println!(
+                "  Configuring {} Chips ({} Cores, {} VLIW Slots)...",
+                num_chips,
+                num_chips * 256,
+                num_chips * 256 * 4
+            );
 
             let bench_program = r#"
             B0000:_CC00$000> 'DD00$000> ~EE00$000> @1100$000>
@@ -8382,15 +11100,43 @@ fn handle_cluster_command(args: &[String]) {
 
             println!("\n  Benchmark Results:");
             println!("  ----------------------------------------------------------");
-            println!("  Elapsed Real Time:            {:.3} ms ({:?})", elapsed.as_secs_f64() * 1000.0, elapsed);
-            println!("  Total Executed Cycles:        {} cycles", stats.total_cycles);
-            println!("  Total Active Cores:           {} cores", stats.total_cores);
-            println!("  Cross-Chip Optical Packets:   {} packets", stats.cross_chip_packets);
-            println!("  Cross-Chip DMA Bursts:        {} transfers", stats.cross_chip_dma_bursts);
-            println!("  Global Barrier Sync Events:   {} syncs", stats.cluster_barrier_syncs);
-            println!("  Aggregate Energy Saved (EE):  {} µW", stats.aggregate_energy_saved_uw);
-            println!("  Sustained Issue Rate:         {:.2} Million VLIW ops/sec", ops_per_sec / 1_000_000.0);
-            println!("  Effective Cluster Speedup:    {:.1}x over single core", (stats.total_cores as f64) * 0.94);
+            println!(
+                "  Elapsed Real Time:            {:.3} ms ({:?})",
+                elapsed.as_secs_f64() * 1000.0,
+                elapsed
+            );
+            println!(
+                "  Total Executed Cycles:        {} cycles",
+                stats.total_cycles
+            );
+            println!(
+                "  Total Active Cores:           {} cores",
+                stats.total_cores
+            );
+            println!(
+                "  Cross-Chip Optical Packets:   {} packets",
+                stats.cross_chip_packets
+            );
+            println!(
+                "  Cross-Chip DMA Bursts:        {} transfers",
+                stats.cross_chip_dma_bursts
+            );
+            println!(
+                "  Global Barrier Sync Events:   {} syncs",
+                stats.cluster_barrier_syncs
+            );
+            println!(
+                "  Aggregate Energy Saved (EE):  {} µW",
+                stats.aggregate_energy_saved_uw
+            );
+            println!(
+                "  Sustained Issue Rate:         {:.2} Million VLIW ops/sec",
+                ops_per_sec / 1_000_000.0
+            );
+            println!(
+                "  Effective Cluster Speedup:    {:.1}x over single core",
+                (stats.total_cores as f64) * 0.94
+            );
             println!("============================================================");
             println!("  BENCHMARK STATUS: SSS+ SUPREME DISTRIBUTED EFFICIENCY\n");
         }
@@ -8413,8 +11159,12 @@ fn handle_cl_cluster_command(args: &[String]) {
         println!("    sim-hw [--chips <N>] [-o <tb.v>] [--json] Automated hardware RTL co-simulation runner (Icarus/vvp)");
         println!("    synth [--chips <N>] [--target <t>] [--json] Silicon/FPGA synthesis estimator & Yosys/OpenLane script gen");
         println!("    tp [--chips <N>] [--json]         Execute Megatron-style Column/Row Tensor Parallelism with Ring AllReduce");
-        println!("    c23-tp [--chips <N>] [-o <out.c>] Emit Multi-Device C23 pthread execution harness");
-        println!("    run <file.cl> [--chips <N>]       Execute on distributed multi-die simulator");
+        println!(
+            "    c23-tp [--chips <N>] [-o <out.c>] Emit Multi-Device C23 pthread execution harness"
+        );
+        println!(
+            "    run <file.cl> [--chips <N>]       Execute on distributed multi-die simulator"
+        );
         return;
     }
 
@@ -8464,7 +11214,11 @@ fn handle_cl_cluster_command(args: &[String]) {
             ) {
                 Ok(out) => {
                     if emit_json {
-                        println!(r#"{{"status":"ok","world_size":{},"elements":{}}}"#, world_size, out.len());
+                        println!(
+                            r#"{{"status":"ok","world_size":{},"elements":{}}}"#,
+                            world_size,
+                            out.len()
+                        );
                     } else {
                         println!("[SUCCESS] Distributed Megatron TP executed across {} ranks. Output elements: {}", world_size, out.len());
                     }
@@ -8474,7 +11228,12 @@ fn handle_cl_cluster_command(args: &[String]) {
         }
         "c23-tp" => {
             let harness = cronc::cl_distributed::synthesize_distributed_c23_harness(
-                "cron_distributed_tp", num_chips, num_chips, 16, 64, 16,
+                "cron_distributed_tp",
+                num_chips,
+                num_chips,
+                16,
+                64,
+                16,
             );
             if let Some(ref p) = out_file {
                 let _ = fs::write(p, &harness);
@@ -8503,23 +11262,36 @@ fn handle_cl_cluster_command(args: &[String]) {
                     std::process::exit(1);
                 }
             };
-            let schedule = match cronc::synthesize_collective_schedule(col_type, num_chips, chunk_bytes) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("[COLLECTIVE ERROR] {}", e);
-                    std::process::exit(1);
-                }
-            };
+            let schedule =
+                match cronc::synthesize_collective_schedule(col_type, num_chips, chunk_bytes) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[COLLECTIVE ERROR] {}", e);
+                        std::process::exit(1);
+                    }
+                };
 
             println!("============================================================");
             println!("      CRON MULTI-DIE COLLECTIVE COMMUNICATION SCHEDULE      ");
             println!("============================================================");
-            println!("  Collective Pattern:   {}", schedule.collective_type.as_str());
-            println!("  Physical Dies:        {} Dies ({} Cores)", schedule.num_dies, schedule.total_cores);
+            println!(
+                "  Collective Pattern:   {}",
+                schedule.collective_type.as_str()
+            );
+            println!(
+                "  Physical Dies:        {} Dies ({} Cores)",
+                schedule.num_dies, schedule.total_cores
+            );
             println!("  Chunk Size:           {} bytes", schedule.chunk_bytes);
             println!("  Ring Pipeline Steps:  {} steps", schedule.ring_steps);
-            println!("  Optical Wave Packets: {} packets", schedule.total_optical_packets);
-            println!("  Theoretical Latency:  {} cycles", schedule.theoretical_latency_cycles);
+            println!(
+                "  Optical Wave Packets: {} packets",
+                schedule.total_optical_packets
+            );
+            println!(
+                "  Theoretical Latency:  {} cycles",
+                schedule.theoretical_latency_cycles
+            );
             println!("============================================================\n");
 
             if let Some(path) = out_file {
@@ -8527,7 +11299,10 @@ fn handle_cl_cluster_command(args: &[String]) {
                     eprintln!("Error writing collective microcode to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Synthesized collective microcode written to '{}'", path);
+                println!(
+                    "[SUCCESS] Synthesized collective microcode written to '{}'",
+                    path
+                );
             } else {
                 println!("{}", schedule.microcode_cl);
             }
@@ -8557,10 +11332,16 @@ fn handle_cl_cluster_command(args: &[String]) {
             let verilog_code = cronc::generate_cluster_verilog_testbench(num_chips, 256);
             if let Some(path) = out_file {
                 if let Err(e) = fs::write(&path, &verilog_code) {
-                    eprintln!("Error writing Verilog co-emulation testbench to '{}': {}", path, e);
+                    eprintln!(
+                        "Error writing Verilog co-emulation testbench to '{}': {}",
+                        path, e
+                    );
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Distributed Verilog co-emulation testbench written to '{}'", path);
+                println!(
+                    "[SUCCESS] Distributed Verilog co-emulation testbench written to '{}'",
+                    path
+                );
             } else {
                 println!("{}", verilog_code);
             }
@@ -8569,21 +11350,24 @@ fn handle_cl_cluster_command(args: &[String]) {
             let total_cores = num_chips * 256;
             let tb_code = cronc::generate_cluster_verilog_testbench(num_chips, 256);
             let tb_target = out_file.clone().unwrap_or_else(|| {
-                std::env::temp_dir().join("tb_cluster_4d.v").to_string_lossy().to_string()
+                std::env::temp_dir()
+                    .join("tb_cluster_4d.v")
+                    .to_string_lossy()
+                    .to_string()
             });
 
             if let Err(e) = fs::write(&tb_target, &tb_code) {
-                eprintln!("[ERROR] Failed to write testbench to '{}': {}", tb_target, e);
+                eprintln!(
+                    "[ERROR] Failed to write testbench to '{}': {}",
+                    tb_target, e
+                );
                 std::process::exit(1);
             }
 
             let mut iverilog_found = false;
             let mut sim_success = false;
 
-            if let Ok(iv_status) = std::process::Command::new("iverilog")
-                .arg("-V")
-                .output()
-            {
+            if let Ok(iv_status) = std::process::Command::new("iverilog").arg("-V").output() {
                 if iv_status.status.success() {
                     iverilog_found = true;
                     let vvp_file = std::env::temp_dir().join("tb_cluster_4d.vvp");
@@ -8618,21 +11402,58 @@ fn handle_cl_cluster_command(args: &[String]) {
             if emit_json {
                 println!(
                     r#"{{"status":"ok","mode":"{}","num_dies":{},"total_cores":{},"mesh_dim":"4D-Torus","cycles":1024,"packets_delivered":4096,"packet_loss":0,"deadlock_freedom":"PROVEN_ACYCLIC_DOR","rtl_verified":true}}"#,
-                    if iverilog_found { "iverilog_vvp_rtl" } else { "builtin_cycle_accurate_rtl" },
-                    num_chips, total_cores
+                    if iverilog_found {
+                        "iverilog_vvp_rtl"
+                    } else {
+                        "builtin_cycle_accurate_rtl"
+                    },
+                    num_chips,
+                    total_cores
                 );
             } else {
                 println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
                 println!("║          CRON DISTRIBUTED MULTI-DIE 4D-TORUS HARDWARE CO-EMULATION HUD                ║");
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
-                println!("║ Co-Emulation Flow: {:<66} ║", if iverilog_found { "Icarus Verilog + VVP IEEE 1364-2001 Simulation" } else { "CRON Cycle-Accurate Multi-Die Hardware RTL Co-Emulator" });
-                println!("║ Silicon Dies     : {:<66} ║", format!("{} Dies ({} Cores Total)", num_chips, total_cores));
-                println!("║ NoC Topology     : {:<66} ║", "4D Hyper-Torus (X=4, Y=4, Z=4, W=4 per die + Inter-Die)");
-                println!("║ Routing Policy   : {:<66} ║", "DOR (X->Y->Z->W) Deadlock-Free Acyclic Routing");
-                println!("║ Packets Simulated: {:<66} ║", "4,096 Flits Transferred (0 Packet Loss, 100% Delivery)");
-                println!("║ Bank Interconnect: {:<66} ║", "GF(2^4) Galois Field XOR Swizzled 16-Bank PGAS");
-                println!("║ Latency P99      : {:<66} ║", "4.2 Cycles (Single-Hop Wormhole Cut-Through)");
-                println!("║ Status           : {:<66} ║", if sim_success { "PASSED (CRON RTL CO-EMULATION SUCCESS)" } else { "FAILED" });
+                println!(
+                    "║ Co-Emulation Flow: {:<66} ║",
+                    if iverilog_found {
+                        "Icarus Verilog + VVP IEEE 1364-2001 Simulation"
+                    } else {
+                        "CRON Cycle-Accurate Multi-Die Hardware RTL Co-Emulator"
+                    }
+                );
+                println!(
+                    "║ Silicon Dies     : {:<66} ║",
+                    format!("{} Dies ({} Cores Total)", num_chips, total_cores)
+                );
+                println!(
+                    "║ NoC Topology     : {:<66} ║",
+                    "4D Hyper-Torus (X=4, Y=4, Z=4, W=4 per die + Inter-Die)"
+                );
+                println!(
+                    "║ Routing Policy   : {:<66} ║",
+                    "DOR (X->Y->Z->W) Deadlock-Free Acyclic Routing"
+                );
+                println!(
+                    "║ Packets Simulated: {:<66} ║",
+                    "4,096 Flits Transferred (0 Packet Loss, 100% Delivery)"
+                );
+                println!(
+                    "║ Bank Interconnect: {:<66} ║",
+                    "GF(2^4) Galois Field XOR Swizzled 16-Bank PGAS"
+                );
+                println!(
+                    "║ Latency P99      : {:<66} ║",
+                    "4.2 Cycles (Single-Hop Wormhole Cut-Through)"
+                );
+                println!(
+                    "║ Status           : {:<66} ║",
+                    if sim_success {
+                        "PASSED (CRON RTL CO-EMULATION SUCCESS)"
+                    } else {
+                        "FAILED"
+                    }
+                );
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
             }
         }
@@ -8691,12 +11512,42 @@ fn handle_cl_cluster_command(args: &[String]) {
                 println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
                 println!("║         CRON SILICON / FPGA GATE-LEVEL HARDWARE SYNTHESIS ESTIMATOR                   ║");
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
-                println!("║ Cluster Size     : {:<66} ║", format!("{} Physical Dies ({} Cores Total)", est.num_dies, est.total_cores));
-                println!("║ Target Flow      : {:<66} ║", format!("{} (Yosys / OpenLane Compatible)", target));
-                println!("║ Logic LUTs       : {:<66} ║", format!("{} LUTs (~1,450 per VLIW Core + Router)", est.estimated_luts));
-                println!("║ Flip-Flops (FF)  : {:<66} ║", format!("{} FFs (Zero-Hazard Pipelined State)", est.estimated_ffs));
-                println!("║ 36Kb Block RAMs  : {:<66} ║", format!("{} BRAMs (16-Bank PGAS SRAM Partition)", est.estimated_brams_36k));
-                println!("║ DSP48 Slices     : {:<66} ║", format!("{} Slices (Clifford Rotor 4-Slot Multipliers)", est.estimated_dsp_slices));
+                println!(
+                    "║ Cluster Size     : {:<66} ║",
+                    format!(
+                        "{} Physical Dies ({} Cores Total)",
+                        est.num_dies, est.total_cores
+                    )
+                );
+                println!(
+                    "║ Target Flow      : {:<66} ║",
+                    format!("{} (Yosys / OpenLane Compatible)", target)
+                );
+                println!(
+                    "║ Logic LUTs       : {:<66} ║",
+                    format!(
+                        "{} LUTs (~1,450 per VLIW Core + Router)",
+                        est.estimated_luts
+                    )
+                );
+                println!(
+                    "║ Flip-Flops (FF)  : {:<66} ║",
+                    format!("{} FFs (Zero-Hazard Pipelined State)", est.estimated_ffs)
+                );
+                println!(
+                    "║ 36Kb Block RAMs  : {:<66} ║",
+                    format!(
+                        "{} BRAMs (16-Bank PGAS SRAM Partition)",
+                        est.estimated_brams_36k
+                    )
+                );
+                println!(
+                    "║ DSP48 Slices     : {:<66} ║",
+                    format!(
+                        "{} Slices (Clifford Rotor 4-Slot Multipliers)",
+                        est.estimated_dsp_slices
+                    )
+                );
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Max Freq (F_max) : TSMC 7nm: {:.1} MHz | 28nm: {:.1} MHz | SkyWater 130nm: {:.1} MHz  ║", est.max_frequency_mhz_7nm, est.max_frequency_mhz_28nm, est.max_frequency_mhz_130nm);
                 println!("║ Power Dissipation: Dynamic: {:.1} mW (at 1 GHz) | Static Leakage: {:.2} mW           ║", est.dynamic_power_mw_at_1ghz, est.static_power_mw);
@@ -8719,14 +11570,18 @@ fn handle_cl_cordic_command(args: &[String]) {
         println!("CRON CORDIC & Complex Geometric Hardware Engine");
         println!("Usage: cron cl-cordic <action> [options]");
         println!("\nActions:");
-        println!("    rot [--angle <rad>] [--x <f64>] [--y <f64>] [--iters <N>] [--orbit] [--json]");
+        println!(
+            "    rot [--angle <rad>] [--x <f64>] [--y <f64>] [--iters <N>] [--orbit] [--json]"
+        );
         println!("                         Circular coordinate rotation (sin, cos, MZI phase calibration)");
         println!("    vec [--x <f64>] [--y <f64>] [--iters <N>] [--json]");
         println!("                         Circular vectoring (magnitude & atan2 phase detection)");
         println!("    synth [--mode <rot|vec|hyp|linear>] [--iters <N>] [-o <file.cl>]");
         println!("                         Synthesize 4-Way VLIW shift-and-add silicon microcode");
         println!("    sphere [--theta <rad>] [--phi <rad>] [--json]");
-        println!("                         Render 3D ASCII quantum Bloch / Poincaré sphere projection");
+        println!(
+            "                         Render 3D ASCII quantum Bloch / Poincaré sphere projection"
+        );
         return;
     }
 
@@ -8814,15 +11669,39 @@ fn handle_cl_cordic_command(args: &[String]) {
                 println!("╔════════════════════════════════════════════════════════════════════════════╗");
                 println!("║          CRON CORDIC CIRCULAR ROTATION (Brain 2 Photonic Phase)            ║");
                 println!("╚════════════════════════════════════════════════════════════════════════════╝");
-                println!("  Target Angle (z0):      {:.6} rad ({:.2}°)", z_val, z_val.to_degrees());
+                println!(
+                    "  Target Angle (z0):      {:.6} rad ({:.2}°)",
+                    z_val,
+                    z_val.to_degrees()
+                );
                 println!("  Initial Coords (x0,y0): [{:.6}, {:.6}]", x_val, y_val);
                 println!("  Rotated Coords (x, y):  [{:.6}, {:.6}]", res.x, res.y);
-                println!("  Computed cos(θ):        {:.6} (analytic: {:.6})", res.x, (z_val).cos());
-                println!("  Computed sin(θ):        {:.6} (analytic: {:.6})", res.y, (z_val).sin());
-                println!("  Iteration Count:        {} shift-add cycles", res.iterations);
-                println!("  Latency:                {} cycles (0 multiplier stalls)", res.latency_cycles);
-                println!("  Dynamic Energy:         {:.3} pJ (0.12 pJ/step)", res.dynamic_energy_pj);
-                println!("  Hardware Precision:     ~{:.2e} (< 1 LSB error)\n", res.error_estimate);
+                println!(
+                    "  Computed cos(θ):        {:.6} (analytic: {:.6})",
+                    res.x,
+                    (z_val).cos()
+                );
+                println!(
+                    "  Computed sin(θ):        {:.6} (analytic: {:.6})",
+                    res.y,
+                    (z_val).sin()
+                );
+                println!(
+                    "  Iteration Count:        {} shift-add cycles",
+                    res.iterations
+                );
+                println!(
+                    "  Latency:                {} cycles (0 multiplier stalls)",
+                    res.latency_cycles
+                );
+                println!(
+                    "  Dynamic Energy:         {:.3} pJ (0.12 pJ/step)",
+                    res.dynamic_energy_pj
+                );
+                println!(
+                    "  Hardware Precision:     ~{:.2e} (< 1 LSB error)\n",
+                    res.error_estimate
+                );
 
                 if show_orbit {
                     let pts = vec![(x_val, y_val), (res.x, res.y)];
@@ -8847,16 +11726,28 @@ fn handle_cl_cordic_command(args: &[String]) {
                 println!("║          CRON CORDIC CIRCULAR VECTORING (Magnitude & Phase Detection)       ║");
                 println!("╚════════════════════════════════════════════════════════════════════════════╝");
                 println!("  Input Vector (x, y):    [{:.6}, {:.6}]", x_val, y_val);
-                println!("  Magnitude r:            {:.6} (analytic: {:.6})", res.x, analytic_r);
-                println!("  Angle θ:                {:.6} rad ({:.2}°) (analytic: {:.6})", res.z, res.z.to_degrees(), analytic_ang);
-                println!("  Iteration Count:        {} shift-add cycles", res.iterations);
+                println!(
+                    "  Magnitude r:            {:.6} (analytic: {:.6})",
+                    res.x, analytic_r
+                );
+                println!(
+                    "  Angle θ:                {:.6} rad ({:.2}°) (analytic: {:.6})",
+                    res.z,
+                    res.z.to_degrees(),
+                    analytic_ang
+                );
+                println!(
+                    "  Iteration Count:        {} shift-add cycles",
+                    res.iterations
+                );
                 println!("  Latency:                {} cycles", res.latency_cycles);
                 println!("  Dynamic Energy:         {:.3} pJ", res.dynamic_energy_pj);
                 println!("  Precision:              ~{:.2e}\n", res.error_estimate);
             }
         }
         "synth" | "kernel" => {
-            let mode = cronc::CordicMode::parse_mode(&mode_str).unwrap_or(cronc::CordicMode::CircularRotation);
+            let mode = cronc::CordicMode::parse_mode(&mode_str)
+                .unwrap_or(cronc::CordicMode::CircularRotation);
             let config = cronc::CordicConfig {
                 mode,
                 iterations: iters,
@@ -8869,7 +11760,10 @@ fn handle_cl_cordic_command(args: &[String]) {
                     eprintln!("Error writing CORDIC microcode to '{}': {}", path, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Synthesized CORDIC microcode written to '{}'", path);
+                println!(
+                    "[SUCCESS] Synthesized CORDIC microcode written to '{}'",
+                    path
+                );
             } else {
                 println!("{}", code);
             }
@@ -8885,7 +11779,10 @@ fn handle_cl_cordic_command(args: &[String]) {
             }
         }
         other => {
-            eprintln!("Unknown cl-cordic action '{}'. Available: rot, vec, synth, sphere", other);
+            eprintln!(
+                "Unknown cl-cordic action '{}'. Available: rot, vec, synth, sphere",
+                other
+            );
             std::process::exit(1);
         }
     }
@@ -8985,9 +11882,22 @@ fn handle_cl_vcd_command(args: &[String]) {
         println!("============================================================");
         println!("  Target Source:        {}", input_path);
         println!("  Simulated Cycles:     {} cycles", report.total_cycles);
-        println!("  Probed Signals:       {} signals (IEEE 1364-2001)", report.total_signals);
-        println!("  Value Change Events:  {} dumped transitions", report.value_changes_dumped);
-        println!("  Core Execution State: {}", if report.execution_halted { "HALTED (Normal Exit)" } else { "RUNNING" });
+        println!(
+            "  Probed Signals:       {} signals (IEEE 1364-2001)",
+            report.total_signals
+        );
+        println!(
+            "  Value Change Events:  {} dumped transitions",
+            report.value_changes_dumped
+        );
+        println!(
+            "  Core Execution State: {}",
+            if report.execution_halted {
+                "HALTED (Normal Exit)"
+            } else {
+                "RUNNING"
+            }
+        );
         println!("============================================================");
     }
 
@@ -8996,7 +11906,11 @@ fn handle_cl_vcd_command(args: &[String]) {
             eprintln!("Error writing VCD file to '{}': {}", path, e);
             std::process::exit(1);
         }
-        println!("[SUCCESS] IEEE 1364-2001 VCD waveform written to '{}' ({} bytes)", path, report.vcd_content.len());
+        println!(
+            "[SUCCESS] IEEE 1364-2001 VCD waveform written to '{}' ({} bytes)",
+            path,
+            report.vcd_content.len()
+        );
         println!("          Compatible with GTKWave: `gtkwave {}`", path);
     }
 }
@@ -9064,24 +11978,60 @@ fn handle_cl_perf_command(args: &[String]) {
         if emit_json {
             println!("{}", metrics.to_json());
         } else {
-            println!("╔════════════════════════════════════════════════════════════════════════════╗");
-            println!("║      CRON 256-CORE 4D-TORUS SILICON MICRO-KERNEL PPA PROFILING REPORT      ║");
-            println!("╚════════════════════════════════════════════════════════════════════════════╝");
+            println!(
+                "╔════════════════════════════════════════════════════════════════════════════╗"
+            );
+            println!(
+                "║      CRON 256-CORE 4D-TORUS SILICON MICRO-KERNEL PPA PROFILING REPORT      ║"
+            );
+            println!(
+                "╚════════════════════════════════════════════════════════════════════════════╝"
+            );
             println!("  Target Kernel:        {}", metrics.kernel_name);
             println!("  Execution Cycles:     {} cycles", metrics.total_cycles);
             println!("  VLIW Issue Rate:      {:.2} IPC (max 4.0)", metrics.ipc);
-            println!("  Attainable Throughput:{:.2} GFLOPs/Core | {:.2} TFLOPs Chip", metrics.gflops_per_core, metrics.chip_tflops);
-            println!("  Operational Intensity:{:.4} FLOPs/Byte (Roofline)", metrics.operational_intensity);
-            println!("  Energy Dissipation:   {:.3} pJ / operation", metrics.dynamic_energy_pj);
-            println!("  Silicon Power:        {:.2} Watts (at {:.1} GHz, 256 Cores)", metrics.power_watts, config.frequency_ghz);
-            println!("  Energy Efficiency:    {:.2} TOPS / Watt", metrics.tops_per_watt);
-            println!("  Energy-Delay Product: {:.3e} Joule-sec (EDP)", metrics.energy_delay_product_edp);
-            println!("  Junction Temperature: {:.1} °C (Thermal Margin: {:.1} °C)", metrics.junction_temp_c, metrics.thermal_margin_c);
-            println!("  4-Way Slot Breakdown: ALU0: {:.1}% | ALU1: {:.1}% | MEM: {:.1}% | NOC: {:.1}%",
-                     metrics.slot_utilization[0], metrics.slot_utilization[1], metrics.slot_utilization[2], metrics.slot_utilization[3]);
-            println!("──────────────────────────────────────────────────────────────────────────────");
+            println!(
+                "  Attainable Throughput:{:.2} GFLOPs/Core | {:.2} TFLOPs Chip",
+                metrics.gflops_per_core, metrics.chip_tflops
+            );
+            println!(
+                "  Operational Intensity:{:.4} FLOPs/Byte (Roofline)",
+                metrics.operational_intensity
+            );
+            println!(
+                "  Energy Dissipation:   {:.3} pJ / operation",
+                metrics.dynamic_energy_pj
+            );
+            println!(
+                "  Silicon Power:        {:.2} Watts (at {:.1} GHz, 256 Cores)",
+                metrics.power_watts, config.frequency_ghz
+            );
+            println!(
+                "  Energy Efficiency:    {:.2} TOPS / Watt",
+                metrics.tops_per_watt
+            );
+            println!(
+                "  Energy-Delay Product: {:.3e} Joule-sec (EDP)",
+                metrics.energy_delay_product_edp
+            );
+            println!(
+                "  Junction Temperature: {:.1} °C (Thermal Margin: {:.1} °C)",
+                metrics.junction_temp_c, metrics.thermal_margin_c
+            );
+            println!(
+                "  4-Way Slot Breakdown: ALU0: {:.1}% | ALU1: {:.1}% | MEM: {:.1}% | NOC: {:.1}%",
+                metrics.slot_utilization[0],
+                metrics.slot_utilization[1],
+                metrics.slot_utilization[2],
+                metrics.slot_utilization[3]
+            );
+            println!(
+                "──────────────────────────────────────────────────────────────────────────────"
+            );
             println!("  AI Bottleneck Advice: {}", metrics.bottleneck_diagnosis);
-            println!("============================================================================\n");
+            println!(
+                "============================================================================\n"
+            );
         }
     }
 }
@@ -9191,7 +12141,11 @@ fn handle_cl_balance_command(args: &[String]) {
             eprintln!("Error writing multi-core bundle to '{}': {}", path, e);
             std::process::exit(1);
         }
-        println!("[SUCCESS] Multi-Core coordinated bundle written to '{}' ({} bytes)", path, bundle.len());
+        println!(
+            "[SUCCESS] Multi-Core coordinated bundle written to '{}' ({} bytes)",
+            path,
+            bundle.len()
+        );
     }
 }
 
@@ -9286,7 +12240,11 @@ fn handle_cl_trace_command(args: &[String]) {
             eprintln!("Error writing optimized trace to '{}': {}", path, e);
             std::process::exit(1);
         }
-        println!("[SUCCESS] Optimized modulo trace written to '{}' ({} bytes)", path, result.synthesized_cl.len());
+        println!(
+            "[SUCCESS] Optimized modulo trace written to '{}' ({} bytes)",
+            path,
+            result.synthesized_cl.len()
+        );
     }
 }
 
@@ -9359,7 +12317,13 @@ fn handle_cl_router_command(args: &[String]) {
     }
 
     let config = cronc::NoCRouterConfig {
-        coord: cronc::Coord4D::new(coord_x.min(3), coord_y.min(3), coord_z.min(3), coord_w.min(3)).unwrap_or_else(|_| cronc::Coord4D::from_core_id(0)),
+        coord: cronc::Coord4D::new(
+            coord_x.min(3),
+            coord_y.min(3),
+            coord_z.min(3),
+            coord_w.min(3),
+        )
+        .unwrap_or_else(|_| cronc::Coord4D::from_core_id(0)),
         num_ports,
         vcs_per_port: vcs,
         buffer_depth_per_vc: buffer_depth,
@@ -9374,7 +12338,11 @@ fn handle_cl_router_command(args: &[String]) {
                 eprintln!("Error writing Verilog router to '{}': {}", path, e);
                 std::process::exit(1);
             }
-            println!("[SUCCESS] Synthesizable Verilog router RTL written to '{}' ({} bytes)", path, verilog.len());
+            println!(
+                "[SUCCESS] Synthesizable Verilog router RTL written to '{}' ({} bytes)",
+                path,
+                verilog.len()
+            );
         } else {
             println!("{}", verilog);
         }
@@ -9384,7 +12352,10 @@ fn handle_cl_router_command(args: &[String]) {
     let mut sim = cronc::NoCRouterSimulation::new(config);
     // Inject sample packets for visualization
     let p1 = [[0xDEADBEEF, 0xCAFEBABE, 0x12345678, 0x9ABCDEF0]];
-    let _ = sim.inject_packet(cronc::Coord4D::new(2, 0, 0, 0).unwrap_or(cronc::Coord4D::from_core_id(0)), &p1);
+    let _ = sim.inject_packet(
+        cronc::Coord4D::new(2, 0, 0, 0).unwrap_or(cronc::Coord4D::from_core_id(0)),
+        &p1,
+    );
 
     for _ in 0..cycles {
         sim.step_cycle();
@@ -9438,7 +12409,10 @@ fn handle_cl_esoteric_command(args: &[String]) {
         let verilog = cronc::synthesize_verilog_esoteric_coprocessor();
         if let Some(path) = &out_verilog {
             if let Err(e) = fs::write(path, &verilog) {
-                eprintln!("Error writing Verilog esoteric coprocessor RTL to '{}': {}", path, e);
+                eprintln!(
+                    "Error writing Verilog esoteric coprocessor RTL to '{}': {}",
+                    path, e
+                );
                 std::process::exit(1);
             }
             println!("[SUCCESS] Synthesizable Verilog esoteric coprocessor RTL written to '{}' ({} bytes)", path, verilog.len());
@@ -9461,10 +12435,22 @@ fn handle_cl_esoteric_command(args: &[String]) {
 
     // 2. Malbolge Trit BitNet Setup
     let trits = [
-        cronc::Trit::Pos, cronc::Trit::Zero, cronc::Trit::Neg, cronc::Trit::Pos,
-        cronc::Trit::Pos, cronc::Trit::Zero, cronc::Trit::Neg, cronc::Trit::Zero,
-        cronc::Trit::Pos, cronc::Trit::Neg, cronc::Trit::Zero, cronc::Trit::Pos,
-        cronc::Trit::Zero, cronc::Trit::Zero, cronc::Trit::Neg, cronc::Trit::Pos,
+        cronc::Trit::Pos,
+        cronc::Trit::Zero,
+        cronc::Trit::Neg,
+        cronc::Trit::Pos,
+        cronc::Trit::Pos,
+        cronc::Trit::Zero,
+        cronc::Trit::Neg,
+        cronc::Trit::Zero,
+        cronc::Trit::Pos,
+        cronc::Trit::Neg,
+        cronc::Trit::Zero,
+        cronc::Trit::Pos,
+        cronc::Trit::Zero,
+        cronc::Trit::Zero,
+        cronc::Trit::Neg,
+        cronc::Trit::Pos,
     ];
     let w = cronc::TritWord::from_trits(&trits);
     let acts: [i8; 16] = [12, -4, 8, 15, -2, 0, 7, -9, 10, -5, 3, 11, -8, 6, -1, 4];
@@ -9478,8 +12464,14 @@ fn handle_cl_esoteric_command(args: &[String]) {
     // 4. Prolog Unification Setup
     let mut vec_a = [0xFFFFu16; 16];
     let mut vec_b = [0xFFFFu16; 16];
-    vec_a[0] = 10; vec_a[1] = 25; vec_a[2] = 42; vec_a[3] = 99;
-    vec_b[0] = 7;  vec_b[1] = 25; vec_b[2] = 88; vec_b[3] = 99;
+    vec_a[0] = 10;
+    vec_a[1] = 25;
+    vec_a[2] = 42;
+    vec_a[3] = 99;
+    vec_b[0] = 7;
+    vec_b[1] = 25;
+    vec_b[2] = 88;
+    vec_b[3] = 99;
     let _unify_res = coproc.exec_unify(&vec_a, &vec_b);
 
     if emit_json {
@@ -9500,7 +12492,9 @@ fn handle_cl_esoteric_command(args: &[String]) {
 
 fn handle_cl_optic_command(args: &[String]) {
     if args.is_empty() {
-        println!("CRON Heterogeneous Optical WDM Laser Power Budget & Photonic Insertion Loss Optimizer");
+        println!(
+            "CRON Heterogeneous Optical WDM Laser Power Budget & Photonic Insertion Loss Optimizer"
+        );
         println!("Usage: cron cl-optic <file.cl> [options]");
         println!("\nOptions:");
         println!("    --mesh <N>          MZI array dimension (NxN, default: 16)");
@@ -9508,7 +12502,9 @@ fn handle_cl_optic_command(args: &[String]) {
         println!("    --topology <c|r>    Mesh topology: clemens (default) or reck");
         println!("    --wg-len <cm>       Physical waveguide length on silicon (default: 2.5 cm)");
         println!("    --wall-plug <eff>   Laser diode electrical-to-optical wall-plug efficiency (default: 0.22)");
-        println!("    --synth-verilog     Synthesize closed-loop laser power controller Verilog RTL");
+        println!(
+            "    --synth-verilog     Synthesize closed-loop laser power controller Verilog RTL"
+        );
         println!("    -o, --output <f>    Output path for Verilog RTL");
         println!("    --json              Emit machine-readable JSON telemetry");
         return;
@@ -9622,7 +12618,10 @@ fn handle_cl_optic_command(args: &[String]) {
         let verilog = cronc::synthesize_optical_power_verilog(&report);
         if let Some(path) = &out_verilog {
             if let Err(e) = fs::write(path, &verilog) {
-                eprintln!("Error writing optical controller Verilog to '{}': {}", path, e);
+                eprintln!(
+                    "Error writing optical controller Verilog to '{}': {}",
+                    path, e
+                );
                 std::process::exit(1);
             }
             println!("[SUCCESS] Synthesizable Optical Power Controller Verilog RTL written to '{}' ({} bytes)", path, verilog.len());
@@ -9649,9 +12648,13 @@ fn handle_cl_patch_command(args: &[String]) {
         println!("    apply <file.cl> <patch.clpatch> [-o <out.cl>] [--json]");
         println!("                         Apply CAM patch overlay table to .cl machine code");
         println!("    inspect <patch.clpatch> [--json]");
-        println!("                         Inspect microcode patch table entries & CRC32 integrity");
+        println!(
+            "                         Inspect microcode patch table entries & CRC32 integrity"
+        );
         println!("    synth-verilog <patch.clpatch> [-o <out.v>]");
-        println!("                         Synthesize on-chip CAM SRAM patch controller Verilog RTL");
+        println!(
+            "                         Synthesize on-chip CAM SRAM patch controller Verilog RTL"
+        );
         return;
     }
 
@@ -9720,8 +12723,12 @@ fn handle_cl_patch_command(args: &[String]) {
                 eprintln!("Error writing patch file '{}': {}", out_file, e);
                 std::process::exit(1);
             }
-            println!("[SUCCESS] Microcode patch package written to '{}' ({} bytes, CRC32: 0x{:08X})",
-                out_file, bytes.len(), pkg.crc32_checksum);
+            println!(
+                "[SUCCESS] Microcode patch package written to '{}' ({} bytes, CRC32: 0x{:08X})",
+                out_file,
+                bytes.len(),
+                pkg.crc32_checksum
+            );
         }
         "apply" => {
             if args.len() < 3 {
@@ -9838,13 +12845,19 @@ fn handle_cl_patch_command(args: &[String]) {
                     eprintln!("Error writing Verilog RTL to '{}': {}", out_p, e);
                     std::process::exit(1);
                 }
-                println!("[SUCCESS] Synthesizable Microcode Patch Controller RTL written to '{}'", out_p);
+                println!(
+                    "[SUCCESS] Synthesizable Microcode Patch Controller RTL written to '{}'",
+                    out_p
+                );
             } else {
                 println!("{}", verilog);
             }
         }
         other => {
-            eprintln!("Unknown cl-patch action '{}'. Available: create, apply, inspect, synth-verilog", other);
+            eprintln!(
+                "Unknown cl-patch action '{}'. Available: create, apply, inspect, synth-verilog",
+                other
+            );
             std::process::exit(1);
         }
     }
@@ -9883,7 +12896,10 @@ fn handle_cl_compare_command(args: &[String]) {
                 if let Some(wk) = cronc::WorkloadKind::parse(other) {
                     target_workload = Some(wk);
                 } else if other != "all" {
-                    eprintln!("Warning: Unknown workload '{}'. Running full comparison suite.", other);
+                    eprintln!(
+                        "Warning: Unknown workload '{}'. Running full comparison suite.",
+                        other
+                    );
                 }
                 i += 1;
             }
@@ -9906,7 +12922,10 @@ fn handle_cl_compare_command(args: &[String]) {
                 eprintln!("Error writing whitepaper to '{}': {}", path, e);
                 std::process::exit(1);
             }
-            println!("[SUCCESS] CRON Performance Whitepaper written to '{}'", path);
+            println!(
+                "[SUCCESS] CRON Performance Whitepaper written to '{}'",
+                path
+            );
         } else {
             print!("{}", md);
         }
@@ -10178,19 +13197,55 @@ fn handle_mcts_synthesize_command(args: &[String]) {
     if emit_json {
         println!("{}", result.to_json());
     } else {
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!(" CRON NEURO-SYMBOLIC MCTS KERNEL SYNTHESIS ENGINE");
         println!(" Workload: {}", prompt);
-        println!(" Search Tree: {} nodes explored across {} simulations", result.tree_node_count, result.simulations_run);
-        println!("================================================================================");
-        println!("+------------------------------------------------------------------------------+");
-        println!("| MCTS INSTRUCTION SCHEDULING & SLOT PACKING METRICS                           |");
-        println!("+------------------------------------------------------------------------------+");
-        println!("| Slot Saturation:    {:<56} |", format!("IPC {:.2} -> {:.2} (+{:.1}%)", result.initial_ipc, result.optimized_ipc, result.speedup_pct));
-        println!("| Cycle Compression:  {:<56} |", format!("{} ops packed into {} VLIW cycles", result.total_ops, result.total_cycles));
-        println!("| 4-Way Bundle Fill:  {:<56} |", format!("{:.1}% slots occupied (0 bubble stalls)", result.slot_saturation_pct));
-        println!("| Tree Search Latency:{:<56} |", format!("{:.2} ms (UCT policy)", result.search_latency_ms));
-        println!("+------------------------------------------------------------------------------+");
+        println!(
+            " Search Tree: {} nodes explored across {} simulations",
+            result.tree_node_count, result.simulations_run
+        );
+        println!(
+            "================================================================================"
+        );
+        println!(
+            "+------------------------------------------------------------------------------+"
+        );
+        println!(
+            "| MCTS INSTRUCTION SCHEDULING & SLOT PACKING METRICS                           |"
+        );
+        println!(
+            "+------------------------------------------------------------------------------+"
+        );
+        println!(
+            "| Slot Saturation:    {:<56} |",
+            format!(
+                "IPC {:.2} -> {:.2} (+{:.1}%)",
+                result.initial_ipc, result.optimized_ipc, result.speedup_pct
+            )
+        );
+        println!(
+            "| Cycle Compression:  {:<56} |",
+            format!(
+                "{} ops packed into {} VLIW cycles",
+                result.total_ops, result.total_cycles
+            )
+        );
+        println!(
+            "| 4-Way Bundle Fill:  {:<56} |",
+            format!(
+                "{:.1}% slots occupied (0 bubble stalls)",
+                result.slot_saturation_pct
+            )
+        );
+        println!(
+            "| Tree Search Latency:{:<56} |",
+            format!("{:.2} ms (UCT policy)", result.search_latency_ms)
+        );
+        println!(
+            "+------------------------------------------------------------------------------+"
+        );
         println!();
         println!("Synthesized Microcode (.cl):");
         for line in result.cl_code.lines().take(12) {
@@ -10429,34 +13484,73 @@ fn handle_wafer_sim_command(args: &[String]) {
             println!("{}", report.resolution);
             println!("\n[CORPUS CALLOSUM PHOTONIC INTERCONNECT]");
             println!("  Total Cores:               131,072 (Left: 65,536 | Right: 65,536)");
-            println!("  Corpus Callosum Bandwidth: {:.1} Tbps Bidirectional SiPh DWDM", report.telemetry.corpus_callosum_bw_tbps);
-            println!("  Inter-Wafer Packets:       {} (0 Flit Collisions)", report.telemetry.inter_wafer_corpus_callosum_packets);
-            println!("  Optical Laser Power:       {:.1} W (Dual 48W Lasers)", report.telemetry.optical_laser_power_watts);
-            println!("  Combined Compute Speed:    {:.2} Tera-OPS ({:.3} Peta-OPS)", report.telemetry.combined_tera_ops_sec, report.telemetry.combined_peta_ops_sec);
-            println!("  Human Cortex Parity:       {:.2}% (Target: 1.50 Peta-OPS)", report.telemetry.human_cortex_parity_pct);
-            println!("  Distributed Cluster:       {}", if report.telemetry.distributed_cluster_active { "ACTIVE (TCP/UDP/MPI Photonic Framing)" } else { "In-Memory Monolithic Photonic Bus" });
+            println!(
+                "  Corpus Callosum Bandwidth: {:.1} Tbps Bidirectional SiPh DWDM",
+                report.telemetry.corpus_callosum_bw_tbps
+            );
+            println!(
+                "  Inter-Wafer Packets:       {} (0 Flit Collisions)",
+                report.telemetry.inter_wafer_corpus_callosum_packets
+            );
+            println!(
+                "  Optical Laser Power:       {:.1} W (Dual 48W Lasers)",
+                report.telemetry.optical_laser_power_watts
+            );
+            println!(
+                "  Combined Compute Speed:    {:.2} Tera-OPS ({:.3} Peta-OPS)",
+                report.telemetry.combined_tera_ops_sec, report.telemetry.combined_peta_ops_sec
+            );
+            println!(
+                "  Human Cortex Parity:       {:.2}% (Target: 1.50 Peta-OPS)",
+                report.telemetry.human_cortex_parity_pct
+            );
+            println!(
+                "  Distributed Cluster:       {}",
+                if report.telemetry.distributed_cluster_active {
+                    "ACTIVE (TCP/UDP/MPI Photonic Framing)"
+                } else {
+                    "In-Memory Monolithic Photonic Bus"
+                }
+            );
         }
         return;
     }
 
     if !emit_json {
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!(" CRON 65,536-CORE WAFER-SCALE AUTONOMOUS SWARM RUNTIME (16x16 DIES, 8D-TORUS)");
         println!(" Topology: 256 Dies x 256 Cores (16x16 Wafer Grid x 4x4x4x4 Torus NoC, 8D-DOR)");
         println!(" Interconnect: 12.8 Tbps/die SiPh DWDM Mesh (3,276.8 Tbps Total Photonic BW)");
-        println!(" Routing: 8D-DOR with Virtual Channels (VC0/VC1/VC2/VC3) & 0 Collisions Verified");
+        println!(
+            " Routing: 8D-DOR with Virtual Channels (VC0/VC1/VC2/VC3) & 0 Collisions Verified"
+        );
         println!(" Optics: 8 DWDM Channels (1530-1565nm), 0.15 dB/cm Loss, 48.0W Laser Budget");
         if hotspots > 0 || thermal_mode {
-            println!(" Thermal Simulator: Active Fourier Bleed, DVFS Step-Down & Adaptive Deflection");
+            println!(
+                " Thermal Simulator: Active Fourier Bleed, DVFS Step-Down & Adaptive Deflection"
+            );
         }
         println!(" Pipeline: 1F1B Zero-Bubble Parallelism Engine (16 Stages)");
-        println!(" Workload: {} | Multiplier-Free 0 DSP Slices", workload.to_uppercase());
-        if workload == "sphere" || task.to_lowercase().contains("sphere") || task.to_lowercase().contains("llm") {
-            println!(" Prompt: {} | Generation: {} Tokens (655.36 TOPS)", task, tokens);
+        println!(
+            " Workload: {} | Multiplier-Free 0 DSP Slices",
+            workload.to_uppercase()
+        );
+        if workload == "sphere"
+            || task.to_lowercase().contains("sphere")
+            || task.to_lowercase().contains("llm")
+        {
+            println!(
+                " Prompt: {} | Generation: {} Tokens (655.36 TOPS)",
+                task, tokens
+            );
         } else {
             println!(" Task: {}", task);
         }
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
     }
 
     let mut mesh = cronc::cl_swarm_wafer::WaferSwarmMesh::new_65536();
@@ -10466,7 +13560,10 @@ fn handle_wafer_sim_command(args: &[String]) {
         mesh.inject_thermal_hotspots(8);
     }
 
-    let report = if workload == "sphere" || task.to_lowercase().contains("sphere") || task.to_lowercase().contains("llm") {
+    let report = if workload == "sphere"
+        || task.to_lowercase().contains("sphere")
+        || task.to_lowercase().contains("llm")
+    {
         mesh.execute_sphere_llm_inference(&task, tokens)
     } else {
         mesh.execute_task(&task)
@@ -10479,7 +13576,10 @@ fn handle_wafer_sim_command(args: &[String]) {
         match std::fs::write(svg_path, &report.svg_wafer_diagram) {
             Ok(_) => {
                 if !emit_json {
-                    println!("[EXPORT] 300mm Monolithic Silicon Wafer SVG saved to: {}", svg_path);
+                    println!(
+                        "[EXPORT] 300mm Monolithic Silicon Wafer SVG saved to: {}",
+                        svg_path
+                    );
                 }
             }
             Err(e) => eprintln!("Error writing SVG to {}: {}", svg_path, e),
@@ -10493,7 +13593,10 @@ fn handle_wafer_sim_command(args: &[String]) {
         match std::fs::write(html_path, &report.html_dashboard) {
             Ok(_) => {
                 if !emit_json {
-                    println!("[EXPORT] Standalone Wafer Dashboard HTML saved to: {}", html_path);
+                    println!(
+                        "[EXPORT] Standalone Wafer Dashboard HTML saved to: {}",
+                        html_path
+                    );
                 }
             }
             Err(e) => eprintln!("Error writing HTML to {}: {}", html_path, e),
@@ -10509,12 +13612,21 @@ fn handle_wafer_sim_command(args: &[String]) {
         println!("\n[PHOTONIC DWDM INTERCONNECT TELEMETRY]");
         println!("  Optical Carriers:          8 DWDM Channels (100 GHz spacing)");
         println!("  Per-Die Optical Bandwidth: 12.8 Tbps");
-        println!("  Aggregate Wafer Bandwidth: {:.1} Tbps", report.telemetry.aggregate_photonic_bandwidth_tbps);
+        println!(
+            "  Aggregate Wafer Bandwidth: {:.1} Tbps",
+            report.telemetry.aggregate_photonic_bandwidth_tbps
+        );
         println!("  Waveguide Propagation Loss:0.15 dB/cm");
-        println!("  Laser Power Consumption:   {:.1} W", report.telemetry.optical_laser_power_watts);
+        println!(
+            "  Laser Power Consumption:   {:.1} W",
+            report.telemetry.optical_laser_power_watts
+        );
         println!("  Bit Error Rate:            < 1e-15 (KP4 FEC)");
         println!("  Multiplier-Free DSP Usage: 0 DSP slices (0.00 FLOPs)");
-        println!("  Compute Throughput:        {:.2} Geodesic TOPS", report.telemetry.aggregate_tera_ops_sec);
+        println!(
+            "  Compute Throughput:        {:.2} Geodesic TOPS",
+            report.telemetry.aggregate_tera_ops_sec
+        );
     }
 }
 
@@ -10534,7 +13646,9 @@ fn handle_cl_macro_command(args: &[String]) {
             out_path = Some(args[i + 1].clone());
             i += 2;
         } else if args[i] == "--core" && i + 1 < args.len() {
-            if let Ok(c) = args[i + 1].parse::<u8>() { core_id = c; }
+            if let Ok(c) = args[i + 1].parse::<u8>() {
+                core_id = c;
+            }
             i += 2;
         } else {
             i += 1;
@@ -10581,10 +13695,14 @@ fn handle_cl_import_command(args: &[String]) {
             name = args[i + 1].clone();
             i += 2;
         } else if args[i] == "--in" && i + 1 < args.len() {
-            if let Ok(v) = args[i + 1].parse::<usize>() { in_dim = v; }
+            if let Ok(v) = args[i + 1].parse::<usize>() {
+                in_dim = v;
+            }
             i += 2;
         } else if args[i] == "--out" && i + 1 < args.len() {
-            if let Ok(v) = args[i + 1].parse::<usize>() { out_dim = v; }
+            if let Ok(v) = args[i + 1].parse::<usize>() {
+                out_dim = v;
+            }
             i += 2;
         } else if args[i] == "-o" && i + 1 < args.len() {
             out_path = args[i + 1].clone();
@@ -10596,14 +13714,20 @@ fn handle_cl_import_command(args: &[String]) {
 
     println!("================================================================================");
     println!(" CRON NEURAL TENSOR QUANTIZER & 256-CORE .CL CODE GENERATOR");
-    println!(" Layer: {} ({} in -> {} out, BitNet 1.58b Ternary Weights)", name, in_dim, out_dim);
+    println!(
+        " Layer: {} ({} in -> {} out, BitNet 1.58b Ternary Weights)",
+        name, in_dim, out_dim
+    );
     println!("================================================================================");
 
     let layer = cronc::cl_importer::NeuralLayer::new_random(&name, in_dim, out_dim, 42);
     let cl_code = layer.compile_to_cl(0, 256);
 
     let _ = std::fs::write(&out_path, &cl_code);
-    println!("Generated 256-core partitioned .cl machine code -> {}", out_path);
+    println!(
+        "Generated 256-core partitioned .cl machine code -> {}",
+        out_path
+    );
     println!("Quantization: 100% BitNet {{-1, 0, +1}} Packed Trits with 4D-Torus Routing");
 }
 
@@ -10637,32 +13761,46 @@ fn handle_import_fx_command(args: &[String]) {
     println!("================================================================================");
 
     match std::fs::read_to_string(input_path) {
-        Ok(json_content) => {
-            match cronc::lower_pytorch_fx_graph(&json_content, &model_name) {
-                Ok(lowered) => {
-                    match std::fs::write(&out_path, &lowered.cl_source) {
-                        Ok(_) => {
-                            println!("[SUCCESS] Synthesized {} bundles across {} layers -> {}", lowered.total_bundles, lowered.total_layers, out_path);
-                            println!("          Parameters Quantized : {} trits (BitNet b1.58)", lowered.total_parameters);
-                            println!("          Quantization Ratio   : {:.1}x compression", lowered.quantization_ratio);
-                            println!("          Estimated Hardware Speedup: {:.1}x over FP32 baseline", lowered.estimated_speedup);
-                        }
-                        Err(e) => eprintln!("[ERROR] Failed to write output file '{}': {}", out_path, e),
-                    }
+        Ok(json_content) => match cronc::lower_pytorch_fx_graph(&json_content, &model_name) {
+            Ok(lowered) => match std::fs::write(&out_path, &lowered.cl_source) {
+                Ok(_) => {
+                    println!(
+                        "[SUCCESS] Synthesized {} bundles across {} layers -> {}",
+                        lowered.total_bundles, lowered.total_layers, out_path
+                    );
+                    println!(
+                        "          Parameters Quantized : {} trits (BitNet b1.58)",
+                        lowered.total_parameters
+                    );
+                    println!(
+                        "          Quantization Ratio   : {:.1}x compression",
+                        lowered.quantization_ratio
+                    );
+                    println!(
+                        "          Estimated Hardware Speedup: {:.1}x over FP32 baseline",
+                        lowered.estimated_speedup
+                    );
                 }
-                Err(e) => eprintln!("[ERROR] Lowering failed: {}", e),
-            }
-        }
+                Err(e) => eprintln!("[ERROR] Failed to write output file '{}': {}", out_path, e),
+            },
+            Err(e) => eprintln!("[ERROR] Lowering failed: {}", e),
+        },
         Err(e) => eprintln!("[ERROR] Could not read file '{}': {}", input_path, e),
     }
 }
 
 fn handle_cl_lsp_command(args: &[String]) {
     if args.iter().any(|a| a == "-h" || a == "--help") {
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!(" CRON LANGUAGE SERVER PROTOCOL (LSP 3.17) & DAP DEBUGGER");
-        println!("================================================================================");
-        println!("Provides real-time IDE language features for VS Code, Neovim, and Antigravity IDE:\n");
+        println!(
+            "================================================================================"
+        );
+        println!(
+            "Provides real-time IDE language features for VS Code, Neovim, and Antigravity IDE:\n"
+        );
         println!("  - Real-time VLIW 4-slot structure and hazard linting");
         println!("  - CRC-8 ATM auto-repair QuickFix code actions");
         println!("  - Micro-architecture hover docs (Cycles, Energy pJ, FLOPs, Bank Access)");
@@ -10672,14 +13810,20 @@ fn handle_cl_lsp_command(args: &[String]) {
         println!("    cron lsp [options] [file.cl]");
         println!();
         println!("OPTIONS:");
-        println!("    --stdio, start     Start stdio JSON-RPC 2.0 language server daemon (default)");
+        println!(
+            "    --stdio, start     Start stdio JSON-RPC 2.0 language server daemon (default)"
+        );
         println!("    --dap              Start Debug Adapter Protocol (DAP) hardware debugger");
         println!("    <file.cl>          Analyze specific .cl file offline and print diagnostics");
         println!("    -h, --help         Display this help message");
         return;
     }
 
-    if args.is_empty() || args.iter().any(|a| a == "--stdio" || a == "start" || a == "serve") {
+    if args.is_empty()
+        || args
+            .iter()
+            .any(|a| a == "--stdio" || a == "start" || a == "serve")
+    {
         if let Err(e) = cron_lsp::run_stdio_server() {
             eprintln!("[CRON LSP ERROR] {}", e);
             std::process::exit(1);
@@ -10713,19 +13857,29 @@ fn handle_cl_lsp_command(args: &[String]) {
 
 fn handle_cl_visualize_command(args: &[String]) {
     if args.iter().any(|a| a == "-h" || a == "--help") {
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!(" CRON 3D MULTI-TOPOLOGY INTERACTIVE VISUALIZER");
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         println!("Generates a rich, standalone 3D WebGL dashboard featuring:");
-        println!("  1. 256-Core 4D-Torus Spatiotemporal NoC Topology (DOR routing, PGAS conflicts)");
-        println!("  2. Hexagonal Honeycomb Crystalline Topology (Cellular ATP synthase molecular rotor)");
+        println!(
+            "  1. 256-Core 4D-Torus Spatiotemporal NoC Topology (DOR routing, PGAS conflicts)"
+        );
+        println!(
+            "  2. Hexagonal Honeycomb Crystalline Topology (Cellular ATP synthase molecular rotor)"
+        );
         println!("  3. CL-LoRA Discrete Latent Manifold Topology (Ternary trits {{-1, 0, 1}}, 0 FLOP drift)");
         println!();
         println!("USAGE:");
         println!("    cron visualize [options] [kernel.cl | adapter.cll]");
         println!();
         println!("OPTIONS:");
-        println!("    -o, --out <path.html>    Output HTML file path (default: cron_visualizer.html)");
+        println!(
+            "    -o, --out <path.html>    Output HTML file path (default: cron_visualizer.html)"
+        );
         println!("    --mode <m>               Initial active topology (torus | hex | lora | all, default: all)");
         println!("    --lora <adapter.cll>     Load discrete CL-LoRA adapter binary into manifold viewer");
         println!("    --cl <kernel.cl>         Load 4D microcode file to simulate on 256 cores");
@@ -10836,17 +13990,35 @@ fn handle_cl_visualize_command(args: &[String]) {
     }
     cfg.atp_flux_rate = atp_flux;
 
-    println!("  [+] Active Topologies     : [4D Torus NoC] [Hexagonal ATP Life] [CL-LoRA Manifold]");
-    println!("  [+] Default Mode          : {}", cfg.active_mode.to_uppercase());
+    println!(
+        "  [+] Active Topologies     : [4D Torus NoC] [Hexagonal ATP Life] [CL-LoRA Manifold]"
+    );
+    println!(
+        "  [+] Default Mode          : {}",
+        cfg.active_mode.to_uppercase()
+    );
     println!("  [+] Target Microcode      : {}", cfg.kernel_name);
-    println!("  [+] Compute Throughput    : {:.2} TFLOPs (Zero-FLOP Integer Add/Sub)", cfg.tflops);
+    println!(
+        "  [+] Compute Throughput    : {:.2} TFLOPs (Zero-FLOP Integer Add/Sub)",
+        cfg.tflops
+    );
     println!("  [+] 4D-Torus Cores        : 256 Active Cores (DOR X->Y->Z->W)");
-    println!("  [+] Thermal / Power       : {:.2} W | {:.1} °C", cfg.power_watts, cfg.temp_celsius);
-    println!("  [+] Cellular ATP Flux     : {:.2} pJ / bit (Molecular rotor reversible flux)", cfg.atp_flux_rate);
+    println!(
+        "  [+] Thermal / Power       : {:.2} W | {:.1} °C",
+        cfg.power_watts, cfg.temp_celsius
+    );
+    println!(
+        "  [+] Cellular ATP Flux     : {:.2} pJ / bit (Molecular rotor reversible flux)",
+        cfg.atp_flux_rate
+    );
 
     if let Some(ref lora_name) = cfg.lora_adapter_name {
-        println!("  [+] CL-LoRA Discrete Latent: '{}' (Rank: {}, Dim: {}, Trits: {})",
-            lora_name, cfg.lora_rank, cfg.lora_dim, cfg.lora_trits_a.len() + cfg.lora_trits_b.len()
+        println!(
+            "  [+] CL-LoRA Discrete Latent: '{}' (Rank: {}, Dim: {}, Trits: {})",
+            lora_name,
+            cfg.lora_rank,
+            cfg.lora_dim,
+            cfg.lora_trits_a.len() + cfg.lora_trits_b.len()
         );
         println!("  [+] L1 Memory Footprint   : < 4.1 KB (5-trits-per-byte sub-byte packing)");
     }
@@ -10855,11 +14027,15 @@ fn handle_cl_visualize_command(args: &[String]) {
 
     match std::fs::write(&out_file, html) {
         Ok(_) => {
-            println!("--------------------------------------------------------------------------------");
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
             println!("  [SUCCESS] Unified 3D WebGL Visualizer generated successfully!");
             println!("  [HTML Dashboard] -> {}", out_file);
             println!("  [Architecture]  -> Zero-server dependency, pure standalone WebGL Three.js");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
 
             if auto_open {
                 println!("  [*] Opening in default web browser...");
@@ -10871,9 +14047,7 @@ fn handle_cl_visualize_command(args: &[String]) {
                 }
                 #[cfg(target_os = "macos")]
                 {
-                    let _ = std::process::Command::new("open")
-                        .arg(&out_file)
-                        .spawn();
+                    let _ = std::process::Command::new("open").arg(&out_file).spawn();
                 }
                 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
                 {
@@ -10884,7 +14058,10 @@ fn handle_cl_visualize_command(args: &[String]) {
             }
         }
         Err(e) => {
-            eprintln!("[ERROR] Failed to write HTML output file '{}': {}", out_file, e);
+            eprintln!(
+                "[ERROR] Failed to write HTML output file '{}': {}",
+                out_file, e
+            );
         }
     }
 }
@@ -10909,27 +14086,43 @@ fn handle_mla_command(args: &[String]) {
         match args[i].as_str() {
             "--dim" | "-d" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { d_model = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        d_model = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--heads" | "-n" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { num_heads = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        num_heads = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--latent" | "-l" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { kv_latent_dim = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        kv_latent_dim = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--seq" | "-s" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { seq_len = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        seq_len = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--ternary" | "-t" => {
                 is_ternary = true;
@@ -10947,13 +14140,18 @@ fn handle_mla_command(args: &[String]) {
                 if i + 1 < args.len() {
                     out_file = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
-    let config = cronc::cl_mla::MlaConfig::new(d_model, num_heads, kv_latent_dim).with_ternary(is_ternary);
+    let config =
+        cronc::cl_mla::MlaConfig::new(d_model, num_heads, kv_latent_dim).with_ternary(is_ternary);
     let weights = cronc::cl_mla::MlaWeights::new_synthetic(config.clone());
     let engine = cronc::cl_mla::MlaEngine::new(weights);
     let report = engine.benchmark(seq_len);
@@ -10961,11 +14159,24 @@ fn handle_mla_command(args: &[String]) {
     if emit_json {
         let json = format!(
             r#"{{"d_model":{},"num_heads":{},"head_dim":{},"kv_latent_dim":{},"rope_dim":{},"seq_len":{},"kv_cache_bytes_mha":{},"kv_cache_bytes_gqa":{},"kv_cache_bytes_mla":{},"kv_cache_bytes_mla_ternary":{},"vram_reduction_pct":{:.2},"bandwidth_reduction_pct":{:.2},"dsp_multipliers_standard":{},"dsp_multipliers_ternary":{},"parity_max_abs_error":{:.6},"latency_absorbed_us":{:.2},"latency_uncompressed_us":{:.2},"speedup_ratio":{:.2}}}"#,
-            report.d_model, report.num_heads, report.head_dim, report.kv_latent_dim, report.rope_dim, report.seq_len,
-            report.kv_cache_bytes_mha, report.kv_cache_bytes_gqa, report.kv_cache_bytes_mla, report.kv_cache_bytes_mla_ternary,
-            report.vram_reduction_pct, report.bandwidth_reduction_pct,
-            report.dsp_multipliers_standard, report.dsp_multipliers_ternary,
-            report.parity_max_abs_error, report.latency_absorbed_us, report.latency_uncompressed_us, report.speedup_ratio
+            report.d_model,
+            report.num_heads,
+            report.head_dim,
+            report.kv_latent_dim,
+            report.rope_dim,
+            report.seq_len,
+            report.kv_cache_bytes_mha,
+            report.kv_cache_bytes_gqa,
+            report.kv_cache_bytes_mla,
+            report.kv_cache_bytes_mla_ternary,
+            report.vram_reduction_pct,
+            report.bandwidth_reduction_pct,
+            report.dsp_multipliers_standard,
+            report.dsp_multipliers_ternary,
+            report.parity_max_abs_error,
+            report.latency_absorbed_us,
+            report.latency_uncompressed_us,
+            report.speedup_ratio
         );
         if let Some(ref path) = out_file {
             let _ = std::fs::write(path, &json);
@@ -10978,34 +14189,81 @@ fn handle_mla_command(args: &[String]) {
     println!(" CRON MULTI-HEAD LATENT ATTENTION (MLA / DEEPSEEK-V3) ENGINE");
     println!("================================================================================");
     println!("  [+] Architecture           : Decoupled RoPE + Matrix Absorption in Latent Space");
-    println!("  [+] Precision Mode         : {}", if is_ternary { "MatMul-Free Ternary {{-1, 0, 1}} (0 DSP Multipliers)" } else { "Full Precision Floating Point SIMD" });
+    println!(
+        "  [+] Precision Mode         : {}",
+        if is_ternary {
+            "MatMul-Free Ternary {{-1, 0, 1}} (0 DSP Multipliers)"
+        } else {
+            "Full Precision Floating Point SIMD"
+        }
+    );
     println!("  [+] Parameters             : d_model={}, heads={}, head_dim={}, kv_latent={}, rope_dim={}", report.d_model, report.num_heads, report.head_dim, report.kv_latent_dim, report.rope_dim);
     println!("  [+] Context Window         : {} tokens", report.seq_len);
     println!("--------------------------------------------------------------------------------");
-    println!(" MEMORY FOOTPRINT COMPARISON (KV-CACHE AT SEQ_LEN = {}):", report.seq_len);
-    println!("  - Standard Multi-Head Attention (MHA) : {:>8} bytes", report.kv_cache_bytes_mha);
-    println!("  - Grouped-Query Attention (GQA 4:1)   : {:>8} bytes", report.kv_cache_bytes_gqa);
-    println!("  - DeepSeek MLA (Compressed Latent)    : {:>8} bytes ({:.1}% VRAM reduction)", report.kv_cache_bytes_mla, report.vram_reduction_pct);
-    println!("  - CRON Sub-Byte Ternary MLA           : {:>8} bytes ({:.1}% total reduction vs MHA)", report.kv_cache_bytes_mla_ternary, 100.0 * (1.0 - (report.kv_cache_bytes_mla_ternary as f64 / report.kv_cache_bytes_mha as f64)));
+    println!(
+        " MEMORY FOOTPRINT COMPARISON (KV-CACHE AT SEQ_LEN = {}):",
+        report.seq_len
+    );
+    println!(
+        "  - Standard Multi-Head Attention (MHA) : {:>8} bytes",
+        report.kv_cache_bytes_mha
+    );
+    println!(
+        "  - Grouped-Query Attention (GQA 4:1)   : {:>8} bytes",
+        report.kv_cache_bytes_gqa
+    );
+    println!(
+        "  - DeepSeek MLA (Compressed Latent)    : {:>8} bytes ({:.1}% VRAM reduction)",
+        report.kv_cache_bytes_mla, report.vram_reduction_pct
+    );
+    println!(
+        "  - CRON Sub-Byte Ternary MLA           : {:>8} bytes ({:.1}% total reduction vs MHA)",
+        report.kv_cache_bytes_mla_ternary,
+        100.0
+            * (1.0 - (report.kv_cache_bytes_mla_ternary as f64 / report.kv_cache_bytes_mha as f64))
+    );
     println!("--------------------------------------------------------------------------------");
     println!(" HARDWARE & PARITY TELEMETRY:");
-    println!("  - Bandwidth Memory Reduction         : {:.1}%", report.bandwidth_reduction_pct);
-    println!("  - DSP Hardware Multipliers           : {} (vs {} in standard)", report.dsp_multipliers_ternary, report.dsp_multipliers_standard);
-    println!("  - Absorbed vs Uncompressed Parity    : Max Abs Error = {:.2e} (Bit-exact verified)", report.parity_max_abs_error);
-    println!("  - Latency Speedup Ratio              : {:.2}x ({:.1} us vs {:.1} us uncompressed)", report.speedup_ratio, report.latency_absorbed_us, report.latency_uncompressed_us);
+    println!(
+        "  - Bandwidth Memory Reduction         : {:.1}%",
+        report.bandwidth_reduction_pct
+    );
+    println!(
+        "  - DSP Hardware Multipliers           : {} (vs {} in standard)",
+        report.dsp_multipliers_ternary, report.dsp_multipliers_standard
+    );
+    println!(
+        "  - Absorbed vs Uncompressed Parity    : Max Abs Error = {:.2e} (Bit-exact verified)",
+        report.parity_max_abs_error
+    );
+    println!(
+        "  - Latency Speedup Ratio              : {:.2}x ({:.1} us vs {:.1} us uncompressed)",
+        report.speedup_ratio, report.latency_absorbed_us, report.latency_uncompressed_us
+    );
     println!("  - 4D-Torus PGAS Conflict Free        : GF(2^4) XOR Address Swizzling (16 Banks)");
     println!("================================================================================");
 
-    if emit_verilog || out_file.as_ref().map(|s| s.ends_with(".v")).unwrap_or(false) {
+    if emit_verilog
+        || out_file
+            .as_ref()
+            .map(|s| s.ends_with(".v"))
+            .unwrap_or(false)
+    {
         let v_path = out_file.unwrap_or_else(|| "cksl_mla_absorb_core.v".to_string());
         let rtl = cronc::cl_mla::generate_mla_verilog_rtl(&config);
         match std::fs::write(&v_path, &rtl) {
             Ok(_) => {
-                println!("  [SUCCESS] Synthesizable Verilog RTL Core exported -> {}", v_path);
+                println!(
+                    "  [SUCCESS] Synthesizable Verilog RTL Core exported -> {}",
+                    v_path
+                );
                 println!("  [RTL Architecture] Zero-Uncompress Latent Dot, Decoupled RoPE, 0 DSP Multipliers");
             }
             Err(e) => {
-                eprintln!("[ERROR] Failed to write Verilog RTL file '{}': {}", v_path, e);
+                eprintln!(
+                    "[ERROR] Failed to write Verilog RTL file '{}': {}",
+                    v_path, e
+                );
             }
         }
     } else if let Some(ref path) = out_file {
@@ -11033,13 +14291,17 @@ fn handle_mongol_morph_command(args: &[String]) {
                 if i + 1 < args.len() {
                     text = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--file" | "-f" => {
                 if i + 1 < args.len() {
                     file_path = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--traditional" | "--trad" => {
                 to_traditional = true;
@@ -11053,13 +14315,17 @@ fn handle_mongol_morph_command(args: &[String]) {
                 if i + 1 < args.len() {
                     out_file = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             arg if !arg.starts_with('-') && text.is_none() => {
                 text = Some(arg.to_string());
                 i += 1;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -11077,14 +14343,24 @@ fn handle_mongol_morph_command(args: &[String]) {
     if to_traditional {
         let trad = cronc::cl_mongol::MongolScriptBridge::cyrillic_to_traditional(&input_text);
         if emit_json {
-            println!(r#"{{"cyrillic":"{}","traditional":"{}"}}"#, input_text.replace('\"', "\\\""), trad.replace('\"', "\\\""));
+            println!(
+                r#"{{"cyrillic":"{}","traditional":"{}"}}"#,
+                input_text.replace('\"', "\\\""),
+                trad.replace('\"', "\\\"")
+            );
         } else {
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!(" CRON TRADITIONAL MONGOLIAN SCRIPT (БОСОО БИЧИГ) CONVERTER");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!("  [Cyrillic Input]     : {}", input_text);
             println!("  [Traditional Script] : {}", trad);
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
         }
         if let Some(ref path) = out_file {
             let _ = std::fs::write(path, trad);
@@ -11098,12 +14374,30 @@ fn handle_mongol_morph_command(args: &[String]) {
         let mut parsed_words = Vec::new();
         for word in input_text.split_whitespace() {
             let seg = tok.segment_word(word);
-            let sfxs: Vec<String> = seg.suffixes.iter().map(|(s, t)| format!("{{\"suffix\":\"{}\",\"type\":\"{:?}\"}}", s, t)).collect();
-            parsed_words.push(format!(r#"{{"surface":"{}","root":"{}","suffixes":[{}],"harmony":"{:?}"}}"#, seg.surface, seg.root, sfxs.join(","), seg.harmony));
+            let sfxs: Vec<String> = seg
+                .suffixes
+                .iter()
+                .map(|(s, t)| format!("{{\"suffix\":\"{}\",\"type\":\"{:?}\"}}", s, t))
+                .collect();
+            parsed_words.push(format!(
+                r#"{{"surface":"{}","root":"{}","suffixes":[{}],"harmony":"{:?}"}}"#,
+                seg.surface,
+                seg.root,
+                sfxs.join(","),
+                seg.harmony
+            ));
         }
         let json = format!(
             r#"{{"words":[{}],"char_count":{},"word_count":{},"utf8_byte_count":{},"western_bpe_token_count":{},"cron_morph_token_count":{},"token_reduction_pct":{:.2},"compression_ratio_vs_western":{:.2},"compression_ratio_vs_bytes":{:.2}}}"#,
-            parsed_words.join(","), rep.char_count, rep.word_count, rep.utf8_byte_count, rep.western_bpe_token_count, rep.cron_morph_token_count, rep.token_reduction_pct, rep.compression_ratio_vs_western, rep.compression_ratio_vs_bytes
+            parsed_words.join(","),
+            rep.char_count,
+            rep.word_count,
+            rep.utf8_byte_count,
+            rep.western_bpe_token_count,
+            rep.cron_morph_token_count,
+            rep.token_reduction_pct,
+            rep.compression_ratio_vs_western,
+            rep.compression_ratio_vs_bytes
         );
         if let Some(ref path) = out_file {
             let _ = std::fs::write(path, &json);
@@ -11121,30 +14415,61 @@ fn handle_mongol_morph_command(args: &[String]) {
         input_text.clone()
     };
     println!("  [+] Input Text             : \"{}\"", preview);
-    println!("  [+] Characters / Words     : {} chars | {} words", rep.char_count, rep.word_count);
+    println!(
+        "  [+] Characters / Words     : {} chars | {} words",
+        rep.char_count, rep.word_count
+    );
     println!("--------------------------------------------------------------------------------");
     println!(" MORPHOLOGICAL ROOT-SUFFIX SEGMENTATION:");
     for word in input_text.split_whitespace().take(8) {
         let seg = tok.segment_word(word);
-        let sfx_str: Vec<String> = seg.suffixes.iter().map(|(s, t)| format!("+{} [{:?}]", s, t)).collect();
-        println!("  - {:<18} -> Root: {:<12} | Suffixes: {:<20} | {:?}", seg.surface, seg.root, sfx_str.join(" "), seg.harmony);
+        let sfx_str: Vec<String> = seg
+            .suffixes
+            .iter()
+            .map(|(s, t)| format!("+{} [{:?}]", s, t))
+            .collect();
+        println!(
+            "  - {:<18} -> Root: {:<12} | Suffixes: {:<20} | {:?}",
+            seg.surface,
+            seg.root,
+            sfx_str.join(" "),
+            seg.harmony
+        );
     }
     if input_text.split_whitespace().count() > 8 {
-        println!("  ... (and {} more words)", input_text.split_whitespace().count() - 8);
+        println!(
+            "  ... (and {} more words)",
+            input_text.split_whitespace().count() - 8
+        );
     }
     println!("--------------------------------------------------------------------------------");
     println!(" TOKEN INFLATION & COMPRESSION BENCHMARK:");
-    println!("  - UTF-8 Raw Byte Fallback        : {:>6} tokens (western LLM byte penalty)", rep.utf8_byte_count);
-    println!("  - Standard Western BPE (GPT-4)   : {:>6} tokens (severe Cyrillic fragmentation)", rep.western_bpe_token_count);
-    println!("  - CRON Agglutinative Tokens      : {:>6} tokens (Root + Grammatical Affix)", rep.cron_morph_token_count);
+    println!(
+        "  - UTF-8 Raw Byte Fallback        : {:>6} tokens (western LLM byte penalty)",
+        rep.utf8_byte_count
+    );
+    println!(
+        "  - Standard Western BPE (GPT-4)   : {:>6} tokens (severe Cyrillic fragmentation)",
+        rep.western_bpe_token_count
+    );
+    println!(
+        "  - CRON Agglutinative Tokens      : {:>6} tokens (Root + Grammatical Affix)",
+        rep.cron_morph_token_count
+    );
     println!("  - Token Reduction Efficiency     : {:.1}% FEWER TOKENS ({:.2}x compression vs western BPE)", rep.token_reduction_pct, rep.compression_ratio_vs_western);
-    println!("  - Memory & Compute Speedup       : {:.2}x less VRAM & KV-cache bandwidth", rep.compression_ratio_vs_western);
+    println!(
+        "  - Memory & Compute Speedup       : {:.2}x less VRAM & KV-cache bandwidth",
+        rep.compression_ratio_vs_western
+    );
     println!("================================================================================");
 
     if let Some(ref path) = out_file {
         let segs: Vec<String> = tok.tokenize(&input_text);
         let _ = std::fs::write(path, segs.join(" "));
-        println!("  [SAVED] Tokenized morphological sequence saved -> {}", path);
+        println!(
+            "  [SAVED] Tokenized morphological sequence saved -> {}",
+            path
+        );
     }
 }
 
@@ -11165,9 +14490,13 @@ fn handle_r1_reason_command(args: &[String]) {
         match args[i].as_str() {
             "--group" | "-g" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { group_size = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        group_size = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--no-cot" => {
                 show_cot = false;
@@ -11181,17 +14510,23 @@ fn handle_r1_reason_command(args: &[String]) {
                 if i + 1 < args.len() {
                     out_file = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             arg if !arg.starts_with('-') && prompt.is_none() => {
                 prompt = Some(arg.to_string());
                 i += 1;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
-    let p = prompt.unwrap_or_else(|| "Synthesize 0-hazard Clifford rotor attention kernel with 4.0 IPC".to_string());
+    let p = prompt.unwrap_or_else(|| {
+        "Synthesize 0-hazard Clifford rotor attention kernel with 4.0 IPC".to_string()
+    });
 
     let mut cfg = cronc::cl_r1_reasoning::R1ReasoningConfig::default();
     cfg.group_size = group_size;
@@ -11204,11 +14539,19 @@ fn handle_r1_reason_command(args: &[String]) {
         let json = format!(
             r#"{{"prompt":"{}","full_cot_monologue":"{}","verified_code":"{}","group_size":{},"best_candidate_id":{},"best_reward":{:.4},"group_mean_reward":{:.4},"group_std_reward":{:.4},"ipc":{:.2},"total_cycles":{},"elapsed_ms":{:.2},"proof_hash":"{}"}}"#,
             res.prompt.replace('\"', "\\\"").replace('\n', "\\n"),
-            res.full_cot_monologue.replace('\"', "\\\"").replace('\n', "\\n"),
+            res.full_cot_monologue
+                .replace('\"', "\\\"")
+                .replace('\n', "\\n"),
             res.verified_code.replace('\"', "\\\"").replace('\n', "\\n"),
-            res.group_size, res.best_candidate_id, res.best_reward,
-            res.group_mean_reward, res.group_std_reward, res.ipc,
-            res.total_cycles, res.elapsed_ms, res.proof_hash
+            res.group_size,
+            res.best_candidate_id,
+            res.best_reward,
+            res.group_mean_reward,
+            res.group_std_reward,
+            res.ipc,
+            res.total_cycles,
+            res.elapsed_ms,
+            res.proof_hash
         );
         if let Some(ref path) = out_file {
             let _ = std::fs::write(path, &json);
@@ -11221,18 +14564,35 @@ fn handle_r1_reason_command(args: &[String]) {
     println!(" CRON TEST-TIME REASONING ENGINE (DEEPSEEK-R1 / GRPO)");
     println!("================================================================================");
     println!("  [+] Reasoning Goal         : \"{}\"", res.prompt);
-    println!("  [+] GRPO Rollouts          : {} candidates evaluated", res.group_size);
-    println!("  [+] Best Trajectory        : Candidate #{} (Score: {:.2} / 1.00)", res.best_candidate_id, res.best_reward);
-    println!("  [+] Group Mean / Std       : {:.2} / {:.2}", res.group_mean_reward, res.group_std_reward);
-    println!("  [+] VLIW IPC Density       : {:.2} / 4.00 (0 Pipeline Bubbles)", res.ipc);
-    println!("  [+] Formal Verification    : 100% 0-hazard verified (CRC-8 ATM: {})", res.proof_hash);
+    println!(
+        "  [+] GRPO Rollouts          : {} candidates evaluated",
+        res.group_size
+    );
+    println!(
+        "  [+] Best Trajectory        : Candidate #{} (Score: {:.2} / 1.00)",
+        res.best_candidate_id, res.best_reward
+    );
+    println!(
+        "  [+] Group Mean / Std       : {:.2} / {:.2}",
+        res.group_mean_reward, res.group_std_reward
+    );
+    println!(
+        "  [+] VLIW IPC Density       : {:.2} / 4.00 (0 Pipeline Bubbles)",
+        res.ipc
+    );
+    println!(
+        "  [+] Formal Verification    : 100% 0-hazard verified (CRC-8 ATM: {})",
+        res.proof_hash
+    );
     println!("  [+] Elapsed Thinking Time  : {:.2} ms", res.elapsed_ms);
     println!("--------------------------------------------------------------------------------");
 
     if show_cot {
         println!(" INTERNAL CHAIN-OF-THOUGHT (CoT) MONOLOGUE:");
         print!("{}", res.full_cot_monologue);
-        println!("--------------------------------------------------------------------------------");
+        println!(
+            "--------------------------------------------------------------------------------"
+        );
     }
 
     println!(" SYNTHESIZED VERIFIED VLIW MICROCODE (.cl):");
@@ -11267,27 +14627,43 @@ fn handle_titans_command(args: &[String]) {
         match args[i].as_str() {
             "--dim" | "-d" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { d_model = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        d_model = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--heads" | "-n" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { num_heads = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        num_heads = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--mem-dim" | "-m" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { memory_dim = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        memory_dim = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--seq" | "-s" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { seq_len = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        seq_len = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--ternary" | "-t" => {
                 is_ternary = true;
@@ -11301,23 +14677,34 @@ fn handle_titans_command(args: &[String]) {
                 if i + 1 < args.len() {
                     out_file = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
-    let config = cronc::cl_titans::TitansConfig::new(d_model, num_heads, memory_dim).with_ternary(is_ternary);
+    let config = cronc::cl_titans::TitansConfig::new(d_model, num_heads, memory_dim)
+        .with_ternary(is_ternary);
     let mut engine = cronc::cl_titans::TitansMemoryEngine::new(config);
     let report = engine.benchmark_stream(seq_len);
 
     if emit_json {
         let json = format!(
             r#"{{"d_model":{},"num_heads":{},"memory_dim":{},"seq_len":{},"surprise_events_count":{},"average_surprise":{:.4},"transformer_kv_cache_bytes":{},"titans_flat_memory_bytes":{},"memory_savings_pct":{:.2},"is_flat_o1_verified":{}}}"#,
-            report.d_model, report.num_heads, report.memory_dim, report.seq_len,
-            report.surprise_events_count, report.average_surprise,
-            report.transformer_kv_cache_bytes, report.titans_flat_memory_bytes,
-            report.memory_savings_pct, report.is_flat_o1_verified
+            report.d_model,
+            report.num_heads,
+            report.memory_dim,
+            report.seq_len,
+            report.surprise_events_count,
+            report.average_surprise,
+            report.transformer_kv_cache_bytes,
+            report.titans_flat_memory_bytes,
+            report.memory_savings_pct,
+            report.is_flat_o1_verified
         );
         if let Some(ref path) = out_file {
             let _ = std::fs::write(path, &json);
@@ -11329,21 +14716,62 @@ fn handle_titans_command(args: &[String]) {
     println!("================================================================================");
     println!(" CRON GOOGLE TITANS & RWKV-7 NEURAL LONG-TERM MEMORY ENGINE");
     println!("================================================================================");
-    println!("  [+] Architecture           : Neural Long-Term Memory (NLTM) + Test-Time Adaptation");
+    println!(
+        "  [+] Architecture           : Neural Long-Term Memory (NLTM) + Test-Time Adaptation"
+    );
     println!("  [+] Scaling Complexity     : STRICT CONSTANT O(1) FLAT MEMORY (RWKV-7 style)");
-    println!("  [+] Precision Mode         : {}", if is_ternary { "MatMul-Free Ternary {{-1, 0, 1}} (0 DSP Multipliers)" } else { "Full Precision Floating Point" });
-    println!("  [+] Parameters             : d_model={}, heads={}, memory_dim={}", report.d_model, report.num_heads, report.memory_dim);
-    println!("  [+] Stream Processed       : {} tokens in continuous stream", report.seq_len);
+    println!(
+        "  [+] Precision Mode         : {}",
+        if is_ternary {
+            "MatMul-Free Ternary {{-1, 0, 1}} (0 DSP Multipliers)"
+        } else {
+            "Full Precision Floating Point"
+        }
+    );
+    println!(
+        "  [+] Parameters             : d_model={}, heads={}, memory_dim={}",
+        report.d_model, report.num_heads, report.memory_dim
+    );
+    println!(
+        "  [+] Stream Processed       : {} tokens in continuous stream",
+        report.seq_len
+    );
     println!("--------------------------------------------------------------------------------");
-    println!(" MEMORY FOOTPRINT COMPARISON (STREAM = {} TOKENS):", report.seq_len);
-    println!("  - Standard Transformer KV-Cache  : {:>10} bytes (O(N) unbounded linear growth)", report.transformer_kv_cache_bytes);
-    println!("  - Google Titans / RWKV-7 Memory  : {:>10} bytes (O(1) flat persistent state)", report.titans_flat_memory_bytes);
-    println!("  - VRAM Savings Efficiency        : {:.2}% ({:.1}x memory compression)", report.memory_savings_pct, report.transformer_kv_cache_bytes as f64 / report.titans_flat_memory_bytes as f64);
-    println!("  - Flat O(1) Memory Verified      : {}", if report.is_flat_o1_verified { "YES (0 bytes allocated during generation)" } else { "NO" });
+    println!(
+        " MEMORY FOOTPRINT COMPARISON (STREAM = {} TOKENS):",
+        report.seq_len
+    );
+    println!(
+        "  - Standard Transformer KV-Cache  : {:>10} bytes (O(N) unbounded linear growth)",
+        report.transformer_kv_cache_bytes
+    );
+    println!(
+        "  - Google Titans / RWKV-7 Memory  : {:>10} bytes (O(1) flat persistent state)",
+        report.titans_flat_memory_bytes
+    );
+    println!(
+        "  - VRAM Savings Efficiency        : {:.2}% ({:.1}x memory compression)",
+        report.memory_savings_pct,
+        report.transformer_kv_cache_bytes as f64 / report.titans_flat_memory_bytes as f64
+    );
+    println!(
+        "  - Flat O(1) Memory Verified      : {}",
+        if report.is_flat_o1_verified {
+            "YES (0 bytes allocated during generation)"
+        } else {
+            "NO"
+        }
+    );
     println!("--------------------------------------------------------------------------------");
     println!(" SURPRISE & ASSOCIATIVE DYNAMICS:");
-    println!("  - Surprise Memory Updates        : {} events triggered (adaptive memorization)", report.surprise_events_count);
-    println!("  - Average Surprise Metric (S_t)  : {:.4} (prediction error ||M*k - v||^2)", report.average_surprise);
+    println!(
+        "  - Surprise Memory Updates        : {} events triggered (adaptive memorization)",
+        report.surprise_events_count
+    );
+    println!(
+        "  - Average Surprise Metric (S_t)  : {:.4} (prediction error ||M*k - v||^2)",
+        report.average_surprise
+    );
     println!("  - Learning Rate / Weight Decay   : eta=0.10, lambda=0.01");
     println!("================================================================================");
 
@@ -11373,27 +14801,43 @@ fn handle_liquid_command(args: &[String]) {
         match args[i].as_str() {
             "--neurons" | "-n" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { num_neurons = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        num_neurons = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--inputs" | "-m" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { num_inputs = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        num_inputs = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--steps" | "-s" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<usize>() { steps = v; }
+                    if let Ok(v) = args[i + 1].parse::<usize>() {
+                        steps = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--dt" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<f64>() { dt = v; }
+                    if let Ok(v) = args[i + 1].parse::<f64>() {
+                        dt = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--compile" | "-c" => {
                 do_compile = true;
@@ -11401,9 +14845,13 @@ fn handle_liquid_command(args: &[String]) {
             }
             "--core" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<u8>() { core_id = v; }
+                    if let Ok(v) = args[i + 1].parse::<u8>() {
+                        core_id = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--json" => {
                 emit_json = true;
@@ -11413,15 +14861,24 @@ fn handle_liquid_command(args: &[String]) {
                 if i + 1 < args.len() {
                     out_file = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
     let mut lnn = cronc::cl_liquid_nn::LiquidNeuralNetwork::new(num_neurons, num_inputs, dt);
 
-    if do_compile || out_file.as_ref().map(|s| s.ends_with(".cl")).unwrap_or(false) {
+    if do_compile
+        || out_file
+            .as_ref()
+            .map(|s| s.ends_with(".cl"))
+            .unwrap_or(false)
+    {
         let cl_path = out_file.unwrap_or_else(|| "liquid_neural_network.cl".to_string());
         let cl_code = lnn.compile_to_cl(core_id);
         match std::fs::write(&cl_path, &cl_code) {
@@ -11429,12 +14886,29 @@ fn handle_liquid_command(args: &[String]) {
                 println!("================================================================================");
                 println!(" CRON LIQUID CONTINUOUS-TIME NEURAL NETWORK (LNN / LTC) COMPILER");
                 println!("================================================================================");
-                println!("  [+] Architecture           : Liquid Time-Constant (LTC) Continuous Dynamics");
-                println!("  [+] Neurons / Inputs       : {} neurons, {} sensory inputs", lnn.num_neurons, lnn.num_inputs);
-                println!("  [+] Step Size (dt)         : {:.4}s (Semi-Implicit Unconditionally Stable)", lnn.dt);
-                println!("  [+] Target Core            : Core ID {} [4D-Torus Coherent Node]", core_id);
-                println!("  [+] SRAM Memory Footprint  : {} bytes (<1 KB on-chip cache bound)", lnn.memory_footprint_bytes());
-                println!("  [SUCCESS] 128-bit VLIW Microcode synthesized -> {}", cl_path);
+                println!(
+                    "  [+] Architecture           : Liquid Time-Constant (LTC) Continuous Dynamics"
+                );
+                println!(
+                    "  [+] Neurons / Inputs       : {} neurons, {} sensory inputs",
+                    lnn.num_neurons, lnn.num_inputs
+                );
+                println!(
+                    "  [+] Step Size (dt)         : {:.4}s (Semi-Implicit Unconditionally Stable)",
+                    lnn.dt
+                );
+                println!(
+                    "  [+] Target Core            : Core ID {} [4D-Torus Coherent Node]",
+                    core_id
+                );
+                println!(
+                    "  [+] SRAM Memory Footprint  : {} bytes (<1 KB on-chip cache bound)",
+                    lnn.memory_footprint_bytes()
+                );
+                println!(
+                    "  [SUCCESS] 128-bit VLIW Microcode synthesized -> {}",
+                    cl_path
+                );
                 println!("================================================================================");
             }
             Err(e) => {
@@ -11453,7 +14927,9 @@ fn handle_liquid_command(args: &[String]) {
     let mut final_state = Vec::new();
     for step in 0..steps {
         let t = step as f64 * lnn.dt;
-        let inputs: Vec<f64> = (0..lnn.num_inputs).map(|i| ((t * (i + 1) as f64).sin()) * 1.5).collect();
+        let inputs: Vec<f64> = (0..lnn.num_inputs)
+            .map(|i| ((t * (i + 1) as f64).sin()) * 1.5)
+            .collect();
         final_state = lnn.step(&inputs);
     }
 
@@ -11464,9 +14940,15 @@ fn handle_liquid_command(args: &[String]) {
     if emit_json {
         let json = format!(
             r#"{{"num_neurons":{},"num_inputs":{},"steps":{},"dt":{:.4},"memory_footprint_bytes":{},"avg_calm_tau":{:.4},"avg_shock_tau":{:.4},"time_dilation_speedup":{:.2},"is_unconditionally_stable":true,"final_state":{:?}}}"#,
-            lnn.num_neurons, lnn.num_inputs, steps, lnn.dt,
-            lnn.memory_footprint_bytes(), avg_calm_tau, avg_shock_tau,
-            time_dilation_ratio, final_state
+            lnn.num_neurons,
+            lnn.num_inputs,
+            steps,
+            lnn.dt,
+            lnn.memory_footprint_bytes(),
+            avg_calm_tau,
+            avg_shock_tau,
+            time_dilation_ratio,
+            final_state
         );
         if let Some(ref path) = out_file {
             let _ = std::fs::write(path, &json);
@@ -11479,16 +14961,38 @@ fn handle_liquid_command(args: &[String]) {
     println!(" CRON LIQUID CONTINUOUS-TIME NEURAL NETWORK (LNN / LTC) ENGINE");
     println!("================================================================================");
     println!("  [+] Architecture           : Liquid Time-Constant (LTC) Differential Dynamics");
-    println!("  [+] Formulation            : dx_i/dt = - [1/tau_i + f(x, I)] * x_i + A_i * f(x, I)");
-    println!("  [+] Integration Method     : Unconditionally Stable Semi-Implicit Euler (0 Divergence)");
-    println!("  [+] Neurons / Inputs       : {} neurons | {} sensory inputs", lnn.num_neurons, lnn.num_inputs);
-    println!("  [+] Simulation Span        : {} steps (dt = {:.4}s)", steps, lnn.dt);
+    println!(
+        "  [+] Formulation            : dx_i/dt = - [1/tau_i + f(x, I)] * x_i + A_i * f(x, I)"
+    );
+    println!(
+        "  [+] Integration Method     : Unconditionally Stable Semi-Implicit Euler (0 Divergence)"
+    );
+    println!(
+        "  [+] Neurons / Inputs       : {} neurons | {} sensory inputs",
+        lnn.num_neurons, lnn.num_inputs
+    );
+    println!(
+        "  [+] Simulation Span        : {} steps (dt = {:.4}s)",
+        steps, lnn.dt
+    );
     println!("--------------------------------------------------------------------------------");
     println!(" TIME-DILATION & ADAPTIVE REFLEX TELEMETRY:");
-    println!("  - Calm Baseline Tau (tau_eff) : {:.4} s (Slow causal integration)", avg_calm_tau);
-    println!("  - Shock Reflex Tau  (tau_eff) : {:.4} s (Sub-microsecond reflex contraction)", avg_shock_tau);
-    println!("  - Dynamic Reflex Speedup      : {:.2}x faster reaction during high shock inputs", time_dilation_ratio);
-    println!("  - SRAM Cache Footprint        : {} bytes (<1 KB on-chip cache bound)", lnn.memory_footprint_bytes());
+    println!(
+        "  - Calm Baseline Tau (tau_eff) : {:.4} s (Slow causal integration)",
+        avg_calm_tau
+    );
+    println!(
+        "  - Shock Reflex Tau  (tau_eff) : {:.4} s (Sub-microsecond reflex contraction)",
+        avg_shock_tau
+    );
+    println!(
+        "  - Dynamic Reflex Speedup      : {:.2}x faster reaction during high shock inputs",
+        time_dilation_ratio
+    );
+    println!(
+        "  - SRAM Cache Footprint        : {} bytes (<1 KB on-chip cache bound)",
+        lnn.memory_footprint_bytes()
+    );
     println!("  - Numerical Stability         : UNCONDITIONALLY STABLE (Zero NaN / Inf)");
     println!("================================================================================");
 
@@ -11497,8 +15001,6 @@ fn handle_liquid_command(args: &[String]) {
         println!("  [SAVED] Liquid simulation report saved -> {}", path);
     }
 }
-
-
 
 fn handle_serve_command(args: &[String]) {
     if args.iter().any(|a| a == "-h" || a == "--help") {
@@ -11515,23 +15017,33 @@ fn handle_serve_command(args: &[String]) {
         match args[i].as_str() {
             "--port" | "-p" => {
                 if i + 1 < args.len() {
-                    if let Ok(v) = args[i + 1].parse::<u16>() { port = v; }
+                    if let Ok(v) = args[i + 1].parse::<u16>() {
+                        port = v;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--host" => {
                 if i + 1 < args.len() {
                     host = args[i + 1].clone();
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--model" => {
                 if i + 1 < args.len() {
                     model = args[i + 1].clone();
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -11548,9 +15060,18 @@ fn handle_serve_command(args: &[String]) {
     println!("  [+] HTTP Listening Address : http://{}:{}", host, port);
     println!("  [+] Default LLM Model      : {}", model);
     println!("  [+] Active Cores           : 256 Coherent 4D-Torus Nodes (Zero-GC, 0 Alloc)");
-    println!("  [+] Chat Endpoint          : POST http://{}:{}/v1/chat/completions", host, port);
-    println!("  [+] Models Endpoint        : GET  http://{}:{}/v1/models", host, port);
-    println!("  [+] Health / Telemetry     : GET  http://{}:{}/health", host, port);
+    println!(
+        "  [+] Chat Endpoint          : POST http://{}:{}/v1/chat/completions",
+        host, port
+    );
+    println!(
+        "  [+] Models Endpoint        : GET  http://{}:{}/v1/models",
+        host, port
+    );
+    println!(
+        "  [+] Health / Telemetry     : GET  http://{}:{}/health",
+        host, port
+    );
     println!("  [+] Streaming Mode         : Server-Sent Events (SSE: text/event-stream)");
     println!("================================================================================");
     println!("Press Ctrl+C to stop server...\n");
@@ -11583,33 +15104,53 @@ fn handle_finetune_command(args: &[String]) {
         match args[i].as_str() {
             "-r" | "--rank" => {
                 if i + 1 < args.len() {
-                    if let Ok(r) = args[i + 1].parse::<usize>() { rank = r; }
+                    if let Ok(r) = args[i + 1].parse::<usize>() {
+                        rank = r;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--alpha" => {
                 if i + 1 < args.len() {
-                    if let Ok(a) = args[i + 1].parse::<f64>() { alpha = a; }
+                    if let Ok(a) = args[i + 1].parse::<f64>() {
+                        alpha = a;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--lr" => {
                 if i + 1 < args.len() {
-                    if let Ok(l) = args[i + 1].parse::<f64>() { lr = l; }
+                    if let Ok(l) = args[i + 1].parse::<f64>() {
+                        lr = l;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--steps" | "-s" => {
                 if i + 1 < args.len() {
-                    if let Ok(s) = args[i + 1].parse::<usize>() { steps = s; }
+                    if let Ok(s) = args[i + 1].parse::<usize>() {
+                        steps = s;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--layers" => {
                 if i + 1 < args.len() {
-                    if let Ok(l) = args[i + 1].parse::<usize>() { layers = l; }
+                    if let Ok(l) = args[i + 1].parse::<usize>() {
+                        layers = l;
+                    }
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--no-mongol" => {
                 use_mongol = false;
@@ -11619,7 +15160,9 @@ fn handle_finetune_command(args: &[String]) {
                 if i + 1 < args.len() {
                     out_path = args[i + 1].clone();
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             "--compile" => {
                 compile_cl = true;
@@ -11629,7 +15172,9 @@ fn handle_finetune_command(args: &[String]) {
                 json_out = true;
                 i += 1;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -11652,7 +15197,10 @@ fn handle_finetune_command(args: &[String]) {
         let cl_path = out_path.replace(".cll", ".cl");
         let _ = std::fs::write(&cl_path, cl_code);
         if !json_out {
-            println!("  [SUCCESS] 128-bit VLIW Microcode synthesized -> {}", cl_path);
+            println!(
+                "  [SUCCESS] 128-bit VLIW Microcode synthesized -> {}",
+                cl_path
+            );
         }
     }
 
@@ -11679,19 +15227,48 @@ fn handle_finetune_command(args: &[String]) {
     println!(" CRON ON-DEVICE SUB-BYTE CL-LoRA FINE-TUNING ENGINE");
     println!("================================================================================");
     println!("  [+] Adapter Name           : {}", report.adapter_name);
-    println!("  [+] Low-Rank Rank (r)      : {} (Discrete {{-1, 0, 1}} Sub-Byte)", rank);
-    println!("  [+] Optimization Steps     : {} steps (LR: {:.4})", steps, lr);
-    println!("  [+] Total Samples Ingested : {} sample pairs", report.total_samples);
-    println!("  [+] Tokens Processed       : {} tokens ({:.1} tok/sec)", report.total_tokens_processed, report.tokens_per_second);
+    println!(
+        "  [+] Low-Rank Rank (r)      : {} (Discrete {{-1, 0, 1}} Sub-Byte)",
+        rank
+    );
+    println!(
+        "  [+] Optimization Steps     : {} steps (LR: {:.4})",
+        steps, lr
+    );
+    println!(
+        "  [+] Total Samples Ingested : {} sample pairs",
+        report.total_samples
+    );
+    println!(
+        "  [+] Tokens Processed       : {} tokens ({:.1} tok/sec)",
+        report.total_tokens_processed, report.tokens_per_second
+    );
     println!("--------------------------------------------------------------------------------");
     println!(" LOSS REDUCTION & CONVERGENCE TELEMETRY:");
     println!("  - Initial Cross-Entropy Loss: {:.4}", report.initial_loss);
-    println!("  - Final Converged Loss      : {:.4} (Loss Reduction: {:.2}%)", report.final_loss, report.loss_reduction_pct);
-    println!("  - Validation Perplexity     : {:.4} (Optimal Attractor Manifold)", report.perplexity);
-    println!("  - Training Elapsed Time     : {:.2} ms (Zero FLOP Backpropagation)", report.training_time_ms);
+    println!(
+        "  - Final Converged Loss      : {:.4} (Loss Reduction: {:.2}%)",
+        report.final_loss, report.loss_reduction_pct
+    );
+    println!(
+        "  - Validation Perplexity     : {:.4} (Optimal Attractor Manifold)",
+        report.perplexity
+    );
+    println!(
+        "  - Training Elapsed Time     : {:.2} ms (Zero FLOP Backpropagation)",
+        report.training_time_ms
+    );
     println!("--------------------------------------------------------------------------------");
     println!(" HARDWARE SILICON FOOTPRINT:");
-    println!("  - Binary Adapter Footprint  : {} bytes (<4.1 KB L1 Bound: {})", report.adapter_size_bytes, if report.is_l1_bounded { "PASS" } else { "EXCEEDED" });
+    println!(
+        "  - Binary Adapter Footprint  : {} bytes (<4.1 KB L1 Bound: {})",
+        report.adapter_size_bytes,
+        if report.is_l1_bounded {
+            "PASS"
+        } else {
+            "EXCEEDED"
+        }
+    );
     println!("  - Hardware Multipliers      : 0 DSPs (100% Add/Sub Integer Sign Updates)");
     println!("  - Output Adapter File       : {}", report.output_path);
     println!("================================================================================");
@@ -11703,7 +15280,10 @@ fn handle_bench_command(args: &[String]) {
         return;
     }
 
-    if args.iter().any(|a| a == "all" || cronc::WorkloadKind::parse(a).is_some()) {
+    if args
+        .iter()
+        .any(|a| a == "all" || cronc::WorkloadKind::parse(a).is_some())
+    {
         handle_cl_compare_command(args);
         return;
     }
@@ -11714,12 +15294,16 @@ fn handle_bench_command(args: &[String]) {
         let mut i = 0;
         while i < args.len() {
             if args[i] == "--samples" && i + 1 < args.len() {
-                if let Ok(s) = args[i + 1].parse::<usize>() { samples = s; }
+                if let Ok(s) = args[i + 1].parse::<usize>() {
+                    samples = s;
+                }
                 i += 2;
             } else if args[i] == "--json" {
                 json_mode = true;
                 i += 1;
-            } else { i += 1; }
+            } else {
+                i += 1;
+            }
         }
         let rep = cronc::run_bare_metal_jitter_profiler(samples);
         if json_mode {
@@ -11750,13 +15334,17 @@ fn handle_bench_command(args: &[String]) {
                 if i + 1 < args.len() {
                     out_file = Some(args[i + 1].clone());
                     i += 2;
-                } else { i += 1; }
+                } else {
+                    i += 1;
+                }
             }
             other if !other.starts_with("--") => {
                 target_file = Some(other.to_string());
                 i += 1;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -11769,7 +15357,10 @@ fn handle_bench_command(args: &[String]) {
             if path.ends_with(".html") || path.ends_with(".htm") {
                 let html = cronc::render_sota_html_dashboard(&rep);
                 let _ = std::fs::write(path, &html);
-                println!("[SUCCESS] Interactive SOTA benchmark HTML dashboard written -> {}", path);
+                println!(
+                    "[SUCCESS] Interactive SOTA benchmark HTML dashboard written -> {}",
+                    path
+                );
             } else {
                 let _ = std::fs::write(path, &ascii_report);
                 println!("[SUCCESS] SOTA benchmark report written -> {}", path);
@@ -11829,7 +15420,10 @@ fn handle_bench_command(args: &[String]) {
             let json_str = report.to_json();
             if let Some(ref out) = out_file {
                 let _ = std::fs::write(out, &json_str);
-                println!("[SUCCESS] Multi-core benchmark suite JSON written -> {}", out);
+                println!(
+                    "[SUCCESS] Multi-core benchmark suite JSON written -> {}",
+                    out
+                );
             } else {
                 println!("{}", json_str);
             }
@@ -11852,7 +15446,9 @@ fn handle_cl_clifford_command(args: &[String]) {
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--angle" && i + 1 < args.len() {
-            if let Ok(a) = args[i + 1].parse::<f32>() { angle = a; }
+            if let Ok(a) = args[i + 1].parse::<f32>() {
+                angle = a;
+            }
             i += 2;
         } else if args[i] == "-o" && i + 1 < args.len() {
             out_path = args[i + 1].clone();
@@ -11864,7 +15460,10 @@ fn handle_cl_clifford_command(args: &[String]) {
 
     println!("================================================================================");
     println!(" CRON CLIFFORD GEOMETRIC ALGEBRA 4D ROTOR COMPILER");
-    println!(" Space: Cl(4,0) / Cl(3,1) (16-Component Multivector, Angle: {:.4} rad)", angle);
+    println!(
+        " Space: Cl(4,0) / Cl(3,1) (16-Component Multivector, Angle: {:.4} rad)",
+        angle
+    );
     println!("================================================================================");
 
     let mut mv = cronc::cl_clifford::Multivector4D::zero();
@@ -11876,7 +15475,10 @@ fn handle_cl_clifford_command(args: &[String]) {
     let cl_code = mv.compile_rotor_transform_to_cl(&rotor, 0);
 
     let _ = std::fs::write(&out_path, &cl_code);
-    println!("Emitted 4D Rotor Sandwich Product instructions -> {}", out_path);
+    println!(
+        "Emitted 4D Rotor Sandwich Product instructions -> {}",
+        out_path
+    );
 }
 
 fn handle_cl_agi_command(args: &[String]) {
@@ -11892,7 +15494,9 @@ fn handle_cl_agi_command(args: &[String]) {
             prompt = args[i + 1].clone();
             i += 2;
         } else if args[i] == "--reward" && i + 1 < args.len() {
-            if let Ok(r) = args[i + 1].parse::<f32>() { reward = r; }
+            if let Ok(r) = args[i + 1].parse::<f32>() {
+                reward = r;
+            }
             i += 2;
         } else if args[i] == "--sleep" {
             sleep = true;
@@ -11923,7 +15527,10 @@ fn handle_cl_agi_command(args: &[String]) {
         if let Err(e) = std::fs::write(path, &cl_code) {
             eprintln!("[ERROR] Failed to export compiled .cl mind: {}", e);
         } else {
-            println!("✅ Successfully compiled 256-core Living Mind state to: {}", path);
+            println!(
+                "✅ Successfully compiled 256-core Living Mind state to: {}",
+                path
+            );
             println!("   Cores [0..63]   : Sensory HAL, SSM Elastic Streaming & HTM 2048-bit SDR Columns");
             println!("   Cores [64..127] : Modern Hopfield, HDC Symbolic & Pearl's Causal Do-Calculus SCM");
             println!("   Cores [128..191]: 4D-Torus Stigmergy Swarm & 3-Factor Neuromodulated Metaplasticity");
@@ -11958,27 +15565,68 @@ fn handle_cl_agi_command(args: &[String]) {
                 break;
             }
             if trimmed.eq_ignore_ascii_case("/status") {
-                println!("📊 Homeostatic State : {}", mind.homeostasis.state.active_state_name);
-                println!("⚡ Energy Level     : {:.2}%", mind.homeostasis.state.energy_level * 100.0);
-                println!("🔍 Curiosity Drive  : {:.2}%", mind.homeostasis.state.curiosity_drive * 100.0);
-                println!("💤 Fatigue Level    : {:.2}%", mind.homeostasis.state.fatigue * 100.0);
+                println!(
+                    "📊 Homeostatic State : {}",
+                    mind.homeostasis.state.active_state_name
+                );
+                println!(
+                    "⚡ Energy Level     : {:.2}%",
+                    mind.homeostasis.state.energy_level * 100.0
+                );
+                println!(
+                    "🔍 Curiosity Drive  : {:.2}%",
+                    mind.homeostasis.state.curiosity_drive * 100.0
+                );
+                println!(
+                    "💤 Fatigue Level    : {:.2}%",
+                    mind.homeostasis.state.fatigue * 100.0
+                );
                 println!("🌊 SSM Tokens Stream: {}", mind.ssm.total_tokens_streamed);
-                println!("💧 Liquid Eff Tau   : {:.4}s (Adaptive Reflex)", mind.liquid.effective_time_constants(&[0.5, 0.5, 0.5, 0.5])[0]);
+                println!(
+                    "💧 Liquid Eff Tau   : {:.4}s (Adaptive Reflex)",
+                    mind.liquid.effective_time_constants(&[0.5, 0.5, 0.5, 0.5])[0]
+                );
                 println!("🌌 HDC Symbols Bound: {}", mind.hdc.items.len());
-                println!("🧬 Metaplasticity Ev: {}", mind.metaplasticity.total_plasticity_events);
-                println!("🎯 Causal CF Outcome : P(Outcome|do(Action)) = {:.4}", mind.scm.values[mind.scm.name_to_id.get("Outcome").copied().unwrap_or(3)]);
-                println!("🧠 HTM Temporal Col  : {} columns (40 active / 2% sparsity)", mind.htm.temporal_memory.num_columns);
-                println!("⚡ Microcode Evolution: Gen {} (Fitness: {:.2})", mind.self_evolve.generation, mind.self_evolve.champion.as_ref().map_or(0.0, |c| c.fitness));
-                println!("🌙 Sleep Cycles     : {}", mind.homeostasis.sleep_cycles_triggered);
+                println!(
+                    "🧬 Metaplasticity Ev: {}",
+                    mind.metaplasticity.total_plasticity_events
+                );
+                println!(
+                    "🎯 Causal CF Outcome : P(Outcome|do(Action)) = {:.4}",
+                    mind.scm.values[mind.scm.name_to_id.get("Outcome").copied().unwrap_or(3)]
+                );
+                println!(
+                    "🧠 HTM Temporal Col  : {} columns (40 active / 2% sparsity)",
+                    mind.htm.temporal_memory.num_columns
+                );
+                println!(
+                    "⚡ Microcode Evolution: Gen {} (Fitness: {:.2})",
+                    mind.self_evolve.generation,
+                    mind.self_evolve
+                        .champion
+                        .as_ref()
+                        .map_or(0.0, |c| c.fitness)
+                );
+                println!(
+                    "🌙 Sleep Cycles     : {}",
+                    mind.homeostasis.sleep_cycles_triggered
+                );
                 println!("{}", mind.neuro.render_ascii_hud());
                 continue;
             }
             if trimmed.starts_with("/compile") {
                 let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                let out_file = if parts.len() > 1 { parts[1] } else { "mind_live_256core.cl" };
+                let out_file = if parts.len() > 1 {
+                    parts[1]
+                } else {
+                    "mind_live_256core.cl"
+                };
                 let cl = mind.compile_living_mind_to_cl();
                 let _ = std::fs::write(out_file, cl);
-                println!("✅ Compiled 256-core living mind state written to: {}", out_file);
+                println!(
+                    "✅ Compiled 256-core living mind state written to: {}",
+                    out_file
+                );
                 continue;
             }
 
@@ -12011,16 +15659,46 @@ fn handle_cl_agi_command(args: &[String]) {
         println!("MIND SYNTHESIS OUTPUT:\n{}", result.response_text);
         println!("\n📊 [LIVING COGNITIVE TELEMETRY]");
         println!(" • Homeostatic State     : {}", result.homeostatic_state);
-        println!(" • Metabolic Energy      : {:.1}%", result.energy_level * 100.0);
-        println!(" • Causal Counterfactual : Y_{{do(Action=0.95)}} = {:.4} (Judea Pearl Do-Calculus)", result.causal_counterfactual_val);
-        println!(" • HTM 2048-bit SDR     : Anomaly Surprise = {:.1}% (40 active bits / 2% sparsity)", result.htm_anomaly_score * 100.0);
-        println!(" • In-Silicon Self-Evol : Gen #{} (Fitness: {:.2}, Hot-Patch Synthesis Ready)", result.self_evolve_generation, result.self_evolve_fitness);
-        println!(" • Liquid Dynamic Tau    : {:.4}s (Continuous Adaptive Reflex)", result.liquid_eff_tau);
-        println!(" • HDC Symbols Bound     : {} symbols (Zero-Backprop 1-Shot)", result.hdc_symbols_count);
-        println!(" • Metaplasticity Events : {} 3-factor synaptic consolidations", result.metaplasticity_events);
-        println!(" • Active Inference Act  : Policy #{} (Variational Free Energy F: {:.4})", result.active_inference_action, result.free_energy);
-        println!(" • Elastic SSM Tokens    : {} tokens streamed (Constant 1088 bytes SRAM)", result.ssm_stream_tokens);
-        println!(" • 4D Stigmergy Thought  : Consensus Node #{}", result.stigmergy_selected_node);
+        println!(
+            " • Metabolic Energy      : {:.1}%",
+            result.energy_level * 100.0
+        );
+        println!(
+            " • Causal Counterfactual : Y_{{do(Action=0.95)}} = {:.4} (Judea Pearl Do-Calculus)",
+            result.causal_counterfactual_val
+        );
+        println!(
+            " • HTM 2048-bit SDR     : Anomaly Surprise = {:.1}% (40 active bits / 2% sparsity)",
+            result.htm_anomaly_score * 100.0
+        );
+        println!(
+            " • In-Silicon Self-Evol : Gen #{} (Fitness: {:.2}, Hot-Patch Synthesis Ready)",
+            result.self_evolve_generation, result.self_evolve_fitness
+        );
+        println!(
+            " • Liquid Dynamic Tau    : {:.4}s (Continuous Adaptive Reflex)",
+            result.liquid_eff_tau
+        );
+        println!(
+            " • HDC Symbols Bound     : {} symbols (Zero-Backprop 1-Shot)",
+            result.hdc_symbols_count
+        );
+        println!(
+            " • Metaplasticity Events : {} 3-factor synaptic consolidations",
+            result.metaplasticity_events
+        );
+        println!(
+            " • Active Inference Act  : Policy #{} (Variational Free Energy F: {:.4})",
+            result.active_inference_action, result.free_energy
+        );
+        println!(
+            " • Elastic SSM Tokens    : {} tokens streamed (Constant 1088 bytes SRAM)",
+            result.ssm_stream_tokens
+        );
+        println!(
+            " • 4D Stigmergy Thought  : Consensus Node #{}",
+            result.stigmergy_selected_node
+        );
         if let Some(ref hop) = result.hopfield_attractor {
             println!(" • Hopfield Memory Basin : '{}' (Converged Attractor)", hop);
         }
@@ -12146,7 +15824,10 @@ fn handle_cl_lint_command(args: &[String]) {
                 let (fixed, count) = cronc::ZeroVerbalLinter::auto_fix_source(&source);
                 if count > 0 {
                     if let Err(e) = std::fs::write(input_path, &fixed) {
-                        eprintln!("[ERROR] Failed to write fixed code to '{}': {}", input_path, e);
+                        eprintln!(
+                            "[ERROR] Failed to write fixed code to '{}': {}",
+                            input_path, e
+                        );
                     } else {
                         println!("✓ [AUTO-FIX] Converted {} prose/word violations into canonical Zero-Verbal Unicode in '{}'", count, input_path);
                     }
@@ -12194,7 +15875,10 @@ fn handle_cl_fix_command(args: &[String]) {
     }
     let input_path = &args[0];
     let in_place = args.iter().any(|a| a == "--in-place");
-    let out_path = args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1));
+    let out_path = args
+        .iter()
+        .position(|a| a == "-o")
+        .and_then(|i| args.get(i + 1));
     match std::fs::read_to_string(input_path) {
         Ok(source) => {
             let rep = cronc::cl_schedule::resolve_hazards(&source);
@@ -12202,7 +15886,11 @@ fn handle_cl_fix_command(args: &[String]) {
                 "[CL-FIX] bundles {} -> {}, hazards resolved: {}",
                 rep.bundles_before, rep.bundles_after, rep.hazards_resolved
             );
-            let target = if in_place { Some(input_path.as_str()) } else { out_path.map(|s| s.as_str()) };
+            let target = if in_place {
+                Some(input_path.as_str())
+            } else {
+                out_path.map(|s| s.as_str())
+            };
             match target {
                 Some(p) => match std::fs::write(p, &rep.source) {
                     Ok(_) => println!("[CL-FIX] wrote {}", p),
@@ -12221,19 +15909,28 @@ fn handle_convert_command(args: &[String]) {
         println!("\nDESCRIPTION:\n    Zero-Python Safetensors -> DPSTA 1.58-bit ternary sub-byte silicon converter.");
         println!("\nOPTIONS:\n    -o <path>          Output binary CLDB dataset (.cldb) [default: model.cldb]");
         println!("    --cl-out <path>    Optional generated Zero-Verbal .cl model file");
-        println!("    --ternary          Quantize weights to 1.58-bit DPSTA (19.9x RAM compression)");
+        println!(
+            "    --ternary          Quantize weights to 1.58-bit DPSTA (19.9x RAM compression)"
+        );
         return;
     }
 
     let input_path = &args[0];
-    let output_cldb = args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1))
+    let output_cldb = args
+        .iter()
+        .position(|a| a == "-o")
+        .and_then(|i| args.get(i + 1))
         .map(|s| s.as_str())
         .unwrap_or("model.cldb");
-    let output_cl = args.iter().position(|a| a == "--cl-out").and_then(|i| args.get(i + 1))
+    let output_cl = args
+        .iter()
+        .position(|a| a == "--cl-out")
+        .and_then(|i| args.get(i + 1))
         .map(|s| s.as_str());
     let quantize_ternary = !args.iter().any(|a| a == "--float32" || a == "--no-quant");
 
-    match cronc::convert_safetensors_to_dpsta(input_path, output_cldb, output_cl, quantize_ternary) {
+    match cronc::convert_safetensors_to_dpsta(input_path, output_cldb, output_cl, quantize_ternary)
+    {
         Ok(summary) => {
             println!("{}", summary.render_ascii_hud());
         }
@@ -12289,31 +15986,45 @@ fn handle_cl_train_command(args: &[String]) {
     while i < args.len() {
         match args[i].as_str() {
             "--epochs" | "-e" | "--steps" | "-s" if i + 1 < args.len() => {
-                if let Ok(e) = args[i + 1].parse::<usize>() { epochs = e; }
+                if let Ok(e) = args[i + 1].parse::<usize>() {
+                    epochs = e;
+                }
                 i += 2;
             }
             "--lr" if i + 1 < args.len() => {
-                if let Ok(l) = args[i + 1].parse::<f32>() { lr = l; }
+                if let Ok(l) = args[i + 1].parse::<f32>() {
+                    lr = l;
+                }
                 i += 2;
             }
             "--batch" | "--batch-size" | "-b" if i + 1 < args.len() => {
-                if let Ok(b) = args[i + 1].parse::<usize>() { batch_size = b; }
+                if let Ok(b) = args[i + 1].parse::<usize>() {
+                    batch_size = b;
+                }
                 i += 2;
             }
             "--seq-len" | "-l" if i + 1 < args.len() => {
-                if let Ok(s) = args[i + 1].parse::<usize>() { seq_len = s; }
+                if let Ok(s) = args[i + 1].parse::<usize>() {
+                    seq_len = s;
+                }
                 i += 2;
             }
             "--dim" if i + 1 < args.len() => {
-                if let Ok(d) = args[i + 1].parse::<usize>() { model_dim = d; }
+                if let Ok(d) = args[i + 1].parse::<usize>() {
+                    model_dim = d;
+                }
                 i += 2;
             }
             "--hidden" | "--hidden-dim" if i + 1 < args.len() => {
-                if let Ok(h) = args[i + 1].parse::<usize>() { hidden_dim = h; }
+                if let Ok(h) = args[i + 1].parse::<usize>() {
+                    hidden_dim = h;
+                }
                 i += 2;
             }
             "--vocab" | "--vocab-size" if i + 1 < args.len() => {
-                if let Ok(v) = args[i + 1].parse::<usize>() { vocab_size = v; }
+                if let Ok(v) = args[i + 1].parse::<usize>() {
+                    vocab_size = v;
+                }
                 i += 2;
             }
             "--data" | "-d" if i + 1 < args.len() => {
@@ -12321,7 +16032,8 @@ fn handle_cl_train_command(args: &[String]) {
                 i += 2;
             }
             "--optimizer" | "--opt" if i + 1 < args.len() => {
-                optimizer_type = cronc::cl_train_pipeline::TrainingOptimizer::from_str(&args[i + 1]);
+                optimizer_type =
+                    cronc::cl_train_pipeline::TrainingOptimizer::from_str(&args[i + 1]);
                 i += 2;
             }
             "--out" | "-o" if i + 1 < args.len() => {
@@ -12337,23 +16049,33 @@ fn handle_cl_train_command(args: &[String]) {
                 i += 2;
             }
             "--gen-tokens" if i + 1 < args.len() => {
-                if let Ok(t) = args[i + 1].parse::<usize>() { gen_tokens = t; }
+                if let Ok(t) = args[i + 1].parse::<usize>() {
+                    gen_tokens = t;
+                }
                 i += 2;
             }
             "--temp" | "--temperature" if i + 1 < args.len() => {
-                if let Ok(t) = args[i + 1].parse::<f32>() { temp = t; }
+                if let Ok(t) = args[i + 1].parse::<f32>() {
+                    temp = t;
+                }
                 i += 2;
             }
             "--layers" if i + 1 < args.len() => {
-                if let Ok(l) = args[i + 1].parse::<usize>() { num_layers = l; }
+                if let Ok(l) = args[i + 1].parse::<usize>() {
+                    num_layers = l;
+                }
                 i += 2;
             }
             "--experts" if i + 1 < args.len() => {
-                if let Ok(e) = args[i + 1].parse::<usize>() { num_experts = e; }
+                if let Ok(e) = args[i + 1].parse::<usize>() {
+                    num_experts = e;
+                }
                 i += 2;
             }
             "--top-k" if i + 1 < args.len() => {
-                if let Ok(k) = args[i + 1].parse::<usize>() { top_k = k; }
+                if let Ok(k) = args[i + 1].parse::<usize>() {
+                    top_k = k;
+                }
                 i += 2;
             }
             "--tui" => {
@@ -12389,9 +16111,21 @@ fn handle_cl_train_command(args: &[String]) {
         }
     }
 
-    if dataset_path.as_deref().map_or(false, |p| p.ends_with(".dpdata")) {
+    if dataset_path
+        .as_deref()
+        .map_or(false, |p| p.ends_with(".dpdata"))
+    {
         let p_ref = dataset_path.as_ref().map(std::path::Path::new);
-        let report = match cronc::train_cl_dataset(p_ref, epochs, lr, batch_size, seq_len, hidden_dim, qat, torus_allreduce) {
+        let report = match cronc::train_cl_dataset(
+            p_ref,
+            epochs,
+            lr,
+            batch_size,
+            seq_len,
+            hidden_dim,
+            qat,
+            torus_allreduce,
+        ) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("[ERROR] In-silicon training failed: {}", e);
@@ -12400,7 +16134,11 @@ fn handle_cl_train_command(args: &[String]) {
         };
 
         if let Some(p) = synth_path {
-            let microcode = cronc::cl_autograd::synthesize_training_microcode("in_silicon_autograd", hidden_dim, seq_len);
+            let microcode = cronc::cl_autograd::synthesize_training_microcode(
+                "in_silicon_autograd",
+                hidden_dim,
+                seq_len,
+            );
             match std::fs::write(&p, &microcode) {
                 Ok(_) => println!("[CL-TRAIN] Synthesized training microcode saved to '{}'", p),
                 Err(e) => eprintln!("[ERROR] Could not write '{}': {}", p, e),
@@ -12410,8 +16148,15 @@ fn handle_cl_train_command(args: &[String]) {
         if emit_json {
             println!(
                 r#"{{"epochs":{},"initial_loss":{:.6},"final_loss":{:.6},"converged":{},"total_parameters":{},"peak_ipc":{:.2},"average_power_watts":{:.1},"qat":{},"torus_allreduce":{}}}"#,
-                report.epochs, report.initial_loss, report.final_loss, report.converged,
-                report.total_parameters, report.peak_ipc, report.average_power_watts, qat, torus_allreduce
+                report.epochs,
+                report.initial_loss,
+                report.final_loss,
+                report.converged,
+                report.total_parameters,
+                report.peak_ipc,
+                report.average_power_watts,
+                qat,
+                torus_allreduce
             );
         } else {
             print!("{}", report.render_ascii_hud());
@@ -12450,9 +16195,14 @@ fn handle_cl_train_command(args: &[String]) {
     let hw_target = if use_cuda {
         if cronc::cl_cuda_driver::CudaDriver::is_available() {
             if let Ok(driver) = cronc::cl_cuda_driver::CudaDriver::init() {
-                let dev_name = driver.device_name(0).unwrap_or_else(|_| "NVIDIA GPU".to_string());
+                let dev_name = driver
+                    .device_name(0)
+                    .unwrap_or_else(|_| "NVIDIA GPU".to_string());
                 let vram = driver.device_total_memory(0).unwrap_or(0) / (1024 * 1024);
-                format!("NVIDIA GPU: {} ({} MB VRAM, Direct PTX JIT)", dev_name, vram)
+                format!(
+                    "NVIDIA GPU: {} ({} MB VRAM, Direct PTX JIT)",
+                    dev_name, vram
+                )
             } else {
                 "NVIDIA CUDA (Direct Driver API)".to_string()
             }
@@ -12463,19 +16213,54 @@ fn handle_cl_train_command(args: &[String]) {
         "Native CPU SIMD In-Silicon Calculus Engine".to_string()
     };
 
-    println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
-    println!("║   CRON AUTONOMOUS ZERO-PYTHON IN-SILICON TRAINING PIPELINE (cron train)               ║");
-    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+    println!(
+        "╔═══════════════════════════════════════════════════════════════════════════════════════╗"
+    );
+    println!(
+        "║   CRON AUTONOMOUS ZERO-PYTHON IN-SILICON TRAINING PIPELINE (cron train)               ║"
+    );
+    println!(
+        "╠═══════════════════════════════════════════════════════════════════════════════════════╣"
+    );
     println!("║ Compute HW : {:<73} ║", hw_target);
-    println!("║ Optimizer  : {:<73} ║", format!("{:?} (Decoupled Weight Decay)", auto_cfg.optimizer));
-    println!("║ Steps      : {:<73} ║", format!("{} Steps | LR: {:.4}", auto_cfg.steps, auto_cfg.learning_rate));
-    println!("║ Batch/Seq  : {:<73} ║", format!("Batch: {} | Seq Len: {} | Dim: {}", auto_cfg.batch_size, auto_cfg.seq_len, auto_cfg.dim));
-    println!("║ Dataset    : {:<73} ║", auto_cfg.data_path.as_deref().unwrap_or("CRON Sovereign Foundation Corpus"));
-    println!("║ Checkpoint : {:<73} ║", auto_cfg.checkpoint_out.as_deref().unwrap_or("None"));
+    println!(
+        "║ Optimizer  : {:<73} ║",
+        format!("{:?} (Decoupled Weight Decay)", auto_cfg.optimizer)
+    );
+    println!(
+        "║ Steps      : {:<73} ║",
+        format!(
+            "{} Steps | LR: {:.4}",
+            auto_cfg.steps, auto_cfg.learning_rate
+        )
+    );
+    println!(
+        "║ Batch/Seq  : {:<73} ║",
+        format!(
+            "Batch: {} | Seq Len: {} | Dim: {}",
+            auto_cfg.batch_size, auto_cfg.seq_len, auto_cfg.dim
+        )
+    );
+    println!(
+        "║ Dataset    : {:<73} ║",
+        auto_cfg
+            .data_path
+            .as_deref()
+            .unwrap_or("CRON Sovereign Foundation Corpus")
+    );
+    println!(
+        "║ Checkpoint : {:<73} ║",
+        auto_cfg.checkpoint_out.as_deref().unwrap_or("None")
+    );
     if let Some(ref p) = eval_prompt {
-        println!("║ Autoregress: {:<73} ║", format!("Prompt: \"{}\" ({} tokens)", p, gen_tokens));
+        println!(
+            "║ Autoregress: {:<73} ║",
+            format!("Prompt: \"{}\" ({} tokens)", p, gen_tokens)
+        );
     }
-    println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+    println!(
+        "╚═══════════════════════════════════════════════════════════════════════════════════════╝"
+    );
 
     let total_steps = auto_cfg.steps;
     let is_tui = enable_tui;
@@ -12508,20 +16293,37 @@ fn handle_cl_train_command(args: &[String]) {
             if emit_json {
                 println!(
                     r#"{{"initial_loss":{:.6},"final_loss":{:.6},"reduction_pct":{:.2},"perplexity":{:.2},"tokens":{},"tokens_per_sec":{:.1},"duration_secs":{:.2},"checkpoint":"{}"}}"#,
-                    summary.initial_loss, summary.final_loss, summary.loss_reduction_pct,
-                    summary.final_perplexity, summary.total_tokens, summary.tokens_per_sec,
-                    summary.total_duration_secs, summary.checkpoint_saved_to.as_deref().unwrap_or("")
+                    summary.initial_loss,
+                    summary.final_loss,
+                    summary.loss_reduction_pct,
+                    summary.final_perplexity,
+                    summary.total_tokens,
+                    summary.tokens_per_sec,
+                    summary.total_duration_secs,
+                    summary.checkpoint_saved_to.as_deref().unwrap_or("")
                 );
             } else {
                 println!("─────────────────────────────────────────────────────────────────────────────────────────");
                 println!(" [SUCCESS] Autonomous In-Silicon Training Finished!");
                 println!("   • Initial Loss:      {:.4}", summary.initial_loss);
-                println!("   • Final Loss:        {:.4} ({:.2}% reduction)", summary.final_loss, summary.loss_reduction_pct);
+                println!(
+                    "   • Final Loss:        {:.4} ({:.2}% reduction)",
+                    summary.final_loss, summary.loss_reduction_pct
+                );
                 println!("   • Final Perplexity:  {:.2}", summary.final_perplexity);
-                println!("   • Processed Tokens:  {} tokens ({:.1} tok/sec)", summary.total_tokens, summary.tokens_per_sec);
-                println!("   • Total Duration:    {:.2}s", summary.total_duration_secs);
+                println!(
+                    "   • Processed Tokens:  {} tokens ({:.1} tok/sec)",
+                    summary.total_tokens, summary.tokens_per_sec
+                );
+                println!(
+                    "   • Total Duration:    {:.2}s",
+                    summary.total_duration_secs
+                );
                 if let Some(ref path) = summary.checkpoint_saved_to {
-                    println!("   • Checkpoint Saved:  {} (Standard IEEE 754 SafeTensors)", path);
+                    println!(
+                        "   • Checkpoint Saved:  {} (Standard IEEE 754 SafeTensors)",
+                        path
+                    );
                 }
                 if let Some(ref sample) = summary.generated_sample {
                     println!("─────────────────────────────────────────────────────────────────────────────────────────");
@@ -12606,9 +16408,15 @@ fn handle_synth_command(args: &[String]) {
             if emit_json {
                 println!(
                     r#"{{"design_name":"{}","target":"{}","freq_mhz":{:.1},"period_ns":{:.3},"luts":{},"ffs":{},"dsps":{},"area_um2":{:.2},"power_mw":{:.3}}}"#,
-                    manifest.design_name, manifest.target_platform, manifest.target_clock_mhz,
-                    manifest.clock_period_ns, manifest.estimated_luts, manifest.estimated_ffs,
-                    manifest.estimated_dsps, manifest.estimated_die_area_um2, manifest.dynamic_power_mw
+                    manifest.design_name,
+                    manifest.target_platform,
+                    manifest.target_clock_mhz,
+                    manifest.clock_period_ns,
+                    manifest.estimated_luts,
+                    manifest.estimated_ffs,
+                    manifest.estimated_dsps,
+                    manifest.estimated_die_area_um2,
+                    manifest.dynamic_power_mw
                 );
             } else {
                 println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
@@ -12616,12 +16424,33 @@ fn handle_synth_command(args: &[String]) {
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Design Name  : {:<71} ║", manifest.design_name);
                 println!("║ Target PDK   : {:<71} ║", manifest.target_platform);
-                println!("║ Clock Freq   : {:<71} ║", format!("{:.1} MHz (Period: {:.3} ns)", manifest.target_clock_mhz, manifest.clock_period_ns));
-                println!("║ Logic LUTs   : {:<71} ║", format!("{} LUTs", manifest.estimated_luts));
-                println!("║ Registers    : {:<71} ║", format!("{} FFs (Pipelined State)", manifest.estimated_ffs));
-                println!("║ DSP Blocks   : {:<71} ║", format!("{} DSP Slices", manifest.estimated_dsps));
-                println!("║ Die Area     : {:<71} ║", format!("{:.2} μm²", manifest.estimated_die_area_um2));
-                println!("║ Dynamic Pwr  : {:<71} ║", format!("{:.3} mW", manifest.dynamic_power_mw));
+                println!(
+                    "║ Clock Freq   : {:<71} ║",
+                    format!(
+                        "{:.1} MHz (Period: {:.3} ns)",
+                        manifest.target_clock_mhz, manifest.clock_period_ns
+                    )
+                );
+                println!(
+                    "║ Logic LUTs   : {:<71} ║",
+                    format!("{} LUTs", manifest.estimated_luts)
+                );
+                println!(
+                    "║ Registers    : {:<71} ║",
+                    format!("{} FFs (Pipelined State)", manifest.estimated_ffs)
+                );
+                println!(
+                    "║ DSP Blocks   : {:<71} ║",
+                    format!("{} DSP Slices", manifest.estimated_dsps)
+                );
+                println!(
+                    "║ Die Area     : {:<71} ║",
+                    format!("{:.2} μm²", manifest.estimated_die_area_um2)
+                );
+                println!(
+                    "║ Dynamic Pwr  : {:<71} ║",
+                    format!("{:.3} mW", manifest.dynamic_power_mw)
+                );
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Generated Package Artifacts in '{}':", cfg.out_dir);
                 for f in &manifest.generated_files {
@@ -12632,17 +16461,29 @@ fn handle_synth_command(args: &[String]) {
 
             if run_sim || vcd_path.is_some() {
                 let vcd_target = vcd_path.as_deref().unwrap_or("silicon_trace.vcd");
-                match cronc::cl_silicon_tapeout::simulate_silicon_and_dump_vcd(&cfg, Some(vcd_target)) {
+                match cronc::cl_silicon_tapeout::simulate_silicon_and_dump_vcd(
+                    &cfg,
+                    Some(vcd_target),
+                ) {
                     Ok(sim_rep) => {
                         println!("┌────────────────────────────────────────────────────────────────────────────────────────┐");
                         println!("│  HARDWARE RTL CO-SIMULATION & WAVEFORM VCD TRACE REPORT                                │");
                         println!("├────────────────────────────────────────────────────────────────────────────────────────┤");
                         println!("│  Cycles Simulated : {:<66} │", sim_rep.total_cycles);
                         println!("│  Input Words Fed  : {:<66} │", sim_rep.input_words_fed);
-                        println!("│  Output Words Out : {:<66} │", sim_rep.output_words_received);
-                        println!("│  Pipeline Latency : {:<66} │", format!("{} clock cycles", sim_rep.latency_cycles));
+                        println!(
+                            "│  Output Words Out : {:<66} │",
+                            sim_rep.output_words_received
+                        );
+                        println!(
+                            "│  Pipeline Latency : {:<66} │",
+                            format!("{} clock cycles", sim_rep.latency_cycles)
+                        );
                         if let Some(ref path) = sim_rep.vcd_saved_to {
-                            println!("│  Waveform Saved   : {:<66} │", format!("{} (IEEE 1364-2001 GTKWave)", path));
+                            println!(
+                                "│  Waveform Saved   : {:<66} │",
+                                format!("{} (IEEE 1364-2001 GTKWave)", path)
+                            );
                         }
                         println!("└────────────────────────────────────────────────────────────────────────────────────────┘");
                     }
@@ -12681,13 +16522,19 @@ fn handle_cl_train_rl_command(args: &[String]) {
     let mut i = 0;
     while i < args.len() {
         if (args[i] == "--epochs" || args[i] == "-e") && i + 1 < args.len() {
-            if let Ok(e) = args[i + 1].parse::<usize>() { epochs = e; }
+            if let Ok(e) = args[i + 1].parse::<usize>() {
+                epochs = e;
+            }
             i += 2;
         } else if args[i] == "--group-size" && i + 1 < args.len() {
-            if let Ok(g) = args[i + 1].parse::<usize>() { group_size = g; }
+            if let Ok(g) = args[i + 1].parse::<usize>() {
+                group_size = g;
+            }
             i += 2;
         } else if args[i] == "--max-steps" && i + 1 < args.len() {
-            if let Ok(s) = args[i + 1].parse::<usize>() { max_steps = s; }
+            if let Ok(s) = args[i + 1].parse::<usize>() {
+                max_steps = s;
+            }
             i += 2;
         } else if args[i] == "--task" && i + 1 < args.len() {
             task = args[i + 1].clone();
@@ -12707,7 +16554,10 @@ fn handle_cl_train_rl_command(args: &[String]) {
     println!("================================================================================");
     println!(" CRON TINYZERO PURE REINFORCEMENT LEARNING TRAINING RUNTIME");
     println!(" Rule-Based Verifier: Format Rewards (<think>) + Math/Hazard Outcome Proof");
-    println!(" Algorithm:           Group Relative Policy Optimization (GRPO, G = {})", group_size);
+    println!(
+        " Algorithm:           Group Relative Policy Optimization (GRPO, G = {})",
+        group_size
+    );
     println!(" Target Task:         \"{}\"", task);
     println!(" Silicon Budget:      0.00 FLOPs Multiplier-Free, <$0.01 Total Cost");
     println!("================================================================================");
@@ -12754,16 +16604,37 @@ fn handle_cl_train_rl_command(args: &[String]) {
         println!("}}");
     } else {
         println!();
-        println!("+------------------------------------------------------------------------------+");
+        println!(
+            "+------------------------------------------------------------------------------+"
+        );
         println!("|           TINYZERO PURE RL TRAINING & REASONING CONVERGENCE REPORT          |");
-        println!("+------------------------------------------------------------------------------+");
-        println!("| Training Algorithm:   TinyZero GRPO (No Human Demonstrations, 100% Rule-RL)   |");
-        println!("| Convergence Status:   100.0% Optimal 4-Slot VLIW (0-Hazard Bit-Exact)        |");
-        println!("| Emergent Behavior:    Autonomous <think> Self-Correction (\"Aha! moment\")      |");
-        println!("| Target IPC Density:   {:<54} |", format!("{:.2} IPC (Deterministic 0-Bubble)", res.ipc));
-        println!("| Training Wall Time:   {:<54} |", format!("{:.2} ms (Total compute cost: $0.0028)", elapsed.as_secs_f64() * 1000.0));
+        println!(
+            "+------------------------------------------------------------------------------+"
+        );
+        println!(
+            "| Training Algorithm:   TinyZero GRPO (No Human Demonstrations, 100% Rule-RL)   |"
+        );
+        println!(
+            "| Convergence Status:   100.0% Optimal 4-Slot VLIW (0-Hazard Bit-Exact)        |"
+        );
+        println!(
+            "| Emergent Behavior:    Autonomous <think> Self-Correction (\"Aha! moment\")      |"
+        );
+        println!(
+            "| Target IPC Density:   {:<54} |",
+            format!("{:.2} IPC (Deterministic 0-Bubble)", res.ipc)
+        );
+        println!(
+            "| Training Wall Time:   {:<54} |",
+            format!(
+                "{:.2} ms (Total compute cost: $0.0028)",
+                elapsed.as_secs_f64() * 1000.0
+            )
+        );
         println!("| Proof Certificate:    {:<54} |", res.proof_hash);
-        println!("+------------------------------------------------------------------------------+");
+        println!(
+            "+------------------------------------------------------------------------------+"
+        );
         println!();
         println!("  Final Reasoning Monologue Trace:");
         println!("  --------------------------------");
@@ -12783,7 +16654,9 @@ fn handle_cl_serve_command(args: &[String]) {
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--port" && i + 1 < args.len() {
-            if let Ok(p) = args[i + 1].parse::<u16>() { port = p; }
+            if let Ok(p) = args[i + 1].parse::<u16>() {
+                port = p;
+            }
             i += 2;
         } else if args[i] == "--host" && i + 1 < args.len() {
             host = args[i + 1].clone();
@@ -12806,7 +16679,9 @@ fn handle_cl_net_command(args: &[String]) {
     let mut i = 0;
     while i < args.len() {
         if (args[i] == "--packets" || args[i] == "-n") && i + 1 < args.len() {
-            if let Ok(p) = args[i + 1].parse::<usize>() { packets = p; }
+            if let Ok(p) = args[i + 1].parse::<usize>() {
+                packets = p;
+            }
             i += 2;
         } else if args[i] == "--json" {
             emit_json = true;
@@ -12846,7 +16721,9 @@ fn handle_cl_forge_command(args: &[String]) {
             emit_json = true;
             i += 1;
         } else if !args[i].starts_with('-') {
-            if !prompt.is_empty() { prompt.push(' '); }
+            if !prompt.is_empty() {
+                prompt.push(' ');
+            }
             prompt.push_str(&args[i]);
             i += 1;
         } else {
@@ -12913,15 +16790,24 @@ fn handle_cl_transpile_command(args: &[String]) {
         }
     }
 
-    let target = cronc::TranspileTarget::parse(&target_str).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
+    let target =
+        cronc::TranspileTarget::parse(&target_str).unwrap_or(cronc::TranspileTarget::WebGpuWgsl);
 
     match std::fs::read_to_string(input_path) {
         Ok(source) => match cronc::transpile_cl(&source, target) {
             Ok(report) => {
                 if let Some(ref path) = out_file {
                     let _ = std::fs::write(path, &report.generated_code);
-                    println!("[SUCCESS] Transpiled {} to {} -> {}", input_path, target.as_str(), path);
-                    println!("          Speedup Estimate: {:.1}x over baseline emulator", report.estimated_speedup);
+                    println!(
+                        "[SUCCESS] Transpiled {} to {} -> {}",
+                        input_path,
+                        target.as_str(),
+                        path
+                    );
+                    println!(
+                        "          Speedup Estimate: {:.1}x over baseline emulator",
+                        report.estimated_speedup
+                    );
                 } else {
                     println!("{}", report.generated_code);
                 }
@@ -12979,15 +16865,21 @@ fn handle_cl_bridge_command(args: &[String]) {
             "Python Standalone Runtime & DLPack Bridge",
         ),
         "dlpack-info" | "dlpack" => {
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!("CRON Universal DLPack Zero-Copy Protocol");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             println!("Protocol: DLPack v0.8+ (kDLCPU / kDLCUDA)");
             println!("Structs : DLTensor, DLManagedTensor, DLDevice, DLDataType");
             println!("Zero-Copy: Direct pointer sharing with PyTorch (torch.from_dlpack)");
             println!("           and JAX (jax.dlpack.from_dlpack)");
             println!("Export FFI: cron_dlpack_tensor_export(data_ptr, rows, cols) -> *mut DLManagedTensor");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
             return;
         }
         _ => {
@@ -13041,8 +16933,17 @@ fn handle_cl_dpsta_rtl_command(args: &[String]) {
     match result {
         Ok(files) => {
             if emit_json {
-                println!(r#"{{"status":"ok","mode":"{}","output_dir":"{}","files_count":{},"files":{:?}}}"#,
-                    if asic_mode { "asic_tapeout" } else { "fpga_rtl" }, out_dir, files.len(), files);
+                println!(
+                    r#"{{"status":"ok","mode":"{}","output_dir":"{}","files_count":{},"files":{:?}}}"#,
+                    if asic_mode {
+                        "asic_tapeout"
+                    } else {
+                        "fpga_rtl"
+                    },
+                    out_dir,
+                    files.len(),
+                    files
+                );
             } else {
                 let title = if asic_mode {
                     "DPSTA SkyWater 130nm ASIC Tapeout & RTL Package Exported"
@@ -13053,18 +16954,34 @@ fn handle_cl_dpsta_rtl_command(args: &[String]) {
                 println!("║ {:<85} ║", title);
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Target Directory : {:<66} ║", out_dir);
-                println!("║ Target Flow      : {:<66} ║", if asic_mode { "OpenLane Sky130 + Yosys ASIC" } else { "FPGA Verilog + Vivado TCL" });
+                println!(
+                    "║ Target Flow      : {:<66} ║",
+                    if asic_mode {
+                        "OpenLane Sky130 + Yosys ASIC"
+                    } else {
+                        "FPGA Verilog + Vivado TCL"
+                    }
+                );
                 println!("║ Total Files      : {:<66} ║", files.len());
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 for f in &files {
                     let path = std::path::Path::new(f);
-                    let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or(f.as_str());
+                    let fname = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(f.as_str());
                     let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-                    println!("║  • {:<32} ({:>6} bytes)                                  ║", fname, size);
+                    println!(
+                        "║  • {:<32} ({:>6} bytes)                                  ║",
+                        fname, size
+                    );
                 }
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
                 if asic_mode {
-                    println!("\nOpenLane Sky130 flow: cd {} && ./run_openlane.sh", out_dir);
+                    println!(
+                        "\nOpenLane Sky130 flow: cd {} && ./run_openlane.sh",
+                        out_dir
+                    );
                 } else {
                     println!("\nVivado synthesis ready: cd {} && vivado -mode batch -source synth_dpsta.tcl", out_dir);
                 }
@@ -13074,13 +16991,16 @@ fn handle_cl_dpsta_rtl_command(args: &[String]) {
     }
 }
 
-
 fn handle_cl_dpsta_command(args: &[String]) {
     if args.is_empty() || args[0] == "-h" || args[0] == "--help" {
         println!("USAGE: cron cl-dpsta <pack|unpack|bench> [OPTIONS]");
         println!("SUBCOMMANDS:");
-        println!("    pack <corpus> [-o out.dpdata] [--json]  Pack text into 7-bit discrete stream");
-        println!("    unpack <file.dpdata> [--json]           Unpack binary stream into state tokens");
+        println!(
+            "    pack <corpus> [-o out.dpdata] [--json]  Pack text into 7-bit discrete stream"
+        );
+        println!(
+            "    unpack <file.dpdata> [--json]           Unpack binary stream into state tokens"
+        );
         println!("    bench [--json]                          Benchmark 1.58-bit sub-byte ternary packer");
         return;
     }
@@ -13123,17 +17043,31 @@ fn handle_cl_dpsta_command(args: &[String]) {
                     match pack_res {
                         Ok(bytes_written) => {
                             if emit_json {
-                                println!(r#"{{"status":"ok","bytes":{},"out":"{}","lossless":{}}}"#,
-                                    bytes_written, out_path, is_lossless);
+                                println!(
+                                    r#"{{"status":"ok","bytes":{},"out":"{}","lossless":{}}}"#,
+                                    bytes_written, out_path, is_lossless
+                                );
                             } else {
-                                println!("[DPSTA PACK] Compressed {} bytes into {} bytes ({}) -> {}",
-                                    bytes.len(), bytes_written, if is_lossless { "Lossless DP95" } else { "Discrete DP94" }, out_path);
+                                println!(
+                                    "[DPSTA PACK] Compressed {} bytes into {} bytes ({}) -> {}",
+                                    bytes.len(),
+                                    bytes_written,
+                                    if is_lossless {
+                                        "Lossless DP95"
+                                    } else {
+                                        "Discrete DP94"
+                                    },
+                                    out_path
+                                );
                             }
                         }
                         Err(e) => eprintln!("[ERROR] DPSTA packing failed: {}", e),
                     }
                 }
-                Err(e) => eprintln!("[ERROR] Could not read corpus file '{}': {}", corpus_path, e),
+                Err(e) => eprintln!(
+                    "[ERROR] Could not read corpus file '{}': {}",
+                    corpus_path, e
+                ),
             }
         }
         "unpack" => {
@@ -13173,9 +17107,16 @@ fn handle_cl_dpsta_command(args: &[String]) {
                             let _ = std::fs::write(out_f, &bytes);
                         }
                         if emit_json {
-                            println!(r#"{{"status":"ok","mode":"lossless_dp95","bytes_count":{}}}"#, bytes.len());
+                            println!(
+                                r#"{{"status":"ok","mode":"lossless_dp95","bytes_count":{}}}"#,
+                                bytes.len()
+                            );
                         } else {
-                            println!("[DPSTA UNPACK] Losslessly unpacked {} bytes from {}", bytes.len(), dpdata_path);
+                            println!(
+                                "[DPSTA UNPACK] Losslessly unpacked {} bytes from {}",
+                                bytes.len(),
+                                dpdata_path
+                            );
                             if let Ok(text) = std::str::from_utf8(&bytes) {
                                 let preview: String = text.chars().take(80).collect();
                                 println!("Recovered text preview: \"{}\"", preview);
@@ -13190,15 +17131,29 @@ fn handle_cl_dpsta_command(args: &[String]) {
             } else {
                 match cronc::CompactDatasetEngine::load_dataset_package(dpdata_path) {
                     Ok(states) => {
-                        let reconstructed: String = states.iter().map(|&s| cronc::cl_matrix94::state_to_char(s)).collect();
+                        let reconstructed: String = states
+                            .iter()
+                            .map(|&s| cronc::cl_matrix94::state_to_char(s))
+                            .collect();
                         if let Some(ref out_f) = out_path {
                             let _ = std::fs::write(out_f, reconstructed.as_bytes());
                         }
                         if emit_json {
-                            println!(r#"{{"status":"ok","mode":"discrete_dp94","tokens_count":{}}}"#, states.len());
+                            println!(
+                                r#"{{"status":"ok","mode":"discrete_dp94","tokens_count":{}}}"#,
+                                states.len()
+                            );
                         } else {
-                            println!("[DPSTA UNPACK] Loaded {} tokens from {}", states.len(), dpdata_path);
-                            let sample: String = states.iter().take(40).map(|&s| cronc::cl_matrix94::state_to_char(s)).collect();
+                            println!(
+                                "[DPSTA UNPACK] Loaded {} tokens from {}",
+                                states.len(),
+                                dpdata_path
+                            );
+                            let sample: String = states
+                                .iter()
+                                .take(40)
+                                .map(|&s| cronc::cl_matrix94::state_to_char(s))
+                                .collect();
                             println!("Sample preview: \"{}\"", sample);
                             if let Some(ref out_f) = out_path {
                                 println!("[SUCCESS] Written recovered text to '{}'", out_f);
@@ -13227,17 +17182,47 @@ fn handle_cl_dpsta_command(args: &[String]) {
             let unpack_rate_mbs = (count as f64 / 1_000_000.0) / unpack_time.as_secs_f64();
 
             if emit_json {
-                println!(r#"{{"synapses":{},"packed_bytes":{},"pack_mbs":{:.2},"unpack_mbs":{:.2},"fidelity_ok":{}}}"#,
-                    count, packed.len(), pack_rate_mbs, unpack_rate_mbs, matches);
+                println!(
+                    r#"{{"synapses":{},"packed_bytes":{},"pack_mbs":{:.2},"unpack_mbs":{:.2},"fidelity_ok":{}}}"#,
+                    count,
+                    packed.len(),
+                    pack_rate_mbs,
+                    unpack_rate_mbs,
+                    matches
+                );
             } else {
                 println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
                 println!("║         DPSTA 1.58-Bit Sub-Byte Ternary Packer Benchmark (5 syn/byte)                 ║");
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Total Synapses   : {:<66} ║", count);
-                println!("║ Sub-Byte Packed  : {:<66} ║", format!("{} bytes (compression: 5x over i8)", packed.len()));
-                println!("║ Pack Speed       : {:<66} ║", format!("{:.2} MSynapses/sec ({:.2} ms)", pack_rate_mbs, pack_time.as_secs_f64() * 1000.0));
-                println!("║ Unpack Speed     : {:<66} ║", format!("{:.2} MSynapses/sec ({:.2} ms)", unpack_rate_mbs, unpack_time.as_secs_f64() * 1000.0));
-                println!("║ Fidelity Check   : {:<66} ║", if matches { "PASSED (100% Exact Roundtrip)" } else { "FAILED" });
+                println!(
+                    "║ Sub-Byte Packed  : {:<66} ║",
+                    format!("{} bytes (compression: 5x over i8)", packed.len())
+                );
+                println!(
+                    "║ Pack Speed       : {:<66} ║",
+                    format!(
+                        "{:.2} MSynapses/sec ({:.2} ms)",
+                        pack_rate_mbs,
+                        pack_time.as_secs_f64() * 1000.0
+                    )
+                );
+                println!(
+                    "║ Unpack Speed     : {:<66} ║",
+                    format!(
+                        "{:.2} MSynapses/sec ({:.2} ms)",
+                        unpack_rate_mbs,
+                        unpack_time.as_secs_f64() * 1000.0
+                    )
+                );
+                println!(
+                    "║ Fidelity Check   : {:<66} ║",
+                    if matches {
+                        "PASSED (100% Exact Roundtrip)"
+                    } else {
+                        "FAILED"
+                    }
+                );
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
             }
         }
@@ -13252,12 +17237,24 @@ fn handle_cl_dpsta_command(args: &[String]) {
             println!("  Heads:                {}", kv.num_heads);
             println!("  Head Dimension:       {}", kv.head_dim);
             println!("  Sequence Length:      {} tokens", tokens);
-            println!("  Memory Footprint:     {:.2} KB", kv.memory_bytes() as f32 / 1024.0);
-            println!("  Compression vs FP16:  {:.2}x", kv.compression_ratio_vs_fp16());
-            println!("  Compression vs FP32:  {:.2}x", kv.compression_ratio_vs_fp32());
+            println!(
+                "  Memory Footprint:     {:.2} KB",
+                kv.memory_bytes() as f32 / 1024.0
+            );
+            println!(
+                "  Compression vs FP16:  {:.2}x",
+                kv.compression_ratio_vs_fp16()
+            );
+            println!(
+                "  Compression vs FP32:  {:.2}x",
+                kv.compression_ratio_vs_fp32()
+            );
             println!("============================================================");
         }
-        other => eprintln!("[ERROR] Unknown cl-dpsta subcommand '{}'. Use: pack, unpack, bench, kv", other),
+        other => eprintln!(
+            "[ERROR] Unknown cl-dpsta subcommand '{}'. Use: pack, unpack, bench, kv",
+            other
+        ),
     }
 }
 
@@ -13350,8 +17347,15 @@ fn handle_fine_tune_command(args: &[String]) {
 
     println!("================================================================================");
     println!(" CRON CL-LoRA ULTRA-LOW RESOURCE FINE-TUNING ENGINE");
-    println!(" Dataset:          {} ({} pairs loaded)", data_file, pairs.len());
-    println!(" Architecture:     Rank r={}, Scale alpha={:.1}, Layers={}, HiddenDim=64", rank, alpha, layers);
+    println!(
+        " Dataset:          {} ({} pairs loaded)",
+        data_file,
+        pairs.len()
+    );
+    println!(
+        " Architecture:     Rank r={}, Scale alpha={:.1}, Layers={}, HiddenDim=64",
+        rank, alpha, layers
+    );
     println!(" Compute Profile:  CPU Discrete Hebbian Attractor Resonance (0-FLOPs, 0-GPU VRAM)");
     println!(" Target Hardware:  Occupies <= 35.3 KB L1 Cache | Sub-Byte 5-Trits Packing");
     println!("================================================================================");
@@ -13365,7 +17369,10 @@ fn handle_fine_tune_command(args: &[String]) {
         target_modules: vec!["q_proj".to_string(), "v_proj".to_string()],
     };
 
-    let str_pairs: Vec<(&str, &str)> = pairs.iter().map(|(p, r)| (p.as_str(), r.as_str())).collect();
+    let str_pairs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(p, r)| (p.as_str(), r.as_str()))
+        .collect();
     let adapter = cronc::train_cl_lora_from_pairs(&name, &str_pairs, &config);
     let elapsed = start.elapsed();
 
@@ -13375,16 +17382,30 @@ fn handle_fine_tune_command(args: &[String]) {
     }
 
     let payload_bytes = adapter.size_in_bytes();
-    println!("\n[SUCCESS] Fine-tuning completed in {:.2}ms ({:.3}s) on CPU!", elapsed.as_secs_f64() * 1000.0, elapsed.as_secs_f64());
+    println!(
+        "\n[SUCCESS] Fine-tuning completed in {:.2}ms ({:.3}s) on CPU!",
+        elapsed.as_secs_f64() * 1000.0,
+        elapsed.as_secs_f64()
+    );
     println!("Saved binary adapter to: '{}'", out_path);
-    println!("Binary footprint:        {} bytes ({:.2} KB) [<= 35.3 KB L1 Cache Bound]", payload_bytes, payload_bytes as f64 / 1024.0);
-    println!("Adapted layers:          {} transformer layers", adapter.layers.len());
+    println!(
+        "Binary footprint:        {} bytes ({:.2} KB) [<= 35.3 KB L1 Cache Bound]",
+        payload_bytes,
+        payload_bytes as f64 / 1024.0
+    );
+    println!(
+        "Adapted layers:          {} transformer layers",
+        adapter.layers.len()
+    );
 
     if export_cl {
         let cl_path = format!("{}.cl", out_path.trim_end_matches(".cldb"));
         let cl_code = adapter.export_cl_machine_code();
         if let Err(e) = std::fs::write(&cl_path, &cl_code) {
-            eprintln!("[WARN] Failed to write CL microcode to '{}': {}", cl_path, e);
+            eprintln!(
+                "[WARN] Failed to write CL microcode to '{}': {}",
+                cl_path, e
+            );
         } else {
             println!("Exported CL microcode to: '{}'", cl_path);
         }
@@ -13409,7 +17430,9 @@ fn handle_cl_cldb_command(args: &[String]) {
     match args[0].as_str() {
         "inspect" => {
             if args.len() < 2 {
-                eprintln!("Error: Missing .cldb file path. Usage: cron cl-cldb inspect <file.cldb>");
+                eprintln!(
+                    "Error: Missing .cldb file path. Usage: cron cl-cldb inspect <file.cldb>"
+                );
                 return;
             }
             let cldb_path = &args[1];
@@ -13420,15 +17443,41 @@ fn handle_cl_cldb_command(args: &[String]) {
 
             match cronc::CldbVault::load(cldb_path, &mut pipe, &mut htgm) {
                 Ok(header) => {
-                    let total_edges: usize = pipe.m_stage1.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count()
-                        + pipe.m_stage2.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count()
-                        + pipe.m_stage3.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count()
-                        + pipe.m_stage4.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count();
-                    let slots_pop = htgm.ring.iter().filter(|s| s.vector.iter().any(|&w| w != 0)).count();
+                    let total_edges: usize = pipe
+                        .m_stage1
+                        .iter()
+                        .flat_map(|r| r.iter())
+                        .filter(|&&w| w > 0)
+                        .count()
+                        + pipe
+                            .m_stage2
+                            .iter()
+                            .flat_map(|r| r.iter())
+                            .filter(|&&w| w > 0)
+                            .count()
+                        + pipe
+                            .m_stage3
+                            .iter()
+                            .flat_map(|r| r.iter())
+                            .filter(|&&w| w > 0)
+                            .count()
+                        + pipe
+                            .m_stage4
+                            .iter()
+                            .flat_map(|r| r.iter())
+                            .filter(|&&w| w > 0)
+                            .count();
+                    let slots_pop = htgm
+                        .ring
+                        .iter()
+                        .filter(|s| s.vector.iter().any(|&w| w != 0))
+                        .count();
 
                     if emit_json {
-                        println!(r#"{{"name":"{}","version":{},"updates":{},"active_edges":{},"slots_populated":{}}}"#,
-                            header.name, header.version, header.updates, total_edges, slots_pop);
+                        println!(
+                            r#"{{"name":"{}","version":{},"updates":{},"active_edges":{},"slots_populated":{}}}"#,
+                            header.name, header.version, header.updates, total_edges, slots_pop
+                        );
                     } else {
                         println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
                         println!("║         Crystalline Vault Database (.cldb) Inspection HUD                             ║");
@@ -13437,9 +17486,22 @@ fn handle_cl_cldb_command(args: &[String]) {
                         println!("║ Vault Name       : {:<66} ║", header.name);
                         println!("║ Format Version   : {:<66} ║", header.version);
                         println!("║ STDP Update Count: {:<66} ║", header.updates);
-                        println!("║ Active Synapses  : {:<66} ║", format!("{} / 35,344 (density: {:.1}%)", total_edges, (total_edges as f64 / 35344.0) * 100.0));
-                        println!("║ Memory Ring Depth: {:<66} ║", format!("{} slots active / 16 total (1,024 bytes)", slots_pop));
-                        println!("║ Total Vault Size : {:<66} ║", "36,414 bytes (Zero DRAM, Zero RAM leak)");
+                        println!(
+                            "║ Active Synapses  : {:<66} ║",
+                            format!(
+                                "{} / 35,344 (density: {:.1}%)",
+                                total_edges,
+                                (total_edges as f64 / 35344.0) * 100.0
+                            )
+                        );
+                        println!(
+                            "║ Memory Ring Depth: {:<66} ║",
+                            format!("{} slots active / 16 total (1,024 bytes)", slots_pop)
+                        );
+                        println!(
+                            "║ Total Vault Size : {:<66} ║",
+                            "36,414 bytes (Zero DRAM, Zero RAM leak)"
+                        );
                         println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
                     }
                 }
@@ -13484,11 +17546,14 @@ fn handle_cl_cldb_command(args: &[String]) {
                     }
                     let update_count = pipe.total_updates;
 
-                    match cronc::CldbVault::save(&out_path, &vault_name, update_count, &pipe, &htgm) {
+                    match cronc::CldbVault::save(&out_path, &vault_name, update_count, &pipe, &htgm)
+                    {
                         Ok(bytes_written) => {
                             if emit_json {
-                                println!(r#"{{"status":"ok","vault":"{}","bytes":{},"updates":{},"path":"{}"}}"#,
-                                    vault_name, bytes_written, update_count, out_path);
+                                println!(
+                                    r#"{{"status":"ok","vault":"{}","bytes":{},"updates":{},"path":"{}"}}"#,
+                                    vault_name, bytes_written, update_count, out_path
+                                );
                             } else {
                                 println!("[CLDB EXPORT] Saved Crystalline Vault '{}' ({} updates, {} bytes) -> {}",
                                     vault_name, update_count, bytes_written, out_path);
@@ -13497,10 +17562,16 @@ fn handle_cl_cldb_command(args: &[String]) {
                         Err(e) => eprintln!("[ERROR] CLDB export failed: {}", e),
                     }
                 }
-                Err(e) => eprintln!("[ERROR] Could not read corpus file '{}': {}", corpus_path, e),
+                Err(e) => eprintln!(
+                    "[ERROR] Could not read corpus file '{}': {}",
+                    corpus_path, e
+                ),
             }
         }
-        other => eprintln!("[ERROR] Unknown cl-cldb subcommand '{}'. Use: inspect, export", other),
+        other => eprintln!(
+            "[ERROR] Unknown cl-cldb subcommand '{}'. Use: inspect, export",
+            other
+        ),
     }
 }
 
@@ -13550,7 +17621,10 @@ fn handle_cl_dpsta_sleep_command(args: &[String]) {
                 vault_name = format!("{}_swr", hdr.name);
             }
             Err(e) => {
-                eprintln!("[ERROR] Failed to load input .cldb vault '{}': {}", input_path, e);
+                eprintln!(
+                    "[ERROR] Failed to load input .cldb vault '{}': {}",
+                    input_path, e
+                );
                 return;
             }
         }
@@ -13573,26 +17647,76 @@ fn handle_cl_dpsta_sleep_command(args: &[String]) {
     let (ripples_run, reinforced_transitions) = pipe.sleep_replay_cycle(ripples);
     let duration = start_t.elapsed();
 
-    let total_edges: usize = pipe.m_stage1.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count()
-        + pipe.m_stage2.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count()
-        + pipe.m_stage3.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count()
-        + pipe.m_stage4.iter().flat_map(|r| r.iter()).filter(|&&w| w > 0).count();
+    let total_edges: usize = pipe
+        .m_stage1
+        .iter()
+        .flat_map(|r| r.iter())
+        .filter(|&&w| w > 0)
+        .count()
+        + pipe
+            .m_stage2
+            .iter()
+            .flat_map(|r| r.iter())
+            .filter(|&&w| w > 0)
+            .count()
+        + pipe
+            .m_stage3
+            .iter()
+            .flat_map(|r| r.iter())
+            .filter(|&&w| w > 0)
+            .count()
+        + pipe
+            .m_stage4
+            .iter()
+            .flat_map(|r| r.iter())
+            .filter(|&&w| w > 0)
+            .count();
 
     match cronc::CldbVault::save(&out_path, &vault_name, pipe.total_updates, &pipe, &htgm) {
         Ok(bytes) => {
             if emit_json {
-                println!(r#"{{"status":"ok","ripples":{},"reinforced":{},"updates":{},"active_edges":{},"bytes":{},"time_ms":{:.2},"path":"{}"}}"#,
-                    ripples_run, reinforced_transitions, pipe.total_updates, total_edges, bytes, duration.as_secs_f64() * 1000.0, out_path);
+                println!(
+                    r#"{{"status":"ok","ripples":{},"reinforced":{},"updates":{},"active_edges":{},"bytes":{},"time_ms":{:.2},"path":"{}"}}"#,
+                    ripples_run,
+                    reinforced_transitions,
+                    pipe.total_updates,
+                    total_edges,
+                    bytes,
+                    duration.as_secs_f64() * 1000.0,
+                    out_path
+                );
             } else {
                 println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
                 println!("║         DPSTA Hippocampal Sharp-Wave Ripple (SWR) Sleep Consolidation         ║");
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ Input Source     : {:<66} ║", input_path);
-                println!("║ SWR Ripple Bursts: {:<66} ║", format!("{} bursts executed in {:.2} ms", ripples_run, duration.as_secs_f64() * 1000.0));
-                println!("║ Engrams Solidified: {:<66} ║", format!("{} high-confidence attractor transitions", reinforced_transitions));
-                println!("║ Total Updates    : {:<66} ║", format!("{} (initial: {})", pipe.total_updates, initial_updates));
-                println!("║ Active Synapses  : {:<66} ║", format!("{} / 35,344 weights crystallized", total_edges));
-                println!("║ Output Vault     : {:<66} ║", format!("{} ({} bytes)", out_path, bytes));
+                println!(
+                    "║ SWR Ripple Bursts: {:<66} ║",
+                    format!(
+                        "{} bursts executed in {:.2} ms",
+                        ripples_run,
+                        duration.as_secs_f64() * 1000.0
+                    )
+                );
+                println!(
+                    "║ Engrams Solidified: {:<66} ║",
+                    format!(
+                        "{} high-confidence attractor transitions",
+                        reinforced_transitions
+                    )
+                );
+                println!(
+                    "║ Total Updates    : {:<66} ║",
+                    format!("{} (initial: {})", pipe.total_updates, initial_updates)
+                );
+                println!(
+                    "║ Active Synapses  : {:<66} ║",
+                    format!("{} / 35,344 weights crystallized", total_edges)
+                );
+                println!(
+                    "║ Output Vault     : {:<66} ║",
+                    format!("{} ({} bytes)", out_path, bytes)
+                );
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
             }
         }
@@ -13605,7 +17729,9 @@ fn handle_cl_ingest_command(args: &[String]) {
         println!("USAGE: cron cl-ingest <path|--sovereign> [OPTIONS]");
         println!("OPTIONS:");
         println!("    --sovereign     Directly ingest & pack the 2,200 Morph-Token Sovereign Knowledge Corpus");
-        println!("    -o <path>       Output 1.58-bit .dpdata packed path (default: corpus.dpdata)");
+        println!(
+            "    -o <path>       Output 1.58-bit .dpdata packed path (default: corpus.dpdata)"
+        );
         println!("    --vault <path>  Export consolidated .cldb crystalline vault snapshot");
         println!("    --name <s>      Snapshot name (default: ingested_cortex)");
         println!("    --json          Output in structured JSON");
@@ -13661,7 +17787,9 @@ fn handle_cl_ingest_command(args: &[String]) {
 
     if is_sovereign {
         let start_t = std::time::Instant::now();
-        let dpdata_len = match cronc::SovereignCorpusEngine::export_sovereign_dpdata(std::path::Path::new(&out_dpdata)) {
+        let dpdata_len = match cronc::SovereignCorpusEngine::export_sovereign_dpdata(
+            std::path::Path::new(&out_dpdata),
+        ) {
             Ok(sz) => sz,
             Err(e) => {
                 eprintln!("[ERROR] Failed to export sovereign dpdata: {}", e);
@@ -13671,7 +17799,8 @@ fn handle_cl_ingest_command(args: &[String]) {
 
         let mut vault_sz_opt = None;
         if let Some(ref v_path) = vault_opt {
-            match cronc::SovereignCorpusEngine::export_sovereign_cldb(std::path::Path::new(v_path)) {
+            match cronc::SovereignCorpusEngine::export_sovereign_cldb(std::path::Path::new(v_path))
+            {
                 Ok(sz) => vault_sz_opt = Some(sz),
                 Err(e) => eprintln!("[WARN] Failed to export sovereign cldb vault: {}", e),
             }
@@ -13682,18 +17811,36 @@ fn handle_cl_ingest_command(args: &[String]) {
             println!("{{\"corpus\":\"sovereign_sphere_agi\",\"tokens\":2200,\"dialogues\":46,\"packed_dpdata_bytes\":{},\"vault_bytes\":{},\"elapsed_us\":{}}}",
                 dpdata_len, vault_sz_opt.unwrap_or(0), elapsed_us);
         } else {
-            println!("================================================================================");
-            println!("      SOVEREIGN 2,200 MORPH-TOKEN & 46 DIALOGUE INGESTION COMPLETE              ");
-            println!("================================================================================");
+            println!(
+                "================================================================================"
+            );
+            println!(
+                "      SOVEREIGN 2,200 MORPH-TOKEN & 46 DIALOGUE INGESTION COMPLETE              "
+            );
+            println!(
+                "================================================================================"
+            );
             println!("  Morph-Tokens:             2,200 unique lexical & grammatical units");
             println!("  Knowledge Dialogues:      46 foundational bilingual deep conversations");
             println!("  Packed .dpdata Path:      {}", out_dpdata);
-            println!("  Packed .dpdata Size:      {} bytes (1.58-bit sub-byte ternary)", dpdata_len);
+            println!(
+                "  Packed .dpdata Size:      {} bytes (1.58-bit sub-byte ternary)",
+                dpdata_len
+            );
             if let Some(sz) = vault_sz_opt {
-                println!("  Crystalline .cldb Vault:  {} ({} bytes, 100% frozen engrams)", vault_opt.unwrap(), sz);
+                println!(
+                    "  Crystalline .cldb Vault:  {} ({} bytes, 100% frozen engrams)",
+                    vault_opt.unwrap(),
+                    sz
+                );
             }
-            println!("  Ingestion Latency:        {:.2} ms", elapsed_us as f64 / 1000.0);
-            println!("================================================================================");
+            println!(
+                "  Ingestion Latency:        {:.2} ms",
+                elapsed_us as f64 / 1000.0
+            );
+            println!(
+                "================================================================================"
+            );
         }
         return;
     }
@@ -13724,30 +17871,75 @@ fn handle_cl_ingest_command(args: &[String]) {
         }
     };
 
-    let speed_mbs = (report.raw_bytes_read as f64 / (1024.0 * 1024.0)) / (report.elapsed_millis / 1000.0).max(0.0001);
+    let speed_mbs = (report.raw_bytes_read as f64 / (1024.0 * 1024.0))
+        / (report.elapsed_millis / 1000.0).max(0.0001);
 
     if emit_json {
         println!(
             r#"{{"status":"ok","input_path":"{}","files_scanned":{},"raw_bytes":{},"tokens":{},"packed_bytes":{},"ratio":{:.2},"speed_mbs":{:.2},"throughput_tokens_sec":{:.0},"time_ms":{:.2},"active_synapses":{},"dpdata_path":"{}","vault_path":{}}}"#,
-            input_path, report.files_scanned, report.raw_bytes_read, report.total_tokens, report.dpdata_bytes_written,
-            report.compression_ratio_x, speed_mbs, report.throughput_tokens_per_sec, report.elapsed_millis,
-            report.active_synapses_trained, out_dpdata,
-            vault_opt.as_ref().map(|p| format!("\"{}\"", p)).unwrap_or_else(|| "null".to_string())
+            input_path,
+            report.files_scanned,
+            report.raw_bytes_read,
+            report.total_tokens,
+            report.dpdata_bytes_written,
+            report.compression_ratio_x,
+            speed_mbs,
+            report.throughput_tokens_per_sec,
+            report.elapsed_millis,
+            report.active_synapses_trained,
+            out_dpdata,
+            vault_opt
+                .as_ref()
+                .map(|p| format!("\"{}\"", p))
+                .unwrap_or_else(|| "null".to_string())
         );
     } else {
         println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
         println!("║             DPSTA High-Speed Ingestion & 1.58-Bit Ternary Packing HUD                 ║");
         println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
         println!("║ Input Path       : {:<66} ║", input_path);
-        println!("║ Files Ingested   : {:<66} ║", format!("{} files (recursive scan & jsonl extraction)", report.files_scanned));
-        println!("║ Ingestion Speed  : {:<66} ║", format!("{:.2} MB/s ({:.0} tokens/sec, {:.2} ms total)", speed_mbs, report.throughput_tokens_per_sec, report.elapsed_millis));
-        println!("║ Raw Ingest Size  : {:<66} ║", format!("{} bytes ({} tokens canonicalized)", report.raw_bytes_read, report.total_tokens));
-        println!("║ Packed .dpdata   : {:<66} ║", format!("{} bytes ({:.2}x compression, 1.58-bit)", report.dpdata_bytes_written, report.compression_ratio_x));
-        println!("║ Active Synapses  : {:<66} ║", format!("{} synapses consolidated in 4-tact cortex", report.active_synapses_trained));
+        println!(
+            "║ Files Ingested   : {:<66} ║",
+            format!(
+                "{} files (recursive scan & jsonl extraction)",
+                report.files_scanned
+            )
+        );
+        println!(
+            "║ Ingestion Speed  : {:<66} ║",
+            format!(
+                "{:.2} MB/s ({:.0} tokens/sec, {:.2} ms total)",
+                speed_mbs, report.throughput_tokens_per_sec, report.elapsed_millis
+            )
+        );
+        println!(
+            "║ Raw Ingest Size  : {:<66} ║",
+            format!(
+                "{} bytes ({} tokens canonicalized)",
+                report.raw_bytes_read, report.total_tokens
+            )
+        );
+        println!(
+            "║ Packed .dpdata   : {:<66} ║",
+            format!(
+                "{} bytes ({:.2}x compression, 1.58-bit)",
+                report.dpdata_bytes_written, report.compression_ratio_x
+            )
+        );
+        println!(
+            "║ Active Synapses  : {:<66} ║",
+            format!(
+                "{} synapses consolidated in 4-tact cortex",
+                report.active_synapses_trained
+            )
+        );
         println!("║ Output Binary    : {:<66} ║", out_dpdata);
         if let Some(ref cldb_p) = report.cldb_vault_path {
             let sz = std::fs::metadata(cldb_p).map(|m| m.len()).unwrap_or(36414);
-            println!("║ Crystalline Vault: {:<66} ║", format!("{} ({} bytes frozen snapshot)", cldb_p.display(), sz));
+            println!(
+                "║ Crystalline Vault: {:<66} ║",
+                format!("{} ({} bytes frozen snapshot)", cldb_p.display(), sz)
+            );
         }
         println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
     }
@@ -13757,11 +17949,9 @@ fn handle_cl_sovereign_command(args: &[String]) {
     sovereign_commands::handle_cl_sovereign_command(args);
 }
 
-
 fn handle_cl_clifford_sim_command(args: &[String]) {
     sovereign_commands::handle_cl_clifford_sim_command(args);
 }
-
 
 fn handle_bootstrap_command(args: &[String]) {
     let mut emit_json = false;
@@ -13805,7 +17995,10 @@ fn handle_bootstrap_command(args: &[String]) {
     let cl_code = match cronc::compile_source(sample_cr) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 1 (.cr -> .cl) compilation failed: {:?}", e);
+            eprintln!(
+                "[BOOTSTRAP ERROR] Stage 1 (.cr -> .cl) compilation failed: {:?}",
+                e
+            );
             std::process::exit(1);
         }
     };
@@ -13814,14 +18007,20 @@ fn handle_bootstrap_command(args: &[String]) {
     let audit = match cronc::verify_cl_program(&cl_code) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 2 (.cl verification) failed: {:?}", e);
+            eprintln!(
+                "[BOOTSTRAP ERROR] Stage 2 (.cl verification) failed: {:?}",
+                e
+            );
             std::process::exit(1);
         }
     };
     let opt_report = match cronc::optimize_cl_program(&cl_code) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 2 (.cl optimization) failed: {:?}", e);
+            eprintln!(
+                "[BOOTSTRAP ERROR] Stage 2 (.cl optimization) failed: {:?}",
+                e
+            );
             std::process::exit(1);
         }
     };
@@ -13831,25 +18030,35 @@ fn handle_bootstrap_command(args: &[String]) {
     let clb_bytes = match cronc::cl_binary::assemble_cl_to_clb(optimized_code) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 3 (.cl -> .clb assembly) failed: {:?}", e);
+            eprintln!(
+                "[BOOTSTRAP ERROR] Stage 3 (.cl -> .clb assembly) failed: {:?}",
+                e
+            );
             std::process::exit(1);
         }
     };
     let disasm_code = match cronc::cl_binary::disassemble_clb_to_cl(&clb_bytes) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 3 (.clb -> .cl disassembly) failed: {:?}", e);
+            eprintln!(
+                "[BOOTSTRAP ERROR] Stage 3 (.clb -> .cl disassembly) failed: {:?}",
+                e
+            );
             std::process::exit(1);
         }
     };
-    let _ = cronc::verify_cl_program(&disasm_code).expect("Disassembled .cl must remain 100% valid");
+    let _ =
+        cronc::verify_cl_program(&disasm_code).expect("Disassembled .cl must remain 100% valid");
 
     // Stage 4: 16-Bank PGAS SRAM Galois Field Swizzle Check
     let memcheck_opts = cronc::MemcheckOptions::default();
     let memcheck_report = match cronc::verify_cl_memory_access(optimized_code, &memcheck_opts) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 4 (PGAS bank conflict check) failed: {:?}", e);
+            eprintln!(
+                "[BOOTSTRAP ERROR] Stage 4 (PGAS bank conflict check) failed: {:?}",
+                e
+            );
             std::process::exit(1);
         }
     };
@@ -13861,19 +18070,26 @@ fn handle_bootstrap_command(args: &[String]) {
     let c23_code = match cronc::cl_c23::compile_cl_to_c23(optimized_code, "bootstrap_kernel") {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 6 (.cl -> C23 transpilation) failed: {:?}", e);
+            eprintln!(
+                "[BOOTSTRAP ERROR] Stage 6 (.cl -> C23 transpilation) failed: {:?}",
+                e
+            );
             std::process::exit(1);
         }
     };
 
     // Stage 7: Verilog RTL Synthesis Check
-    let verilog_code = match cronc::verilog_backend::generate_verilog_hdl(optimized_code, "cron_bootstrap_top") {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("[BOOTSTRAP ERROR] Stage 7 (Verilog RTL synthesis) failed: {:?}", e);
-            std::process::exit(1);
-        }
-    };
+    let verilog_code =
+        match cronc::verilog_backend::generate_verilog_hdl(optimized_code, "cron_bootstrap_top") {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!(
+                    "[BOOTSTRAP ERROR] Stage 7 (Verilog RTL synthesis) failed: {:?}",
+                    e
+                );
+                std::process::exit(1);
+            }
+        };
 
     let elapsed = start_instant.elapsed();
 
@@ -13921,7 +18137,9 @@ fn handle_import_py_command(args: &[String]) {
         println!("OPTIONS:");
         println!("    -o, --out <path>      Output file path (defaults to input with .cl, .c, or .v extension)");
         println!("    -t, --target <tgt>    Compilation target: 'cl', 'c23', or 'verilog' (default: 'cl')");
-        println!("    --sphere              Enable 4D Hyperspherical Geodesic Rotors (default: enabled)");
+        println!(
+            "    --sphere              Enable 4D Hyperspherical Geodesic Rotors (default: enabled)"
+        );
         println!("    --no-sphere           Disable 4D sphere rotor optimization");
         println!("    --dim <n>             Default tensor dimension (default: 64)");
         println!("    -h, --help            Display this help message");
@@ -13964,7 +18182,9 @@ fn handle_import_py_command(args: &[String]) {
     let file_path = match input_path {
         Some(p) => p,
         None => {
-            eprintln!("[ERROR] No input Python file specified. Run 'cron import-py --help' for usage.");
+            eprintln!(
+                "[ERROR] No input Python file specified. Run 'cron import-py --help' for usage."
+            );
             std::process::exit(1);
         }
     };
@@ -13972,7 +18192,10 @@ fn handle_import_py_command(args: &[String]) {
     let py_src = match fs::read_to_string(&file_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("[ERROR] Failed to read input Python file '{}': {}", file_path, e);
+            eprintln!(
+                "[ERROR] Failed to read input Python file '{}': {}",
+                file_path, e
+            );
             std::process::exit(1);
         }
     };
@@ -13990,14 +18213,20 @@ fn handle_import_py_command(args: &[String]) {
         "verilog" | "v" | "rtl" => (transpiler.emit_verilog_rtl(), "v"),
         "ptx" | "cuda" | "gpu" => (transpiler.emit_ptx_cuda_kernel(), "ptx"),
         other => {
-            eprintln!("[ERROR] Unsupported target '{}'. Supported: cl, c23, verilog, ptx", other);
+            eprintln!(
+                "[ERROR] Unsupported target '{}'. Supported: cl, c23, verilog, ptx",
+                other
+            );
             std::process::exit(1);
         }
     };
 
     let final_out = out_path.unwrap_or_else(|| {
         let path = Path::new(&file_path);
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("kernel");
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("kernel");
         format!("{}.{}", stem, ext_default)
     });
 
@@ -14007,26 +18236,58 @@ fn handle_import_py_command(args: &[String]) {
     }
 
     let elapsed = t0.elapsed();
-    println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
-    println!("║             CRON UNIVERSAL PYTHON-TO-SILICON MATHEMATICAL TRANSPILER                  ║");
-    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+    println!(
+        "╔═══════════════════════════════════════════════════════════════════════════════════════╗"
+    );
+    println!(
+        "║             CRON UNIVERSAL PYTHON-TO-SILICON MATHEMATICAL TRANSPILER                  ║"
+    );
+    println!(
+        "╠═══════════════════════════════════════════════════════════════════════════════════════╣"
+    );
     println!("║ Source Python:       {:<65} ║", file_path);
-    println!("║ Target Architecture: {:<65} ║", match target.as_str() {
-        "cl" => "CRON CL 128-bit VLIW Microcode (40-char Bundles, 4-Slot)",
-        "c23" => "ISO C23 + AVX-512 SIMD Zero-Dependency Native Source",
-        "verilog" => "Synthesizable IEEE 1364 Verilog RTL Core (0 DSP Multipliers)",
-        "ptx" | "cuda" => "NVIDIA CUDA PTX v7.5+ GPU Kernel (SM_80+ Architecture)",
-        _ => "Custom Target",
-    });
-    println!("║ Functions Lowered:   {:<65} ║", transpiler.functions.len());
+    println!(
+        "║ Target Architecture: {:<65} ║",
+        match target.as_str() {
+            "cl" => "CRON CL 128-bit VLIW Microcode (40-char Bundles, 4-Slot)",
+            "c23" => "ISO C23 + AVX-512 SIMD Zero-Dependency Native Source",
+            "verilog" => "Synthesizable IEEE 1364 Verilog RTL Core (0 DSP Multipliers)",
+            "ptx" | "cuda" => "NVIDIA CUDA PTX v7.5+ GPU Kernel (SM_80+ Architecture)",
+            _ => "Custom Target",
+        }
+    );
+    println!(
+        "║ Functions Lowered:   {:<65} ║",
+        transpiler.functions.len()
+    );
     for f in &transpiler.functions {
-        println!("║   • {:<20} Domain: {:<15} Ops: {:<21} ║", f.name, format!("{:?}", f.domain), f.ops.len());
+        println!(
+            "║   • {:<20} Domain: {:<15} Ops: {:<21} ║",
+            f.name,
+            format!("{:?}", f.domain),
+            f.ops.len()
+        );
     }
-    println!("║ 4D Hyperspherical:   {:<65} ║", if use_sphere { "ENABLED (0 FLOPs, S^3 Geodesic Rotors)" } else { "DISABLED (Standard Matrix)" });
+    println!(
+        "║ 4D Hyperspherical:   {:<65} ║",
+        if use_sphere {
+            "ENABLED (0 FLOPs, S^3 Geodesic Rotors)"
+        } else {
+            "DISABLED (Standard Matrix)"
+        }
+    );
     println!("║ Emitted Output:      {:<65} ║", final_out);
-    println!("║ Lines Generated:     {:<65} ║", emitted_code.lines().count());
-    println!("║ Compilation Time:    {:<65} ║", format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0));
-    println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+    println!(
+        "║ Lines Generated:     {:<65} ║",
+        emitted_code.lines().count()
+    );
+    println!(
+        "║ Compilation Time:    {:<65} ║",
+        format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0)
+    );
+    println!(
+        "╚═══════════════════════════════════════════════════════════════════════════════════════╝"
+    );
     println!("[SUCCESS] Transpilation completed losslessly with 100% mathematical parity.");
 }
 
@@ -14036,7 +18297,9 @@ fn handle_py_verify_command(args: &[String]) {
         println!();
         println!("DESCRIPTION:");
         println!("    Bit-Exact Analytical Parity Verifier for Python-to-CRON Lowering:");
-        println!("    - Simulates N test vectors across Python float execution vs CRON discrete algebra");
+        println!(
+            "    - Simulates N test vectors across Python float execution vs CRON discrete algebra"
+        );
         println!("    - Certifies floating-point invariance (maximum absolute difference < 1e-12)");
         println!("    - Benchmarks relative throughput speedup over interpreted Python");
         println!();
@@ -14072,7 +18335,9 @@ fn handle_py_verify_command(args: &[String]) {
     let file_path = match input_path {
         Some(p) => p,
         None => {
-            eprintln!("[ERROR] No input Python file specified. Run 'cron py-verify --help' for usage.");
+            eprintln!(
+                "[ERROR] No input Python file specified. Run 'cron py-verify --help' for usage."
+            );
             std::process::exit(1);
         }
     };
@@ -14080,7 +18345,10 @@ fn handle_py_verify_command(args: &[String]) {
     let py_src = match fs::read_to_string(&file_path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("[ERROR] Failed to read input Python file '{}': {}", file_path, e);
+            eprintln!(
+                "[ERROR] Failed to read input Python file '{}': {}",
+                file_path, e
+            );
             std::process::exit(1);
         }
     };
@@ -14109,15 +18377,30 @@ fn handle_py_verify_command(args: &[String]) {
         return;
     }
 
-    println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
-    println!("║             CRON FORMAL MATHEMATICAL PARITY & BIT-EXACT INVARIANCE AUDIT              ║");
-    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+    println!(
+        "╔═══════════════════════════════════════════════════════════════════════════════════════╗"
+    );
+    println!(
+        "║             CRON FORMAL MATHEMATICAL PARITY & BIT-EXACT INVARIANCE AUDIT              ║"
+    );
+    println!(
+        "╠═══════════════════════════════════════════════════════════════════════════════════════╣"
+    );
     println!("║ Target File:     {:<68} ║", file_path);
     println!("║ Samples Tested:  {:<68} ║", num_samples);
-    println!("║ Verification:    {:<68} ║", format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0));
-    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
-    println!("║ FUNCTION NAME        │ DOMAIN       │ SAMPLES │ MAX DIFF │ PARITY STATUS │ SPEEDUP    ║");
-    println!("╟──────────────────────┼──────────────┼─────────┼──────────┼───────────────┼────────────╢");
+    println!(
+        "║ Verification:    {:<68} ║",
+        format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0)
+    );
+    println!(
+        "╠═══════════════════════════════════════════════════════════════════════════════════════╣"
+    );
+    println!(
+        "║ FUNCTION NAME        │ DOMAIN       │ SAMPLES │ MAX DIFF │ PARITY STATUS │ SPEEDUP    ║"
+    );
+    println!(
+        "╟──────────────────────┼──────────────┼─────────┼──────────┼───────────────┼────────────╢"
+    );
     let mut all_pass = true;
     for r in &reports {
         if !r.is_bit_exact {
@@ -14129,17 +18412,25 @@ fn handle_py_verify_command(args: &[String]) {
             format!("{:?}", r.domain),
             r.samples_tested,
             r.max_absolute_diff,
-            if r.is_bit_exact { "[PASS] EXACT" } else { "[FAIL] DRIFT" },
+            if r.is_bit_exact {
+                "[PASS] EXACT"
+            } else {
+                "[FAIL] DRIFT"
+            },
             format!("{:.0}x CPU", r.speedup_factor)
         );
     }
-    println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+    println!(
+        "╠═══════════════════════════════════════════════════════════════════════════════════════╣"
+    );
     if all_pass {
         println!("║ STATUS: 100.000% BIT-EXACT MATHEMATICAL INVARIANCE CERTIFIED (0 FLOP DRIFT)           ║");
     } else {
         println!("║ STATUS: [WARNING] NUMERICAL DRIFT DETECTED IN LOWERED OPERATORS                       ║");
     }
-    println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
+    println!(
+        "╚═══════════════════════════════════════════════════════════════════════════════════════╝"
+    );
 }
 
 fn handle_weights_command(args: &[String]) {
@@ -14147,10 +18438,16 @@ fn handle_weights_command(args: &[String]) {
         println!("USAGE: cron weights <SUBCOMMAND> [OPTIONS]");
         println!();
         println!("SUBCOMMANDS:");
-        println!("    import <file.safetensors|model.gguf> [-o <out>] [--lora] [--target cl|cll|c23]");
-        println!("        Ingest HuggingFace SafeTensors / GGUF model and lower to .cl or .cll adapter");
+        println!(
+            "    import <file.safetensors|model.gguf> [-o <out>] [--lora] [--target cl|cll|c23]"
+        );
+        println!(
+            "        Ingest HuggingFace SafeTensors / GGUF model and lower to .cl or .cll adapter"
+        );
         println!("    inspect <file.safetensors|model.gguf>");
-        println!("        Inspect tensor metadata, shapes, parameter count, and quantization ratios");
+        println!(
+            "        Inspect tensor metadata, shapes, parameter count, and quantization ratios"
+        );
         println!();
         println!("OPTIONS:");
         println!("    -o, --out <path>      Output file path (.cll for LoRA adapter, .cl for microcode, .c for C23)");
@@ -14201,7 +18498,10 @@ fn handle_weights_command(args: &[String]) {
             }
 
             let path = Path::new(file_path);
-            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("weights");
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("weights");
             let default_out = if is_lora || target == "cll" {
                 format!("{}.cll", stem)
             } else if target == "c23" || target == "c" {
@@ -14214,7 +18514,10 @@ fn handle_weights_command(args: &[String]) {
             let bytes = match fs::read(file_path) {
                 Ok(b) => b,
                 Err(e) => {
-                    eprintln!("[ERROR] Failed to read model weights file '{}': {}", file_path, e);
+                    eprintln!(
+                        "[ERROR] Failed to read model weights file '{}': {}",
+                        file_path, e
+                    );
                     std::process::exit(1);
                 }
             };
@@ -14252,9 +18555,18 @@ fn handle_weights_command(args: &[String]) {
                 println!("║ Output Adapter:      {:<65} ║", final_out);
                 println!("║ Ingested Layers:     {:<65} ║", adapter.layers.len());
                 println!("║ Adapter Rank:        {:<65} ║", adapter.config.rank);
-                println!("║ Binary Footprint:    {:<65} ║", format!("{} bytes (< 4.1 KB L1 bound)", adapter.size_in_bytes()));
-                println!("║ Compression Ratio:   {:<65} ║", "16.0x vs FP32 (93.75% memory saved)");
-                println!("║ Ingestion Time:      {:<65} ║", format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0));
+                println!(
+                    "║ Binary Footprint:    {:<65} ║",
+                    format!("{} bytes (< 4.1 KB L1 bound)", adapter.size_in_bytes())
+                );
+                println!(
+                    "║ Compression Ratio:   {:<65} ║",
+                    "16.0x vs FP32 (93.75% memory saved)"
+                );
+                println!(
+                    "║ Ingestion Time:      {:<65} ║",
+                    format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0)
+                );
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ STATUS: [SUCCESS] Bit-Exact Sub-Byte CL-LoRA Adapter Generated (0 Overfitting Noise)  ║");
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
@@ -14268,7 +18580,9 @@ fn handle_weights_command(args: &[String]) {
                     }
                 };
 
-                let is_binding = target == "weights" || target == "binding" || args.iter().any(|a| a == "--weights" || a == "--binding");
+                let is_binding = target == "weights"
+                    || target == "binding"
+                    || args.iter().any(|a| a == "--weights" || a == "--binding");
                 let cl_code = if is_binding {
                     match cronc::safetensors_to_cl_weights_binding(&model) {
                         Ok(c) => c,
@@ -14299,7 +18613,10 @@ fn handle_weights_command(args: &[String]) {
                 println!("║ Source File:         {:<65} ║", file_path);
                 println!("║ Output Microcode:    {:<65} ║", final_out);
                 println!("║ Ingested Tensors:    {:<65} ║", model.tensors.len());
-                println!("║ Synthesis Time:      {:<65} ║", format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0));
+                println!(
+                    "║ Synthesis Time:      {:<65} ║",
+                    format!("{:.2} ms", elapsed.as_secs_f64() * 1000.0)
+                );
                 println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
                 println!("║ STATUS: [SUCCESS] 40-character 4-slot VLIW microcode synthesized (0 Multipliers)      ║");
                 println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
@@ -14355,7 +18672,11 @@ fn handle_weights_command(args: &[String]) {
                     "║ {:<39} │ {:<6} │ {:<14} │ {:<8} │ {:<6} ║",
                     display_name,
                     format!("{:?}", t.dtype),
-                    if shape_str.len() > 14 { &shape_str[..14] } else { &shape_str },
+                    if shape_str.len() > 14 {
+                        &shape_str[..14]
+                    } else {
+                        &shape_str
+                    },
                     t.values.len(),
                     format!("{:.1} KB", bytes_count as f64 / 1024.0)
                 );
@@ -14364,12 +18685,25 @@ fn handle_weights_command(args: &[String]) {
             let ternary_bytes = total_params.div_ceil(5);
             println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
             println!("║ Total Ingested Parameters:  {:<57} ║", total_params);
-            println!("║ Original Float32 Footprint: {:<57} ║", format!("{:.2} KB", total_raw_bytes as f64 / 1024.0));
-            println!("║ CRON Sub-Byte Footprint:    {:<57} ║", format!("{:.2} KB ({:.1}x compression)", ternary_bytes as f64 / 1024.0, (total_raw_bytes as f64) / ternary_bytes.max(1) as f64));
+            println!(
+                "║ Original Float32 Footprint: {:<57} ║",
+                format!("{:.2} KB", total_raw_bytes as f64 / 1024.0)
+            );
+            println!(
+                "║ CRON Sub-Byte Footprint:    {:<57} ║",
+                format!(
+                    "{:.2} KB ({:.1}x compression)",
+                    ternary_bytes as f64 / 1024.0,
+                    (total_raw_bytes as f64) / ternary_bytes.max(1) as f64
+                )
+            );
             println!("╚═══════════════════════════════════════════════════════════════════════════════════════╝");
         }
         other => {
-            eprintln!("[ERROR] Unknown weights subcommand '{}'. Supported: import, inspect", other);
+            eprintln!(
+                "[ERROR] Unknown weights subcommand '{}'. Supported: import, inspect",
+                other
+            );
             std::process::exit(1);
         }
     }
@@ -14417,14 +18751,23 @@ fn run_showcase_tour() {
     println!("\x1b[33m[2/8] Testing 128-Bit Binary Bytecode Roundtrip...\x1b[0m");
     let clb_file = temp_dir.join("mamba2_tour.clb");
     let status = std::process::Command::new(&cron_exe)
-        .args(["asm", cl_file.to_str().unwrap(), "-o", clb_file.to_str().unwrap()])
+        .args([
+            "asm",
+            cl_file.to_str().unwrap(),
+            "-o",
+            clb_file.to_str().unwrap(),
+        ])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 2 FAILED]");
         return;
     }
     let clb_size = std::fs::metadata(&clb_file).map(|m| m.len()).unwrap_or(0);
-    println!("\x1b[32m      ✓ Assembled: {} - size: {} bytes\x1b[0m", clb_file.display(), clb_size);
+    println!(
+        "\x1b[32m      ✓ Assembled: {} - size: {} bytes\x1b[0m",
+        clb_file.display(),
+        clb_size
+    );
 
     // Stage 3: JIT
     println!("\x1b[33m[3/8] Running Cycle-Accurate JIT Silicon Engine...\x1b[0m");
@@ -14463,14 +18806,25 @@ fn run_showcase_tour() {
     println!("\x1b[33m[6/8] Exporting 7-File Synthesizable Verilog RTL Package...\x1b[0m");
     let rtl_dir = temp_dir.join("rtl_export");
     let status = std::process::Command::new(&cron_exe)
-        .args(["cl-export-rtl", cl_file.to_str().unwrap(), "-o", rtl_dir.to_str().unwrap()])
+        .args([
+            "cl-export-rtl",
+            cl_file.to_str().unwrap(),
+            "-o",
+            rtl_dir.to_str().unwrap(),
+        ])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 6 FAILED]");
         return;
     }
-    let count = std::fs::read_dir(&rtl_dir).map(|rd| rd.count()).unwrap_or(0);
-    println!("\x1b[32m      ✓ Exported {} files to {} at 1.0 GHz Fmax\x1b[0m", count, rtl_dir.display());
+    let count = std::fs::read_dir(&rtl_dir)
+        .map(|rd| rd.count())
+        .unwrap_or(0);
+    println!(
+        "\x1b[32m      ✓ Exported {} files to {} at 1.0 GHz Fmax\x1b[0m",
+        count,
+        rtl_dir.display()
+    );
 
     // Stage 7: Sub-byte Fine-Tuning
     println!("\x1b[33m[7/8] Running On-Device Sub-Byte CL-LoRA Fine-Tuning...\x1b[0m");
@@ -14479,45 +18833,60 @@ fn run_showcase_tour() {
     let _ = std::fs::write(&dataset_path, dataset_content);
     let adapter_file = temp_dir.join("mamba_adapter.cll");
     let status = std::process::Command::new(&cron_exe)
-        .args(["finetune", dataset_path.to_str().unwrap(), "-o", adapter_file.to_str().unwrap(), "--rank", "2", "--alpha", "2.0"])
+        .args([
+            "finetune",
+            dataset_path.to_str().unwrap(),
+            "-o",
+            adapter_file.to_str().unwrap(),
+            "--rank",
+            "2",
+            "--alpha",
+            "2.0",
+        ])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 7 FAILED]");
         return;
     }
-    let adapter_size = std::fs::metadata(&adapter_file).map(|m| m.len()).unwrap_or(0);
-    println!("\x1b[32m      ✓ Trained discrete adapter: {} - size: {} bytes\x1b[0m", adapter_file.display(), adapter_size);
+    let adapter_size = std::fs::metadata(&adapter_file)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    println!(
+        "\x1b[32m      ✓ Trained discrete adapter: {} - size: {} bytes\x1b[0m",
+        adapter_file.display(),
+        adapter_size
+    );
 
     // Stage 8: SafeTensors Merge
     println!("\x1b[33m[8/8] Executing Bidirectional Weight Cycle with SafeTensors Merge...\x1b[0m");
     let dense_delta = temp_dir.join("dense_delta.safetensors");
     let status = std::process::Command::new(&cron_exe)
-        .args(["model-expand", adapter_file.to_str().unwrap(), "-o", dense_delta.to_str().unwrap()])
+        .args([
+            "model-expand",
+            adapter_file.to_str().unwrap(),
+            "-o",
+            dense_delta.to_str().unwrap(),
+        ])
         .status();
     if status.is_err() || !status.unwrap().success() {
         eprintln!("[STAGE 8 FAILED]");
         return;
     }
-    println!("\x1b[32m      ✓ Up-projected discrete adapter into dense SafeTensors: {}\x1b[0m", dense_delta.display());
+    println!(
+        "\x1b[32m      ✓ Up-projected discrete adapter into dense SafeTensors: {}\x1b[0m",
+        dense_delta.display()
+    );
 
     println!();
     println!("\x1b[36m================================================================================\x1b[0m");
     println!("\x1b[32m           [SHOWCASE TOUR RESULT: ALL 8 STAGES PASSED WITH 100% SSS+]           \x1b[0m");
     println!("\x1b[36m================================================================================\x1b[0m");
-    println!(" Entire ecosystem is verified, deterministic, and ready for production deployment.\n");
+    println!(
+        " Entire ecosystem is verified, deterministic, and ready for production deployment.\n"
+    );
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
-
-
-
-
-
-
-
-
-
-
 
 fn run_bench_math(args: &[String]) {
     use cronc::cl_math::{MathBinOp, MathEvaluator, MathExpr, MathValue};
@@ -14529,7 +18898,10 @@ fn run_bench_math(args: &[String]) {
         println!("\x1b[36m================================================================================\x1b[0m");
         println!("\x1b[1;37m        CRON ZERO-VERBAL MATHEMATICAL SILICON ENGINE BENCHMARK (Phase 12)       \x1b[0m");
         println!("\x1b[36m================================================================================\x1b[0m");
-        println!(" Warmup: 3 iterations | Measurement: {} iterations | SIMD/Cache-Tiled: Active\n", iters);
+        println!(
+            " Warmup: 3 iterations | Measurement: {} iterations | SIMD/Cache-Tiled: Active\n",
+            iters
+        );
     }
 
     struct BenchResult {
@@ -14544,8 +18916,10 @@ fn run_bench_math(args: &[String]) {
     {
         let n = 128;
         let mut eval = MathEvaluator::new();
-        eval.env.insert("A".to_string(), MathValue::Matrix(vec![vec![0.5f64; n]; n]));
-        eval.env.insert("B".to_string(), MathValue::Matrix(vec![vec![0.2f64; n]; n]));
+        eval.env
+            .insert("A".to_string(), MathValue::Matrix(vec![vec![0.5f64; n]; n]));
+        eval.env
+            .insert("B".to_string(), MathValue::Matrix(vec![vec![0.2f64; n]; n]));
         let expr = MathExpr::Binary(
             Box::new(MathExpr::Var("A".to_string())),
             MathBinOp::MatMul,
@@ -14580,9 +18954,12 @@ fn run_bench_math(args: &[String]) {
         let t = 128;
         let d = 64;
         let mut eval = MathEvaluator::new();
-        eval.env.insert("Q".to_string(), MathValue::Matrix(vec![vec![0.1; d]; t]));
-        eval.env.insert("K".to_string(), MathValue::Matrix(vec![vec![0.1; d]; t]));
-        eval.env.insert("V".to_string(), MathValue::Matrix(vec![vec![0.2; d]; t]));
+        eval.env
+            .insert("Q".to_string(), MathValue::Matrix(vec![vec![0.1; d]; t]));
+        eval.env
+            .insert("K".to_string(), MathValue::Matrix(vec![vec![0.1; d]; t]));
+        eval.env
+            .insert("V".to_string(), MathValue::Matrix(vec![vec![0.2; d]; t]));
         let expr = MathExpr::Call(
             "causal_attn".to_string(),
             vec![
@@ -14618,11 +18995,18 @@ fn run_bench_math(args: &[String]) {
         let rows = 512;
         let cols = 512;
         let mut eval = MathEvaluator::new();
-        eval.env.insert("X".to_string(), MathValue::Matrix(vec![vec![1.05; cols]; rows]));
-        eval.env.insert("gamma".to_string(), MathValue::Vector(vec![1.0; cols]));
+        eval.env.insert(
+            "X".to_string(),
+            MathValue::Matrix(vec![vec![1.05; cols]; rows]),
+        );
+        eval.env
+            .insert("gamma".to_string(), MathValue::Vector(vec![1.0; cols]));
         let expr = MathExpr::Call(
             "rmsnorm".to_string(),
-            vec![MathExpr::Var("X".to_string()), MathExpr::Var("gamma".to_string())],
+            vec![
+                MathExpr::Var("X".to_string()),
+                MathExpr::Var("gamma".to_string()),
+            ],
         );
 
         for _ in 0..3 {
@@ -14652,10 +19036,18 @@ fn run_bench_math(args: &[String]) {
         let d = 256;
         let h = 512;
         let mut eval = MathEvaluator::new();
-        eval.env.insert("X".to_string(), MathValue::Matrix(vec![vec![0.3; d]; b]));
-        eval.env.insert("W_gate".to_string(), MathValue::Matrix(vec![vec![0.1; h]; d]));
-        eval.env.insert("W_up".to_string(), MathValue::Matrix(vec![vec![0.2; h]; d]));
-        eval.env.insert("W_down".to_string(), MathValue::Matrix(vec![vec![0.1; d]; h]));
+        eval.env
+            .insert("X".to_string(), MathValue::Matrix(vec![vec![0.3; d]; b]));
+        eval.env.insert(
+            "W_gate".to_string(),
+            MathValue::Matrix(vec![vec![0.1; h]; d]),
+        );
+        eval.env
+            .insert("W_up".to_string(), MathValue::Matrix(vec![vec![0.2; h]; d]));
+        eval.env.insert(
+            "W_down".to_string(),
+            MathValue::Matrix(vec![vec![0.1; d]; h]),
+        );
         let expr = MathExpr::Call(
             "fused_swiglu".to_string(),
             vec![
@@ -14693,8 +19085,10 @@ fn run_bench_math(args: &[String]) {
         let d = 256;
         let m = 256;
         let mut eval = MathEvaluator::new();
-        eval.env.insert("X".to_string(), MathValue::Matrix(vec![vec![0.5; d]; b]));
-        eval.env.insert("W".to_string(), MathValue::Matrix(vec![vec![1.0; d]; m]));
+        eval.env
+            .insert("X".to_string(), MathValue::Matrix(vec![vec![0.5; d]; b]));
+        eval.env
+            .insert("W".to_string(), MathValue::Matrix(vec![vec![1.0; d]; m]));
         let expr = MathExpr::Call(
             "bitlinear".to_string(),
             vec![
@@ -14726,14 +19120,17 @@ fn run_bench_math(args: &[String]) {
     }
 
     if json_mode {
-        let json_items: Vec<serde_json::Value> = results.into_iter().map(|r| {
-            serde_json::json!({
-                "operator": r.name,
-                "latency_us": r.latency_us,
-                "throughput": r.throughput,
-                "memory": r.memory_str
+        let json_items: Vec<serde_json::Value> = results
+            .into_iter()
+            .map(|r| {
+                serde_json::json!({
+                    "operator": r.name,
+                    "latency_us": r.latency_us,
+                    "throughput": r.throughput,
+                    "memory": r.memory_str
+                })
             })
-        }).collect();
+            .collect();
         let report = serde_json::json!({
             "benchmark": "CRON Zero-Verbal Mathematical Silicon Engine",
             "version": "v1.0-Phase12",
@@ -14742,18 +19139,29 @@ fn run_bench_math(args: &[String]) {
         });
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
     } else {
-        println!("+----------------------------------+---------------+---------------+---------------+");
-        println!("| Operator                         | Latency       | Throughput    | Memory        |");
-        println!("+----------------------------------+---------------+---------------+---------------+");
+        println!(
+            "+----------------------------------+---------------+---------------+---------------+"
+        );
+        println!(
+            "| Operator                         | Latency       | Throughput    | Memory        |"
+        );
+        println!(
+            "+----------------------------------+---------------+---------------+---------------+"
+        );
         for r in &results {
             let lat_str = if r.latency_us >= 1000.0 {
                 format!("{:.2} ms", r.latency_us / 1000.0)
             } else {
                 format!("{:.1} μs", r.latency_us)
             };
-            println!("| {:<32} | {:<13} | {:<13} | {:<13} |", r.name, lat_str, r.throughput, r.memory_str);
+            println!(
+                "| {:<32} | {:<13} | {:<13} | {:<13} |",
+                r.name, lat_str, r.throughput, r.memory_str
+            );
         }
-        println!("+----------------------------------+---------------+---------------+---------------+");
+        println!(
+            "+----------------------------------+---------------+---------------+---------------+"
+        );
         println!("\x1b[32m[+] Pure Silicon Mathematical AI Engine Status: 100% SSS+ OPTIMIZED (PASSED)\x1b[0m\n");
     }
 }
