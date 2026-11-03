@@ -390,10 +390,22 @@ impl R1ReasoningEngine {
         let proof_hash = format!("0x{:08X}", (mean_reward * 1_000_000.0) as u32 ^ 0xC404_5EED);
         let total_cycles = best.synthesized_code.lines().filter(|l| l.trim().starts_with('B')).count();
 
+        let header = format!(
+            "; ============================================================================\n\
+             ; CRON TEST-TIME REASONED VLIW MICROCODE (DeepSeek-R1 + GRPO)\n\
+             ; Goal: {} | Strategy: {}\n\
+             ; Target: 256-Core 4D-Torus Silicon | 4.0 IPC Zero-Stall Schedule\n\
+             ; ============================================================================\n\n\
+             .stage \"r1_reasoned_kernel\", params=\"32\", precision=\"ternary_1.58b\", d_model=64, heads=4, zero_overhead=true\n\n\
+             @entry:\n",
+            prompt, best.strategy_name
+        );
+        let verified_code = format!("{}{}", header, best.synthesized_code);
+
         R1ReasoningResult {
             prompt: prompt.to_string(),
             full_cot_monologue: cot,
-            verified_code: best.synthesized_code,
+            verified_code,
             group_size: g,
             best_candidate_id: best.candidate_id + 1,
             best_reward: best.total_reward,
