@@ -16,8 +16,11 @@ use cronc::cl_paged_serving::*;
 use cronc::cl_checkpoint::*;
 use cronc::cl_train_pipeline::{AutonomousLanguageModel, TrainingConfig, TrainingOptimizer};
 
+static CUDA_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn test_cuda_driver_sm80_vector_math() {
+    let _lock = CUDA_TEST_MUTEX.lock().unwrap();
     if !CudaDriver::is_available() {
         println!("[SKIP] CUDA Driver not present in environment.");
         return;
@@ -285,6 +288,7 @@ fn test_distributed_optimizer_checkpointing_atomic_crc32() {
 
 #[test]
 fn test_cuda_hardware_autonomous_training() {
+    let _lock = CUDA_TEST_MUTEX.lock().unwrap();
     if !CudaDriver::is_available() {
         println!("[SKIP] CUDA Driver not present on host system.");
         return;

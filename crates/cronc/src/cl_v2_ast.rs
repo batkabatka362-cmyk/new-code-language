@@ -238,6 +238,13 @@ impl TensorShape {
         if self.dims == other.dims || other.dims.is_empty() || self.dims.is_empty() {
             return Ok(self.clone());
         }
+        // Scalar broadcasting: [1] broadcasts to any tensor shape
+        if other.dims == [1] || other.dims.iter().product::<usize>() == 1 {
+            return Ok(self.clone());
+        }
+        if self.dims == [1] || self.dims.iter().product::<usize>() == 1 {
+            return Ok(other.clone());
+        }
         if self.dims.iter().product::<usize>() == other.dims.iter().product::<usize>() {
             return Ok(self.clone());
         }

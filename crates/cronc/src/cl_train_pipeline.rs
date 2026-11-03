@@ -1218,6 +1218,261 @@ impl AutonomousLanguageModel {
             String::from_utf8_lossy(&bytes).to_string()
         }
     }
+
+    /// Loads model weights from a standard IEEE 754 SafeTensors file
+    pub fn from_safetensors_file(path: &str) -> Result<Self, String> {
+        let bytes = fs::read(path).map_err(|e| format!("Failed to read safetensors file '{}': {}", path, e))?;
+        let raw_tensors = crate::cl_safetensors_convert::parse_raw_safetensors(&bytes)?;
+
+        let mut config = TrainingConfig::default();
+        let mut embedding_opt = None;
+        let mut w_head_opt = None;
+        let mut w_gate_opt = None;
+        let mut w_up_opt = None;
+        let mut w_down_opt = None;
+
+        for t in raw_tensors {
+            match t.name.as_str() {
+                "embedding" if t.shape.len() == 2 => {
+                    config.vocab_size = t.shape[0];
+                    config.dim = t.shape[1];
+                    embedding_opt = Some(ParamMatrix {
+                        rows: t.shape[0],
+                        cols: t.shape[1],
+                        data: t.data.clone(),
+                        grad: vec![0.0f32; t.data.len()],
+                        m: vec![0.0f32; t.data.len()],
+                        v: vec![0.0f32; t.data.len()],
+                    });
+                }
+                "w_head" if t.shape.len() == 2 => {
+                    w_head_opt = Some(ParamMatrix {
+                        rows: t.shape[0],
+                        cols: t.shape[1],
+                        data: t.data.clone(),
+                        grad: vec![0.0f32; t.data.len()],
+                        m: vec![0.0f32; t.data.len()],
+                        v: vec![0.0f32; t.data.len()],
+                    });
+                }
+                "w_gate" | "model.layers.0.mlp.gate_proj.0" if t.shape.len() == 2 => {
+                    config.hidden_dim = t.shape[1];
+                    w_gate_opt = Some(ParamMatrix {
+                        rows: t.shape[0],
+                        cols: t.shape[1],
+                        data: t.data.clone(),
+                        grad: vec![0.0f32; t.data.len()],
+                        m: vec![0.0f32; t.data.len()],
+                        v: vec![0.0f32; t.data.len()],
+                    });
+                }
+                "w_up" | "model.layers.0.mlp.up_proj.0" if t.shape.len() == 2 => {
+                    w_up_opt = Some(ParamMatrix {
+                        rows: t.shape[0],
+                        cols: t.shape[1],
+                        data: t.data.clone(),
+                        grad: vec![0.0f32; t.data.len()],
+                        m: vec![0.0f32; t.data.len()],
+                        v: vec![0.0f32; t.data.len()],
+                    });
+                }
+                "w_down" | "model.layers.0.mlp.down_proj.0" if t.shape.len() == 2 => {
+                    w_down_opt = Some(ParamMatrix {
+                        rows: t.shape[0],
+                        cols: t.shape[1],
+                        data: t.data.clone(),
+                        grad: vec![0.0f32; t.data.len()],
+                        m: vec![0.0f32; t.data.len()],
+                        v: vec![0.0f32; t.data.len()],
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        let mut model = AutonomousLanguageModel::new(config);
+        if let Some(emb) = embedding_opt { model.embedding = emb; }
+        if let Some(head) = w_head_opt { model.w_head = head; }
+        if let Some(g) = w_gate_opt {
+            model.layers[0].w_gate[0] = g.clone();
+            model.w_gate = g;
+        }
+        if let Some(u) = w_up_opt {
+            model.layers[0].w_up[0] = u.clone();
+            model.w_up = u;
+        }
+        if let Some(d) = w_down_opt {
+            model.layers[0].w_down[0] = d.clone();
+            model.w_down = d;
+        }
+
+        Ok(model)
+    }
+
+    /// Autoregressively generates text directly on the physical NVIDIA RTX GPU with real-time streaming
+    pub fn generate_text_gpu(
+        &self,
+        prompt: &str,
+        max_new_tokens: usize,
+        temperature: f32,
+        mut token_callback: impl FnMut(&str),
+    ) -> Result<String, String> {
+        if !CudaDriver::is_available() {
+            return Err("CUDA Driver not available on host system".to_string());
+        }
+
+        let driver = CudaDriver::init()?;
+        let ctx = Arc::new(driver.create_context(0)?);
+        ctx.make_current()?;
+        let engine = CudaTensorEngine::new(ctx.clone())?;
+
+        let d = self.config.dim;
+        let h = self.config.hidden_dim;
+        let v = self.config.vocab_size;
+        let seq_len = self.config.seq_len.max(16);
+
+        // Upload layer 0 weights to GPU
+        let d_w_head = ctx.alloc(d * v * 4)?;
+        ctx.copy_htod(&d_w_head, &self.w_head.data)?;
+
+        let d_w_gate = ctx.alloc(d * h * 4)?;
+        ctx.copy_htod(&d_w_gate, &self.layers[0].w_gate[0].data)?;
+
+        let d_w_up = ctx.alloc(d * h * 4)?;
+        ctx.copy_htod(&d_w_up, &self.layers[0].w_up[0].data)?;
+
+        let d_w_down = ctx.alloc(h * d * 4)?;
+        ctx.copy_htod(&d_w_down, &self.layers[0].w_down[0].data)?;
+
+        // Allocate scratch buffers
+        let d_h = ctx.alloc(seq_len * d * 4)?;
+        let d_g = ctx.alloc(seq_len * h * 4)?;
+        let d_u = ctx.alloc(seq_len * h * 4)?;
+        let d_act = ctx.alloc(seq_len * h * 4)?;
+        let d_h_ffn = ctx.alloc(seq_len * d * 4)?;
+        let d_h_last = ctx.alloc(1 * d * 4)?;
+        let d_logits = ctx.alloc(v * 4)?;
+
+        let tokenizer = BpeTokenizer::from_default_vocab();
+        let prompt_tokens = tokenizer.encode(prompt);
+        let mut tokens: Vec<usize> = if prompt_tokens.is_empty() {
+            prompt.bytes().map(|b| b as usize).collect()
+        } else {
+            prompt_tokens.into_iter().map(|t| t as usize).collect()
+        };
+
+        if tokens.is_empty() {
+            tokens.push(0);
+        }
+
+        let mut generated_ids = Vec::new();
+
+        for _ in 0..max_new_tokens {
+            let window_start = if tokens.len() > seq_len {
+                tokens.len() - seq_len
+            } else {
+                0
+            };
+            let context = &tokens[window_start..];
+            let n = context.len();
+
+            // 1. Embedding lookup on host
+            let mut h_host = vec![0.0f32; n * d];
+            for (i, &tok) in context.iter().enumerate() {
+                let tok_clamped = tok % v;
+                let src = &self.embedding.data[tok_clamped * d..(tok_clamped + 1) * d];
+                h_host[i * d..(i + 1) * d].copy_from_slice(src);
+            }
+
+            // 2. Upload to GPU
+            ctx.copy_htod(&d_h, &h_host)?;
+
+            // 3. GPU Forward Pass
+            engine.gemm(&d_h, &d_w_gate, &d_g, n, h, d, false, false)?;
+            engine.gemm(&d_h, &d_w_up, &d_u, n, h, d, false, false)?;
+            engine.swiglu(&d_g, &d_u, &d_act, n * h)?;
+            engine.gemm(&d_act, &d_w_down, &d_h_ffn, n, d, h, false, false)?;
+            engine.vec_add_inplace(&d_h, &d_h_ffn, n * d)?;
+
+            // 4. Extract last token embedding and project to logits: [1, d] @ [d, v] -> [1, v]
+            let last_offset = (n - 1) * d;
+            let h_last_slice = &h_host[last_offset..last_offset + d];
+            ctx.copy_htod(&d_h_last, h_last_slice)?;
+            engine.gemm(&d_h_last, &d_w_head, &d_logits, 1, v, d, false, false)?;
+
+            ctx.synchronize()?;
+
+            // 5. Read back next-token logits from GPU
+            let mut logits = vec![0.0f32; v];
+            ctx.copy_dtoh(&d_logits, &mut logits)?;
+
+            // 6. Sample token
+            let next_tok = if temperature <= 0.01 {
+                let mut best_tok = 0;
+                let mut best_val = -1e9f32;
+                for (idx, &val) in logits.iter().enumerate() {
+                    if val > best_val {
+                        best_val = val;
+                        best_tok = idx;
+                    }
+                }
+                best_tok
+            } else {
+                let mut max_l = -1e9f32;
+                for &l in &logits {
+                    if l > max_l { max_l = l; }
+                }
+                let mut probs = Vec::with_capacity(v);
+                let mut sum_p = 0.0f32;
+                for &l in &logits {
+                    let p = ((l - max_l) / temperature).exp();
+                    probs.push(p);
+                    sum_p += p;
+                }
+                let inv_sum = 1.0 / sum_p.max(1e-12);
+                let seed_step = (tokens.len()).wrapping_mul(1103515245).wrapping_add(12345);
+                let seed_ratio = ((seed_step & 0x7fffffff) as f32) / (0x7fffffff as f32);
+
+                let mut accum = 0.0f32;
+                let mut chosen = 0;
+                for (idx, &p) in probs.iter().enumerate() {
+                    accum += p * inv_sum;
+                    if accum >= seed_ratio {
+                        chosen = idx;
+                        break;
+                    }
+                }
+                chosen
+            };
+
+            let next_tok_clamped = next_tok % v;
+            tokens.push(next_tok_clamped);
+            generated_ids.push(next_tok_clamped);
+
+            // Stream token
+            let piece = tokenizer.decode(&[next_tok_clamped as u32]);
+            let s = if !piece.is_empty() {
+                piece
+            } else {
+                let b = [next_tok_clamped as u8];
+                String::from_utf8_lossy(&b).to_string()
+            };
+            token_callback(&s);
+        }
+
+        let full_piece = tokenizer.decode(&generated_ids.iter().map(|&x| x as u32).collect::<Vec<_>>());
+        let result = if !full_piece.is_empty() {
+            format!("{}{}", prompt, full_piece)
+        } else {
+            let mut bytes = prompt.as_bytes().to_vec();
+            for &id in &generated_ids {
+                bytes.push((id % 256) as u8);
+            }
+            String::from_utf8_lossy(&bytes).to_string()
+        };
+
+        Ok(result)
+    }
 }
 
 /// Tokenizes source training corpus into a continuous sequence of token IDs

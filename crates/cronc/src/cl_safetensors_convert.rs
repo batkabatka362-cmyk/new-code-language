@@ -89,15 +89,15 @@ pub fn quantize_to_ternary_158(data: &[f32]) -> (Vec<i8>, f32, f32) {
 }
 
 /// Parsed Raw Tensor from Safetensors
-struct RawSafetensor {
-    name: String,
-    _dtype: String,
-    shape: Vec<usize>,
-    data: Vec<f32>,
+pub struct RawSafetensor {
+    pub name: String,
+    pub dtype: String,
+    pub shape: Vec<usize>,
+    pub data: Vec<f32>,
 }
 
 /// Native zero-dependency Safetensors parser supporting F32, F16, and BF16
-fn parse_raw_safetensors(bytes: &[u8]) -> Result<Vec<RawSafetensor>, String> {
+pub fn parse_raw_safetensors(bytes: &[u8]) -> Result<Vec<RawSafetensor>, String> {
     if bytes.len() < 8 {
         return Err("Safetensors file is too small (less than 8 bytes)".to_string());
     }
@@ -236,7 +236,7 @@ fn parse_raw_safetensors(bytes: &[u8]) -> Result<Vec<RawSafetensor>, String> {
 
                     result.push(RawSafetensor {
                         name: key.to_string(),
-                        _dtype: dtype,
+                        dtype,
                         shape,
                         data: floats,
                     });

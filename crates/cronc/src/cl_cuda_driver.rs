@@ -68,6 +68,10 @@ mod os_dynload {
         pub fn LoadLibraryA(lpLibFileName: *const u8) -> *mut c_void;
         pub fn GetProcAddress(hModule: *mut c_void, lpProcName: *const u8) -> *mut c_void;
         pub fn FreeLibrary(hLibModule: *mut c_void) -> i32;
+        pub fn CreateMutexA(lpMutexAttributes: *mut c_void, bInitialOwner: i32, lpName: *const u8) -> *mut c_void;
+        pub fn WaitForSingleObject(hHandle: *mut c_void, dwMilliseconds: u32) -> u32;
+        pub fn ReleaseMutex(hMutex: *mut c_void) -> i32;
+        pub fn CloseHandle(hObject: *mut c_void) -> i32;
     }
 
     pub unsafe fn load_library(name: &str) -> Option<*mut c_void> {
@@ -371,6 +375,8 @@ impl CudaDriver {
 
     /// Creates an active compute context on the specified GPU ordinal
     pub fn create_context(&self, ordinal: i32) -> Result<CudaContext, String> {
+        let guard = Arc::new(CudaDeviceGuard::acquire());
+
         let mut dev: CUdevice = 0;
         let res = unsafe { (self.vtable.cu_device_get)(&mut dev, ordinal) };
         if res != CUDA_SUCCESS {
@@ -387,7 +393,47 @@ impl CudaDriver {
             driver: self.clone(),
             raw_ctx: ctx,
             active: Arc::new(AtomicBool::new(true)),
+            _guard: guard,
         })
+    }
+}
+
+/// System-Wide Named Mutex Guard for Physical Hardware CUDA Serialization
+pub struct CudaDeviceGuard {
+    #[cfg(windows)]
+    handle: *mut std::ffi::c_void,
+}
+
+unsafe impl Send for CudaDeviceGuard {}
+unsafe impl Sync for CudaDeviceGuard {}
+
+impl CudaDeviceGuard {
+    pub fn acquire() -> Self {
+        #[cfg(windows)]
+        unsafe {
+            let name = b"Local\\CRON_CUDA_HARDWARE_LOCK\0";
+            let handle = os_dynload::CreateMutexA(std::ptr::null_mut(), 0, name.as_ptr());
+            if !handle.is_null() {
+                os_dynload::WaitForSingleObject(handle, 120_000);
+            }
+            Self { handle }
+        }
+        #[cfg(not(windows))]
+        {
+            Self {}
+        }
+    }
+}
+
+impl Drop for CudaDeviceGuard {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        unsafe {
+            if !self.handle.is_null() {
+                os_dynload::ReleaseMutex(self.handle);
+                os_dynload::CloseHandle(self.handle);
+            }
+        }
     }
 }
 
@@ -396,6 +442,7 @@ pub struct CudaContext {
     pub driver: CudaDriver,
     pub raw_ctx: CUcontext,
     active: Arc<AtomicBool>,
+    _guard: Arc<CudaDeviceGuard>,
 }
 
 unsafe impl Send for CudaContext {}
@@ -403,12 +450,11 @@ unsafe impl Sync for CudaContext {}
 
 impl Drop for CudaContext {
     fn drop(&mut self) {
-        if self.active.load(Ordering::SeqCst) && !self.raw_ctx.is_null() {
-            unsafe {
-                (self.driver.vtable.cu_ctx_destroy)(self.raw_ctx);
-            }
-            self.active.store(false, Ordering::SeqCst);
-        }
+        // Note: In CUDA Driver API, destroying active device contexts via cuCtxDestroy
+        // while the process continues running invalidates device TLS tables and causes
+        // access violations on subsequent context creation. Memory buffers are freed
+        // via CudaBuffer RAII (cuMemFree) and context resources are reaped upon process exit.
+        self.active.store(false, Ordering::SeqCst);
     }
 }
 

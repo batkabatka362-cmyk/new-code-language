@@ -746,6 +746,9 @@ fn main() {
                 } else if args[i] == "--sphere" {
                     config.use_sphere = true;
                     i += 1;
+                } else if args[i] == "--cuda" || args[i] == "--gpu" {
+                    config.use_cuda = true;
+                    i += 1;
                 } else if (args[i] == "--adapter" || args[i] == "-a") && i + 1 < args.len() {
                     config.adapter_path = Some(args[i + 1].clone());
                     i += 2;
@@ -5740,6 +5743,7 @@ fn main() {
             let mut target_path: Option<String> = None;
             let mut spec_k = 4usize;
             let mut cot_mode = false;
+            let mut use_cuda = false;
 
             let mut i = 2;
             while i < args.len() {
@@ -5795,6 +5799,7 @@ fn main() {
                     "--cot" | "--refine" => { cot_mode = true; i += 1; }
                     "--no-sparse" => { enable_sparsity = false; i += 1; }
                     "--no-stream" => { stream_tokens = false; i += 1; }
+                    "--cuda" | "--gpu" => { use_cuda = true; i += 1; }
                     "-o" if i + 1 < args.len() => { out_file = Some(args[i + 1].clone()); i += 2; }
                     "--json" => { emit_json = true; i += 1; }
                     other if !other.starts_with("--") && i >= 3 => {
@@ -5877,6 +5882,7 @@ fn main() {
                         use_reversible,
                         use_snn,
                         use_sphere: false,
+                        use_cuda,
                         adapter_path: None,
                     };
                     if let Err(e) = cron_cli::chat::run_interactive_chat_loop(chat_config) {
