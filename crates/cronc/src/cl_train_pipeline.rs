@@ -1330,27 +1330,36 @@ impl AutonomousLanguageModel {
         let h = self.config.hidden_dim;
         let v = self.config.vocab_size;
         let seq_len = self.config.seq_len.max(16);
+        let num_layers = self.layers.len().max(1);
 
-        // Upload layer 0 weights to GPU
+        // Upload head weights to GPU
         let d_w_head = ctx.alloc(d * v * 4)?;
         ctx.copy_htod(&d_w_head, &self.w_head.data)?;
 
-        let d_w_gate = ctx.alloc(d * h * 4)?;
-        ctx.copy_htod(&d_w_gate, &self.layers[0].w_gate[0].data)?;
+        // Upload all transformer layers to GPU
+        let mut d_w_gate = Vec::with_capacity(num_layers);
+        let mut d_w_up = Vec::with_capacity(num_layers);
+        let mut d_w_down = Vec::with_capacity(num_layers);
+        for l in 0..num_layers {
+            let buf_gate = ctx.alloc(d * h * 4)?;
+            ctx.copy_htod(&buf_gate, &self.layers[l].w_gate[0].data)?;
+            d_w_gate.push(buf_gate);
 
-        let d_w_up = ctx.alloc(d * h * 4)?;
-        ctx.copy_htod(&d_w_up, &self.layers[0].w_up[0].data)?;
+            let buf_up = ctx.alloc(d * h * 4)?;
+            ctx.copy_htod(&buf_up, &self.layers[l].w_up[0].data)?;
+            d_w_up.push(buf_up);
 
-        let d_w_down = ctx.alloc(h * d * 4)?;
-        ctx.copy_htod(&d_w_down, &self.layers[0].w_down[0].data)?;
+            let buf_down = ctx.alloc(h * d * 4)?;
+            ctx.copy_htod(&buf_down, &self.layers[l].w_down[0].data)?;
+            d_w_down.push(buf_down);
+        }
 
-        // Allocate scratch buffers
+        // Allocate scratch buffers on GPU
         let d_h = ctx.alloc(seq_len * d * 4)?;
         let d_g = ctx.alloc(seq_len * h * 4)?;
         let d_u = ctx.alloc(seq_len * h * 4)?;
         let d_act = ctx.alloc(seq_len * h * 4)?;
         let d_h_ffn = ctx.alloc(seq_len * d * 4)?;
-        let d_h_last = ctx.alloc(1 * d * 4)?;
         let d_logits = ctx.alloc(v * 4)?;
 
         let tokenizer = BpeTokenizer::from_default_vocab();
@@ -1384,29 +1393,39 @@ impl AutonomousLanguageModel {
                 h_host[i * d..(i + 1) * d].copy_from_slice(src);
             }
 
-            // 2. Upload to GPU
+            // 2. Upload input embeddings to GPU
             ctx.copy_htod(&d_h, &h_host)?;
 
-            // 3. GPU Forward Pass
-            engine.gemm(&d_h, &d_w_gate, &d_g, n, h, d, false, false)?;
-            engine.gemm(&d_h, &d_w_up, &d_u, n, h, d, false, false)?;
-            engine.swiglu(&d_g, &d_u, &d_act, n * h)?;
-            engine.gemm(&d_act, &d_w_down, &d_h_ffn, n, d, h, false, false)?;
-            engine.vec_add_inplace(&d_h, &d_h_ffn, n * d)?;
+            // 3. Multi-Layer GPU Forward Pass
+            for l in 0..num_layers {
+                engine.gemm(&d_h, &d_w_gate[l], &d_g, n, h, d, false, false)?;
+                engine.gemm(&d_h, &d_w_up[l], &d_u, n, h, d, false, false)?;
+                engine.swiglu(&d_g, &d_u, &d_act, n * h)?;
+                engine.gemm(&d_act, &d_w_down[l], &d_h_ffn, n, d, h, false, false)?;
+                engine.vec_add_inplace(&d_h, &d_h_ffn, n * d)?;
+            }
 
-            // 4. Extract last token embedding and project to logits: [1, d] @ [d, v] -> [1, v]
-            let last_offset = (n - 1) * d;
-            let h_last_slice = &h_host[last_offset..last_offset + d];
-            ctx.copy_htod(&d_h_last, h_last_slice)?;
-            engine.gemm(&d_h_last, &d_w_head, &d_logits, 1, v, d, false, false)?;
-
+            // 4. Zero-copy Last-Token Logits: compute logits from true transformer output in VRAM
+            let last_token_dptr = d_h.dptr + ((n - 1) * d * std::mem::size_of::<f32>()) as u64;
+            engine.gemm_dptr(last_token_dptr, d_w_head.dptr, d_logits.dptr, 1, v, d, false, false)?;
             ctx.synchronize()?;
 
             // 5. Read back next-token logits from GPU
             let mut logits = vec![0.0f32; v];
             ctx.copy_dtoh(&d_logits, &mut logits)?;
 
-            // 6. Sample token
+            // 6. Apply repetition penalty for recent context
+            let recent_window = &tokens[tokens.len().saturating_sub(32)..];
+            for &past_tok in recent_window {
+                let idx = past_tok % v;
+                if logits[idx] > 0.0 {
+                    logits[idx] /= 1.2;
+                } else {
+                    logits[idx] *= 1.2;
+                }
+            }
+
+            // 7. Sample token with temperature
             let next_tok = if temperature <= 0.01 {
                 let mut best_tok = 0;
                 let mut best_val = -1e9f32;
@@ -1430,7 +1449,9 @@ impl AutonomousLanguageModel {
                     sum_p += p;
                 }
                 let inv_sum = 1.0 / sum_p.max(1e-12);
-                let seed_step = (tokens.len()).wrapping_mul(1103515245).wrapping_add(12345);
+                let seed_step = (tokens.len() + generated_ids.len() * 37)
+                    .wrapping_mul(1103515245)
+                    .wrapping_add(12345);
                 let seed_ratio = ((seed_step & 0x7fffffff) as f32) / (0x7fffffff as f32);
 
                 let mut accum = 0.0f32;

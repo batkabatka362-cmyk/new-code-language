@@ -1182,21 +1182,18 @@ impl CudaTensorEngine {
         })
     }
 
-    /// High-throughput GPU Matrix Multiplication: C = A @ B (with optional transpose)
-    pub fn gemm(
+    /// High-throughput GPU Matrix Multiplication: C = A @ B with raw device pointers
+    pub fn gemm_dptr(
         &self,
-        d_a: &CudaDeviceBuffer,
-        d_b: &CudaDeviceBuffer,
-        d_c: &CudaDeviceBuffer,
+        mut da_ptr: CUdeviceptr,
+        mut db_ptr: CUdeviceptr,
+        mut dc_ptr: CUdeviceptr,
         m: usize,
         n: usize,
         k: usize,
         trans_a: bool,
         trans_b: bool,
     ) -> Result<(), String> {
-        let mut da_ptr = d_a.dptr;
-        let mut db_ptr = d_b.dptr;
-        let mut dc_ptr = d_c.dptr;
         let mut m_u32 = m as u32;
         let mut n_u32 = n as u32;
         let mut k_u32 = k as u32;
@@ -1225,6 +1222,21 @@ impl CudaTensorEngine {
         }
 
         Ok(())
+    }
+
+    /// High-throughput GPU Matrix Multiplication: C = A @ B (with optional transpose)
+    pub fn gemm(
+        &self,
+        d_a: &CudaDeviceBuffer,
+        d_b: &CudaDeviceBuffer,
+        d_c: &CudaDeviceBuffer,
+        m: usize,
+        n: usize,
+        k: usize,
+        trans_a: bool,
+        trans_b: bool,
+    ) -> Result<(), String> {
+        self.gemm_dptr(d_a.dptr, d_b.dptr, d_c.dptr, m, n, k, trans_a, trans_b)
     }
 
     /// GPU-accelerated SwiGLU forward pass: act = SiLU(G) * U

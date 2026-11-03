@@ -222,7 +222,7 @@ fn print_subcommand_help(cmd: &str) {
         "chat" => {
             println!("USAGE:\n    cron chat [OPTIONS]\n");
             println!("DESCRIPTION:\n    Interactive AI Terminal with zero-VRAM paged weight streaming (<16 MB RSS) and hardware speculative decoding.\n");
-            println!("OPTIONS:\n    --model <name>      Model identifier string (default: cron-bitnet-7b)\n    --weights <path>    Load weights from .gguf or .safetensors file\n    --layers <n>        Number of transformer layers (default: 32)\n    --page-mb <n>       Resident set size limit in MB (default: 16)\n    --speculative <k>   Speculative draft tokens lookahead depth (default: 4)\n    --grammar <mode>    Sampling constraint: 'unconstrained' or 'json'\n    --eval <prompt>     Execute a single turn non-interactively and print output\n    -h, --help          Display this help message\n");
+            println!("OPTIONS:\n    --model <name>      Model identifier string (default: cron-bitnet-7b)\n    --weights <path>    Load weights from .gguf or .safetensors file\n    --layers <n>        Number of transformer layers (default: 32)\n    --page-mb <n>       Resident set size limit in MB (default: 16)\n    --speculative <k>   Speculative draft tokens lookahead depth (default: 4)\n    --grammar <mode>    Sampling constraint: 'unconstrained' or 'json'\n    --temp <float>      Sampling temperature (default: 0.7)\n    --cuda, --gpu       Enable hardware NVIDIA GPU Driver API execution\n    --eval <prompt>     Execute a single turn non-interactively and print output\n    -h, --help          Display this help message\n");
             println!("EXAMPLE:\n    cron chat --weights model.gguf --page-mb 16");
         }
         "vibe-loop" => {
@@ -308,7 +308,7 @@ fn print_subcommand_help(cmd: &str) {
         "cl-train" | "train-cl" | "train" => {
             println!("USAGE:\n    cron train [model.cl] [OPTIONS]\n    cron cl-train [dataset.dpdata] [OPTIONS]\n");
             println!("DESCRIPTION:\n    CRON Autonomous Zero-Python In-Silicon Training Pipeline & Autograd Engine.\n    Ingests raw text corpus, executes causal LM forward pass, computes exact\n    analytical reverse-mode VJP autodiff gradients, optimizes parameters with\n    AdamW or Lion, and exports IEEE 754 Safetensors checkpoints.\n    Zero Python, Zero PyTorch, Zero external C++ runtime required.\n");
-            println!("OPTIONS:\n    --data, -d <path>   Path to raw text training corpus or token stream\n    --steps, -s <N>     Number of training optimization steps (default: 50)\n    --lr <float>        Learning rate (default: 0.01)\n    --batch, -b <N>     Batch size (default: 4)\n    --seq-len, -l <N>   Sequence length (default: 16)\n    --dim <N>           Hidden dimension (default: 32)\n    --optimizer <opt>   Optimizer algorithm: adamw, lion, sgd (default: adamw)\n    -o, --out <path>    Output Safetensors checkpoint path (default: checkpoint.safetensors)\n    --cuda, --gpu       Enable hardware NVIDIA RTX GPU acceleration via zero-NVCC Driver API\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
+            println!("OPTIONS:\n    --data, -d <path>   Path to raw text training corpus or token stream\n    --steps, -s <N>     Number of training optimization steps (default: 50)\n    --lr <float>        Learning rate (default: 0.01)\n    --batch, -b <N>     Batch size (default: 4)\n    --seq-len, -l <N>   Sequence length (default: 16)\n    --dim <N>           Model embedding dimension (default: 32)\n    --hidden <N>        Hidden layer dimension (default: 64)\n    --vocab <N>         Vocabulary size (default: 256)\n    --layers <N>        Number of transformer layers (default: 1)\n    --optimizer <opt>   Optimizer algorithm: adamw, lion, sgd (default: adamw)\n    -o, --out <path>    Output Safetensors checkpoint path (default: checkpoint.safetensors)\n    --cuda, --gpu       Enable hardware NVIDIA RTX GPU acceleration via zero-NVCC Driver API\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
             println!("EXAMPLES:\n    cron train model.cl --data corpus.txt --steps 100 --lr 0.01 -o model.safetensors\n    cron train --data mongol_text.txt --optimizer lion --steps 50\n    cron train --steps 30 --lr 0.02 -o trained.safetensors");
         }
         "cl-sovereign" | "sovereign" => {
@@ -704,6 +704,9 @@ fn main() {
                     i += 2;
                 } else if (args[i] == "--eval" || args[i] == "--prompt" || args[i] == "-p") && i + 1 < args.len() {
                     eval_prompt = Some(args[i + 1].clone());
+                    i += 2;
+                } else if (args[i] == "--temp" || args[i] == "--temperature") && i + 1 < args.len() {
+                    if let Ok(t) = args[i + 1].parse::<f32>() { config.temperature = t; }
                     i += 2;
                 } else if args[i] == "--mode" && i + 1 < args.len() {
                     match args[i + 1].to_lowercase().as_str() {
@@ -5884,6 +5887,7 @@ fn main() {
                         use_sphere: false,
                         use_cuda,
                         adapter_path: None,
+                        temperature: temperature as f32,
                     };
                     if let Err(e) = cron_cli::chat::run_interactive_chat_loop(chat_config) {
                         eprintln!("Chat session error: {}", e);
@@ -12262,7 +12266,9 @@ fn handle_cl_train_command(args: &[String]) {
     let mut lr = 0.01f32;
     let mut batch_size = 4usize;
     let mut seq_len = 16usize;
+    let mut model_dim = 32usize;
     let mut hidden_dim = 64usize;
+    let mut vocab_size = 256usize;
     let mut qat = false;
     let mut torus_allreduce = false;
     let mut synth_path = None;
@@ -12298,8 +12304,16 @@ fn handle_cl_train_command(args: &[String]) {
                 if let Ok(s) = args[i + 1].parse::<usize>() { seq_len = s; }
                 i += 2;
             }
-            "--hidden" | "--dim" if i + 1 < args.len() => {
+            "--dim" if i + 1 < args.len() => {
+                if let Ok(d) = args[i + 1].parse::<usize>() { model_dim = d; }
+                i += 2;
+            }
+            "--hidden" | "--hidden-dim" if i + 1 < args.len() => {
                 if let Ok(h) = args[i + 1].parse::<usize>() { hidden_dim = h; }
+                i += 2;
+            }
+            "--vocab" | "--vocab-size" if i + 1 < args.len() => {
+                if let Ok(v) = args[i + 1].parse::<usize>() { vocab_size = v; }
                 i += 2;
             }
             "--data" | "-d" if i + 1 < args.len() => {
@@ -12419,7 +12433,9 @@ fn handle_cl_train_command(args: &[String]) {
     auto_cfg.learning_rate = lr;
     auto_cfg.batch_size = batch_size;
     auto_cfg.seq_len = seq_len;
+    auto_cfg.dim = model_dim;
     auto_cfg.hidden_dim = hidden_dim;
+    auto_cfg.vocab_size = vocab_size;
     auto_cfg.optimizer = optimizer_type;
     auto_cfg.checkpoint_out = checkpoint_out;
     auto_cfg.num_layers = num_layers;
