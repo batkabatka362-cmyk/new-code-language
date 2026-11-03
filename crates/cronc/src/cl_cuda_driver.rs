@@ -661,3 +661,671 @@ pub fn run_ptx_vector_kernel(
 
     Ok(result)
 }
+
+/// Consolidated PTX Microcode Source for Neural Matrix Math & Optimizers
+pub const NEURAL_MATH_PTX_SRC: &str = r#"
+.version 7.5
+.target sm_80
+.address_size 64
+
+.visible .entry gemm_nn_kernel (
+    .param .u64 d_a,
+    .param .u64 d_b,
+    .param .u64 d_c,
+    .param .u32 m_dim,
+    .param .u32 n_dim,
+    .param .u32 k_dim
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<14>;
+    .reg .b64 %rd<14>;
+    .reg .f32 %f<5>;
+
+    ld.param.u64 %rd1, [d_a];
+    ld.param.u64 %rd2, [d_b];
+    ld.param.u64 %rd3, [d_c];
+    ld.param.u32 %r1, [m_dim];
+    ld.param.u32 %r2, [n_dim];
+    ld.param.u32 %r3, [k_dim];
+
+    mov.u32 %r4, %ctaid.y;
+    mov.u32 %r5, %ntid.y;
+    mov.u32 %r6, %tid.y;
+    mad.lo.u32 %r7, %r4, %r5, %r6;
+
+    mov.u32 %r8, %ctaid.x;
+    mov.u32 %r9, %ntid.x;
+    mov.u32 %r10, %tid.x;
+    mad.lo.u32 %r11, %r8, %r9, %r10;
+
+    setp.ge.u32 %p1, %r7, %r1;
+    @%p1 bra EXIT;
+    setp.ge.u32 %p2, %r11, %r2;
+    @%p2 bra EXIT;
+
+    mov.f32 %f1, 0.0;
+    mov.u32 %r12, 0;
+
+LOOP:
+    setp.ge.u32 %p3, %r12, %r3;
+    @%p3 bra STORE;
+
+    mad.lo.u32 %r4, %r7, %r3, %r12;
+    mul.wide.u32 %rd4, %r4, 4;
+    add.s64 %rd5, %rd1, %rd4;
+    ld.global.f32 %f2, [%rd5];
+
+    mad.lo.u32 %r5, %r12, %r2, %r11;
+    mul.wide.u32 %rd6, %r5, 4;
+    add.s64 %rd7, %rd2, %rd6;
+    ld.global.f32 %f3, [%rd7];
+
+    fma.rn.f32 %f1, %f2, %f3, %f1;
+
+    add.u32 %r12, %r12, 1;
+    bra LOOP;
+
+STORE:
+    mad.lo.u32 %r6, %r7, %r2, %r11;
+    mul.wide.u32 %rd8, %r6, 4;
+    add.s64 %rd9, %rd3, %rd8;
+    st.global.f32 [%rd9], %f1;
+
+EXIT:
+    ret;
+}
+
+.visible .entry gemm_nt_kernel (
+    .param .u64 d_a,
+    .param .u64 d_b,
+    .param .u64 d_c,
+    .param .u32 m_dim,
+    .param .u32 n_dim,
+    .param .u32 k_dim
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<14>;
+    .reg .b64 %rd<14>;
+    .reg .f32 %f<5>;
+
+    ld.param.u64 %rd1, [d_a];
+    ld.param.u64 %rd2, [d_b];
+    ld.param.u64 %rd3, [d_c];
+    ld.param.u32 %r1, [m_dim];
+    ld.param.u32 %r2, [n_dim];
+    ld.param.u32 %r3, [k_dim];
+
+    mov.u32 %r4, %ctaid.y;
+    mov.u32 %r5, %ntid.y;
+    mov.u32 %r6, %tid.y;
+    mad.lo.u32 %r7, %r4, %r5, %r6;
+
+    mov.u32 %r8, %ctaid.x;
+    mov.u32 %r9, %ntid.x;
+    mov.u32 %r10, %tid.x;
+    mad.lo.u32 %r11, %r8, %r9, %r10;
+
+    setp.ge.u32 %p1, %r7, %r1;
+    @%p1 bra EXIT;
+    setp.ge.u32 %p2, %r11, %r2;
+    @%p2 bra EXIT;
+
+    mov.f32 %f1, 0.0;
+    mov.u32 %r12, 0;
+
+LOOP:
+    setp.ge.u32 %p3, %r12, %r3;
+    @%p3 bra STORE;
+
+    mad.lo.u32 %r4, %r7, %r3, %r12;
+    mul.wide.u32 %rd4, %r4, 4;
+    add.s64 %rd5, %rd1, %rd4;
+    ld.global.f32 %f2, [%rd5];
+
+    mad.lo.u32 %r5, %r11, %r3, %r12;
+    mul.wide.u32 %rd6, %r5, 4;
+    add.s64 %rd7, %rd2, %rd6;
+    ld.global.f32 %f3, [%rd7];
+
+    fma.rn.f32 %f1, %f2, %f3, %f1;
+
+    add.u32 %r12, %r12, 1;
+    bra LOOP;
+
+STORE:
+    mad.lo.u32 %r6, %r7, %r2, %r11;
+    mul.wide.u32 %rd8, %r6, 4;
+    add.s64 %rd9, %rd3, %rd8;
+    st.global.f32 [%rd9], %f1;
+
+EXIT:
+    ret;
+}
+
+.visible .entry gemm_tn_kernel (
+    .param .u64 d_a,
+    .param .u64 d_b,
+    .param .u64 d_c,
+    .param .u32 m_dim,
+    .param .u32 n_dim,
+    .param .u32 k_dim
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<14>;
+    .reg .b64 %rd<14>;
+    .reg .f32 %f<5>;
+
+    ld.param.u64 %rd1, [d_a];
+    ld.param.u64 %rd2, [d_b];
+    ld.param.u64 %rd3, [d_c];
+    ld.param.u32 %r1, [m_dim];
+    ld.param.u32 %r2, [n_dim];
+    ld.param.u32 %r3, [k_dim];
+
+    mov.u32 %r4, %ctaid.y;
+    mov.u32 %r5, %ntid.y;
+    mov.u32 %r6, %tid.y;
+    mad.lo.u32 %r7, %r4, %r5, %r6;
+
+    mov.u32 %r8, %ctaid.x;
+    mov.u32 %r9, %ntid.x;
+    mov.u32 %r10, %tid.x;
+    mad.lo.u32 %r11, %r8, %r9, %r10;
+
+    setp.ge.u32 %p1, %r7, %r1;
+    @%p1 bra EXIT;
+    setp.ge.u32 %p2, %r11, %r2;
+    @%p2 bra EXIT;
+
+    mov.f32 %f1, 0.0;
+    mov.u32 %r12, 0;
+
+LOOP:
+    setp.ge.u32 %p3, %r12, %r3;
+    @%p3 bra STORE;
+
+    mad.lo.u32 %r4, %r12, %r1, %r7;
+    mul.wide.u32 %rd4, %r4, 4;
+    add.s64 %rd5, %rd1, %rd4;
+    ld.global.f32 %f2, [%rd5];
+
+    mad.lo.u32 %r5, %r12, %r2, %r11;
+    mul.wide.u32 %rd6, %r5, 4;
+    add.s64 %rd7, %rd2, %rd6;
+    ld.global.f32 %f3, [%rd7];
+
+    fma.rn.f32 %f1, %f2, %f3, %f1;
+
+    add.u32 %r12, %r12, 1;
+    bra LOOP;
+
+STORE:
+    mad.lo.u32 %r6, %r7, %r2, %r11;
+    mul.wide.u32 %rd8, %r6, 4;
+    add.s64 %rd9, %rd3, %rd8;
+    st.global.f32 [%rd9], %f1;
+
+EXIT:
+    ret;
+}
+
+.visible .entry swiglu_fwd_kernel (
+    .param .u64 d_g,
+    .param .u64 d_u,
+    .param .u64 d_act,
+    .param .u32 param_len
+) {
+    .reg .pred %p;
+    .reg .b32 %r<5>;
+    .reg .b64 %rd<8>;
+    .reg .f32 %f<8>;
+
+    ld.param.u64 %rd1, [d_g];
+    ld.param.u64 %rd2, [d_u];
+    ld.param.u64 %rd3, [d_act];
+    ld.param.u32 %r0, [param_len];
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    setp.ge.u32 %p, %r4, %r0;
+    @%p bra EXIT;
+
+    mul.wide.u32 %rd4, %r4, 4;
+    add.s64 %rd5, %rd1, %rd4;
+    add.s64 %rd6, %rd2, %rd4;
+    add.s64 %rd7, %rd3, %rd4;
+
+    ld.global.f32 %f1, [%rd5];
+    ld.global.f32 %f2, [%rd6];
+
+    neg.f32 %f3, %f1;
+    mul.f32 %f4, %f3, 1.44269504;
+    ex2.approx.f32 %f5, %f4;
+    add.f32 %f6, %f5, 1.0;
+    rcp.approx.f32 %f7, %f6;
+    mul.f32 %f1, %f1, %f7;
+    mul.f32 %f0, %f1, %f2;
+
+    st.global.f32 [%rd7], %f0;
+
+EXIT:
+    ret;
+}
+
+.visible .entry adamw_step_kernel (
+    .param .u64 d_w,
+    .param .u64 d_g,
+    .param .u64 d_m,
+    .param .u64 d_v,
+    .param .f32 param_lr,
+    .param .f32 param_b1,
+    .param .f32 param_b2,
+    .param .f32 param_eps,
+    .param .f32 param_wd,
+    .param .f32 param_bc1,
+    .param .f32 param_bc2,
+    .param .u32 param_n
+) {
+    .reg .pred %p;
+    .reg .b32 %r<5>;
+    .reg .b64 %rd<9>;
+    .reg .f32 %f<18>;
+
+    ld.param.u64 %rd1, [d_w];
+    ld.param.u64 %rd2, [d_g];
+    ld.param.u64 %rd3, [d_m];
+    ld.param.u64 %rd4, [d_v];
+    ld.param.f32 %f1, [param_lr];
+    ld.param.f32 %f2, [param_b1];
+    ld.param.f32 %f3, [param_b2];
+    ld.param.f32 %f4, [param_eps];
+    ld.param.f32 %f5, [param_wd];
+    ld.param.f32 %f6, [param_bc1];
+    ld.param.f32 %f7, [param_bc2];
+    ld.param.u32 %r0, [param_n];
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    setp.ge.u32 %p, %r4, %r0;
+    @%p bra EXIT;
+
+    mul.wide.u32 %rd5, %r4, 4;
+    add.s64 %rd6, %rd1, %rd5;
+    add.s64 %rd7, %rd2, %rd5;
+    add.s64 %rd8, %rd3, %rd5;
+    add.s64 %rd1, %rd4, %rd5;
+
+    ld.global.f32 %f8, [%rd6];
+    ld.global.f32 %f9, [%rd7];
+    ld.global.f32 %f10, [%rd8];
+    ld.global.f32 %f11, [%rd1];
+
+    sub.f32 %f12, 1.0, %f2;
+    mul.f32 %f13, %f10, %f2;
+    fma.rn.f32 %f10, %f12, %f9, %f13;
+    st.global.f32 [%rd8], %f10;
+
+    sub.f32 %f14, 1.0, %f3;
+    mul.f32 %f15, %f9, %f9;
+    mul.f32 %f16, %f11, %f3;
+    fma.rn.f32 %f11, %f14, %f15, %f16;
+    st.global.f32 [%rd1], %f11;
+
+    rcp.approx.f32 %f12, %f6;
+    mul.f32 %f13, %f10, %f12;
+
+    rcp.approx.f32 %f14, %f7;
+    mul.f32 %f15, %f11, %f14;
+
+    sqrt.approx.f32 %f16, %f15;
+    add.f32 %f16, %f16, %f4;
+    rcp.approx.f32 %f17, %f16;
+    mul.f32 %f13, %f13, %f17;
+
+    fma.rn.f32 %f13, %f5, %f8, %f13;
+    neg.f32 %f1, %f1;
+    fma.rn.f32 %f8, %f1, %f13, %f8;
+
+    st.global.f32 [%rd6], %f8;
+
+EXIT:
+    ret;
+}
+
+.visible .entry vec_add_inplace_kernel (
+    .param .u64 d_y,
+    .param .u64 d_x,
+    .param .u32 n
+) {
+    .reg .pred %p;
+    .reg .b32 %r<5>;
+    .reg .b64 %rd<8>;
+    .reg .f32 %f<3>;
+
+    ld.param.u64 %rd1, [d_y];
+    ld.param.u64 %rd2, [d_x];
+    ld.param.u32 %r0, [n];
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    setp.ge.u32 %p, %r4, %r0;
+    @%p bra EXIT;
+
+    mul.wide.u32 %rd4, %r4, 4;
+    add.s64 %rd5, %rd1, %rd4;
+    add.s64 %rd6, %rd2, %rd4;
+
+    ld.global.f32 %f1, [%rd5];
+    ld.global.f32 %f2, [%rd6];
+    add.f32 %f0, %f1, %f2;
+    st.global.f32 [%rd5], %f0;
+
+EXIT:
+    ret;
+}
+
+.visible .entry swiglu_bwd_kernel (
+    .param .u64 d_dact,
+    .param .u64 d_g,
+    .param .u64 d_u,
+    .param .u64 d_dg,
+    .param .u64 d_du,
+    .param .u32 param_len
+) {
+    .reg .pred %p;
+    .reg .b32 %r<5>;
+    .reg .b64 %rd<12>;
+    .reg .f32 %f<16>;
+
+    ld.param.u64 %rd1, [d_dact];
+    ld.param.u64 %rd2, [d_g];
+    ld.param.u64 %rd3, [d_u];
+    ld.param.u64 %rd4, [d_dg];
+    ld.param.u64 %rd5, [d_du];
+    ld.param.u32 %r0, [param_len];
+
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    setp.ge.u32 %p, %r4, %r0;
+    @%p bra EXIT;
+
+    mul.wide.u32 %rd6, %r4, 4;
+    add.s64 %rd7, %rd1, %rd6;
+    add.s64 %rd8, %rd2, %rd6;
+    add.s64 %rd9, %rd3, %rd6;
+    add.s64 %rd10, %rd4, %rd6;
+    add.s64 %rd11, %rd5, %rd6;
+
+    ld.global.f32 %f1, [%rd7];
+    ld.global.f32 %f2, [%rd8];
+    ld.global.f32 %f3, [%rd9];
+
+    neg.f32 %f4, %f2;
+    mul.f32 %f5, %f4, 1.44269504;
+    ex2.approx.f32 %f6, %f5;
+    add.f32 %f7, %f6, 1.0;
+    rcp.approx.f32 %f8, %f7;
+
+    mul.f32 %f9, %f2, %f8;
+    mul.f32 %f10, %f1, %f9;
+    st.global.f32 [%rd11], %f10;
+
+    sub.f32 %f11, 1.0, %f8;
+    mul.f32 %f12, %f2, %f11;
+    add.f32 %f13, %f12, 1.0;
+    mul.f32 %f14, %f8, %f13;
+
+    mul.f32 %f15, %f1, %f3;
+    mul.f32 %f15, %f15, %f14;
+    st.global.f32 [%rd10], %f15;
+
+EXIT:
+    ret;
+}
+"#;
+
+/// High-Performance GPU Neural Tensor Computation Engine
+pub struct CudaTensorEngine {
+    pub ctx: Arc<CudaContext>,
+    #[allow(dead_code)]
+    module: CudaModule,
+    kernel_gemm_nn: CudaKernel,
+    kernel_gemm_nt: CudaKernel,
+    kernel_gemm_tn: CudaKernel,
+    kernel_swiglu_fwd: CudaKernel,
+    kernel_swiglu_bwd: CudaKernel,
+    kernel_vec_add_inplace: CudaKernel,
+    kernel_adamw_step: CudaKernel,
+}
+
+impl CudaTensorEngine {
+    /// Initializes and JIT-compiles all neural tensor compute kernels on the active GPU context
+    pub fn new(ctx: Arc<CudaContext>) -> Result<Self, String> {
+        let module = ctx.load_ptx(NEURAL_MATH_PTX_SRC)?;
+
+        let kernel_gemm_nn = module.get_kernel("gemm_nn_kernel")?;
+        let kernel_gemm_nt = module.get_kernel("gemm_nt_kernel")?;
+        let kernel_gemm_tn = module.get_kernel("gemm_tn_kernel")?;
+        let kernel_swiglu_fwd = module.get_kernel("swiglu_fwd_kernel")?;
+        let kernel_swiglu_bwd = module.get_kernel("swiglu_bwd_kernel")?;
+        let kernel_vec_add_inplace = module.get_kernel("vec_add_inplace_kernel")?;
+        let kernel_adamw_step = module.get_kernel("adamw_step_kernel")?;
+
+        Ok(Self {
+            ctx,
+            module,
+            kernel_gemm_nn,
+            kernel_gemm_nt,
+            kernel_gemm_tn,
+            kernel_swiglu_fwd,
+            kernel_swiglu_bwd,
+            kernel_vec_add_inplace,
+            kernel_adamw_step,
+        })
+    }
+
+    /// High-throughput GPU Matrix Multiplication: C = A @ B (with optional transpose)
+    pub fn gemm(
+        &self,
+        d_a: &CudaDeviceBuffer,
+        d_b: &CudaDeviceBuffer,
+        d_c: &CudaDeviceBuffer,
+        m: usize,
+        n: usize,
+        k: usize,
+        trans_a: bool,
+        trans_b: bool,
+    ) -> Result<(), String> {
+        let mut da_ptr = d_a.dptr;
+        let mut db_ptr = d_b.dptr;
+        let mut dc_ptr = d_c.dptr;
+        let mut m_u32 = m as u32;
+        let mut n_u32 = n as u32;
+        let mut k_u32 = k as u32;
+
+        let mut params: [*mut c_void; 6] = [
+            &mut da_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut db_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut dc_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut m_u32 as *mut u32 as *mut c_void,
+            &mut n_u32 as *mut u32 as *mut c_void,
+            &mut k_u32 as *mut u32 as *mut c_void,
+        ];
+
+        let block = (16u32, 16u32, 1u32);
+        let grid = (((n as u32) + 15) / 16, ((m as u32) + 15) / 16, 1u32);
+
+        let kernel = match (trans_a, trans_b) {
+            (false, false) => &self.kernel_gemm_nn,
+            (false, true) => &self.kernel_gemm_nt,
+            (true, false) => &self.kernel_gemm_tn,
+            (true, true) => return Err("GEMM TT not implemented".to_string()),
+        };
+
+        unsafe {
+            kernel.launch_raw(grid, block, 0, &mut params)?;
+        }
+
+        Ok(())
+    }
+
+    /// GPU-accelerated SwiGLU forward pass: act = SiLU(G) * U
+    pub fn swiglu(
+        &self,
+        d_g: &CudaDeviceBuffer,
+        d_u: &CudaDeviceBuffer,
+        d_act: &CudaDeviceBuffer,
+        len: usize,
+    ) -> Result<(), String> {
+        let mut dg_ptr = d_g.dptr;
+        let mut du_ptr = d_u.dptr;
+        let mut dact_ptr = d_act.dptr;
+        let mut len_u32 = len as u32;
+
+        let mut params: [*mut c_void; 4] = [
+            &mut dg_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut du_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut dact_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut len_u32 as *mut u32 as *mut c_void,
+        ];
+
+        let block = (256u32, 1u32, 1u32);
+        let grid = (((len as u32) + 255) / 256, 1u32, 1u32);
+
+        unsafe {
+            self.kernel_swiglu_fwd.launch_raw(grid, block, 0, &mut params)?;
+        }
+
+        Ok(())
+    }
+
+    /// GPU in-place AdamW parameter update with decoupled weight decay
+    pub fn adamw_step(
+        &self,
+        d_w: &CudaDeviceBuffer,
+        d_g: &CudaDeviceBuffer,
+        d_m: &CudaDeviceBuffer,
+        d_v: &CudaDeviceBuffer,
+        lr: f32,
+        beta1: f32,
+        beta2: f32,
+        eps: f32,
+        weight_decay: f32,
+        step: usize,
+        n_elements: usize,
+    ) -> Result<(), String> {
+        let mut dw_ptr = d_w.dptr;
+        let mut dg_ptr = d_g.dptr;
+        let mut dm_ptr = d_m.dptr;
+        let mut dv_ptr = d_v.dptr;
+
+        let mut lr_f = lr;
+        let mut b1_f = beta1;
+        let mut b2_f = beta2;
+        let mut eps_f = eps;
+        let mut wd_f = weight_decay;
+
+        let mut bc1 = 1.0f32 - beta1.powi(step as i32);
+        let mut bc2 = 1.0f32 - beta2.powi(step as i32);
+        let mut n_u32 = n_elements as u32;
+
+        let mut params: [*mut c_void; 12] = [
+            &mut dw_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut dg_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut dm_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut dv_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut lr_f as *mut f32 as *mut c_void,
+            &mut b1_f as *mut f32 as *mut c_void,
+            &mut b2_f as *mut f32 as *mut c_void,
+            &mut eps_f as *mut f32 as *mut c_void,
+            &mut wd_f as *mut f32 as *mut c_void,
+            &mut bc1 as *mut f32 as *mut c_void,
+            &mut bc2 as *mut f32 as *mut c_void,
+            &mut n_u32 as *mut u32 as *mut c_void,
+        ];
+
+        let block = (256u32, 1u32, 1u32);
+        let grid = (((n_elements as u32) + 255) / 256, 1u32, 1u32);
+
+        unsafe {
+            self.kernel_adamw_step.launch_raw(grid, block, 0, &mut params)?;
+        }
+
+        Ok(())
+    }
+
+    /// GPU-accelerated SwiGLU backward pass: computes dG and dU from d_act, G, U
+    pub fn swiglu_bwd(
+        &self,
+        d_dact: &CudaDeviceBuffer,
+        d_g: &CudaDeviceBuffer,
+        d_u: &CudaDeviceBuffer,
+        d_dg: &CudaDeviceBuffer,
+        d_du: &CudaDeviceBuffer,
+        len: usize,
+    ) -> Result<(), String> {
+        let mut dact_ptr = d_dact.dptr;
+        let mut dg_ptr = d_g.dptr;
+        let mut du_ptr = d_u.dptr;
+        let mut ddg_ptr = d_dg.dptr;
+        let mut ddu_ptr = d_du.dptr;
+        let mut len_u32 = len as u32;
+
+        let mut params: [*mut c_void; 6] = [
+            &mut dact_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut dg_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut du_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut ddg_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut ddu_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut len_u32 as *mut u32 as *mut c_void,
+        ];
+
+        let block = (256u32, 1u32, 1u32);
+        let grid = (((len as u32) + 255) / 256, 1u32, 1u32);
+
+        unsafe {
+            self.kernel_swiglu_bwd.launch_raw(grid, block, 0, &mut params)?;
+        }
+
+        Ok(())
+    }
+
+    /// GPU in-place vector addition: d_y = d_y + d_x
+    pub fn vec_add_inplace(
+        &self,
+        d_y: &CudaDeviceBuffer,
+        d_x: &CudaDeviceBuffer,
+        n: usize,
+    ) -> Result<(), String> {
+        let mut dy_ptr = d_y.dptr;
+        let mut dx_ptr = d_x.dptr;
+        let mut n_u32 = n as u32;
+
+        let mut params: [*mut c_void; 3] = [
+            &mut dy_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut dx_ptr as *mut CUdeviceptr as *mut c_void,
+            &mut n_u32 as *mut u32 as *mut c_void,
+        ];
+
+        let block = (256u32, 1u32, 1u32);
+        let grid = (((n as u32) + 255) / 256, 1u32, 1u32);
+
+        unsafe {
+            self.kernel_vec_add_inplace.launch_raw(grid, block, 0, &mut params)?;
+        }
+
+        Ok(())
+    }
+}

@@ -27,9 +27,11 @@
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::bpe_tokenizer::BpeTokenizer;
+use crate::cl_cuda_driver::{CudaDeviceBuffer, CudaDriver, CudaTensorEngine};
 
 /// Supported In-Silicon Optimization Algorithms
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +98,7 @@ pub struct TrainingConfig {
     pub eval_prompt: Option<String>,
     pub eval_max_tokens: usize,
     pub eval_temperature: f32,
+    pub use_cuda: bool,
 }
 
 impl Default for TrainingConfig {
@@ -125,6 +128,7 @@ impl Default for TrainingConfig {
             eval_prompt: None,
             eval_max_tokens: 32,
             eval_temperature: 0.7,
+            use_cuda: false,
         }
     }
 }
@@ -1253,6 +1257,303 @@ pub fn prepare_dataset_tokens(config: &TrainingConfig) -> Result<Vec<usize>, Str
     }
 }
 
+/// Dedicated GPU Hardware Acceleration Engine for In-Silicon Neural Training
+pub struct CudaTrainingEngine {
+    pub engine: CudaTensorEngine,
+    pub num_layers: usize,
+    pub d: usize,
+    pub h: usize,
+    pub v: usize,
+    pub n_tokens: usize,
+
+    // Layer parameters on GPU
+    pub d_w_gate: Vec<CudaDeviceBuffer>,
+    pub d_w_up: Vec<CudaDeviceBuffer>,
+    pub d_w_down: Vec<CudaDeviceBuffer>,
+    pub d_m_gate: Vec<CudaDeviceBuffer>,
+    pub d_m_up: Vec<CudaDeviceBuffer>,
+    pub d_m_down: Vec<CudaDeviceBuffer>,
+    pub d_v_gate: Vec<CudaDeviceBuffer>,
+    pub d_v_up: Vec<CudaDeviceBuffer>,
+    pub d_v_down: Vec<CudaDeviceBuffer>,
+    pub d_grad_gate: Vec<CudaDeviceBuffer>,
+    pub d_grad_up: Vec<CudaDeviceBuffer>,
+    pub d_grad_down: Vec<CudaDeviceBuffer>,
+
+    // Head parameters on GPU
+    pub d_w_head: CudaDeviceBuffer,
+    pub d_m_head: CudaDeviceBuffer,
+    pub d_v_head: CudaDeviceBuffer,
+    pub d_grad_head: CudaDeviceBuffer,
+
+    // Intermediate activations on GPU
+    pub d_h: CudaDeviceBuffer,
+    pub d_h_ffn: CudaDeviceBuffer,
+    pub d_g: CudaDeviceBuffer,
+    pub d_u: CudaDeviceBuffer,
+    pub d_act: CudaDeviceBuffer,
+    pub d_logits: CudaDeviceBuffer,
+    pub d_d_logits: CudaDeviceBuffer,
+    pub d_dh: CudaDeviceBuffer,
+    pub d_d_act: CudaDeviceBuffer,
+    pub d_dg: CudaDeviceBuffer,
+    pub d_du: CudaDeviceBuffer,
+}
+
+impl CudaTrainingEngine {
+    pub fn new(model: &AutonomousLanguageModel, n_tokens: usize) -> Result<Self, String> {
+        let driver = CudaDriver::init()?;
+        let ctx = Arc::new(driver.create_context(0)?);
+        ctx.make_current()?;
+
+        let engine = CudaTensorEngine::new(ctx.clone())?;
+        let d = model.config.dim;
+        let h = model.config.hidden_dim;
+        let v = model.config.vocab_size;
+        let num_layers = model.layers.len();
+
+        let mut d_w_gate = Vec::with_capacity(num_layers);
+        let mut d_w_up = Vec::with_capacity(num_layers);
+        let mut d_w_down = Vec::with_capacity(num_layers);
+        let mut d_m_gate = Vec::with_capacity(num_layers);
+        let mut d_m_up = Vec::with_capacity(num_layers);
+        let mut d_m_down = Vec::with_capacity(num_layers);
+        let mut d_v_gate = Vec::with_capacity(num_layers);
+        let mut d_v_up = Vec::with_capacity(num_layers);
+        let mut d_v_down = Vec::with_capacity(num_layers);
+        let mut d_grad_gate = Vec::with_capacity(num_layers);
+        let mut d_grad_up = Vec::with_capacity(num_layers);
+        let mut d_grad_down = Vec::with_capacity(num_layers);
+
+        let zeros_dh = vec![0.0f32; d * h];
+        let zeros_hd = vec![0.0f32; h * d];
+
+        for l in 0..num_layers {
+            let buf_gate = ctx.alloc(d * h * 4)?;
+            ctx.copy_htod(&buf_gate, &model.layers[l].w_gate[0].data)?;
+            d_w_gate.push(buf_gate);
+
+            let buf_up = ctx.alloc(d * h * 4)?;
+            ctx.copy_htod(&buf_up, &model.layers[l].w_up[0].data)?;
+            d_w_up.push(buf_up);
+
+            let buf_down = ctx.alloc(h * d * 4)?;
+            ctx.copy_htod(&buf_down, &model.layers[l].w_down[0].data)?;
+            d_w_down.push(buf_down);
+
+            let m_g = ctx.alloc(d * h * 4)?; ctx.copy_htod(&m_g, &zeros_dh)?; d_m_gate.push(m_g);
+            let v_g = ctx.alloc(d * h * 4)?; ctx.copy_htod(&v_g, &zeros_dh)?; d_v_gate.push(v_g);
+            let grad_g = ctx.alloc(d * h * 4)?; ctx.copy_htod(&grad_g, &zeros_dh)?; d_grad_gate.push(grad_g);
+
+            let m_u = ctx.alloc(d * h * 4)?; ctx.copy_htod(&m_u, &zeros_dh)?; d_m_up.push(m_u);
+            let v_u = ctx.alloc(d * h * 4)?; ctx.copy_htod(&v_u, &zeros_dh)?; d_v_up.push(v_u);
+            let grad_u = ctx.alloc(d * h * 4)?; ctx.copy_htod(&grad_u, &zeros_dh)?; d_grad_up.push(grad_u);
+
+            let m_d = ctx.alloc(h * d * 4)?; ctx.copy_htod(&m_d, &zeros_hd)?; d_m_down.push(m_d);
+            let v_d = ctx.alloc(h * d * 4)?; ctx.copy_htod(&v_d, &zeros_hd)?; d_v_down.push(v_d);
+            let grad_d = ctx.alloc(h * d * 4)?; ctx.copy_htod(&grad_d, &zeros_hd)?; d_grad_down.push(grad_d);
+        }
+
+        let d_w_head = ctx.alloc(d * v * 4)?;
+        ctx.copy_htod(&d_w_head, &model.w_head.data)?;
+        let zeros_dv = vec![0.0f32; d * v];
+        let d_m_head = ctx.alloc(d * v * 4)?; ctx.copy_htod(&d_m_head, &zeros_dv)?;
+        let d_v_head = ctx.alloc(d * v * 4)?; ctx.copy_htod(&d_v_head, &zeros_dv)?;
+        let d_grad_head = ctx.alloc(d * v * 4)?; ctx.copy_htod(&d_grad_head, &zeros_dv)?;
+
+        let d_h = ctx.alloc(n_tokens * d * 4)?;
+        let d_h_ffn = ctx.alloc(n_tokens * d * 4)?;
+        let d_g = ctx.alloc(n_tokens * h * 4)?;
+        let d_u = ctx.alloc(n_tokens * h * 4)?;
+        let d_act = ctx.alloc(n_tokens * h * 4)?;
+        let d_logits = ctx.alloc(n_tokens * v * 4)?;
+        let d_d_logits = ctx.alloc(n_tokens * v * 4)?;
+        let d_dh = ctx.alloc(n_tokens * d * 4)?;
+        let d_d_act = ctx.alloc(n_tokens * h * 4)?;
+        let d_dg = ctx.alloc(n_tokens * h * 4)?;
+        let d_du = ctx.alloc(n_tokens * h * 4)?;
+
+        Ok(Self {
+            engine,
+            num_layers,
+            d,
+            h,
+            v,
+            n_tokens,
+            d_w_gate,
+            d_w_up,
+            d_w_down,
+            d_m_gate,
+            d_m_up,
+            d_m_down,
+            d_v_gate,
+            d_v_up,
+            d_v_down,
+            d_grad_gate,
+            d_grad_up,
+            d_grad_down,
+            d_w_head,
+            d_m_head,
+            d_v_head,
+            d_grad_head,
+            d_h,
+            d_h_ffn,
+            d_g,
+            d_u,
+            d_act,
+            d_logits,
+            d_d_logits,
+            d_dh,
+            d_d_act,
+            d_dg,
+            d_du,
+        })
+    }
+
+    /// Executes high-throughput GPU forward pass, cross-entropy gradient computation,
+    /// backward VJP pullback, and in-place GPU AdamW parameter update.
+    pub fn train_step(
+        &mut self,
+        model: &mut AutonomousLanguageModel,
+        input_tokens: &[usize],
+        target_tokens: &[usize],
+        step: usize,
+        lr: f32,
+    ) -> Result<(f32, f32), String> {
+        let n = self.n_tokens;
+        let d = self.d;
+        let h = self.h;
+        let v = self.v;
+
+        // 1. Embedding lookup on host
+        let mut h0 = vec![0.0f32; n * d];
+        for (i, &tok) in input_tokens.iter().enumerate() {
+            let tok_clamped = tok % v;
+            let src = &model.embedding.data[tok_clamped * d..(tok_clamped + 1) * d];
+            h0[i * d..(i + 1) * d].copy_from_slice(src);
+        }
+
+        // 2. Upload initial embedding activations to GPU
+        self.engine.ctx.copy_htod(&self.d_h, &h0)?;
+
+        // 3. Multi-layer forward pass on GPU
+        for l in 0..self.num_layers {
+            // G = H @ W_gate
+            self.engine.gemm(&self.d_h, &self.d_w_gate[l], &self.d_g, n, h, d, false, false)?;
+            // U = H @ W_up
+            self.engine.gemm(&self.d_h, &self.d_w_up[l], &self.d_u, n, h, d, false, false)?;
+            // act = SiLU(G) * U
+            self.engine.swiglu(&self.d_g, &self.d_u, &self.d_act, n * h)?;
+            // H_ffn = act @ W_down
+            self.engine.gemm(&self.d_act, &self.d_w_down[l], &self.d_h_ffn, n, d, h, false, false)?;
+            // Residual: H = H + H_ffn
+            self.engine.vec_add_inplace(&self.d_h, &self.d_h_ffn, n * d)?;
+        }
+
+        // 4. Output Logits: logits = H @ W_head
+        self.engine.gemm(&self.d_h, &self.d_w_head, &self.d_logits, n, v, d, false, false)?;
+        self.engine.ctx.synchronize()?;
+
+        // 5. Read back logits to host for Softmax Cross-Entropy Loss
+        let mut logits = vec![0.0f32; n * v];
+        self.engine.ctx.copy_dtoh(&self.d_logits, &mut logits)?;
+
+        let mut probs = vec![0.0f32; n * v];
+        let mut total_loss = 0.0f32;
+        for i in 0..n {
+            let row = &logits[i * v..(i + 1) * v];
+            let mut max_val = -1e9f32;
+            for &val in row {
+                if val > max_val { max_val = val; }
+            }
+            let mut sum_exp = 0.0f32;
+            for j in 0..v {
+                let exp_val = (row[j] - max_val).exp();
+                probs[i * v + j] = exp_val;
+                sum_exp += exp_val;
+            }
+            let inv_sum = 1.0 / sum_exp.max(1e-12);
+            for j in 0..v {
+                probs[i * v + j] *= inv_sum;
+            }
+            let tgt = target_tokens[i] % v;
+            let prob_tgt = probs[i * v + tgt].max(1e-12);
+            total_loss += -prob_tgt.ln();
+        }
+
+        let mean_loss = total_loss / (n as f32);
+        let perplexity = mean_loss.min(80.0).exp();
+
+        // 6. Compute d_logits
+        let inv_n = 1.0 / (n as f32);
+        let mut d_logits = vec![0.0f32; n * v];
+        for i in 0..n {
+            let tgt = target_tokens[i] % v;
+            for j in 0..v {
+                let p = probs[i * v + j];
+                d_logits[i * v + j] = if j == tgt { (p - 1.0) * inv_n } else { p * inv_n };
+            }
+        }
+
+        // 7. Upload d_logits to GPU
+        self.engine.ctx.copy_htod(&self.d_d_logits, &d_logits)?;
+
+        // 8. Backward Pass on GPU
+        // grad_head = H^T @ d_logits [d, v]
+        self.engine.gemm(&self.d_h, &self.d_d_logits, &self.d_grad_head, d, v, n, true, false)?;
+        // dH = d_logits @ W_head^T [n, d]
+        self.engine.gemm(&self.d_d_logits, &self.d_w_head, &self.d_dh, n, d, v, false, true)?;
+
+        for l in (0..self.num_layers).rev() {
+            // grad_down = act^T @ dH [h, d]
+            self.engine.gemm(&self.d_act, &self.d_dh, &self.d_grad_down[l], h, d, n, true, false)?;
+            // d_act = dH @ W_down^T [n, h]
+            self.engine.gemm(&self.d_dh, &self.d_w_down[l], &self.d_d_act, n, h, d, false, true)?;
+            // SwiGLU backward: dG, dU
+            self.engine.swiglu_bwd(&self.d_d_act, &self.d_g, &self.d_u, &self.d_dg, &self.d_du, n * h)?;
+            // grad_up = H^T @ dU [d, h]
+            self.engine.gemm(&self.d_h, &self.d_du, &self.d_grad_up[l], d, h, n, true, false)?;
+            // grad_gate = H^T @ dG [d, h]
+            self.engine.gemm(&self.d_h, &self.d_dg, &self.d_grad_gate[l], d, h, n, true, false)?;
+        }
+
+        // 9. GPU in-place AdamW parameter update
+        let wd = model.config.weight_decay;
+        let beta1 = 0.9f32;
+        let beta2 = 0.999f32;
+        let eps = 1e-8f32;
+
+        self.engine.adamw_step(&self.d_w_head, &self.d_grad_head, &self.d_m_head, &self.d_v_head, lr, beta1, beta2, eps, wd, step, d * v)?;
+
+        for l in 0..self.num_layers {
+            self.engine.adamw_step(&self.d_w_down[l], &self.d_grad_down[l], &self.d_m_down[l], &self.d_v_down[l], lr, beta1, beta2, eps, wd, step, h * d)?;
+            self.engine.adamw_step(&self.d_w_up[l], &self.d_grad_up[l], &self.d_m_up[l], &self.d_v_up[l], lr, beta1, beta2, eps, wd, step, d * h)?;
+            self.engine.adamw_step(&self.d_w_gate[l], &self.d_grad_gate[l], &self.d_m_gate[l], &self.d_v_gate[l], lr, beta1, beta2, eps, wd, step, d * h)?;
+        }
+
+        self.engine.ctx.synchronize()?;
+        Ok((mean_loss, perplexity))
+    }
+
+    /// Read back all trained neural parameter matrices from GPU VRAM to Host CPU memory
+    pub fn sync_weights_to_host(&self, model: &mut AutonomousLanguageModel) -> Result<(), String> {
+        self.engine.ctx.synchronize()?;
+        self.engine.ctx.copy_dtoh(&self.d_w_head, &mut model.w_head.data)?;
+
+        for l in 0..self.num_layers {
+            self.engine.ctx.copy_dtoh(&self.d_w_gate[l], &mut model.layers[l].w_gate[0].data)?;
+            self.engine.ctx.copy_dtoh(&self.d_w_up[l], &mut model.layers[l].w_up[0].data)?;
+            self.engine.ctx.copy_dtoh(&self.d_w_down[l], &mut model.layers[l].w_down[0].data)?;
+        }
+
+        // Mirror layer 0 expert 0 data for backward compatibility
+        model.w_gate.data.copy_from_slice(&model.layers[0].w_gate[0].data);
+        model.w_up.data.copy_from_slice(&model.layers[0].w_up[0].data);
+        model.w_down.data.copy_from_slice(&model.layers[0].w_down[0].data);
+        Ok(())
+    }
+}
+
 /// Main Autonomous Zero-Python Training Loop
 pub fn train_autonomous_model(
     config: TrainingConfig,
@@ -1275,6 +1576,21 @@ pub fn train_autonomous_model(
     let window_size = b * l;
     let n_tokens = tokens.len();
 
+    let mut gpu_engine: Option<CudaTrainingEngine> = if actual_config.use_cuda && CudaDriver::is_available() {
+        match CudaTrainingEngine::new(&model, window_size) {
+            Ok(eng) => {
+                println!("[CUDA] Physical NVIDIA GPU Acceleration active (Direct Driver API + sm_80 PTX)");
+                Some(eng)
+            }
+            Err(e) => {
+                eprintln!("[CUDA WARN] GPU init failed ({}), falling back to CPU calculus engine.", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let mut initial_loss = 0.0f32;
     let mut final_loss = 0.0f32;
     let mut total_tokens_processed = 0usize;
@@ -1295,12 +1611,24 @@ pub fn train_autonomous_model(
             target_batch.extend_from_slice(y_slice);
         }
 
-        // Forward and backward gradient calculation
-        let (loss, perplexity) = model.forward_backward_step(&input_batch, &target_batch);
-        let grad_norm = model.total_grad_norm();
+        // Forward, loss calculation, backward autodiff & optimizer update
+        let (loss, perplexity) = if let Some(ref mut gpu) = gpu_engine {
+            match gpu.train_step(&mut model, &input_batch, &target_batch, step, lr) {
+                Ok(lp) => lp,
+                Err(e) => {
+                    eprintln!("[CUDA ERROR] Step failed on GPU ({}), falling back to CPU", e);
+                    let lp = model.forward_backward_step(&input_batch, &target_batch);
+                    model.optimizer_step(step, lr);
+                    lp
+                }
+            }
+        } else {
+            let lp = model.forward_backward_step(&input_batch, &target_batch);
+            model.optimizer_step(step, lr);
+            lp
+        };
 
-        // Parameter update
-        model.optimizer_step(step, lr);
+        let grad_norm = model.total_grad_norm();
 
         if step == 1 {
             initial_loss = loss;
@@ -1324,6 +1652,12 @@ pub fn train_autonomous_model(
         }
 
         step_history.push(report);
+    }
+
+    if let Some(ref gpu) = gpu_engine {
+        if let Err(e) = gpu.sync_weights_to_host(&mut model) {
+            eprintln!("[CUDA WARN] Failed to sync final weights to host: {}", e);
+        }
     }
 
     let total_duration = start_time.elapsed().as_secs_f64();

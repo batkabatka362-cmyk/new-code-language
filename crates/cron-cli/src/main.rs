@@ -308,7 +308,7 @@ fn print_subcommand_help(cmd: &str) {
         "cl-train" | "train-cl" | "train" => {
             println!("USAGE:\n    cron train [model.cl] [OPTIONS]\n    cron cl-train [dataset.dpdata] [OPTIONS]\n");
             println!("DESCRIPTION:\n    CRON Autonomous Zero-Python In-Silicon Training Pipeline & Autograd Engine.\n    Ingests raw text corpus, executes causal LM forward pass, computes exact\n    analytical reverse-mode VJP autodiff gradients, optimizes parameters with\n    AdamW or Lion, and exports IEEE 754 Safetensors checkpoints.\n    Zero Python, Zero PyTorch, Zero external C++ runtime required.\n");
-            println!("OPTIONS:\n    --data, -d <path>   Path to raw text training corpus or token stream\n    --steps, -s <N>     Number of training optimization steps (default: 50)\n    --lr <float>        Learning rate (default: 0.01)\n    --batch, -b <N>     Batch size (default: 4)\n    --seq-len, -l <N>   Sequence length (default: 16)\n    --dim <N>           Hidden dimension (default: 32)\n    --optimizer <opt>   Optimizer algorithm: adamw, lion, sgd (default: adamw)\n    -o, --out <path>    Output Safetensors checkpoint path (default: checkpoint.safetensors)\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
+            println!("OPTIONS:\n    --data, -d <path>   Path to raw text training corpus or token stream\n    --steps, -s <N>     Number of training optimization steps (default: 50)\n    --lr <float>        Learning rate (default: 0.01)\n    --batch, -b <N>     Batch size (default: 4)\n    --seq-len, -l <N>   Sequence length (default: 16)\n    --dim <N>           Hidden dimension (default: 32)\n    --optimizer <opt>   Optimizer algorithm: adamw, lion, sgd (default: adamw)\n    -o, --out <path>    Output Safetensors checkpoint path (default: checkpoint.safetensors)\n    --cuda, --gpu       Enable hardware NVIDIA RTX GPU acceleration via zero-NVCC Driver API\n    --qat               Enable Quantization-Aware Training (QAT) to {{-1, 0, +1}} ternary weights\n    --torus-allreduce   Enable distributed 4D-Torus Ring All-Reduce gradient synchronization\n    --json              Output structured training telemetry in JSON\n    -h, --help          Display this help message\n");
             println!("EXAMPLES:\n    cron train model.cl --data corpus.txt --steps 100 --lr 0.01 -o model.safetensors\n    cron train --data mongol_text.txt --optimizer lion --steps 50\n    cron train --steps 30 --lr 0.02 -o trained.safetensors");
         }
         "cl-sovereign" | "sovereign" => {
@@ -12271,6 +12271,7 @@ fn handle_cl_train_command(args: &[String]) {
     let mut num_layers = 1usize;
     let mut num_experts = 1usize;
     let mut top_k = 1usize;
+    let mut use_cuda = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -12347,6 +12348,10 @@ fn handle_cl_train_command(args: &[String]) {
                 torus_allreduce = true;
                 i += 1;
             }
+            "--cuda" | "--gpu" => {
+                use_cuda = true;
+                i += 1;
+            }
             "--synth" if i + 1 < args.len() => {
                 synth_path = Some(args[i + 1].clone());
                 i += 2;
@@ -12418,10 +12423,28 @@ fn handle_cl_train_command(args: &[String]) {
     auto_cfg.eval_prompt = eval_prompt.clone();
     auto_cfg.eval_max_tokens = gen_tokens;
     auto_cfg.eval_temperature = temp;
+    auto_cfg.use_cuda = use_cuda;
+
+    let hw_target = if use_cuda {
+        if cronc::cl_cuda_driver::CudaDriver::is_available() {
+            if let Ok(driver) = cronc::cl_cuda_driver::CudaDriver::init() {
+                let dev_name = driver.device_name(0).unwrap_or_else(|_| "NVIDIA GPU".to_string());
+                let vram = driver.device_total_memory(0).unwrap_or(0) / (1024 * 1024);
+                format!("NVIDIA GPU: {} ({} MB VRAM, Direct PTX JIT)", dev_name, vram)
+            } else {
+                "NVIDIA CUDA (Direct Driver API)".to_string()
+            }
+        } else {
+            "CUDA requested but driver not present (Fallback to CPU)".to_string()
+        }
+    } else {
+        "Native CPU SIMD In-Silicon Calculus Engine".to_string()
+    };
 
     println!("╔═══════════════════════════════════════════════════════════════════════════════════════╗");
     println!("║   CRON AUTONOMOUS ZERO-PYTHON IN-SILICON TRAINING PIPELINE (cron train)               ║");
     println!("╠═══════════════════════════════════════════════════════════════════════════════════════╣");
+    println!("║ Compute HW : {:<73} ║", hw_target);
     println!("║ Optimizer  : {:<73} ║", format!("{:?} (Decoupled Weight Decay)", auto_cfg.optimizer));
     println!("║ Steps      : {:<73} ║", format!("{} Steps | LR: {:.4}", auto_cfg.steps, auto_cfg.learning_rate));
     println!("║ Batch/Seq  : {:<73} ║", format!("Batch: {} | Seq Len: {} | Dim: {}", auto_cfg.batch_size, auto_cfg.seq_len, auto_cfg.dim));

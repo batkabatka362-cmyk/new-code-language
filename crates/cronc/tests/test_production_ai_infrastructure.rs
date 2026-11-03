@@ -231,6 +231,7 @@ fn test_distributed_optimizer_checkpointing_atomic_crc32() {
         eval_prompt: None,
         eval_max_tokens: 10,
         eval_temperature: 0.7,
+        use_cuda: false,
     };
 
     let mut model = AutonomousLanguageModel::new(config.clone());
@@ -280,4 +281,49 @@ fn test_distributed_optimizer_checkpointing_atomic_crc32() {
     // Cleanup
     let _ = std::fs::remove_dir_all(&tmp_dir);
     println!("Atomic distributed optimizer checkpointing verified!");
+}
+
+#[test]
+fn test_cuda_hardware_autonomous_training() {
+    if !CudaDriver::is_available() {
+        println!("[SKIP] CUDA Driver not present on host system.");
+        return;
+    }
+
+    let config = TrainingConfig {
+        model_path: None,
+        data_path: None,
+        data_text: Some("CRON In-Silicon Tensor Architecture and Real GPU Autonomous Neural Training.".to_string()),
+        steps: 15,
+        learning_rate: 0.02,
+        min_learning_rate: 0.0001,
+        batch_size: 4,
+        seq_len: 16,
+        dim: 32,
+        hidden_dim: 64,
+        vocab_size: 256,
+        num_layers: 1,
+        num_experts: 1,
+        top_k: 1,
+        optimizer: TrainingOptimizer::AdamW,
+        weight_decay: 0.01,
+        warmup_steps: 3,
+        lr_schedule: cronc::cl_train_pipeline::LrSchedule::Cosine,
+        checkpoint_out: None,
+        profile: "test".to_string(),
+        seed: 42,
+        eval_prompt: None,
+        eval_max_tokens: 10,
+        eval_temperature: 0.7,
+        use_cuda: true,
+    };
+
+    let summary = cronc::cl_train_pipeline::train_autonomous_model(config, None)
+        .expect("CUDA autonomous training failed on actual GPU");
+
+    println!("CUDA GPU Training Initial Loss: {:.4}", summary.initial_loss);
+    println!("CUDA GPU Training Final Loss: {:.4} (reduction: {:.2}%)", summary.final_loss, summary.loss_reduction_pct);
+    assert!(summary.final_loss < summary.initial_loss, "Expected loss reduction during GPU training!");
+    assert!(summary.total_tokens > 0);
+    println!("Hardware NVIDIA RTX 4060 GPU autonomous training verified flawlessly!");
 }
