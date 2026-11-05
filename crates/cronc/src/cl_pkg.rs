@@ -1000,7 +1000,10 @@ pub fn list_standard_kernels(workspace_root: &Path) -> Vec<StandardKernelInfo> {
         let p = libcl_dir.join(file_name);
         let exists = p.exists();
         let bundles_count = if exists {
-            fs::read_to_string(&p).map(|s| s.lines().filter(|l| l.trim().starts_with('B')).count()).unwrap_or(0)
+            fs::read_to_string(&p).map(|s| s.lines().filter(|l| {
+                let t = l.trim();
+                t.find(':').map_or(false, |pos| pos >= 2 && pos <= 5 && t.starts_with('B') && t[1..pos].chars().all(|c| c.is_ascii_hexdigit()))
+            }).count()).unwrap_or(0)
         } else {
             0
         };
@@ -1037,7 +1040,11 @@ pub fn audit_cl_source(cl_source: &str, pkg_name: &str) -> ClAuditReport {
     let mut lowered_source = String::new();
     let is_vliw_line = |l: &str| {
         let t = l.trim();
-        t.starts_with('B') && t.chars().nth(1).map_or(false, |c| c.is_ascii_hexdigit()) && t.contains(':') && !t.contains(":=")
+        if let Some(colon) = t.find(':') {
+            colon >= 2 && colon <= 5 && t.starts_with('B') && t[1..colon].chars().all(|c| c.is_ascii_hexdigit()) && !t.contains(":=")
+        } else {
+            false
+        }
     };
     let effective_source = if (cl_source.contains("@io") || cl_source.contains('§')) && !cl_source.lines().any(is_vliw_line) {
         if let Ok(doc) = crate::cl_v2_parser::parse_cl_v2(cl_source) {

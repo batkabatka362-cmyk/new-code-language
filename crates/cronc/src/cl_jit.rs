@@ -1229,7 +1229,11 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
     let v2_lowered_code;
     let is_vliw_line = |l: &str| {
         let t = l.trim();
-        t.starts_with('B') && t.chars().nth(1).map_or(false, |c| c.is_ascii_hexdigit()) && t.contains(':') && !t.contains(":=")
+        if let Some(colon) = t.find(':') {
+            colon >= 2 && colon <= 5 && t.starts_with('B') && t[1..colon].chars().all(|c| c.is_ascii_hexdigit()) && !t.contains(":=")
+        } else {
+            false
+        }
     };
     let code_to_run = if (code_to_run.contains("@io") || code_to_run.contains('§')) && !code_to_run.lines().any(is_vliw_line) {
         if let Ok(doc) = crate::cl_v2_parser::parse_cl_v2(code_to_run) {
