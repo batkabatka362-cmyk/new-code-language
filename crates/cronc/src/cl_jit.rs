@@ -1226,6 +1226,32 @@ pub fn execute_cl_on_core(cl_code: &str, core: &mut ClJitCore) -> Result<(), Str
         cl_code
     };
 
+    let v2_lowered_code;
+    let is_vliw_line = |l: &str| {
+        let t = l.trim();
+        t.starts_with('B') && t.chars().nth(1).map_or(false, |c| c.is_ascii_hexdigit()) && t.contains(':') && !t.contains(":=")
+    };
+    let code_to_run = if (code_to_run.contains("@io") || code_to_run.contains('§')) && !code_to_run.lines().any(is_vliw_line) {
+        if let Ok(doc) = crate::cl_v2_parser::parse_cl_v2(code_to_run) {
+            let mut engine = crate::cl_v2_lowering::V2LoweringEngine::new();
+            if let Ok(bundles) = engine.lower_document(&doc) {
+                let mut text = String::new();
+                for b in &bundles {
+                    let slot_strs: Vec<String> = b.slots.iter().map(|s| s.raw.clone()).collect();
+                    text.push_str(&format!("B{:04X}: {}\n", b.cycle, slot_strs.join(" ")));
+                }
+                v2_lowered_code = text;
+                &v2_lowered_code
+            } else {
+                code_to_run
+            }
+        } else {
+            code_to_run
+        }
+    } else {
+        code_to_run
+    };
+
     let mut bundles: Vec<JitBundle> = Vec::new();
     let mut cycle_to_idx: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
 

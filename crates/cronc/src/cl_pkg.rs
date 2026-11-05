@@ -112,6 +112,11 @@ fn write_if_changed<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> std
         if existing == contents.as_ref() {
             return Ok(());
         }
+        if let Ok(s) = std::str::from_utf8(&existing) {
+            if s.contains("@io") || s.contains('§') {
+                return Ok(());
+            }
+        }
     }
     fs::write(path, contents)
 }
@@ -1029,6 +1034,30 @@ pub fn search_standard_kernels(workspace_root: &Path, query: &str) -> Vec<Standa
 
 /// Audits a `.cl` file or package directory for 10-char slot width, CRC-8 integrity, RAW/WAW hazards
 pub fn audit_cl_source(cl_source: &str, pkg_name: &str) -> ClAuditReport {
+    let mut lowered_source = String::new();
+    let is_vliw_line = |l: &str| {
+        let t = l.trim();
+        t.starts_with('B') && t.chars().nth(1).map_or(false, |c| c.is_ascii_hexdigit()) && t.contains(':') && !t.contains(":=")
+    };
+    let effective_source = if (cl_source.contains("@io") || cl_source.contains('§')) && !cl_source.lines().any(is_vliw_line) {
+        if let Ok(doc) = crate::cl_v2_parser::parse_cl_v2(cl_source) {
+            let mut engine = crate::cl_v2_lowering::V2LoweringEngine::new();
+            if let Ok(bundles) = engine.lower_document(&doc) {
+                for b in &bundles {
+                    let slot_strs: Vec<String> = b.slots.iter().map(|s| s.raw.clone()).collect();
+                    lowered_source.push_str(&format!("B{:04X}: {}\n", b.cycle, slot_strs.join(" ")));
+                }
+                &lowered_source
+            } else {
+                cl_source
+            }
+        } else {
+            cl_source
+        }
+    } else {
+        cl_source
+    };
+
     let mut total_bundles = 0;
     let mut total_slots = 0;
     let mut invalid_width = 0;
@@ -1038,9 +1067,9 @@ pub fn audit_cl_source(cl_source: &str, pkg_name: &str) -> ClAuditReport {
 
     let mut prev_written_regs: [bool; 16] = [false; 16];
 
-    for (line_idx, line) in cl_source.lines().enumerate() {
+    for (line_idx, line) in effective_source.lines().enumerate() {
         let trimmed = line.trim();
-        if !trimmed.starts_with('B') || !trimmed.contains(':') {
+        if !is_vliw_line(trimmed) {
             continue;
         }
 

@@ -16,8 +16,7 @@ use crate::cl_lang::compute_crc8_atm;
 #[inline]
 fn compute_crc8_token(raw9: &str) -> char {
     let crc = compute_crc8_atm(raw9.as_bytes());
-    const ASCII_MAP: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+,-./:;<=>?@[\\]^_`{|}~";
-    ASCII_MAP[(crc as usize) % ASCII_MAP.len()] as char
+    (33 + (crc % 94)) as char
 }
 
 #[derive(Debug, Clone)]
@@ -877,19 +876,56 @@ impl V2LoweringEngine {
         let mut bundles = Vec::new();
         let mut cycle = 0;
 
-        let chunks = instrs.chunks(4);
-        for chunk in chunks {
-            let mut slots = Vec::new();
-            for instr in chunk {
-                slots.push(instr.to_slot_string());
+        let mut current_bundle_slots = Vec::new();
+        let mut current_bundle_dests = [false; 16];
+
+        for instr in instrs {
+            let d_idx = (instr.dest % 16) as usize;
+            if current_bundle_slots.len() == 4 || current_bundle_dests[d_idx] {
+                while current_bundle_slots.len() < 4 {
+                    let raw_nop = "_NO00#000";
+                    let crc_nop = compute_crc8_token(raw_nop);
+                    current_bundle_slots.push(format!("{}{}", raw_nop, crc_nop));
+                }
+                bundles.push(self.build_bundle(cycle, current_bundle_slots)?);
+                cycle += 1;
+                current_bundle_slots = Vec::new();
+                current_bundle_dests = [false; 16];
             }
-            while slots.len() < 4 {
+
+            current_bundle_dests[d_idx] = true;
+            current_bundle_slots.push(instr.to_slot_string());
+        }
+
+        if !current_bundle_slots.is_empty() {
+            while current_bundle_slots.len() < 4 {
                 let raw_nop = "_NO00#000";
                 let crc_nop = compute_crc8_token(raw_nop);
-                slots.push(format!("{}{}", raw_nop, crc_nop));
+                current_bundle_slots.push(format!("{}{}", raw_nop, crc_nop));
             }
-            bundles.push(self.build_bundle(cycle, slots)?);
-            cycle += 1;
+            bundles.push(self.build_bundle(cycle, current_bundle_slots)?);
+        }
+
+        let has_halt = bundles.iter().any(|b| b.slots.iter().any(|s| s.opcode == "HL"));
+        if !has_halt {
+            if let Some(last_b) = bundles.last_mut() {
+                if let Some(last_s) = last_b.slots.last_mut() {
+                    let raw_hl = "!HL00#000";
+                    let crc_hl = compute_crc8_token(raw_hl);
+                    let hl_str = format!("{}{}", raw_hl, crc_hl);
+                    *last_s = VliwSlot {
+                        raw: hl_str,
+                        is_16_char_tile: false,
+                        prefix: '!',
+                        opcode: "HL".to_string(),
+                        dst: 0,
+                        op_math: '#',
+                        src1: 0,
+                        src2: None,
+                        crc_token: crc_hl.to_string(),
+                    };
+                }
+            }
         }
 
         Ok(bundles)
